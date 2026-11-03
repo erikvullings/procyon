@@ -240,7 +240,7 @@ import { syncPlanItemToDto } from '../../models/comparison';
 import { entryMetadataFromDto, entrySummaryFromDto } from '../../models/entry';
 import { directorySnapshotFromDto } from '../../models/snapshot';
 import { workspaceProjectionFromDto } from '../../models/workspace';
-import { perfEnd, perfStart } from '../../utilities/perf';
+import { perfEnd, perfStart, setPerfSink } from '../../utilities/perf';
 import { TauriEventStream } from '../events/tauri-event-stream';
 import type { DirectorySnapshotDto } from '../generated/models/directorySnapshotDto';
 import type { EntryMetadataDto } from '../generated/models/entryMetadataDto';
@@ -254,12 +254,50 @@ import { operationFromDto } from './operation-mapping';
 import { settingsFromDto, settingsToDto } from './settings-mapping';
 import { toCommandError } from './tauri-command-error';
 
+/** Measures at or above this are written to the desktop log; `settings*` measures always are. */
+const SLOW_MEASURE_MS = 150;
+/** The UI thread should come back from a 100 ms timer well within this; more means it was blocked. */
+const UI_STALL_MS = 300;
+
+/** Forwards slow frontend measures to the backend log so they line up with `fm_perf` entries. */
+function installPerfLogging(): void {
+  setPerfSink((name, durationMs, detail) => {
+    if (durationMs < SLOW_MEASURE_MS && !name.startsWith('settings') && !name.startsWith('stat-')) {
+      return;
+    }
+    void tauriInvoke('log_perf_event', {
+      name,
+      durationMs,
+      detail: detail === undefined ? '' : JSON.stringify(detail),
+    }).catch(() => undefined);
+  });
+  // WebKit has no Long Tasks API, so detect a blocked UI thread by timer drift instead.
+  let expected = performance.now() + 100;
+  setInterval(() => {
+    const now = performance.now();
+    const drift = now - expected;
+    expected = now + 100;
+    // WebKit throttles timers to about 1 Hz in a background window, which looks like a stall but
+    // is not one: only a focused window's drift says anything about a blocked UI thread.
+    if (document.hasFocus() && !document.hidden && drift >= UI_STALL_MS) {
+      void tauriInvoke('log_perf_event', {
+        name: 'ui-stall',
+        durationMs: drift,
+        detail: '',
+      }).catch(() => undefined);
+    }
+  }, 100);
+}
+
 /** `invoke`, rejecting with an `Error` that carries the backend's message. */
 async function invoke<T>(...call: Parameters<typeof tauriInvoke>): Promise<T> {
+  const started = perfStart();
   try {
     return await tauriInvoke<T>(...call);
   } catch (rejection) {
     throw toCommandError(call[0], rejection);
+  } finally {
+    perfEnd(`invoke:${call[0]}`, started);
   }
 }
 
@@ -316,6 +354,10 @@ export class TauriFileManagerClient implements FileManagerClient {
   }
   private readonly eventStream = new TauriEventStream();
   readonly connection = this.eventStream.status;
+
+  constructor() {
+    installPerfLogging();
+  }
 
   cacheArchivePassword(request: ArchiveCredentialRequest, _signal?: AbortSignal): Promise<void> {
     return invoke<void>('cache_archive_password', { request });

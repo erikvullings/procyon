@@ -20,6 +20,7 @@ import type {
   Settings,
   WorkspaceId,
 } from '../../models';
+import { perfEndAfterRender, perfStart } from '../../utilities/perf';
 import { DiagnosticsViewComponent } from '../diagnostics/diagnostics-view';
 import { MapSettingsSection } from '../map/map-settings-section';
 import { PluginManagement } from '../plugin-management/plugin-management';
@@ -251,7 +252,9 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                   type: 'button',
                   'aria-current': activeSection === section.id ? 'page' : undefined,
                   onclick: () => {
+                    const switchStarted = perfStart();
                     activeSection = section.id;
+                    perfEndAfterRender('settings-section', switchStarted, { section: section.id });
                   },
                 },
                 section.label,

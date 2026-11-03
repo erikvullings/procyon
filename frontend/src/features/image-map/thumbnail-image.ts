@@ -1,13 +1,26 @@
 import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import type { EntrySummary } from '../../models';
+import { WeightedLru } from '../../utilities/weighted-lru';
 
 type ThumbnailSource = Pick<WorkspaceClient, 'getThumbnail'>;
 type Size = 'small' | 'medium' | 'large';
 
 const MAX_CONCURRENT = 4;
-const results = new Map<string, string | null>();
+/** Characters of data URI kept across all map thumbnails (about 16 MB of string data). */
+const MAP_THUMBNAIL_BUDGET_CHARS = 16_000_000;
+const results = new WeightedLru<string | null>(
+  MAP_THUMBNAIL_BUDGET_CHARS,
+  (uri) => uri?.length ?? 64,
+);
 const waiting: (() => void)[] = [];
 let active = 0;
+
+/** Cache size for memory diagnostics: entries held and the characters of their data URIs. */
+export function mapThumbnailStats(): { readonly count: number; readonly chars: number } {
+  let chars = 0;
+  for (const uri of results.values()) chars += uri?.length ?? 0;
+  return { count: results.size, chars };
+}
 
 function dataUri(bytes: Uint8Array): string {
   let binary = '';

@@ -634,6 +634,30 @@ pub(crate) fn record_frontend_diagnostic(state: State<'_, AppState>, error: Diag
     );
 }
 
+/// Writes one frontend-measured slow operation to the rolling desktop log (target `fm_perf`), so a
+/// UI stall (for example the Settings dialog opening slowly) can be lined up with backend activity.
+#[tauri::command]
+pub(crate) fn log_perf_event(name: String, duration_ms: f64, detail: String) {
+    if name.starts_with("stat-") {
+        tracing::info!(
+            target: "fm_perf",
+            op = "frontend_stat",
+            name = %name,
+            detail = %detail,
+            "frontend statistics"
+        );
+    } else {
+        tracing::warn!(
+            target: "fm_perf",
+            op = "frontend_slow",
+            name = %name,
+            duration_ms,
+            detail = %detail,
+            "frontend reported a slow operation"
+        );
+    }
+}
+
 /// Converts a `#rgb`/`#rrggbb` CSS colour into a Win32 `COLORREF` (`0x00bbggrr`).
 #[cfg(target_os = "windows")]
 fn colorref(css: &str) -> Option<u32> {

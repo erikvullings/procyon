@@ -2,6 +2,7 @@ import m from 'mithril';
 
 import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import type { EntrySummary } from '../../models';
+import { WeightedLru } from '../../utilities/weighted-lru';
 import { isParentEntry } from '../panes/parent-entry';
 
 export type ThumbnailSize = 'small' | 'medium' | 'large';
@@ -91,8 +92,15 @@ interface PendingThumbnail {
 
 const UNSCOPED_SUBSCRIBER = Symbol('unscoped-thumbnail-request');
 
+/** Characters of data URI kept across all cached thumbnails (about 24 MB of string data); older
+ * ones are re-requested on demand, and the backend serves those from its own thumbnail cache. */
+const THUMBNAIL_CACHE_BUDGET_CHARS = 24_000_000;
+
 export class ThumbnailLoader {
-  private readonly thumbnails = new Map<string, string | undefined>();
+  private readonly thumbnails = new WeightedLru<string | undefined>(
+    THUMBNAIL_CACHE_BUDGET_CHARS,
+    (uri) => uri?.length ?? 64,
+  );
   private readonly pending = new Map<string, PendingThumbnail>();
   private activeRequestCount = 0;
   private readonly waiting: PendingThumbnail[] = [];
@@ -104,6 +112,13 @@ export class ThumbnailLoader {
 
   thumbnailDataUri(entry: EntrySummary, size: ThumbnailSize): string | undefined {
     return this.thumbnailDataUriFor(entry, size, UNSCOPED_SUBSCRIBER);
+  }
+
+  /** Cache size for memory diagnostics: entries held and the characters of their data URIs. */
+  stats(): { readonly count: number; readonly chars: number } {
+    let chars = 0;
+    for (const uri of this.thumbnails.values()) chars += uri?.length ?? 0;
+    return { count: this.thumbnails.size, chars };
   }
 
   createViewport(): ThumbnailViewport {

@@ -4,6 +4,7 @@ import type { SettingsSection } from '../features/settings/settings-editor';
 import type { SemanticComponentStatus, Settings } from '../models';
 
 /** Sets up the settingsWiring feature wiring and returns its functions. */
+import { perfEndAfterRender, perfStart } from '../utilities/perf';
 import type { ShellState } from './shell-state';
 
 /** The narrow cross-cutting surface settings/appearance wiring needs from the shell. */
@@ -46,9 +47,11 @@ export function createSettingsWiring(shellState: ShellState, core: SettingsCore)
       m.redraw();
       return;
     }
+    const openStarted = perfStart();
     shellState.settingsDisclosureElement.open = true;
     shellState.settingsDialogOpen = true;
     m.redraw();
+    perfEndAfterRender('settings-open', openStarted, { via: 'wiring', section });
   }
 
   function applyIconTheme(themeId: string): void {

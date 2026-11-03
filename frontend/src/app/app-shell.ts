@@ -67,6 +67,7 @@ import { recordRecentLocation } from '../features/favourites/favourites';
 import { FileDiffDialog } from '../features/file-diff/file-diff-dialog';
 import { ConvertGeoDialog } from '../features/geo/convert-geo-dialog';
 import { MinifyGeoDialog } from '../features/geo/minify-geo-dialog';
+import { mapThumbnailStats } from '../features/image-map/thumbnail-image';
 import { EditImageMetadataDialog } from '../features/image-metadata/edit-image-metadata-dialog';
 import {
   createGlobalKeydownHandler,
@@ -208,7 +209,13 @@ import {
   playerPatch,
   setQuickFilterDraftPatch,
 } from '../state';
-import { perfEndAfterPaint, perfStart } from '../utilities/perf';
+import {
+  hasPerfSink,
+  perfEndAfterPaint,
+  perfEndAfterRender,
+  perfStart,
+  perfStat,
+} from '../utilities/perf';
 import type { RuntimeKind } from '../utilities/runtime';
 import { createWindowTitleSink, dedupeWindowTitleSink } from '../utilities/window-title-sink';
 import { createActionsWiring } from './actions-wiring';
@@ -558,6 +565,36 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     if (activePaneId === undefined) return;
     if (shellState.focusPane !== undefined) shellState.focusPane(activePaneId);
     else void activatePane(shellState.client, activePaneId);
+  }
+
+  /** Periodic cache-size statistics for memory diagnostics (desktop log, `stat-cache` entries). */
+  function reportCacheStats(): void {
+    if (!hasPerfSink() || document.hidden) return;
+    const sum = (arrays: Iterable<{ readonly length: number }>): number => {
+      let total = 0;
+      for (const array of arrays) total += array.length;
+      return total;
+    };
+    const thumbnails = shellState.thumbnailLoader?.stats();
+    const icons = shellState.nativeIconLoader?.stats();
+    const mapThumbnails = mapThumbnailStats();
+    perfStat('cache', {
+      directorySessions: shellState.directories.size,
+      directoryEntries: sum([...shellState.directories.values()].map((view) => view.entries)),
+      sortedCopies: shellState.sortedEntries.size,
+      sortedEntries: sum([...shellState.sortedEntries.values()].map((cached) => cached.entries)),
+      filteredCopies: shellState.filteredEntries.size,
+      filteredEntries: sum(
+        [...shellState.filteredEntries.values()].map((cached) => cached.entries),
+      ),
+      viewers: shellState.viewerByTab.size,
+      thumbnails: thumbnails?.count ?? 0,
+      thumbnailMChars: Math.round((thumbnails?.chars ?? 0) / 1_000_000),
+      icons: icons?.count ?? 0,
+      iconKChars: Math.round((icons?.chars ?? 0) / 1_000),
+      mapThumbnails: mapThumbnails.count,
+      mapThumbnailMChars: Math.round(mapThumbnails.chars / 1_000_000),
+    });
   }
 
   function handleVisibilityChange(): void {
@@ -1409,6 +1446,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
   /** `dispose()` of the `buildControllers` registry set up in `oninit` (controller-registry.ts). */
   let disposeShellControllers: (() => void) | undefined;
   let volumePollTimer: number | undefined;
+  let cacheStatsTimer: number | undefined;
+  const CACHE_STATS_INTERVAL_MS = 30_000;
   const VOLUME_POLL_INTERVAL_MS = 10_000;
 
   const workspaceControllerContext: WorkspaceControllerContext = {
@@ -2901,6 +2940,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       );
       window.addEventListener('focus', handleWindowFocus);
       // A drive plugged in while Procyon stays focused raises no window event, so poll gently.
+      cacheStatsTimer = window.setInterval(reportCacheStats, CACHE_STATS_INTERVAL_MS);
       volumePollTimer = window.setInterval(() => {
         if (document.visibilityState === 'visible') {
           void shellState.workspaceController.refreshVolumes();
@@ -3012,6 +3052,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       );
       window.removeEventListener('focus', handleWindowFocus);
       if (volumePollTimer !== undefined) window.clearInterval(volumePollTimer);
+      if (cacheStatsTimer !== undefined) window.clearInterval(cacheStatsTimer);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       document.removeEventListener('keydown', miscWiring.updateFunctionKeyModifiers);
       document.removeEventListener('keyup', miscWiring.updateFunctionKeyModifiers);
@@ -3658,10 +3699,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                   'aria-label': t('shell', 'settings'),
                   onclick: () => {
                     if (shellState.settingsDisclosureElement === undefined) return;
+                    const openStarted = perfStart();
                     shellState.settingsInitialSection = 'appearance';
                     shellState.settingsDisclosureElement.open =
                       !shellState.settingsDisclosureElement.open;
                     shellState.settingsDialogOpen = shellState.settingsDisclosureElement.open;
+                    if (shellState.settingsDialogOpen) {
+                      perfEndAfterRender('settings-open', openStarted, { via: 'button' });
+                    }
                     if (
                       !shellState.settingsDialogOpen &&
                       shellState.currentSettings !== undefined

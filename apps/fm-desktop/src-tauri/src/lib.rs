@@ -13,6 +13,7 @@ mod event_stream;
 mod exit_dialog;
 #[cfg(any(target_os = "linux", all(test, unix)))]
 mod linux_clipboard;
+mod main_thread_watchdog;
 mod media_protocol;
 mod native_menu;
 mod platform;
@@ -30,6 +31,7 @@ use std::sync::{Arc, Mutex};
 use fm_application::FileManagerService;
 use fm_events::EventBus;
 use fm_transport_dto::RuntimeKindDto;
+use main_thread_watchdog::SLOW_SYNC_COMMAND;
 use tauri::Manager;
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 use tokio_util::sync::CancellationToken;
@@ -222,6 +224,7 @@ pub fn run() {
                 );
             };
             stamp("setup-started");
+            main_thread_watchdog::start(app.handle().clone());
             #[cfg(feature = "native-spa-smoke")]
             native_spa_smoke::stage("setup-started");
             // Built here rather than eagerly via `.manage()` because bundled plugin discovery
@@ -803,6 +806,7 @@ pub fn run() {
             commands::get_diagnostics,
             commands::open_devtools,
             commands::record_frontend_diagnostic,
+            commands::log_perf_event,
             commands::subscribe_native_menu_actions,
             commands::initialize_window_handle,
             commands::set_native_menu,
@@ -812,7 +816,23 @@ pub fn run() {
                     invoke.resolver.reject("plugin SPA windows cannot invoke app commands");
                     true
                 } else {
-                    app_commands(invoke)
+                    // Synchronous commands run on the main thread, so their whole duration is a
+                    // window in which the app (and the macOS beachball) is unresponsive. Async
+                    // commands return immediately here and are not counted.
+                    let command = invoke.message.command().to_owned();
+                    let started = std::time::Instant::now();
+                    let handled = app_commands(invoke);
+                    let elapsed = started.elapsed();
+                    if elapsed >= SLOW_SYNC_COMMAND {
+                        tracing::warn!(
+                            target: "fm_perf",
+                            op = "slow_sync_command",
+                            command = %command,
+                            duration_ms = elapsed.as_secs_f64() * 1000.0,
+                            "synchronous command held the main thread"
+                        );
+                    }
+                    handled
                 }
             }
         })
