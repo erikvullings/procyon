@@ -186,8 +186,9 @@ export const it = {
     list: 'Elenco',
     smallIcons: 'Icone piccole',
     mediumIcons: 'Icone medie',
-    viewRemembered: 'Per questa cartella è salvata una vista',
-    forgetView: 'Dimentica la vista di questa cartella',
+    viewRemembered:
+      'Questa cartella ha una vista salvata (ordinamento, colonne, modalità di visualizzazione)',
+    forgetView: 'Ripristina la vista predefinita per questa cartella',
     syncBrowsingOff: 'Navigazione sincronizzata: disattivata',
     syncBrowsingOn: 'Navigazione sincronizzata: attiva',
     syncBrowsingApart: 'Navigazione sincronizzata: i pannelli divergono',

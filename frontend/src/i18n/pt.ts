@@ -187,8 +187,9 @@ export const pt = {
     list: 'Lista',
     smallIcons: 'Ícones pequenos',
     mediumIcons: 'Ícones médios',
-    viewRemembered: 'Existe uma vista guardada para esta pasta',
-    forgetView: 'Esquecer a vista desta pasta',
+    viewRemembered:
+      'Esta pasta tem a sua própria vista guardada (ordenação, colunas, modo de vista)',
+    forgetView: 'Repor a vista predefinida desta pasta',
     syncBrowsingOff: 'Navegação sincronizada: desativada',
     syncBrowsingOn: 'Navegação sincronizada: ativada',
     syncBrowsingApart: 'Navegação sincronizada: os painéis divergem',

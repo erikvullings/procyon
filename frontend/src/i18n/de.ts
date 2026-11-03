@@ -193,8 +193,9 @@ export const de = {
     list: 'Liste',
     smallIcons: 'Kleine Symbole',
     mediumIcons: 'Mittlere Symbole',
-    viewRemembered: 'Für diesen Ordner ist eine Ansicht gespeichert',
-    forgetView: 'Ansicht dieses Ordners vergessen',
+    viewRemembered:
+      'Dieser Ordner hat eine eigene gespeicherte Ansicht (Sortierung, Spalten, Ansichtsmodus)',
+    forgetView: 'Diesen Ordner auf die Standardansicht zurücksetzen',
     syncBrowsingOff: 'Synchrones Navigieren: aus',
     syncBrowsingOn: 'Synchrones Navigieren: ein',
     syncBrowsingApart: 'Synchrones Navigieren: Bereiche weichen ab',

@@ -188,8 +188,9 @@ export const nl = {
     list: 'Lijst',
     smallIcons: 'Kleine pictogrammen',
     mediumIcons: 'Middelgrote pictogrammen',
-    viewRemembered: 'Voor deze map is een weergave onthouden',
-    forgetView: 'Weergave van deze map vergeten',
+    viewRemembered:
+      'Deze map heeft een eigen opgeslagen weergave (sortering, kolommen, weergavemodus)',
+    forgetView: 'Deze map terugzetten naar de standaardweergave',
     syncBrowsingOff: 'Gesynchroniseerd bladeren: uit',
     syncBrowsingOn: 'Gesynchroniseerd bladeren: aan',
     syncBrowsingApart: 'Gesynchroniseerd bladeren: panelen lopen uiteen',
