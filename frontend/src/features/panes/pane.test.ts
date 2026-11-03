@@ -2873,6 +2873,77 @@ describe('Pane navigation input', () => {
     expect(maskInput()?.value).toBe('*.txt');
   });
 
+  describe('selection-mask keys versus type-to-select', () => {
+    function key(init: KeyboardEventInit): KeyboardEvent {
+      return new KeyboardEvent('keydown', { bubbles: true, ...init });
+    }
+
+    /** The mask prompt is always mounted; it is open only while it carries the `active` class. */
+    function maskPromptOpen(): boolean {
+      return root.querySelector('.fm-selection-mask-modal.active') !== null;
+    }
+
+    function typeahead(): string | undefined {
+      return root.querySelector('.fm-typeahead-status')?.textContent ?? undefined;
+    }
+
+    it('types a bare main-row "-" into the type-to-select prefix instead of deselecting by mask', () => {
+      mount(attrs());
+      const pane = root.querySelector<HTMLElement>('.fm-pane');
+
+      for (const letter of ['o', 'n', 'e']) {
+        pane?.dispatchEvent(key({ key: letter, code: `Key${letter.toUpperCase()}` }));
+      }
+      pane?.dispatchEvent(key({ key: '-', code: 'Minus' }));
+      m.redraw.sync();
+
+      expect(maskPromptOpen()).toBe(false);
+      expect(typeahead()).toBe('one-');
+    });
+
+    it('types "+" and "_" while a prefix is active instead of opening the mask prompt', () => {
+      mount(attrs());
+      const pane = root.querySelector<HTMLElement>('.fm-pane');
+
+      pane?.dispatchEvent(key({ key: 'o', code: 'KeyO' }));
+      pane?.dispatchEvent(key({ key: '+', code: 'Equal', shiftKey: true }));
+      pane?.dispatchEvent(key({ key: '_', code: 'Minus', shiftKey: true }));
+      m.redraw.sync();
+
+      expect(maskPromptOpen()).toBe(false);
+      expect(typeahead()).toBe('o+_');
+    });
+
+    it('does not treat a lone bare main-row "-" as a mask key either', () => {
+      mount(attrs());
+
+      root.querySelector<HTMLElement>('.fm-pane')?.dispatchEvent(key({ key: '-', code: 'Minus' }));
+      m.redraw.sync();
+
+      expect(maskPromptOpen()).toBe(false);
+    });
+
+    it('still opens the mask prompt from the Numpad keys, even mid-prefix', () => {
+      mount(attrs());
+      const pane = root.querySelector<HTMLElement>('.fm-pane');
+
+      pane?.dispatchEvent(key({ key: 'o', code: 'KeyO' }));
+      pane?.dispatchEvent(key({ key: '+', code: 'NumpadAdd' }));
+      m.redraw.sync();
+
+      expect(maskPromptOpen()).toBe(true);
+    });
+
+    it('still opens the mask prompt from Shift+- and Shift+= when no prefix is being typed', () => {
+      mount(attrs());
+      root
+        .querySelector<HTMLElement>('.fm-pane')
+        ?.dispatchEvent(key({ key: '_', code: 'Minus', shiftKey: true }));
+      m.redraw.sync();
+      expect(maskPromptOpen()).toBe(true);
+    });
+  });
+
   it('selects clicked rows and moves the cursor to the first in-word match', () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000);

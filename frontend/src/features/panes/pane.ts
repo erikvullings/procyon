@@ -691,6 +691,31 @@ function saveSelectionMask(mask: string): void {
   }
 }
 
+/** Actions bound to bare `+`, `-` and `*` characters (task 0090/0128: Total Commander's Numpad keys). */
+const NUMPAD_STYLE_ACTIONS = new Set([
+  'core.selectByMask',
+  'core.deselectByMask',
+  'core.invertSelection',
+]);
+
+/**
+ * Whether a key that matched a Numpad-style selection binding is really just a typed character.
+ *
+ * Those bindings are the Numpad `+` `-` `*` keys and their Shift forms (for keyboards without a
+ * numpad), but a binding matches by character, so the same characters typed on the main row would
+ * trigger them too. They must not: a bare main-row `-` is part of a file name, and while a
+ * type-to-select prefix is being typed every character, `+` and `_` included, belongs to it.
+ */
+function isTypedCharacterNotMaskKey(
+  actionId: string | undefined,
+  event: KeyboardEvent,
+  typeaheadActive: boolean,
+): boolean {
+  if (actionId === undefined || !NUMPAD_STYLE_ACTIONS.has(actionId)) return false;
+  if (event.code.startsWith('Numpad')) return false;
+  return typeaheadActive || !event.shiftKey;
+}
+
 export const Pane: FactoryComponent<PaneAttrs> = () => {
   let editing = false;
   let draftPath = '';
@@ -1051,7 +1076,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               !event.ctrlKey &&
               !event.metaKey &&
               !event.altKey;
-            const actionId = typeaheadConsumesSpace
+            const dispatchedActionId = typeaheadConsumesSpace
               ? undefined
               : dispatchKeybinding(
                   event,
@@ -1063,6 +1088,13 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                   attrs.actions ?? [],
                   attrs.keybindingOverrides ?? {},
                 );
+            const actionId = isTypedCharacterNotMaskKey(
+              dispatchedActionId,
+              event,
+              typeaheadCtrl.prefix !== undefined,
+            )
+              ? undefined
+              : dispatchedActionId;
             if (actionId === 'core.rename') {
               event.preventDefault();
               beginRename(attrs);
