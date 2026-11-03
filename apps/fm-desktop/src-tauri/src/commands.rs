@@ -1788,14 +1788,21 @@ pub(crate) fn get_settings(state: State<'_, AppState>) -> SettingsDto {
 
 /// Atomically persists the same settings document as `PUT /api/v1/settings`.
 #[tauri::command]
-pub(crate) fn update_settings(
+pub(crate) async fn update_settings(
     state: State<'_, AppState>,
     settings: SettingsDto,
 ) -> Result<SettingsDto, ApplicationErrorDto> {
-    state
-        .service
-        .update_settings(settings)
-        .map_err(|error| error.into_dto(Uuid::new_v4()))
+    // Saving settings writes the file (and fsyncs), which took 150-400 ms in real use. A
+    // synchronous command would do that on the main thread, freezing the window and holding up
+    // every other synchronous command queued behind it, so it runs on a worker thread instead.
+    let service = std::sync::Arc::clone(&state.service);
+    tauri::async_runtime::spawn_blocking(move || {
+        service
+            .update_settings(settings)
+            .map_err(|error| error.into_dto(Uuid::new_v4()))
+    })
+    .await
+    .map_err(|_| fm_application::ApplicationError::Internal.into_dto(Uuid::new_v4()))?
 }
 
 /// Lists a directory through the same application service as Axum.
