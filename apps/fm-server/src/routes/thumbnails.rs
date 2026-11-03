@@ -20,15 +20,15 @@ pub(crate) struct ThumbnailQuery {
     size: String,
 }
 
-/// Returns JPEG thumbnail bytes for an image or CBZ/CBR comic archive
-/// entry, if supported.
+/// Returns thumbnail bytes for an image or CBZ/CBR comic archive entry, if supported: JPEG,
+/// except for icon (`.ico`) files, which keep their transparency as PNG.
 #[utoipa::path(
     get,
     path = "/api/v1/thumbnails",
     operation_id = "getThumbnail",
     params(ThumbnailQuery),
     responses(
-        (status = 200, description = "Downscaled JPEG preview", content_type = "image/jpeg"),
+        (status = 200, description = "Downscaled preview (JPEG, or PNG for icons)", content_type = "image/*"),
         (status = 400, description = "The location URI or size was invalid", body = ApplicationErrorDto),
         (status = 404, description = "No thumbnail is available for this entry", body = ApplicationErrorDto),
     )
@@ -46,7 +46,10 @@ pub(crate) async fn get_thumbnail(
         .map(|bytes| {
             (
                 StatusCode::OK,
-                [(header::CONTENT_TYPE, "image/jpeg")],
+                [(
+                    header::CONTENT_TYPE,
+                    fm_application::thumbnail_content_type(&bytes),
+                )],
                 bytes,
             )
         })

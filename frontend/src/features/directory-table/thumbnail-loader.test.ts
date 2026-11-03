@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import type { EntrySummary } from '../../models';
-import { ThumbnailLoader } from './thumbnail-loader';
+import { ThumbnailLoader, type ThumbnailSize } from './thumbnail-loader';
 
 function entry(name: string, extension: string, kind: EntrySummary['kind'] = 'file'): EntrySummary {
   return {
@@ -161,7 +161,7 @@ describe('ThumbnailLoader', () => {
       {
         location: file.location,
         offset: 0,
-        length: 512 * 1024,
+        length: 4 * 1024,
       },
       expect.any(AbortSignal),
     );
@@ -179,11 +179,11 @@ describe('ThumbnailLoader', () => {
     const getThumbnail = vi.fn<WorkspaceClient['getThumbnail']>();
     const readFileRange = vi
       .fn<WorkspaceClient['readFileRange']>()
-      .mockResolvedValue({ data: [], eof: false, length: 3 * 1024, offset: 0 });
+      .mockResolvedValue({ data: [], eof: false, length: 4 * 1024, offset: 0 });
     const loader = new ThumbnailLoader({ getThumbnail, readFileRange }, vi.fn());
 
     const oversized = entry('huge.svg', 'svg');
-    oversized.size = 3 * 1024 + 1;
+    oversized.size = 4 * 1024 + 1;
     expect(loader.thumbnailDataUri(oversized, 'small')).toBeUndefined();
     expect(readFileRange).not.toHaveBeenCalled();
 
@@ -194,15 +194,24 @@ describe('ThumbnailLoader', () => {
     expect(loader.thumbnailDataUri(truncated, 'small')).toBeUndefined();
   });
 
-  it('does not read an oversized svg even at grid thumbnail sizes', () => {
+  it('shows a big svg with the generic icon at every size, and inlines one just under the limit', () => {
     const getThumbnail = vi.fn<WorkspaceClient['getThumbnail']>();
-    const readFileRange = vi.fn<WorkspaceClient['readFileRange']>();
+    const readFileRange = vi
+      .fn<WorkspaceClient['readFileRange']>()
+      .mockResolvedValue({ data: [60], eof: true, length: 1, offset: 0 });
     const loader = new ThumbnailLoader({ getThumbnail, readFileRange }, vi.fn());
-    const oversized = entry('huge.svg', 'svg');
-    oversized.size = 512 * 1024 + 1;
+    const oversized = entry('illustration.svg', 'svg');
+    oversized.size = 4 * 1024 + 1;
 
-    expect(loader.thumbnailDataUri(oversized, 'medium')).toBeUndefined();
+    for (const size of ['small', 'medium', 'large'] as const) {
+      expect(loader.thumbnailDataUri(oversized, size)).toBeUndefined();
+    }
     expect(readFileRange).not.toHaveBeenCalled();
+
+    const icon = entry('tabler-icon.svg', 'svg');
+    icon.size = 4 * 1024;
+    expect(loader.thumbnailDataUri(icon, 'large')).toBeUndefined();
+    expect(readFileRange).toHaveBeenCalledTimes(1);
   });
 
   it('skips large raster images in list rows but loads them for the thumbnail grid', () => {
@@ -294,5 +303,104 @@ describe('ThumbnailLoader', () => {
 
     expect(signal?.aborted).toBe(false);
     viewport.dispose();
+  });
+});
+
+describe('ThumbnailLoader memory lifetime', () => {
+  const jpeg = Uint8Array.of(0xff, 0xd8, 0xff, 0xe0);
+
+  function loaderWithClock() {
+    let now = 0;
+    const getThumbnail = vi.fn<WorkspaceClient['getThumbnail']>().mockResolvedValue(jpeg);
+    const redraw = vi.fn();
+    const loader = new ThumbnailLoader(
+      { getThumbnail, readFileRange: noopReadFileRange },
+      redraw,
+      () => now,
+    );
+    return {
+      loader,
+      getThumbnail,
+      redraw,
+      advance: (ms: number) => {
+        now += ms;
+      },
+    };
+  }
+
+  async function load(loader: ThumbnailLoader, file: EntrySummary, size: ThumbnailSize) {
+    expect(loader.thumbnailDataUri(file, size)).toBeUndefined();
+    await vi.waitFor(() => expect(loader.thumbnailDataUri(file, size)).toBeDefined());
+  }
+
+  it('forgets grid-size thumbnails shortly after they stop being drawn', async () => {
+    const { loader, getThumbnail, advance } = loaderWithClock();
+    const photo = entry('photo.jpg', 'jpg');
+    await load(loader, photo, 'large');
+    expect(getThumbnail).toHaveBeenCalledTimes(1);
+
+    advance(61_000);
+
+    // Gone: asking again starts a fresh request instead of serving a stale cached image.
+    expect(loader.thumbnailDataUri(photo, 'large')).toBeUndefined();
+    await vi.waitFor(() => expect(getThumbnail).toHaveBeenCalledTimes(2));
+  });
+
+  it('keeps grid thumbnails that are still being drawn', async () => {
+    const { loader, getThumbnail, advance } = loaderWithClock();
+    const photo = entry('photo.jpg', 'jpg');
+    await load(loader, photo, 'medium');
+
+    for (let frame = 0; frame < 5; frame += 1) {
+      advance(30_000);
+      expect(loader.thumbnailDataUri(photo, 'medium')).toBeDefined();
+    }
+    expect(getThumbnail).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps small row thumbnails long after grid tiles would have expired', async () => {
+    const { loader, getThumbnail, advance } = loaderWithClock();
+    const icon = entry('logo.png', 'png');
+    icon.size = 1;
+    await load(loader, icon, 'small');
+
+    advance(10 * 60_000);
+
+    expect(loader.thumbnailDataUri(icon, 'small')).toBeDefined();
+    expect(getThumbnail).toHaveBeenCalledTimes(1);
+  });
+
+  it('frees idle grid thumbnails by itself, without any further access', async () => {
+    vi.useFakeTimers();
+    try {
+      let now = 0;
+      const getThumbnail = vi.fn<WorkspaceClient['getThumbnail']>().mockResolvedValue(jpeg);
+      const loader = new ThumbnailLoader(
+        { getThumbnail, readFileRange: noopReadFileRange },
+        vi.fn(),
+        () => now,
+      );
+      const photo = entry('photo.jpg', 'jpg');
+      loader.thumbnailDataUri(photo, 'large');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(loader.stats().count).toBe(1);
+
+      now += 61_000;
+      await vi.advanceTimersByTimeAsync(16_000);
+
+      expect(loader.stats().count).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('labels a PNG thumbnail as PNG so icon transparency survives', async () => {
+    const png = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a);
+    const getThumbnail = vi.fn<WorkspaceClient['getThumbnail']>().mockResolvedValue(png);
+    const loader = new ThumbnailLoader({ getThumbnail, readFileRange: noopReadFileRange }, vi.fn());
+    const favicon = entry('favicon.ico', 'ico');
+    favicon.size = 1;
+    await load(loader, favicon, 'small');
+    expect(loader.thumbnailDataUri(favicon, 'small')).toMatch(/^data:image\/png;base64,/u);
   });
 });

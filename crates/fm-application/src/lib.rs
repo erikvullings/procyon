@@ -51,6 +51,8 @@ pub mod rejection;
 mod split_combine;
 mod split_manifest;
 mod viewer_warning;
+/// MIME type of generated thumbnail bytes (PNG for icons, JPEG otherwise).
+pub use fm_metadata::thumbnail_content_type;
 pub use map_tiles::MapTile;
 mod metadata_tokens;
 mod music_duplicates;

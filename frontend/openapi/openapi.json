@@ -8668,7 +8668,7 @@
     },
     "/api/v1/thumbnails": {
       "get": {
-        "summary": "Returns JPEG thumbnail bytes for an image or CBZ/CBR comic archive\nentry, if supported.",
+        "summary": "Returns thumbnail bytes for an image or CBZ/CBR comic archive entry, if supported: JPEG,\nexcept for icon (`.ico`) files, which keep their transparency as PNG.",
         "operationId": "getThumbnail",
         "parameters": [
           {
@@ -8691,9 +8691,9 @@
         ],
         "responses": {
           "200": {
-            "description": "Downscaled JPEG preview",
+            "description": "Downscaled preview (JPEG, or PNG for icons)",
             "content": {
-              "image/jpeg": {}
+              "image/*": {}
             }
           },
           "400": {

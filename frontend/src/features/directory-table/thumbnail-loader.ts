@@ -2,6 +2,7 @@ import m from 'mithril';
 
 import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import type { EntrySummary } from '../../models';
+import { thumbnailMimeType } from '../../utilities/image-mime';
 import { WeightedLru } from '../../utilities/weighted-lru';
 import { isParentEntry } from '../panes/parent-entry';
 
@@ -37,11 +38,18 @@ const THUMBNAILABLE_EXTENSIONS = new Set([
 /** Large images are not useful as 16px list-row previews, but grid tiles must request them:
  * opening a cloud-backed placeholder is what lets OneDrive produce the visible thumbnail. */
 const LIST_THUMBNAIL_SIZE_LIMIT_BYTES = 3 * 1024;
-const SVG_THUMBNAIL_SIZE_LIMIT_BYTES = 512 * 1024;
+/** An SVG is only ever shown as an inline icon, and only when it is icon-sized (tabler-style icons
+ * are 1-2 KB). A larger SVG is almost certainly an illustration too complex to read as a tile, and
+ * its whole markup would be held in memory as the cached image, so it keeps the generic icon. */
+const SVG_THUMBNAIL_SIZE_LIMIT_BYTES = 4 * 1024;
 
-const SIZE_GATED_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'pdf']);
+const SIZE_GATED_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf']);
 
 function exceedsThumbnailSizeLimit(entry: EntrySummary, size: ThumbnailSize): boolean {
+  // The SVG limit applies at every size: a big SVG is never inlined, whatever the tile size.
+  if (isSvg(entry)) {
+    return entry.size !== undefined && entry.size > SVG_THUMBNAIL_SIZE_LIMIT_BYTES;
+  }
   if (size !== 'small') return false;
   const extension = (entry.extension ?? '').toLocaleLowerCase();
   if (!SIZE_GATED_EXTENSIONS.has(extension)) return false;
@@ -92,15 +100,26 @@ interface PendingThumbnail {
 
 const UNSCOPED_SUBSCRIBER = Symbol('unscoped-thumbnail-request');
 
-/** Characters of data URI kept across all cached thumbnails (about 24 MB of string data); older
- * ones are re-requested on demand, and the backend serves those from its own thumbnail cache. */
-const THUMBNAIL_CACHE_BUDGET_CHARS = 24_000_000;
+/** Characters of data URI kept across the small list-row thumbnails and SVG icons (about 24 MB of
+ * string data); older ones are re-requested on demand, and the backend serves those from its own
+ * thumbnail cache. */
+const LIST_THUMBNAIL_CACHE_BUDGET_CHARS = 24_000_000;
+
+/** Grid tiles (medium and large) are far bigger than a row icon, so they are kept only briefly:
+ * a tile that has not been drawn for this long is dropped, and the total is capped as well. A
+ * thumbnail that is still on screen is drawn on every render, which keeps it alive. */
+const GRID_THUMBNAIL_TTL_MS = 60_000;
+const GRID_THUMBNAIL_CACHE_BUDGET_CHARS = 12_000_000;
+/** How often idle grid thumbnails are actually freed, while there are any. */
+const GRID_THUMBNAIL_SWEEP_MS = 15_000;
 
 export class ThumbnailLoader {
   private readonly thumbnails = new WeightedLru<string | undefined>(
-    THUMBNAIL_CACHE_BUDGET_CHARS,
+    LIST_THUMBNAIL_CACHE_BUDGET_CHARS,
     (uri) => uri?.length ?? 64,
   );
+  private readonly gridThumbnails: WeightedLru<string | undefined>;
+  private sweepTimer: ReturnType<typeof setInterval> | undefined;
   private readonly pending = new Map<string, PendingThumbnail>();
   private activeRequestCount = 0;
   private readonly waiting: PendingThumbnail[] = [];
@@ -108,7 +127,32 @@ export class ThumbnailLoader {
   constructor(
     private readonly client: ThumbnailClient,
     private readonly redraw: () => void = m.redraw,
-  ) {}
+    now: () => number = () => Date.now(),
+  ) {
+    this.gridThumbnails = new WeightedLru<string | undefined>(
+      GRID_THUMBNAIL_CACHE_BUDGET_CHARS,
+      (uri) => uri?.length ?? 64,
+      { maxAgeMs: GRID_THUMBNAIL_TTL_MS, now },
+    );
+  }
+
+  /** Grid-size rasters are the big ones; list-row thumbnails and SVG icons are tiny. */
+  private cacheFor(entry: EntrySummary, size: ThumbnailSize): WeightedLru<string | undefined> {
+    return size === 'small' || isSvg(entry) ? this.thumbnails : this.gridThumbnails;
+  }
+
+  /** Frees idle grid thumbnails on a timer, since nothing else touches them once the grid is gone;
+   * the timer stops itself when the cache is empty. */
+  private scheduleGridSweep(): void {
+    if (this.sweepTimer !== undefined) return;
+    this.sweepTimer = setInterval(() => {
+      this.gridThumbnails.prune();
+      if (this.gridThumbnails.size === 0 && this.sweepTimer !== undefined) {
+        clearInterval(this.sweepTimer);
+        this.sweepTimer = undefined;
+      }
+    }, GRID_THUMBNAIL_SWEEP_MS);
+  }
 
   thumbnailDataUri(entry: EntrySummary, size: ThumbnailSize): string | undefined {
     return this.thumbnailDataUriFor(entry, size, UNSCOPED_SUBSCRIBER);
@@ -117,8 +161,10 @@ export class ThumbnailLoader {
   /** Cache size for memory diagnostics: entries held and the characters of their data URIs. */
   stats(): { readonly count: number; readonly chars: number } {
     let chars = 0;
-    for (const uri of this.thumbnails.values()) chars += uri?.length ?? 0;
-    return { count: this.thumbnails.size, chars };
+    for (const cache of [this.thumbnails, this.gridThumbnails]) {
+      for (const uri of cache.values()) chars += uri?.length ?? 0;
+    }
+    return { count: this.thumbnails.size + this.gridThumbnails.size, chars };
   }
 
   createViewport(): ThumbnailViewport {
@@ -132,7 +178,8 @@ export class ThumbnailLoader {
   ): string | undefined {
     if (!isThumbnailable(entry, size)) return undefined;
     const key = cacheKey(entry, size);
-    if (this.thumbnails.has(key)) return this.thumbnails.get(key);
+    const cache = this.cacheFor(entry, size);
+    if (cache.has(key)) return cache.get(key);
     const existing = this.pending.get(key);
     if (existing !== undefined && !existing.controller.signal.aborted) {
       existing.subscribers.add(subscriber);
@@ -175,13 +222,15 @@ export class ThumbnailLoader {
       ? this.readSvgDataUri(request.entry, signal)
       : this.client
           .getThumbnail(request.entry.location.uri, request.size, signal)
-          .then((bytes) => (bytes === undefined ? undefined : bytesToDataUri(bytes, 'image/jpeg')));
+          .then((bytes) =>
+            bytes === undefined ? undefined : bytesToDataUri(bytes, thumbnailMimeType(bytes)),
+          );
     void result
       .then((dataUri) => {
-        if (!signal.aborted) this.thumbnails.set(request.key, dataUri);
+        if (!signal.aborted) this.storeResult(request, dataUri);
       })
       .catch(() => {
-        if (!signal.aborted) this.thumbnails.set(request.key, undefined);
+        if (!signal.aborted) this.storeResult(request, undefined);
       })
       .finally(() => {
         this.activeRequestCount -= 1;
@@ -189,6 +238,12 @@ export class ThumbnailLoader {
         this.startWaitingRequests();
         this.redraw();
       });
+  }
+
+  private storeResult(request: PendingThumbnail, dataUri: string | undefined): void {
+    const cache = this.cacheFor(request.entry, request.size);
+    cache.set(request.key, dataUri);
+    if (cache === this.gridThumbnails) this.scheduleGridSweep();
   }
 
   private startWaitingRequests(): void {

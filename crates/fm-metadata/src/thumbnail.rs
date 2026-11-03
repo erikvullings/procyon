@@ -113,6 +113,11 @@ pub fn generate_image_thumbnail(
             limit: MAX_SOURCE_BYTES,
         });
     }
+    // A favicon-style `.ico` holds several sizes of one image. Decode only the one that fits the
+    // requested thumbnail rather than whichever frame the decoder prefers.
+    let original = bytes;
+    let single_frame = select_ico_frame(bytes, size.max_dimension());
+    let bytes = single_frame.as_deref().unwrap_or(bytes);
     let reader = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
         .map_err(|_| ThumbnailError::UnsupportedFormat)?;
@@ -122,14 +127,99 @@ pub fn generate_image_thumbnail(
     let image = reader.decode()?;
     let thumbnail = image.thumbnail(size.max_dimension(), size.max_dimension());
 
+    // Icons are small, often transparent artwork: keep the alpha channel as PNG. JPEG has none and
+    // would paint every transparent pixel black. Photos and everything else stay JPEG.
+    let (format, content_type) = if is_ico(original) {
+        (ImageFormat::Png, "image/png")
+    } else {
+        (ImageFormat::Jpeg, "image/jpeg")
+    };
     let mut out = Vec::new();
     thumbnail
-        .write_to(&mut Cursor::new(&mut out), ImageFormat::Jpeg)
+        .write_to(&mut Cursor::new(&mut out), format)
         .map_err(ThumbnailError::Encode)?;
     Ok(GeneratedThumbnail {
         bytes: out,
-        content_type: "image/jpeg",
+        content_type,
     })
+}
+
+/// Whether `bytes` start an `.ico` file (`ICONDIR`: reserved 0, type 1).
+#[must_use]
+pub(crate) fn is_ico(bytes: &[u8]) -> bool {
+    bytes.get(..4) == Some(&[0, 0, 1, 0])
+}
+
+/// The MIME type of already-generated thumbnail bytes (PNG for icons, otherwise JPEG), for callers
+/// that only hold the cached bytes.
+#[must_use]
+pub fn thumbnail_content_type(bytes: &[u8]) -> &'static str {
+    if bytes.starts_with(&[0x89, b'P', b'N', b'G']) {
+        "image/png"
+    } else {
+        "image/jpeg"
+    }
+}
+
+/// Size of the `ICONDIR` header and of each `ICONDIRENTRY` in an `.ico` file.
+const ICO_HEADER_LEN: usize = 6;
+const ICO_ENTRY_LEN: usize = 16;
+
+/// For a multi-image `.ico`, returns a single-image `.ico` holding only the frame that best fits a
+/// `target`-pixel thumbnail: the smallest frame at least `target` wide and tall, or the largest
+/// frame when none is that big. Returns `None` for anything that is not a well-formed `.ico` with
+/// more than one frame, so the caller decodes the original bytes unchanged.
+fn select_ico_frame(bytes: &[u8], target: u32) -> Option<Vec<u8>> {
+    // ICONDIR: reserved = 0, type = 1 (icon), image count.
+    if !is_ico(bytes) {
+        return None;
+    }
+    let count = usize::from(u16::from_le_bytes([*bytes.get(4)?, *bytes.get(5)?]));
+    if count < 2 {
+        return None;
+    }
+    let mut best: Option<(u32, &[u8])> = None;
+    for index in 0..count {
+        let start = ICO_HEADER_LEN + index * ICO_ENTRY_LEN;
+        let entry = bytes.get(start..start + ICO_ENTRY_LEN)?;
+        // A stored width or height of 0 means 256.
+        let dimension = |value: u8| if value == 0 { 256 } else { u32::from(value) };
+        let edge = dimension(entry[0]).min(dimension(entry[1]));
+        let better = match best {
+            None => true,
+            Some((current, _)) => {
+                if edge >= target && current >= target {
+                    edge < current
+                } else if edge >= target {
+                    true
+                } else if current >= target {
+                    false
+                } else {
+                    edge > current
+                }
+            }
+        };
+        if better {
+            best = Some((edge, entry));
+        }
+    }
+    let entry = best?.1;
+    let length = usize::try_from(u32::from_le_bytes(entry[8..12].try_into().ok()?)).ok()?;
+    let offset = usize::try_from(u32::from_le_bytes(entry[12..16].try_into().ok()?)).ok()?;
+    let data = bytes.get(offset..offset.checked_add(length)?)?;
+
+    // Re-wrap the chosen frame as a one-image `.ico`: header, its entry (data now at offset 22),
+    // then the frame's bytes (PNG or headerless BMP, exactly as stored).
+    let mut single = Vec::with_capacity(ICO_HEADER_LEN + ICO_ENTRY_LEN + data.len());
+    single.extend_from_slice(&[0, 0, 1, 0, 1, 0]);
+    single.extend_from_slice(&entry[..12]);
+    single.extend_from_slice(
+        &u32::try_from(ICO_HEADER_LEN + ICO_ENTRY_LEN)
+            .ok()?
+            .to_le_bytes(),
+    );
+    single.extend_from_slice(data);
+    Some(single)
 }
 
 /// Whether `extension` (without the leading dot, any case) is a format
@@ -180,6 +270,74 @@ mod tests {
         assert!(decoded.width() <= ThumbnailSize::Small.max_dimension());
     }
 
+    /// A multi-frame `.ico` whose frames are solid colours keyed by size, so the frame a
+    /// thumbnail came from can be read back from its pixels.
+    fn multi_size_ico(sizes: &[(u32, [u8; 3])]) -> Vec<u8> {
+        use image::codecs::ico::{IcoEncoder, IcoFrame};
+        use image::{ExtendedColorType, RgbaImage};
+        let frames: Vec<IcoFrame<'static>> = sizes
+            .iter()
+            .map(|(edge, [r, g, b])| {
+                let pixels = RgbaImage::from_pixel(*edge, *edge, Rgba([*r, *g, *b, 255]));
+                IcoFrame::as_png(pixels.as_raw(), *edge, *edge, ExtendedColorType::Rgba8)
+                    .expect("encode ico frame")
+            })
+            .collect();
+        let mut bytes = Vec::new();
+        IcoEncoder::new(&mut bytes)
+            .encode_images(&frames)
+            .expect("encode ico");
+        bytes
+    }
+
+    fn dominant_channel(thumbnail: &GeneratedThumbnail) -> usize {
+        let pixel = image::load_from_memory(&thumbnail.bytes)
+            .expect("decode thumbnail")
+            .to_rgb8()
+            .get_pixel(2, 2)
+            .0;
+        pixel
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, value)| **value)
+            .map(|(index, _)| index)
+            .expect("three channels")
+    }
+
+    #[test]
+    fn an_ico_thumbnail_comes_from_the_frame_that_fits_the_requested_size() {
+        // red 16, green 32, blue 64, then a yellow-ish 256 frame (red and green high).
+        let ico = multi_size_ico(&[
+            (16, [250, 0, 0]),
+            (32, [0, 250, 0]),
+            (64, [0, 0, 250]),
+            (256, [250, 250, 0]),
+        ]);
+
+        // Small is 64 px: the 64 px frame (blue) is the exact fit, not the 256 px one.
+        let small = generate_image_thumbnail(&ico, ThumbnailSize::Small).expect("small");
+        assert_eq!(dominant_channel(&small), 2);
+        // Medium is 128 px: nothing is exactly 128, so the smallest frame that is big enough (256).
+        let medium = generate_image_thumbnail(&ico, ThumbnailSize::Medium).expect("medium");
+        assert_ne!(dominant_channel(&medium), 2);
+    }
+
+    #[test]
+    fn an_ico_with_only_small_frames_uses_the_largest() {
+        let ico = multi_size_ico(&[(16, [250, 0, 0]), (32, [0, 250, 0])]);
+        let large = generate_image_thumbnail(&ico, ThumbnailSize::Large).expect("large");
+        assert_eq!(dominant_channel(&large), 1, "the 32 px green frame");
+    }
+
+    #[test]
+    fn a_malformed_ico_directory_falls_back_to_the_original_bytes() {
+        let mut ico = multi_size_ico(&[(16, [250, 0, 0]), (32, [0, 250, 0])]);
+        // Claim far more frames than the file holds: selection must give up, not panic.
+        ico[4] = 200;
+        let _ = generate_image_thumbnail(&ico, ThumbnailSize::Small);
+        assert!(select_ico_frame(&ico, 64).is_none());
+    }
+
     #[test]
     fn generates_a_thumbnail_from_gif() {
         let bytes = fixture_bytes(ImageFormat::Gif, 80, 60);
@@ -209,6 +367,53 @@ mod tests {
         let decoded = image::load_from_memory(&thumbnail.bytes).expect("decode thumbnail");
         assert!(decoded.width() <= ThumbnailSize::Small.max_dimension());
         assert!(decoded.height() <= ThumbnailSize::Small.max_dimension());
+    }
+
+    #[test]
+    fn an_ico_thumbnail_is_a_png_that_keeps_its_transparency() {
+        use image::codecs::ico::{IcoEncoder, IcoFrame};
+        use image::{ExtendedColorType, RgbaImage};
+        // Fully transparent pixels everywhere except a solid red block in the middle.
+        let mut pixels = RgbaImage::from_pixel(32, 32, Rgba([0, 0, 0, 0]));
+        for x in 12..20 {
+            for y in 12..20 {
+                pixels.put_pixel(x, y, Rgba([250, 0, 0, 255]));
+            }
+        }
+        let frame = IcoFrame::as_png(pixels.as_raw(), 32, 32, ExtendedColorType::Rgba8)
+            .expect("encode ico frame");
+        let mut ico = Vec::new();
+        IcoEncoder::new(&mut ico)
+            .encode_images(&[frame])
+            .expect("encode ico");
+
+        let thumbnail = generate_image_thumbnail(&ico, ThumbnailSize::Small).expect("thumbnail");
+
+        assert_eq!(thumbnail.content_type, "image/png");
+        assert_eq!(thumbnail_content_type(&thumbnail.bytes), "image/png");
+        let decoded = image::load_from_memory(&thumbnail.bytes)
+            .expect("decode thumbnail")
+            .to_rgba8();
+        assert_eq!(
+            decoded.get_pixel(0, 0).0[3],
+            0,
+            "transparent stays transparent"
+        );
+        // The opaque red block survives wherever scaling put it.
+        assert!(
+            decoded
+                .pixels()
+                .any(|pixel| pixel.0[3] > 200 && pixel.0[0] > 200),
+            "an opaque red pixel remains"
+        );
+    }
+
+    #[test]
+    fn photos_stay_jpeg() {
+        let bytes = fixture_bytes(ImageFormat::Png, 100, 100);
+        let thumbnail = generate_image_thumbnail(&bytes, ThumbnailSize::Small).expect("thumbnail");
+        assert_eq!(thumbnail.content_type, "image/jpeg");
+        assert_eq!(thumbnail_content_type(&thumbnail.bytes), "image/jpeg");
     }
 
     #[test]

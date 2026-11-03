@@ -1,6 +1,5 @@
 import m, { type FactoryComponent } from 'mithril';
 import { FlatButton, IconButton, ModalPanel, Skeleton } from 'mithril-materialized';
-
 import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
 import type { ConnectionClient } from '../../api/client/connection-client.ts';
 import type { SemanticClient } from '../../api/client/semantic-client.ts';
@@ -46,6 +45,7 @@ import type {
   Location,
 } from '../../models';
 import { defaultKnowledgeSearchOptions } from '../../models';
+import { thumbnailMimeType } from '../../utilities/image-mime';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
 import { lastPathSegment } from '../navigation/navigation';
 import { copyImageDataUri, copyText } from '../preview/clipboard';
@@ -136,7 +136,7 @@ const KnowledgeImagePreview: FactoryComponent<KnowledgeImagePreviewAttrs> = () =
       }
       let binary = '';
       for (const byte of bytes) binary += String.fromCharCode(byte);
-      dataUri = `data:image/jpeg;base64,${btoa(binary)}`;
+      dataUri = `data:${thumbnailMimeType(bytes)};base64,${btoa(binary)}`;
     } catch {
       if (!signal.aborted) unavailable = true;
     } finally {

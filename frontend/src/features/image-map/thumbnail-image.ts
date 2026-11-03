@@ -1,5 +1,6 @@
 import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import type { EntrySummary } from '../../models';
+import { thumbnailMimeType } from '../../utilities/image-mime';
 import { WeightedLru } from '../../utilities/weighted-lru';
 
 type ThumbnailSource = Pick<WorkspaceClient, 'getThumbnail'>;
@@ -25,7 +26,7 @@ export function mapThumbnailStats(): { readonly count: number; readonly chars: n
 function dataUri(bytes: Uint8Array): string {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return `data:image/jpeg;base64,${btoa(binary)}`;
+  return `data:${thumbnailMimeType(bytes)};base64,${btoa(binary)}`;
 }
 
 function release(): void {

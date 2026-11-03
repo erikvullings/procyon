@@ -10825,8 +10825,8 @@ export const getGetThumbnailUrl = (params: GetThumbnailParams,) => {
 }
 
 /**
- * @summary Returns JPEG thumbnail bytes for an image or CBZ/CBR comic archive
-entry, if supported.
+ * @summary Returns thumbnail bytes for an image or CBZ/CBR comic archive entry, if supported: JPEG,
+except for icon (`.ico`) files, which keep their transparency as PNG.
  */
 export const getThumbnail = async (params: GetThumbnailParams, options?: Parameters<typeof fetchMutator>[1]): Promise<getThumbnailResponse> => {
 

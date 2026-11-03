@@ -22,6 +22,7 @@ use fm_metadata::{
     GeneratedThumbnail, MAX_SOURCE_BYTES, ThumbnailCache, ThumbnailError, ThumbnailSize,
     generate_image_thumbnail, generate_pdf_thumbnail, generate_video_thumbnail,
     is_supported_image_extension, is_supported_pdf_extension, is_supported_video_extension,
+    thumbnail_content_type,
 };
 use fm_vfs::{EntryRef, ListOptions, ProviderCapabilities, ProviderRegistry};
 use tokio::io::AsyncReadExt;
@@ -71,8 +72,8 @@ impl ThumbnailService {
         let key = ThumbnailCache::cache_key(&source_bytes, size);
         if let Some(cached) = self.cache.get(&key) {
             return Ok(GeneratedThumbnail {
+                content_type: thumbnail_content_type(&cached),
                 bytes: cached,
-                content_type: "image/jpeg",
             });
         }
 
