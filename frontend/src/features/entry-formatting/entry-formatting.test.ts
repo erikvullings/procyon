@@ -60,7 +60,7 @@ describe('entry presentation formatting', () => {
   it('provides settings defaults outside UI components', () => {
     expect(DEFAULT_ENTRY_FORMAT_SETTINGS).toEqual({
       sizeFormat: 'binary',
-      dateFormat: 'medium',
+      dateFormat: 'iso',
     });
   });
 });

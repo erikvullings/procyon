@@ -197,7 +197,7 @@ export class MockContext {
     language: 'en',
     fontSize: 13,
     rowHeight: 20,
-    dateFormat: 'medium',
+    dateFormat: 'iso',
     sizeFormat: 'binary',
     showHiddenFiles: false,
     confirmPermanentDelete: true,

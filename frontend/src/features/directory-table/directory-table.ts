@@ -562,7 +562,8 @@ const INITIAL_COLUMNS: readonly DirectoryColumnDescriptor[] = [
       const value = formatEntryModifiedAt(entry.modifiedAt, settings);
       const compactValue = formatEntryModifiedAt(entry.modifiedAt, {
         ...settings,
-        dateFormat: 'short',
+        // ISO is already compact and unambiguous; only the locale formats need shortening.
+        dateFormat: settings.dateFormat === 'iso' ? 'iso' : 'short',
       });
       return m('span', { title: value }, [
         m('span.fm-directory-modified-full', value),

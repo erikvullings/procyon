@@ -22,6 +22,8 @@ describe('settings appearance entry formatting', () => {
         ...(await client.getSettings()),
         language: 'fr' as const,
         sizeFormat: 'bytes' as const,
+        // The locale fallback is only visible in the locale-aware formats, not in ISO.
+        dateFormat: 'medium' as const,
       };
       const setLoadedEntryFormatSettings = vi.fn();
       const controller = createSettingsController(context(client, setLoadedEntryFormatSettings));

@@ -22,7 +22,7 @@ export interface EntryFormatSettings {
 /** Presentation defaults used until the settings service from task 0030 is available. */
 export const DEFAULT_ENTRY_FORMAT_SETTINGS: EntryFormatSettings = Object.freeze({
   sizeFormat: 'binary',
-  dateFormat: 'medium',
+  dateFormat: 'iso',
 });
 
 export interface EntrySizeValue {

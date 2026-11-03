@@ -104,9 +104,9 @@ pub enum DateFormat {
     /// Compact locale-aware date and time.
     Short,
     /// More descriptive locale-aware date and time.
-    #[default]
     Medium,
-    /// ISO-8601 representation.
+    /// ISO-8601 representation (`YYYY-MM-DD HH:mm` in local time); the default.
+    #[default]
     Iso,
 }
 
@@ -492,7 +492,7 @@ impl Default for Settings {
             language: Language::En,
             font_size: 13,
             row_height: 20,
-            date_format: DateFormat::Medium,
+            date_format: DateFormat::Iso,
             size_format: SizeFormat::Binary,
             show_hidden_files: false,
             confirm_permanent_delete: true,
