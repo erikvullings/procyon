@@ -538,6 +538,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
    * before the app lost focus (often nowhere useful), so the cursor row still *looks* highlighted
    * but arrow keys silently do nothing until the user clicks a row to re-establish focus manually. */
   function handleWindowFocus(): void {
+    void shellState.workspaceController.refreshVolumes();
     const openModals = document.querySelectorAll<HTMLElement>('.modal.active[aria-modal="true"]');
     const openModal = openModals.item(openModals.length - 1);
     if (openModal !== null) {
@@ -560,7 +561,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
   }
 
   function handleVisibilityChange(): void {
-    if (document.visibilityState === 'visible') revalidateDirectoriesOnReturn();
+    if (document.visibilityState === 'visible') {
+      revalidateDirectoriesOnReturn();
+      void shellState.workspaceController.refreshVolumes();
+    }
   }
 
   function effectiveSort(sort: readonly SortDescriptor[]): readonly SortDescriptor[] {
@@ -1404,6 +1408,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
 
   /** `dispose()` of the `buildControllers` registry set up in `oninit` (controller-registry.ts). */
   let disposeShellControllers: (() => void) | undefined;
+  let volumePollTimer: number | undefined;
+  const VOLUME_POLL_INTERVAL_MS = 10_000;
 
   const workspaceControllerContext: WorkspaceControllerContext = {
     getWorkspace: () => shellState.workspace,
@@ -2894,6 +2900,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         settingsWiring.handleSystemThemeChange,
       );
       window.addEventListener('focus', handleWindowFocus);
+      // A drive plugged in while Procyon stays focused raises no window event, so poll gently.
+      volumePollTimer = window.setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          void shellState.workspaceController.refreshVolumes();
+        }
+      }, VOLUME_POLL_INTERVAL_MS);
       document.addEventListener('visibilitychange', handleVisibilityChange);
       document.addEventListener('keydown', miscWiring.updateFunctionKeyModifiers);
       document.addEventListener('keyup', miscWiring.updateFunctionKeyModifiers);
@@ -2999,6 +3011,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         settingsWiring.handleSystemThemeChange,
       );
       window.removeEventListener('focus', handleWindowFocus);
+      if (volumePollTimer !== undefined) window.clearInterval(volumePollTimer);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       document.removeEventListener('keydown', miscWiring.updateFunctionKeyModifiers);
       document.removeEventListener('keyup', miscWiring.updateFunctionKeyModifiers);

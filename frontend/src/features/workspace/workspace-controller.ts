@@ -72,6 +72,8 @@ export interface WorkspaceController {
   loadWorkspace(): Promise<void>;
   loadSystemLocations(signal?: AbortSignal): Promise<void>;
   loadVolumes(signal?: AbortSignal): Promise<void>;
+  /** Re-reads mounted volumes (a drive plugged in or ejected after startup); silent on failure and redraws only when the list changed. */
+  refreshVolumes(): Promise<void>;
   loadHomeDirectory(signal?: AbortSignal): Promise<void>;
   switchWorkspace(workspaceId: WorkspaceId): Promise<void>;
   refreshWorkspaceSummaries(): void;
@@ -172,6 +174,19 @@ export function createWorkspaceController(
       context.setVolumesError(t('workspace', 'unableToDiscoverVolumes'));
     }
     context.redraw();
+  }
+
+  async function refreshVolumes(): Promise<void> {
+    try {
+      const next = await client.getVolumes();
+      const same = JSON.stringify(next) === JSON.stringify(context.getVolumes());
+      if (same) return;
+      context.setVolumes(next);
+      context.setVolumesError(undefined);
+      context.redraw();
+    } catch {
+      // Keep the last known list: a transient failure must not blank the volume picker.
+    }
   }
 
   async function loadHomeDirectory(signal?: AbortSignal): Promise<void> {
@@ -366,6 +381,7 @@ export function createWorkspaceController(
     loadSystemLocations,
     loadHomeDirectory,
     loadVolumes,
+    refreshVolumes,
     switchWorkspace,
     refreshWorkspaceSummaries,
     revisionForWorkspace,
