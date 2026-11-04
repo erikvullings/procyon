@@ -101,6 +101,8 @@ export interface SettingsDto {
      * @minimum 0
      */
   semanticMaxSourceMib?: number;
+  /** Indexed roots the corpus-themes view analyses; empty means the whole library (task 0298). */
+  semanticThemeRootIds?: string[];
   /** Show hidden entries by default. */
   showHiddenFiles: boolean;
   /** Size presentation. */

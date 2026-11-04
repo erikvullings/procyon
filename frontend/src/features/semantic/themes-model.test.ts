@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { mockCorpusThemes } from '../../api/client/mock-corpus-themes';
+import type { RagScope } from '../../models';
 import {
   cleanTitle,
   decodeEntities,
+  exportFileName,
   folderIsEnrolled,
   folderName,
   isThemesStale as isStaleRejection,
@@ -12,11 +14,14 @@ import {
   pickPoint,
   provenanceLine,
   reflowPassage,
+  scopeForRoots,
   themeColour,
+  themeExportLabels,
   themeKeywordLabel,
   themesAreStale,
   topDocumentsForTheme,
   toScreen,
+  validRootSelection,
 } from './themes-model';
 
 const GEOMETRY = { width: 220, height: 120, padding: 10 } as const;
@@ -138,5 +143,61 @@ describe('reflowPassage', () => {
 
   it('drops text-less bullets that the Markdown renderer would leak as placeholders', () => {
     expect(reflowPassage('abuse\n\n-\n\nnext')).toBe('abuse\n\nnext');
+  });
+});
+
+describe('theme export helpers', () => {
+  const NOW = new Date(2026, 10, 4, 9, 30);
+
+  it('names the file after the format and the local date', () => {
+    expect(exportFileName('markdown', NOW)).toBe('corpus-themes-2026-11-04.md');
+    expect(exportFileName('docx', NOW)).toBe('corpus-themes-2026-11-04.docx');
+    expect(exportFileName('skosTurtle', NOW)).toBe('corpus-themes-2026-11-04.ttl');
+    expect(exportFileName('skosRdfXml', NOW)).toBe('corpus-themes-2026-11-04.rdf');
+    expect(exportFileName('skosJsonLd', NOW)).toBe('corpus-themes-2026-11-04.jsonld');
+    expect(exportFileName('markdown', NOW, 3)).toBe('corpus-theme-3-2026-11-04.md');
+  });
+
+  it('labels every theme as the list does, with a numbered fallback', () => {
+    const themes = mockCorpusThemes();
+    const labels = themeExportLabels(themes, (number) => `Theme ${number}`);
+    expect(labels).toHaveLength(themes.themes.length);
+    expect(labels[0]).toEqual({
+      theme: themes.themes[0]?.id,
+      label: themeKeywordLabel(themes.themes[0]?.keywords ?? []),
+    });
+    const bare = { ...themes, themes: [{ ...(themes.themes[0] as object), keywords: [] }] };
+    expect(themeExportLabels(bare as never, (number) => `Theme ${number}`)[0]?.label).toMatch(
+      /^Theme \d+$/u,
+    );
+  });
+
+  const ROOTS = [{ rootId: 'a' }, { rootId: 'b' }, { rootId: 'c' }];
+
+  it('keeps only remembered roots that still exist, defaulting to every root', () => {
+    expect(validRootSelection(['b', 'gone'], ROOTS)).toEqual(['b']);
+    expect(validRootSelection(['gone'], ROOTS)).toEqual(['a', 'b', 'c']);
+    expect(validRootSelection([], ROOTS)).toEqual(['a', 'b', 'c']);
+    expect(validRootSelection(['b'], [])).toEqual([]);
+  });
+
+  it('scopes to the whole library unless a strict subset of roots is chosen', () => {
+    const library: RagScope = {
+      kind: 'entireLibrary',
+      workspaceId: 'w',
+      label: 'Entire library',
+      selectedFiles: [],
+      semanticSourceIds: [],
+      enrolledRootIds: [],
+    };
+    expect(scopeForRoots(library, ['a', 'b', 'c'], ROOTS, 'Selected folders')).toBe(library);
+    expect(scopeForRoots(library, [], ROOTS, 'Selected folders')).toBe(library);
+    const subset = scopeForRoots(library, ['c', 'a'], ROOTS, 'Selected folders');
+    expect(subset).toEqual({
+      ...library,
+      kind: 'enrolledRoots',
+      label: 'Selected folders',
+      enrolledRootIds: ['a', 'c'],
+    });
   });
 });

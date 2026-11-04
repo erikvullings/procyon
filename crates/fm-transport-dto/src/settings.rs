@@ -402,6 +402,9 @@ pub struct SettingsDto {
     /// resource profile and the worker's own hard caps.
     #[serde(default = "default_semantic_max_source_mib")]
     pub semantic_max_source_mib: u32,
+    /// Indexed roots the corpus-themes view analyses; empty means the whole library (task 0298).
+    #[serde(default)]
+    pub semantic_theme_root_ids: Vec<String>,
 }
 
 const fn default_semantic_max_source_mib() -> u32 {

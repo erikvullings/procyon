@@ -5,9 +5,12 @@ import type { SemanticClient } from '../../api/client/semantic-client.ts';
 import { chevronDownIcon, chevronUpIcon } from '../../components/tabler-icons';
 import { t } from '../../i18n';
 import type {
+  CorpusThemeExportFormat,
   CorpusThemeStatus,
   CorpusThemes,
   CorpusThemesResponse,
+  KnowledgeRoot,
+  Location,
   RagScope,
   ThemeMapPoint,
   ThemePassage,
@@ -17,6 +20,7 @@ import { knowledgeProvenanceLabel } from './knowledge-search-dialog';
 import {
   cleanTitle,
   decodeEntities,
+  exportFileName,
   folderIsEnrolled,
   folderName,
   isThemesStale,
@@ -26,12 +30,15 @@ import {
   reflowPassage,
   resolveColour,
   type ScatterGeometry,
+  scopeForRoots,
   themeColour,
+  themeExportLabels,
   themeKeywordLabel,
   themesAreStale,
   topDocumentsForTheme,
   toScreen,
   usableKeywords,
+  validRootSelection,
 } from './themes-model';
 
 export interface ThemesViewAttrs {
@@ -45,7 +52,33 @@ export interface ThemesViewAttrs {
   readonly onSearchSources: (sourceIds: readonly string[], subject: string) => void;
   /** Smallest share of a document's passages for it to be listed under a theme (default 5%). */
   readonly minDocumentShare?: number;
+  /** Remembered indexed roots to analyse (global setting); empty or absent means all of them. */
+  readonly selectedRootIds?: readonly string[];
+  /** Remembers the chosen roots; called with `[]` when every root is chosen. */
+  readonly onSelectRoots?: (rootIds: readonly string[]) => void;
+  /** Folder an export is saved in (the active pane's folder). Without it, export is not offered. */
+  readonly exportFolder?: Location;
+  /** Told after a successful export, with the saved file's name. */
+  readonly onExported?: (fileName: string) => void;
 }
+
+const EXPORT_FORMATS: readonly {
+  readonly format: CorpusThemeExportFormat;
+  readonly label:
+    | 'exportFormatMarkdown'
+    | 'exportFormatDocx'
+    | 'exportFormatSkosTurtle'
+    | 'exportFormatSkosRdfXml'
+    | 'exportFormatSkosJsonLd';
+}[] = [
+  { format: 'markdown', label: 'exportFormatMarkdown' },
+  { format: 'docx', label: 'exportFormatDocx' },
+  { format: 'skosTurtle', label: 'exportFormatSkosTurtle' },
+  { format: 'skosRdfXml', label: 'exportFormatSkosRdfXml' },
+  { format: 'skosJsonLd', label: 'exportFormatSkosJsonLd' },
+];
+
+const isSkos = (format: CorpusThemeExportFormat): boolean => format.startsWith('skos');
 
 /** Selection in the list or on the map; `null` is the "no theme" bucket. */
 type Selection = number | null | undefined;
@@ -315,28 +348,274 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
   let generation = 0;
   let scopeIndex = 0;
   let visibleScopes: readonly RagScope[] = [];
+  let roots: readonly KnowledgeRoot[] = [];
+  /** Roots the shown themes were computed for, and the checkboxes' not yet applied state. */
+  let appliedRoots: readonly string[] = [];
+  let draftRoots: readonly string[] = [];
+  let exportFormat: CorpusThemeExportFormat = 'markdown';
+  let exportOnlySelected = false;
+  let includePassages = false;
+  let includeDocuments = false;
+  let baseUri = '';
+  let exporting = false;
+  let exportResult: { readonly ok: boolean; readonly text: string } | undefined;
 
-  function activeScope(): RagScope | undefined {
+  function baseScope(): RagScope | undefined {
     return visibleScopes[Math.min(scopeIndex, visibleScopes.length - 1)];
   }
 
-  /** Offers the folder scope only when the backend would authorize it (an enrolled root). */
-  async function resolveScopes(attrs: ThemesViewAttrs): Promise<readonly RagScope[]> {
-    const folderScopes = attrs.scopes.filter((scope) => scope.kind === 'currentFolder');
-    if (folderScopes.length === 0) return attrs.scopes;
-    let roots: Awaited<ReturnType<SemanticClient['listKnowledgeRoots']>> = [];
+  /** The library scope narrows to the chosen roots; other scopes are used as offered. */
+  function activeScope(): RagScope | undefined {
+    const base = baseScope();
+    if (base === undefined || base.kind !== 'entireLibrary') return base;
+    return scopeForRoots(base, appliedRoots, roots, t('themes', 'scopeSelectedFolders'));
+  }
+
+  /** The indexed roots, without which a folder scope cannot be vouched for. */
+  async function loadRoots(attrs: ThemesViewAttrs): Promise<readonly KnowledgeRoot[]> {
+    const workspaceId = attrs.scopes[0]?.workspaceId ?? '';
     try {
-      roots = await attrs.client.listKnowledgeRoots({
-        workspaceId: folderScopes[0]?.workspaceId ?? '',
-      });
+      return await attrs.client.listKnowledgeRoots({ workspaceId });
     } catch {
-      // Without the roots the folder scope cannot be vouched for: offer the library only.
+      return [];
     }
+  }
+
+  /** Offers the folder scope only when the backend would authorize it (an enrolled root). */
+  function resolveScopes(attrs: ThemesViewAttrs): readonly RagScope[] {
     return attrs.scopes.filter(
       (scope) =>
         scope.kind !== 'currentFolder' ||
         (scope.folder != null && folderIsEnrolled(scope.folder, roots)),
     );
+  }
+
+  function rootLabel(root: KnowledgeRoot): string {
+    return root.label.length > 0 ? root.label : folderName(root.location.uri);
+  }
+
+  function toggleRoot(rootId: string, checked: boolean): void {
+    draftRoots = checked
+      ? [...draftRoots.filter((id) => id !== rootId), rootId]
+      : draftRoots.filter((id) => id !== rootId);
+  }
+
+  function rootsChanged(): boolean {
+    const sorted = (ids: readonly string[]): string => [...ids].sort().join('\n');
+    return sorted(draftRoots) !== sorted(appliedRoots);
+  }
+
+  function applyRoots(attrs: ThemesViewAttrs): void {
+    const chosen = roots.map((root) => root.rootId).filter((id) => draftRoots.includes(id));
+    if (chosen.length === 0) return;
+    appliedRoots = chosen;
+    draftRoots = chosen;
+    attrs.onSelectRoots?.(chosen.length === roots.length ? [] : chosen);
+    void load(attrs);
+  }
+
+  /** Folder multi-select: unrelated topics cluster poorly together, so analyse a chosen subset. */
+  function rootsPanel(attrs: ThemesViewAttrs): Vnode | undefined {
+    if (roots.length < 2 || baseScope()?.kind !== 'entireLibrary') return undefined;
+    return m('fieldset.fm-themes-roots', [
+      m('legend', t('themes', 'foldersHeading')),
+      m('p.fm-themes-muted', t('themes', 'foldersHint')),
+      m(
+        'ul.fm-themes-root-list',
+        roots.map((root) =>
+          m(
+            'li',
+            { key: root.rootId },
+            m('label.fm-themes-root', [
+              m('input', {
+                type: 'checkbox',
+                checked: draftRoots.includes(root.rootId),
+                disabled: busy,
+                onchange: (event: Event) =>
+                  toggleRoot(root.rootId, (event.target as HTMLInputElement).checked),
+              }),
+              m('span', rootLabel(root)),
+              m(
+                'span.fm-themes-muted',
+                ` · ${t('themes', 'folderDocuments', { count: root.confirmedCompletedSources })}`,
+              ),
+            ]),
+          ),
+        ),
+      ),
+      m('.fm-themes-root-actions', [
+        m(
+          'button.btn',
+          {
+            type: 'button',
+            disabled: busy || draftRoots.length === 0 || !rootsChanged(),
+            onclick: () => applyRoots(attrs),
+          },
+          t('themes', 'applyFolders'),
+        ),
+        m(
+          'button.btn-flat',
+          {
+            type: 'button',
+            disabled: busy || draftRoots.length === roots.length,
+            onclick: () => {
+              draftRoots = roots.map((root) => root.rootId);
+            },
+          },
+          t('themes', 'selectAllFolders'),
+        ),
+      ]),
+    ]);
+  }
+
+  async function runExport(attrs: ThemesViewAttrs, themes: CorpusThemes): Promise<void> {
+    const scope = activeScope();
+    const folder = attrs.exportFolder;
+    if (scope === undefined || folder === undefined || exporting) return;
+    const onlyTheme = exportOnlySelected && typeof selected === 'number' ? selected : undefined;
+    const fileName = exportFileName(
+      exportFormat,
+      new Date(),
+      onlyTheme === undefined ? undefined : onlyTheme + 1,
+    );
+    // Join onto the pane's directory URI: the file lands where the user is browsing and both hosts
+    // write it through the same provider path.
+    const base = folder.uri.endsWith('/') ? folder.uri.slice(0, -1) : folder.uri;
+    exporting = true;
+    exportResult = undefined;
+    const trimmedBase = baseUri.trim();
+    try {
+      const saved = await attrs.client.exportCorpusThemes({
+        scope,
+        format: exportFormat,
+        destination: {
+          providerId: folder.providerId,
+          uri: `${base}/${encodeURIComponent(fileName)}`,
+        },
+        overwrite: false,
+        themes: onlyTheme === undefined ? [] : [onlyTheme],
+        labels: [...themeExportLabels(themes, (number) => t('themes', 'themeNumber', { number }))],
+        includePassages,
+        includeDocuments,
+        ...(isSkos(exportFormat) && trimmedBase.length > 0 ? { baseUri: trimmedBase } : {}),
+      });
+      exportResult = {
+        ok: true,
+        text: t('themes', 'exportDone', { name: fileName, count: saved.themeCount }),
+      };
+      attrs.onExported?.(fileName);
+    } catch (cause) {
+      exportResult = { ok: false, text: errorMessage(cause, t('themes', 'exportFailed')) };
+    } finally {
+      exporting = false;
+      m.redraw();
+    }
+  }
+
+  /** Export options. Document text and titles are opt-in; SKOS offers a base URI. */
+  function exportPanel(attrs: ThemesViewAttrs, themes: CorpusThemes): Vnode | undefined {
+    if (attrs.exportFolder === undefined) return undefined;
+    const singleTheme = typeof selected === 'number';
+    return m('details.fm-themes-export', [
+      m('summary', t('themes', 'exportTitle')),
+      m('.fm-themes-export-body', [
+        m('label.fm-themes-field', [
+          m('span', t('themes', 'exportFormat')),
+          m(
+            'select.browser-default',
+            {
+              value: exportFormat,
+              onchange: (event: Event) => {
+                exportFormat = (event.target as HTMLSelectElement).value as CorpusThemeExportFormat;
+              },
+            },
+            EXPORT_FORMATS.map((entry) =>
+              m(
+                'option',
+                { value: entry.format, selected: entry.format === exportFormat },
+                t('themes', entry.label),
+              ),
+            ),
+          ),
+        ]),
+        m('fieldset.fm-themes-field', [
+          m('legend', t('themes', 'exportWhat')),
+          m('label', [
+            m('input', {
+              type: 'radio',
+              name: 'fm-themes-export-what',
+              checked: !exportOnlySelected || !singleTheme,
+              onchange: () => {
+                exportOnlySelected = false;
+              },
+            }),
+            m('span', t('themes', 'exportAll')),
+          ]),
+          m('label', [
+            m('input', {
+              type: 'radio',
+              name: 'fm-themes-export-what',
+              checked: exportOnlySelected && singleTheme,
+              disabled: !singleTheme,
+              onchange: () => {
+                exportOnlySelected = true;
+              },
+            }),
+            m('span', t('themes', 'exportSelected')),
+          ]),
+        ]),
+        m('label.fm-themes-field', [
+          m('input', {
+            type: 'checkbox',
+            checked: includePassages,
+            onchange: (event: Event) => {
+              includePassages = (event.target as HTMLInputElement).checked;
+            },
+          }),
+          m('span', t('themes', 'exportPassages')),
+        ]),
+        m('label.fm-themes-field', [
+          m('input', {
+            type: 'checkbox',
+            checked: includeDocuments,
+            onchange: (event: Event) => {
+              includeDocuments = (event.target as HTMLInputElement).checked;
+            },
+          }),
+          m('span', t('themes', 'exportDocuments')),
+        ]),
+        isSkos(exportFormat)
+          ? m('label.fm-themes-field', [
+              m('span', t('themes', 'exportBaseUri')),
+              m('input', {
+                type: 'url',
+                placeholder: 'https://example.org/themes/',
+                value: baseUri,
+                oninput: (event: Event) => {
+                  baseUri = (event.target as HTMLInputElement).value;
+                },
+              }),
+              m('span.fm-themes-muted', t('themes', 'exportBaseUriHint')),
+            ])
+          : undefined,
+        m(
+          'button.btn',
+          {
+            type: 'button',
+            disabled: exporting || busy,
+            onclick: () => void runExport(attrs, themes),
+          },
+          exporting ? t('themes', 'exporting') : t('themes', 'exportRun'),
+        ),
+        exportResult === undefined
+          ? undefined
+          : m(
+              exportResult.ok ? 'p.fm-themes-notice' : 'p.fm-themes-error',
+              { role: exportResult.ok ? 'status' : 'alert' },
+              exportResult.text,
+            ),
+      ]),
+    ]);
   }
 
   function stopPolling(): void {
@@ -583,8 +862,11 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
     scopeIndex = 0;
     busy = true;
     visibleScopes = attrs.scopes.filter((scope) => scope.kind !== 'currentFolder');
-    void resolveScopes(attrs).then((resolved) => {
-      visibleScopes = resolved;
+    void loadRoots(attrs).then((loaded) => {
+      roots = loaded;
+      appliedRoots = validRootSelection(attrs.selectedRootIds ?? [], roots);
+      draftRoots = appliedRoots;
+      visibleScopes = resolveScopes(attrs);
       void load(attrs);
     });
     stopPolling();
@@ -631,6 +913,7 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
                 ),
               )
             : undefined,
+          rootsPanel(attrs),
           busy
             ? m('.fm-themes-progress', { role: 'status', 'aria-busy': 'true' }, [
                 m('span', t('themes', 'analyzing')),
@@ -660,6 +943,7 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
                     shown: themes.mapPoints.length,
                   }),
                 ),
+                exportPanel(attrs, themes),
                 m('.fm-themes-layout', [
                   m('.fm-themes-map', [
                     m('h4', t('themes', 'mapHeading')),

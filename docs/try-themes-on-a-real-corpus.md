@@ -67,6 +67,19 @@ Command palette > **Explore themes** (listed only when the worker reports knowle
 builds are exempt from the release qualification gate). Themes open as a pane view in a new tab of the active pane, like Disk usage.
 
 - Scope switch: entire library or the folder shown when you opened the tab.
+- **Folders to analyse** (shown when two or more folders are indexed): unrelated topics, such as
+  crime and adolescence next to TRIZ, cluster poorly together, so tick the folders that belong
+  together and press **Show themes for these folders**. The choice is a global setting
+  (`semanticThemeRootIds`, only one semantic library is active); an empty list means all folders,
+  and folders that were removed since drop out. The backend re-authorizes the roots on every call.
+- **Export…**: saves the themes into the folder the tab was opened from, as Markdown, Word
+  (`.docx`) or SKOS (Turtle, RDF/XML, JSON-LD), for all themes or only the selected one. A file is
+  never replaced. Every file states that the themes are automatically generated clusters. By
+  default it holds labels, keywords and a generated description only; *Include example passages*
+  adds document text and *Include document titles* lists the documents per theme. SKOS has one
+  concept scheme, one `skos:Concept` per theme (`prefLabel` = the label shown, `altLabel` =
+  keywords, `definition` = the description, `skos:example` = passages when included) and stable
+  `urn:uuid` identifiers unless you give a base URI. Flat clusters carry no `broader`/`narrower`.
 - **Map**: one point per passage (a stride sample of up to 2000), coloured by theme. Hover shows the
   passage; click opens its source (text and JSONL in the editor at the record line, PDF/slides at
   the page) in the other pane.
@@ -96,5 +109,7 @@ builds are exempt from the release qualification gate). Themes open as a pane vi
   (`--semantic-desktop-profile`, loopback, authenticated); otherwise the routes answer 503. The
   signed production worker predates the theme IPC route and reports the capability unavailable
   until a new semantic component release.
+- Export descriptions are generated from counts and keywords (no LLM) and are in English. Export
+  re-runs the analysis for the scope, so it can differ from the view if the index changed since.
 - Not verified here: real-browser rendering of the canvas and a run against a real model; check
   those first when you try it.

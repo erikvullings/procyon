@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::RagScopeDto;
+use crate::location::LocationDto;
 
 /// Requests themes for one authorized scope (library, folder, files, roots).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -239,4 +240,77 @@ pub struct CorpusThemesResponseDto {
     pub model_id: String,
     /// Present only when the outcome is ready.
     pub themes: Option<CorpusThemesDto>,
+}
+
+/// File format of an exported theme report.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum CorpusThemeExportFormatDto {
+    /// Markdown report.
+    Markdown,
+    /// Word (`.docx`) report.
+    Docx,
+    /// SKOS concept scheme in Turtle.
+    SkosTurtle,
+    /// SKOS concept scheme in RDF/XML.
+    SkosRdfXml,
+    /// SKOS concept scheme in JSON-LD.
+    SkosJsonLd,
+}
+
+/// The label the user sees for one theme, so an export reads like the view.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeExportLabelDto {
+    /// Theme id within the analysis.
+    pub theme: u32,
+    /// Display label.
+    pub label: String,
+}
+
+/// Exports the themes of one authorized scope to a file
+/// (`POST /api/v1/semantic/themes/export`).
+///
+/// The analysis is recomputed (or reused) on the backend for the re-authorized scope, never taken
+/// from the caller, and the file is written through the destination provider's audited `WRITE`
+/// path like every other file this application creates.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportCorpusThemesRequestDto {
+    /// Visible authorized scope; re-authorized on every request.
+    pub scope: RagScopeDto,
+    /// Output format.
+    pub format: CorpusThemeExportFormatDto,
+    /// Where to write the file, including its filename.
+    pub destination: LocationDto,
+    /// Permit replacing an existing file. Defaults to `false`.
+    #[serde(default)]
+    pub overwrite: bool,
+    /// Theme ids to export; empty exports every theme.
+    #[serde(default)]
+    pub themes: Vec<u32>,
+    /// Display labels per theme (falls back to the leading keywords).
+    #[serde(default)]
+    pub labels: Vec<ThemeExportLabelDto>,
+    /// Include example passages (document text) in the file. Off by default.
+    #[serde(default)]
+    pub include_passages: bool,
+    /// Include the titles of the documents belonging to each theme.
+    #[serde(default)]
+    pub include_documents: bool,
+    /// Base URI for SKOS concept identifiers; absent uses `urn:uuid:` identifiers.
+    #[serde(default)]
+    pub base_uri: Option<String>,
+}
+
+/// Confirms a theme export was written.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportCorpusThemesResponseDto {
+    /// Where the file was written.
+    pub location: LocationDto,
+    /// Number of bytes written.
+    pub bytes_written: u64,
+    /// Number of themes in the file.
+    pub theme_count: u32,
 }

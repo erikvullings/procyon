@@ -2148,6 +2148,62 @@ impl FileManagerService {
             .await
     }
 
+    /// Exports the themes of a re-authorized scope to a file (task 0298).
+    ///
+    /// The analysis is computed on the backend for the authorized scope; nothing the caller
+    /// supplies is trusted as theme content. The file goes through the destination provider's
+    /// audited `WRITE` path.
+    pub async fn export_corpus_themes(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::ExportCorpusThemesRequestDto,
+    ) -> Result<fm_transport_dto::ExportCorpusThemesResponseDto, ApplicationError> {
+        let (scope, titles) = self
+            .resolve_corpus_theme_scope(access, &request.scope)
+            .await?;
+        let response = self
+            .corpus_themes
+            .analyze(
+                scope,
+                None,
+                &titles,
+                &tokio_util::sync::CancellationToken::new(),
+            )
+            .await?;
+        let themes = response.themes.ok_or_else(|| {
+            ApplicationError::InvalidRequest(format!(
+                "there are no themes to export ({:?})",
+                response.outcome
+            ))
+        })?;
+        let rendered = crate::corpus_theme_export::render(
+            request.format,
+            &themes,
+            &request.themes,
+            &request.labels,
+            &crate::corpus_theme_export::ExportOptions {
+                include_passages: request.include_passages,
+                include_documents: request.include_documents,
+                base_uri: request.base_uri,
+                scope_label: request.scope.label.clone(),
+                generated_on: chrono::Local::now().format("%Y-%m-%d").to_string(),
+            },
+        )?;
+        let destination: fm_domain::Location = request.destination.into();
+        crate::corpus_theme_export::write_export(
+            &self.providers,
+            &destination,
+            request.overwrite,
+            &rendered.bytes,
+        )
+        .await?;
+        Ok(fm_transport_dto::ExportCorpusThemesResponseDto {
+            location: destination.into(),
+            bytes_written: rendered.bytes.len() as u64,
+            theme_count: rendered.theme_count,
+        })
+    }
+
     /// Re-authorizes a visible scope into the exact sources the worker may read.
     ///
     /// An empty authorized set stays empty: it never widens to the whole library.

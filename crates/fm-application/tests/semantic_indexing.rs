@@ -4020,3 +4020,232 @@ async fn corpus_themes_are_unavailable_without_a_worker_capability() {
         fm_application::ApplicationError::ProviderUnavailable
     ));
 }
+
+/// Serves one fixed, ready analysis and records the scope it was asked to analyse.
+struct ReadyThemes {
+    scopes: Mutex<Vec<fm_semantic_worker::corpus_theme_storage::CorpusScope>>,
+}
+
+fn ready_analysis() -> fm_semantic_worker::corpus_themes::CorpusThemes {
+    use fm_semantic_worker::corpus_themes as worker;
+    let passage = worker::ThemePassage {
+        chunk_id: "chunk-1".into(),
+        document_id: "document-1".into(),
+        source_id: "source-1".into(),
+        source_position: 0,
+        section_path: vec!["Intro".into()],
+        provenance: String::new(),
+        excerpt: "Secret document sentence.".into(),
+        distance: 0.0,
+    };
+    worker::CorpusThemes {
+        algorithm_version: "v1".into(),
+        model_tag: "fixture-model".into(),
+        index_revision: "revision-1".into(),
+        fingerprint: "fingerprint-1".into(),
+        chunk_count: 4,
+        document_count: 1,
+        sampled: false,
+        fitted_chunks: 4,
+        themes: vec![worker::Theme {
+            id: 0,
+            chunk_count: 4,
+            document_count: 1,
+            share: 1.0,
+            keywords: vec![
+                worker::ThemeKeyword {
+                    term: "adolescence".into(),
+                    score: 1.0,
+                },
+                worker::ThemeKeyword {
+                    term: "delinquency".into(),
+                    score: 0.5,
+                },
+            ],
+            passages: vec![passage],
+            concepts: Vec::new(),
+        }],
+        no_theme: worker::NoTheme {
+            chunk_count: 0,
+            document_count: 0,
+            share: 0.0,
+            passages: Vec::new(),
+        },
+        document_mixtures: Vec::new(),
+        mixtures_truncated: false,
+        map_points: Vec::new(),
+        map_sampled: false,
+        centroids_recomputed: 0,
+        centroids_reused: 0,
+        from_cache: false,
+        incremental: false,
+    }
+}
+
+#[async_trait]
+impl fm_application::corpus_themes::CorpusThemeCapability for ReadyThemes {
+    async fn status(
+        &self,
+        scope: fm_semantic_worker::corpus_theme_storage::CorpusScope,
+    ) -> Result<
+        fm_semantic_worker::corpus_themes::CorpusThemeStatus,
+        fm_application::corpus_themes::CorpusThemeCapabilityError,
+    > {
+        self.scopes.lock().unwrap().push(scope);
+        Ok(fm_semantic_worker::corpus_themes::CorpusThemeStatus {
+            index_revision: "revision-1".into(),
+            document_count: 1,
+            chunk_count: 4,
+            model_id: "fixture-model".into(),
+            profile_too_weak: false,
+        })
+    }
+
+    async fn analyze(
+        &self,
+        scope: fm_semantic_worker::corpus_theme_storage::CorpusScope,
+        _config: fm_semantic_worker::corpus_themes::CorpusThemeConfig,
+        _cancellation: &CancellationToken,
+    ) -> Result<
+        fm_semantic_worker::corpus_themes::CorpusThemes,
+        fm_application::corpus_themes::CorpusThemeCapabilityError,
+    > {
+        self.scopes.lock().unwrap().push(scope);
+        Ok(ready_analysis())
+    }
+
+    async fn theme_sources(
+        &self,
+        _scope: fm_semantic_worker::corpus_theme_storage::CorpusScope,
+        _theme: Option<u32>,
+        _fingerprint: String,
+        _limit: usize,
+        _cancellation: &CancellationToken,
+    ) -> Result<
+        fm_semantic_worker::corpus_themes::ThemeSources,
+        fm_application::corpus_themes::CorpusThemeCapabilityError,
+    > {
+        Ok(fm_semantic_worker::corpus_themes::ThemeSources {
+            source_ids: Vec::new(),
+            truncated: false,
+        })
+    }
+}
+
+#[tokio::test]
+async fn corpus_theme_export_is_scoped_to_the_chosen_roots_and_written_through_the_provider() {
+    let root_a = project_temp_dir("themes-export-a-");
+    let root_b = project_temp_dir("themes-export-b-");
+    std::fs::write(root_a.path().join("a.txt"), "Alpha document.").unwrap();
+    std::fs::write(root_b.path().join("b.txt"), "Beta document.").unwrap();
+    let out = project_temp_dir("themes-export-out-");
+    let state = project_temp_dir("themes-export-state-");
+    let library = library(&state);
+    let workspace_id = WorkspaceId::from(Uuid::from_u128(0x1910));
+    let id_a = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(root_a.path()).unwrap(),
+    );
+    let id_b = enrol(
+        &library,
+        workspace_id,
+        Location::from_native_path(root_b.path()).unwrap(),
+    );
+    let themes = Arc::new(ReadyThemes {
+        scopes: Mutex::new(Vec::new()),
+    });
+    let service = FileManagerService::new(
+        RuntimeKindDto::Tauri,
+        state.path().join("workspaces"),
+        state.path().join("settings"),
+    )
+    .with_semantic_library_service(library)
+    .with_semantic_capability(Arc::new(FakeSemanticCapability::new()))
+    .with_corpus_theme_capability(themes.clone());
+    for root in [id_a, id_b] {
+        service
+            .semantic_reconcile_enrolled_root(&HOST, root, CancellationToken::new())
+            .await
+            .unwrap();
+    }
+
+    let mut scope = entire_library_scope(workspace_id.into());
+    scope.kind = fm_transport_dto::RagScopeKindDto::EnrolledRoots;
+    scope.label = "Root A".into();
+    scope.enrolled_root_ids = vec![id_a.to_string()];
+    let request = |name: &str| fm_transport_dto::ExportCorpusThemesRequestDto {
+        scope: scope.clone(),
+        format: fm_transport_dto::CorpusThemeExportFormatDto::Markdown,
+        destination: Location::from_native_path(&out.path().join(name))
+            .unwrap()
+            .into(),
+        overwrite: false,
+        themes: Vec::new(),
+        labels: vec![fm_transport_dto::ThemeExportLabelDto {
+            theme: 0,
+            label: "Youth crime".into(),
+        }],
+        include_passages: false,
+        include_documents: false,
+        base_uri: None,
+    };
+
+    let response = service
+        .export_corpus_themes(&HOST, request("themes.md"))
+        .await
+        .unwrap();
+    assert_eq!(response.theme_count, 1);
+    let written = std::fs::read_to_string(out.path().join("themes.md")).unwrap();
+    assert_eq!(response.bytes_written, written.len() as u64);
+    assert!(written.contains("# Corpus themes: Root A"));
+    assert!(written.contains("## 1. Youth crime"));
+    assert!(!written.contains("Secret document"), "passages are opt-in");
+    {
+        let scopes = themes.scopes.lock().unwrap();
+        let analysed = scopes.last().expect("the worker was asked to analyse");
+        assert_eq!(
+            analysed.source_ids.len(),
+            1,
+            "only root A's file is analysed"
+        );
+    }
+
+    // Opting in adds document text.
+    let mut with_passages = request("with-passages.md");
+    with_passages.include_passages = true;
+    service
+        .export_corpus_themes(&HOST, with_passages)
+        .await
+        .unwrap();
+    assert!(
+        std::fs::read_to_string(out.path().join("with-passages.md"))
+            .unwrap()
+            .contains("Secret document sentence.")
+    );
+
+    // An existing file is never replaced without overwrite.
+    assert!(
+        service
+            .export_corpus_themes(&HOST, request("themes.md"))
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        std::fs::read_to_string(out.path().join("themes.md")).unwrap(),
+        written
+    );
+
+    // An unknown theme is rejected and nothing is written.
+    let mut unknown = request("unknown.md");
+    unknown.themes = vec![42];
+    assert!(service.export_corpus_themes(&HOST, unknown).await.is_err());
+    assert!(!out.path().join("unknown.md").exists());
+
+    // A scope with no authorized root is refused before the worker is asked.
+    let calls_before = themes.scopes.lock().unwrap().len();
+    let mut empty = request("empty.md");
+    empty.scope.enrolled_root_ids = Vec::new();
+    assert!(service.export_corpus_themes(&HOST, empty).await.is_err());
+    assert_eq!(themes.scopes.lock().unwrap().len(), calls_before);
+}

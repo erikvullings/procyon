@@ -104,6 +104,11 @@ export interface KnowledgeSearchTabState {
   readonly initialSubject: string | undefined;
 }
 
+/** The folder themes were opened from, where an export is saved. */
+function exportFolderOf(scopes: readonly RagScope[]): Location | undefined {
+  return scopes.find((scope) => scope.kind === 'currentFolder')?.folder ?? undefined;
+}
+
 /** Shown before settings finish loading, mirroring the backend's own default (`core.gitStatus`
  * stays opt-in even then). */
 const DEFAULT_VISIBLE_COLUMN_IDS: readonly string[] = [
@@ -1102,11 +1107,24 @@ export function createPaneContentBuilder(
             ? {
                 viewerContent: (() => {
                   if (themes !== undefined) {
+                    const exportFolder = exportFolderOf(themes.scopes);
                     return m(ThemesView, {
                       client,
                       scopes: themes.scopes,
                       onOpenPassage: context.openThemePassage,
                       onSearchSources: context.searchThemeSources,
+                      selectedRootIds: context.getCurrentSettings()?.semanticThemeRootIds ?? [],
+                      onSelectRoots: (rootIds) => {
+                        void context
+                          .updateLocationSettings(client, (settings) => ({
+                            ...settings,
+                            semanticThemeRootIds: [...rootIds],
+                          }))
+                          .catch(() => undefined);
+                      },
+                      // Saved next to where the user opened the themes, so the file is easy to find.
+                      ...(exportFolder === undefined ? {} : { exportFolder }),
+                      onExported: () => context.refetchAffectedPanes(),
                     });
                   }
                   if (knowledgeSearch !== undefined) {

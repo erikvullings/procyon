@@ -56,6 +56,8 @@ import type {
   EntryMetadataRequest,
   EntrySummary,
   ExecuteKnowledgeSearchRequest,
+  ExportCorpusThemesRequest,
+  ExportCorpusThemesResponse,
   FileDiffOptions,
   FileDiffResult,
   Location as FileLocation,
@@ -275,6 +277,7 @@ import {
   getCorpusThemeSources as requestCorpusThemeSources,
   getCorpusThemeStatus as requestCorpusThemeStatus,
   analyzeCorpusThemes as requestCorpusThemesAnalysis,
+  exportCorpusThemes as requestCorpusThemesExport,
   getDiagnostics as requestDiagnostics,
   diffFiles as requestDiffFiles,
   listDirectory as requestDirectory,
@@ -2819,6 +2822,19 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200)
       throw unexpectedResponseError('analyzeCorpusThemes', response.status);
+    return response.data;
+  }
+
+  async exportCorpusThemes(
+    request: ExportCorpusThemesRequest,
+    signal?: AbortSignal,
+  ): Promise<ExportCorpusThemesResponse> {
+    const response = await requestCorpusThemesExport(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw unexpectedResponseError('exportCorpusThemes', response.status);
     return response.data;
   }
 

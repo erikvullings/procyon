@@ -5832,6 +5832,7 @@ describe('AppShell', () => {
     const client = new MockFileManagerClient();
     vi.spyOn(client, 'getSettings').mockResolvedValue({
       semanticMaxSourceMib: 64,
+      semanticThemeRootIds: [],
       schemaVersion: 2,
       theme: 'auto',
       language: 'en',

@@ -4,8 +4,8 @@ use axum::Json;
 use axum::extract::{Extension, State};
 use fm_transport_dto::{
     AnalyzeCorpusThemesRequestDto, ApplicationErrorDto, CorpusThemeSourcesDto,
-    CorpusThemeStatusDto, CorpusThemesResponseDto, GetCorpusThemeSourcesRequestDto,
-    GetCorpusThemeStatusRequestDto,
+    CorpusThemeStatusDto, CorpusThemesResponseDto, ExportCorpusThemesRequestDto,
+    ExportCorpusThemesResponseDto, GetCorpusThemeSourcesRequestDto, GetCorpusThemeStatusRequestDto,
 };
 use tower_http::request_id::RequestId;
 
@@ -82,6 +82,31 @@ pub(crate) async fn get_corpus_theme_sources(
     state
         .service
         .get_corpus_theme_sources(state.semantic_access(), request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, extract_request_id(&request_id)))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/semantic/themes/export",
+    operation_id = "exportCorpusThemes",
+    request_body = ExportCorpusThemesRequestDto,
+    responses(
+        (status = 200, body = ExportCorpusThemesResponseDto),
+        (status = 400, body = ApplicationErrorDto),
+        (status = 403, body = ApplicationErrorDto),
+        (status = 503, body = ApplicationErrorDto)
+    )
+)]
+pub(crate) async fn export_corpus_themes(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<ExportCorpusThemesRequestDto>,
+) -> Result<Json<ExportCorpusThemesResponseDto>, ApiError> {
+    state
+        .service
+        .export_corpus_themes(state.semantic_access(), request)
         .await
         .map(Json)
         .map_err(|error| ApiError::new(error, extract_request_id(&request_id)))

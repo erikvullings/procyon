@@ -21,6 +21,8 @@ import type {
   DocumentSummary,
   DocumentSummaryPreview,
   ExecuteKnowledgeSearchRequest,
+  ExportCorpusThemesRequest,
+  ExportCorpusThemesResponse,
   GenerateDocumentSummaryRequest,
   GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
@@ -111,6 +113,15 @@ export interface SemanticClient {
     request: AnalyzeCorpusThemesRequest,
     signal?: AbortSignal,
   ): Promise<CorpusThemesResponse>;
+
+  /**
+   * Exports the themes of a scope to a file written through the destination provider
+   * (Markdown, Word or SKOS). Passages and document titles are included only on request.
+   */
+  exportCorpusThemes(
+    request: ExportCorpusThemesRequest,
+    signal?: AbortSignal,
+  ): Promise<ExportCorpusThemesResponse>;
 
   attachSemanticVocabulary(
     request: AttachSemanticVocabularyRequest,

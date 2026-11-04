@@ -66,6 +66,8 @@ import type {
   EntryMetadataRequest,
   EntrySummary,
   ExecuteKnowledgeSearchRequest,
+  ExportCorpusThemesRequest,
+  ExportCorpusThemesResponse,
   FileDiffOptions,
   FileDiffResult,
   FileRangeChunk,
@@ -1768,6 +1770,13 @@ export class TauriFileManagerClient implements FileManagerClient {
     _signal?: AbortSignal,
   ): Promise<CorpusThemesResponse> {
     return invoke<CorpusThemesResponse>('analyze_corpus_themes', { request });
+  }
+
+  exportCorpusThemes(
+    request: ExportCorpusThemesRequest,
+    _signal?: AbortSignal,
+  ): Promise<ExportCorpusThemesResponse> {
+    return invoke<ExportCorpusThemesResponse>('export_corpus_themes', { request });
   }
 
   getCorpusThemeSources(

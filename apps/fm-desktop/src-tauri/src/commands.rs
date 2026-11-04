@@ -3544,6 +3544,19 @@ pub(crate) async fn analyze_corpus_themes(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Exports the themes of a scope to a file.
+#[tauri::command]
+pub(crate) async fn export_corpus_themes(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::ExportCorpusThemesRequestDto,
+) -> Result<fm_transport_dto::ExportCorpusThemesResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .export_corpus_themes(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Previews authorized local evidence before grounded generation.
 #[tauri::command]
 pub(crate) async fn preview_rag(

@@ -224,6 +224,7 @@ export class MockContext {
     checkForBetaUpdates: false,
     viewerInSeparateWindow: false,
     semanticMaxSourceMib: 64,
+    semanticThemeRootIds: [],
     rememberFolderViews: true,
     map: DEFAULT_MAP_SETTINGS,
   };

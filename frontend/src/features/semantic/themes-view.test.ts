@@ -300,4 +300,191 @@ describe('ThemesView', () => {
     });
     expect(onSearchSources).not.toHaveBeenCalled();
   });
+
+  describe('folder scope', () => {
+    const HANDBOOK = 'mock-knowledge-root-handbook';
+    const ARCHIVE = 'mock-knowledge-root-archive';
+
+    const checkboxes = (): HTMLInputElement[] => [
+      ...root.querySelectorAll<HTMLInputElement>('.fm-themes-root input[type="checkbox"]'),
+    ];
+    const applyButton = (): HTMLButtonElement | undefined =>
+      [...root.querySelectorAll<HTMLButtonElement>('.fm-themes-root-actions button')].find(
+        (button) => button.textContent === 'Show themes for these folders',
+      );
+
+    it('analyses every folder at first and offers no panel with fewer than two roots', async () => {
+      const client = new MockFileManagerClient();
+      const analyze = vi.spyOn(client, 'analyzeCorpusThemes');
+      mount(client);
+      await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+      expect(analyze.mock.calls[0]?.[0].scope.kind).toBe('entireLibrary');
+      expect(checkboxes().map((box) => box.checked)).toEqual([true, true]);
+      expect(root.querySelector('.fm-themes-root')?.textContent).toContain(
+        'Handbook · 3 documents',
+      );
+      m.mount(root, null);
+
+      const single = new MockFileManagerClient();
+      vi.spyOn(single, 'listKnowledgeRoots').mockResolvedValue([
+        (await new MockFileManagerClient().listKnowledgeRoots({ workspaceId: 'w' }))[0] as never,
+      ]);
+      mount(single);
+      await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+      expect(root.querySelector('.fm-themes-roots')).toBeNull();
+    });
+
+    it('analyses only the chosen folders and remembers the choice', async () => {
+      const client = new MockFileManagerClient();
+      const analyze = vi.spyOn(client, 'analyzeCorpusThemes');
+      const onSelectRoots = vi.fn();
+      mount(client, { onSelectRoots });
+      await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+      expect(applyButton()?.disabled).toBe(true);
+
+      checkboxes()[1]?.click();
+      m.redraw.sync();
+      expect(applyButton()?.disabled).toBe(false);
+      expect(analyze).toHaveBeenCalledOnce();
+      applyButton()?.click();
+
+      await vi.waitFor(() => expect(analyze).toHaveBeenCalledTimes(2));
+      const scope = analyze.mock.calls[1]?.[0].scope;
+      expect(scope?.kind).toBe('enrolledRoots');
+      expect(scope?.enrolledRootIds).toEqual([HANDBOOK]);
+      expect(onSelectRoots).toHaveBeenCalledWith([HANDBOOK]);
+    });
+
+    it('stores an empty list when every folder is chosen again', async () => {
+      const client = new MockFileManagerClient();
+      const analyze = vi.spyOn(client, 'analyzeCorpusThemes');
+      const onSelectRoots = vi.fn();
+      mount(client, { onSelectRoots, selectedRootIds: [ARCHIVE] });
+      await vi.waitFor(() => expect(analyze).toHaveBeenCalledOnce());
+      expect(analyze.mock.calls[0]?.[0].scope.enrolledRootIds).toEqual([ARCHIVE]);
+      await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+      expect(checkboxes().map((box) => box.checked)).toEqual([false, true]);
+
+      checkboxes()[0]?.click();
+      m.redraw.sync();
+      applyButton()?.click();
+      await vi.waitFor(() => expect(analyze).toHaveBeenCalledTimes(2));
+      expect(analyze.mock.calls[1]?.[0].scope.kind).toBe('entireLibrary');
+      expect(onSelectRoots).toHaveBeenCalledWith([]);
+    });
+
+    it('ignores remembered folders that no longer exist and never applies an empty choice', async () => {
+      const client = new MockFileManagerClient();
+      const analyze = vi.spyOn(client, 'analyzeCorpusThemes');
+      mount(client, { selectedRootIds: ['removed-root'] });
+      await vi.waitFor(() => expect(analyze).toHaveBeenCalledOnce());
+      expect(analyze.mock.calls[0]?.[0].scope.kind).toBe('entireLibrary');
+      await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+
+      for (const box of checkboxes()) box.click();
+      m.redraw.sync();
+      expect(applyButton()?.disabled).toBe(true);
+    });
+  });
+
+  describe('export', () => {
+    const FOLDER = { providerId: 'file', uri: 'mock:///Documents/out/' };
+
+    const panel = (): HTMLElement | null => root.querySelector('.fm-themes-export');
+    const field = <T extends HTMLElement>(selector: string): T => {
+      const found = root.querySelector<T>(`.fm-themes-export ${selector}`);
+      if (found === null) throw new Error(`missing ${selector}`);
+      return found;
+    };
+    const exportButton = (): HTMLButtonElement =>
+      [...root.querySelectorAll<HTMLButtonElement>('.fm-themes-export button')].find(
+        (button) => button.textContent === 'Save in the current folder',
+      ) as HTMLButtonElement;
+
+    it('is offered only when a destination folder is known', async () => {
+      const client = new MockFileManagerClient();
+      mount(client);
+      await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+      expect(panel()).toBeNull();
+    });
+
+    it('exports all themes as Markdown by default without document text', async () => {
+      const client = new MockFileManagerClient();
+      const exportThemes = vi.spyOn(client, 'exportCorpusThemes');
+      const onExported = vi.fn();
+      mount(client, { exportFolder: FOLDER, onExported });
+      await vi.waitFor(() => expect(panel()).not.toBeNull());
+
+      exportButton().click();
+      await vi.waitFor(() => expect(exportThemes).toHaveBeenCalledOnce());
+      const request = exportThemes.mock.calls[0]?.[0];
+      expect(request?.format).toBe('markdown');
+      expect(request?.destination.uri).toMatch(
+        /^mock:\/\/\/Documents\/out\/corpus-themes-\d{4}-\d{2}-\d{2}\.md$/u,
+      );
+      expect(request?.overwrite).toBe(false);
+      expect(request?.themes).toEqual([]);
+      expect(request?.includePassages).toBe(false);
+      expect(request?.includeDocuments).toBe(false);
+      expect(request?.baseUri).toBeUndefined();
+      expect(request?.labels?.[0]?.label).toBe('harbour, shipping');
+      await vi.waitFor(() => expect(root.textContent).toContain('themes) in the current folder.'));
+      expect(onExported).toHaveBeenCalledOnce();
+    });
+
+    it('sends the chosen format, opt-ins and base URI for SKOS, and only the selected theme', async () => {
+      const client = new MockFileManagerClient();
+      const exportThemes = vi.spyOn(client, 'exportCorpusThemes');
+      mount(client, { exportFolder: FOLDER });
+      await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+      expect(root.querySelector('.fm-themes-export input[type="url"]')).toBeNull();
+
+      const select = field<HTMLSelectElement>('select');
+      select.value = 'skosTurtle';
+      select.dispatchEvent(new Event('change'));
+      m.redraw.sync();
+      const [passages, documents] = [
+        ...root.querySelectorAll<HTMLInputElement>('.fm-themes-export input[type="checkbox"]'),
+      ];
+      passages?.click();
+      documents?.click();
+      const base = field<HTMLInputElement>('input[type="url"]');
+      base.value = ' https://example.org/themes ';
+      base.dispatchEvent(new Event('input'));
+
+      const radios = [...root.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+      expect(radios[1]?.disabled).toBe(true);
+      (root.querySelectorAll('.fm-themes-row')[1] as HTMLButtonElement).click();
+      m.redraw.sync();
+      expect(radios[1]?.disabled).toBe(false);
+      radios[1]?.click();
+      m.redraw.sync();
+
+      exportButton().click();
+      await vi.waitFor(() => expect(exportThemes).toHaveBeenCalledOnce());
+      const request = exportThemes.mock.calls[0]?.[0];
+      expect(request?.format).toBe('skosTurtle');
+      expect(request?.destination.uri).toMatch(/corpus-theme-2-\d{4}-\d{2}-\d{2}\.ttl$/u);
+      expect(request?.themes).toEqual([1]);
+      expect(request?.includePassages).toBe(true);
+      expect(request?.includeDocuments).toBe(true);
+      expect(request?.baseUri).toBe('https://example.org/themes');
+    });
+
+    it('reports a failed export without claiming success', async () => {
+      const client = new MockFileManagerClient();
+      vi.spyOn(client, 'exportCorpusThemes').mockRejectedValue(new Error('File already exists'));
+      const onExported = vi.fn();
+      mount(client, { exportFolder: FOLDER, onExported });
+      await vi.waitFor(() => expect(panel()).not.toBeNull());
+      exportButton().click();
+      await vi.waitFor(() =>
+        expect(root.querySelector('.fm-themes-export .fm-themes-error')).not.toBeNull(),
+      );
+      expect(root.querySelector('.fm-themes-export .fm-themes-error')?.textContent).toBe(
+        'File already exists',
+      );
+      expect(onExported).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -60,6 +60,8 @@ import type {
   EntryMetadataRequest,
   EntrySummaryDto,
   ExecuteKnowledgeSearchRequestDto,
+  ExportCorpusThemesRequestDto,
+  ExportCorpusThemesResponseDto,
   ExportSemanticVocabularyResponseDto,
   FindLinkReplacementsRequestDto,
   FindLinkReplacementsResponseDto,
@@ -9846,6 +9848,70 @@ return fetchMutator<analyzeCorpusThemesResponse>(getAnalyzeCorpusThemesUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(analyzeCorpusThemesRequestDto)
+  }
+);}
+
+
+
+export type exportCorpusThemesResponse200 = {
+  data: ExportCorpusThemesResponseDto
+  status: 200
+}
+
+export type exportCorpusThemesResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type exportCorpusThemesResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type exportCorpusThemesResponse503 = {
+  data: ApplicationErrorDto
+  status: 503
+}
+
+export type exportCorpusThemesResponseSuccess = (exportCorpusThemesResponse200) & {
+  headers: Headers;
+};
+export type exportCorpusThemesResponseError = (exportCorpusThemesResponse400 | exportCorpusThemesResponse403 | exportCorpusThemesResponse503) & {
+  headers: Headers;
+};
+
+export type exportCorpusThemesResponse = (exportCorpusThemesResponseSuccess | exportCorpusThemesResponseError)
+
+export const getExportCorpusThemesUrl = () => {
+
+
+
+
+  return `/api/v1/semantic/themes/export`
+}
+
+export const exportCorpusThemes = async (exportCorpusThemesRequestDto: ExportCorpusThemesRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<exportCorpusThemesResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<exportCorpusThemesResponse>(getExportCorpusThemesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(exportCorpusThemesRequestDto)
   }
 );}
 

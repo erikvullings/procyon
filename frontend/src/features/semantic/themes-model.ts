@@ -1,7 +1,10 @@
 import type {
+  CorpusThemeExportFormat,
   CorpusThemeStatus,
   CorpusThemes,
   DocumentThemeMixture,
+  RagScope,
+  ThemeExportLabel,
   ThemeMapPoint,
 } from '../../models';
 
@@ -332,4 +335,66 @@ export function reflowPassage(text: string): string {
     })
     .filter((block) => block.length > 0)
     .join('\n\n');
+}
+
+const EXPORT_EXTENSIONS: Readonly<Record<CorpusThemeExportFormat, string>> = {
+  markdown: 'md',
+  docx: 'docx',
+  skosTurtle: 'ttl',
+  skosRdfXml: 'rdf',
+  skosJsonLd: 'jsonld',
+};
+
+/** Default file name of a theme export: `corpus-themes-YYYY-MM-DD.ext`, or one theme's number. */
+export function exportFileName(
+  format: CorpusThemeExportFormat,
+  date: Date,
+  themeNumber?: number,
+): string {
+  const day = [
+    String(date.getFullYear()).padStart(4, '0'),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+  const stem = themeNumber === undefined ? 'corpus-themes' : `corpus-theme-${themeNumber}`;
+  return `${stem}-${day}.${EXPORT_EXTENSIONS[format]}`;
+}
+
+/** The labels the theme list shows, so an exported file reads like the view. */
+export function themeExportLabels(
+  themes: CorpusThemes,
+  fallback: (number: number) => string,
+): readonly ThemeExportLabel[] {
+  return themes.themes.map((theme) => {
+    const label = themeKeywordLabel(theme.keywords);
+    return { theme: theme.id, label: label.length > 0 ? label : fallback(theme.id + 1) };
+  });
+}
+
+/**
+ * The remembered root selection restricted to roots that still exist. Nothing valid remembered
+ * means every root, so the first visit (and a removed folder) shows the whole library.
+ */
+export function validRootSelection(
+  remembered: readonly string[],
+  roots: readonly { readonly rootId: string }[],
+): readonly string[] {
+  const available = new Set(roots.map((root) => root.rootId));
+  const kept = remembered.filter((id) => available.has(id));
+  return kept.length > 0 ? kept : roots.map((root) => root.rootId);
+}
+
+/**
+ * The scope for a root selection: the whole library when every root (or none) is chosen, else
+ * the named enrolled roots, in the roots' own order so equal selections give equal scopes.
+ */
+export function scopeForRoots(
+  library: RagScope,
+  selected: readonly string[],
+  roots: readonly { readonly rootId: string }[],
+  label: string,
+): RagScope {
+  const chosen = roots.map((root) => root.rootId).filter((id) => selected.includes(id));
+  if (chosen.length === 0 || chosen.length === roots.length) return library;
+  return { ...library, kind: 'enrolledRoots', label, enrolledRootIds: chosen };
 }

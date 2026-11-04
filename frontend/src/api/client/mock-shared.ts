@@ -226,6 +226,7 @@ export type MockClientMethod =
   | 'getDocumentSummary'
   | 'getCorpusThemeStatus'
   | 'analyzeCorpusThemes'
+  | 'exportCorpusThemes'
   | 'getCorpusThemeSources'
   | 'previewRag'
   | 'generateRagAnswer'

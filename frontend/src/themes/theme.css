@@ -5965,3 +5965,66 @@ button.fm-activity-count {
   align-items: center;
   gap: 0.5rem;
 }
+
+.fm-themes-roots,
+.fm-themes-export {
+  margin: 0.5rem 0;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 6px;
+}
+
+.fm-themes-root-list {
+  margin: 0.4rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fm-themes-root,
+.fm-themes-field {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+/*
+ * Plain HTML checkboxes and radios: mm's base rule hides them (`position: absolute; opacity: 0`)
+ * at 2 classes of specificity, so `.fm-app-shell` lifts these rules to win the tie, as above.
+ */
+.fm-app-shell .fm-themes-root input[type="checkbox"],
+.fm-app-shell .fm-themes-field input[type="checkbox"],
+.fm-app-shell .fm-themes-field input[type="radio"] {
+  position: static;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.fm-themes-root-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.fm-themes-export summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.fm-themes-export-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.fm-themes-field {
+  border: 0;
+  padding: 0;
+}
+
+.fm-themes-field select,
+.fm-themes-field input[type="url"] {
+  min-width: 16rem;
+}

@@ -7912,6 +7912,63 @@
         }
       }
     },
+    "/api/v1/semantic/themes/export": {
+      "post": {
+        "operationId": "exportCorpusThemes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportCorpusThemesRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportCorpusThemesResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/semantic/themes/sources": {
       "post": {
         "operationId": "getCorpusThemeSources",
@@ -11033,6 +11090,17 @@
           }
         }
       },
+      "CorpusThemeExportFormatDto": {
+        "type": "string",
+        "description": "File format of an exported theme report.",
+        "enum": [
+          "markdown",
+          "docx",
+          "skosTurtle",
+          "skosRdfXml",
+          "skosJsonLd"
+        ]
+      },
       "CorpusThemeOutcomeDto": {
         "type": "string",
         "description": "Why a scope can or cannot show themes.",
@@ -13103,6 +13171,91 @@
           "scope": {
             "$ref": "#/components/schemas/KnowledgeScopeDto",
             "description": "Visible authorized scope."
+          }
+        }
+      },
+      "ExportCorpusThemesRequestDto": {
+        "type": "object",
+        "description": "Exports the themes of one authorized scope to a file\n(`POST /api/v1/semantic/themes/export`).\n\nThe analysis is recomputed (or reused) on the backend for the re-authorized scope, never taken\nfrom the caller, and the file is written through the destination provider's audited `WRITE`\npath like every other file this application creates.",
+        "required": [
+          "scope",
+          "format",
+          "destination"
+        ],
+        "properties": {
+          "baseUri": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Base URI for SKOS concept identifiers; absent uses `urn:uuid:` identifiers."
+          },
+          "destination": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Where to write the file, including its filename."
+          },
+          "format": {
+            "$ref": "#/components/schemas/CorpusThemeExportFormatDto",
+            "description": "Output format."
+          },
+          "includeDocuments": {
+            "type": "boolean",
+            "description": "Include the titles of the documents belonging to each theme."
+          },
+          "includePassages": {
+            "type": "boolean",
+            "description": "Include example passages (document text) in the file. Off by default."
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ThemeExportLabelDto"
+            },
+            "description": "Display labels per theme (falls back to the leading keywords)."
+          },
+          "overwrite": {
+            "type": "boolean",
+            "description": "Permit replacing an existing file. Defaults to `false`."
+          },
+          "scope": {
+            "$ref": "#/components/schemas/RagScopeDto",
+            "description": "Visible authorized scope; re-authorized on every request."
+          },
+          "themes": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "description": "Theme ids to export; empty exports every theme."
+          }
+        }
+      },
+      "ExportCorpusThemesResponseDto": {
+        "type": "object",
+        "description": "Confirms a theme export was written.",
+        "required": [
+          "location",
+          "bytesWritten",
+          "themeCount"
+        ],
+        "properties": {
+          "bytesWritten": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of bytes written.",
+            "minimum": 0
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Where the file was written."
+          },
+          "themeCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of themes in the file.",
+            "minimum": 0
           }
         }
       },
@@ -24932,6 +25085,13 @@
             "description": "Largest source file, in MiB, that semantic indexing reads; `0` means no limit beyond the\nresource profile and the worker's own hard caps.",
             "minimum": 0
           },
+          "semanticThemeRootIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Indexed roots the corpus-themes view analyses; empty means the whole library (task 0298)."
+          },
           "showHiddenFiles": {
             "type": "boolean",
             "description": "Show hidden entries by default."
@@ -27101,6 +27261,26 @@
           "light",
           "dark"
         ]
+      },
+      "ThemeExportLabelDto": {
+        "type": "object",
+        "description": "The label the user sees for one theme, so an export reads like the view.",
+        "required": [
+          "theme",
+          "label"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Display label."
+          },
+          "theme": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Theme id within the analysis.",
+            "minimum": 0
+          }
+        }
       },
       "ThemeKeywordDto": {
         "type": "object",

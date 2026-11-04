@@ -161,6 +161,7 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
         remember_folder_views: settings.remember_folder_views,
         map: map_settings_to_dto(&settings.map),
         semantic_max_source_mib: settings.semantic_max_source_mib,
+        semantic_theme_root_ids: settings.semantic_theme_root_ids,
     }
 }
 
@@ -307,6 +308,7 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
         folder_views: Vec::new(),
         map: map_settings_from_dto(settings.map),
         semantic_max_source_mib: settings.semantic_max_source_mib,
+        semantic_theme_root_ids: settings.semantic_theme_root_ids,
     }
 }
 

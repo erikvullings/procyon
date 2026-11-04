@@ -13,6 +13,7 @@ mod attribute_change;
 mod checksum_coordinator;
 mod connection_facade;
 mod content_streaming;
+pub mod corpus_theme_export;
 pub mod corpus_themes;
 pub mod diagnostics;
 mod directory;

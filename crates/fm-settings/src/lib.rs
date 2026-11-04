@@ -438,6 +438,9 @@ pub struct Settings {
     /// Largest source file, in MiB, that semantic indexing reads; `0` means no limit beyond the
     /// resource profile and the worker's own hard caps.
     pub semantic_max_source_mib: u32,
+    /// Indexed roots the corpus-themes view analyses, remembered across sessions (task 0298).
+    /// Empty means the whole library. Only one semantic library is active, so this is global.
+    pub semantic_theme_root_ids: Vec<String>,
 }
 
 impl Settings {
@@ -527,6 +530,7 @@ impl Default for Settings {
             folder_views: Vec::new(),
             map: MapSettings::default(),
             semantic_max_source_mib: DEFAULT_SEMANTIC_MAX_SOURCE_MIB,
+            semantic_theme_root_ids: Vec::new(),
         }
     }
 }

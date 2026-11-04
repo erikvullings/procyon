@@ -55,6 +55,8 @@ import type {
   EntryMetadataRequest,
   EntrySummary,
   ExecuteKnowledgeSearchRequest,
+  ExportCorpusThemesRequest,
+  ExportCorpusThemesResponse,
   FileDiffOptions,
   FileDiffResult,
   FileRangeChunk,
@@ -1170,6 +1172,12 @@ export class MockFileManagerClient implements FileManagerClient {
     signal?: AbortSignal,
   ): Promise<CorpusThemesResponse> {
     return this.semanticClient.analyzeCorpusThemes(_request, signal);
+  }
+  exportCorpusThemes(
+    request: ExportCorpusThemesRequest,
+    signal?: AbortSignal,
+  ): Promise<ExportCorpusThemesResponse> {
+    return this.semanticClient.exportCorpusThemes(request, signal);
   }
   getCorpusThemeSources(
     request: GetCorpusThemeSourcesRequest,

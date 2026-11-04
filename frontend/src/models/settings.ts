@@ -136,6 +136,8 @@ export interface Settings {
   readonly viewerInSeparateWindow: boolean;
   /** Largest source file semantic indexing reads, in MiB; 0 means no limit. */
   readonly semanticMaxSourceMib: number;
+  /** Indexed roots the themes view analyses; empty means the whole library (task 0298). */
+  readonly semanticThemeRootIds: string[];
   /** Remembers and restores the view (sort, columns, mode) chosen for each folder (task 0270). */
   readonly rememberFolderViews: boolean;
   /** Basemap of the shared map component (task 0275). */

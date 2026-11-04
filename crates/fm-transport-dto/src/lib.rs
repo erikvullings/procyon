@@ -89,10 +89,12 @@ pub use connection::{
     WebDavConnectionConfigurationDto,
 };
 pub use corpus_themes::{
-    AnalyzeCorpusThemesRequestDto, CorpusThemeDto, CorpusThemeOutcomeDto, CorpusThemeSourcesDto,
-    CorpusThemeStatusDto, CorpusThemesDto, CorpusThemesResponseDto, DocumentThemeMixtureDto,
-    GetCorpusThemeSourcesRequestDto, GetCorpusThemeStatusRequestDto, NoThemeDto, ThemeConceptDto,
-    ThemeKeywordDto, ThemeMapPointDto, ThemePassageDto, ThemeShareDto,
+    AnalyzeCorpusThemesRequestDto, CorpusThemeDto, CorpusThemeExportFormatDto,
+    CorpusThemeOutcomeDto, CorpusThemeSourcesDto, CorpusThemeStatusDto, CorpusThemesDto,
+    CorpusThemesResponseDto, DocumentThemeMixtureDto, ExportCorpusThemesRequestDto,
+    ExportCorpusThemesResponseDto, GetCorpusThemeSourcesRequestDto, GetCorpusThemeStatusRequestDto,
+    NoThemeDto, ThemeConceptDto, ThemeExportLabelDto, ThemeKeywordDto, ThemeMapPointDto,
+    ThemePassageDto, ThemeShareDto,
 };
 pub use diagnostics::{
     ConnectionStateDto, DiagnosticErrorDto, DiagnosticsDto, OperationQueueStatusDto,

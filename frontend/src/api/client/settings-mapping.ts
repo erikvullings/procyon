@@ -9,6 +9,7 @@ export function settingsFromDto(settings: SettingsDto): Settings {
   return {
     ...settings,
     semanticMaxSourceMib: settings.semanticMaxSourceMib ?? 64,
+    semanticThemeRootIds: settings.semanticThemeRootIds ?? [],
     multiRenamePresets: settings.multiRenamePresets.map((preset) => ({
       ...preset,
       rules: { ...preset.rules, sequence: { ...preset.rules.sequence } },

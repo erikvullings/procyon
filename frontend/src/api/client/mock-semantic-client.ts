@@ -21,6 +21,8 @@ import type {
   DocumentSummary,
   DocumentSummaryPreview,
   ExecuteKnowledgeSearchRequest,
+  ExportCorpusThemesRequest,
+  ExportCorpusThemesResponse,
   GenerateDocumentSummaryRequest,
   GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
@@ -1446,6 +1448,20 @@ export class MockSemanticClient implements SemanticClient {
       modelId: 'mock-embedding-model',
       themes: mockCorpusThemes(),
     }));
+  }
+
+  exportCorpusThemes(
+    request: ExportCorpusThemesRequest,
+    signal?: AbortSignal,
+  ): Promise<ExportCorpusThemesResponse> {
+    return this.ctx.perform('exportCorpusThemes', signal, () => {
+      const chosen = request.themes ?? [];
+      return {
+        location: request.destination,
+        bytesWritten: 0,
+        themeCount: chosen.length === 0 ? mockCorpusThemes().themes.length : chosen.length,
+      };
+    });
   }
 
   getCorpusThemeSources(
