@@ -1,6 +1,6 @@
 # 0145 Surface Finder tags/Spotlight comment editing in the Properties dialog
 
-Status: open
+Status: done
 Priority: low
 Owner: unassigned
 Agent: unassigned
@@ -68,4 +68,23 @@ network calls.
   existing dialog.
 
 ## Agent Notes
-- (none yet)
+- Done: `PropertiesDialog` gained capability-gated Tags and Comment sections for a single-entry
+  selection only. Tags are fetched via `getFinderTags` on open (mirroring the `requestedEntryId`
+  fetch-on-open/abort pattern), shown as chips, and edited through the **shared**
+  `FinderTagsEditor` component — extracted from the old standalone `FinderTagsDialog` so both the
+  context-menu dialog and the Properties dialog reuse one editor with no nested modals (the editor
+  renders its own chips/add-row/Remove-All/Save; the dialog is now just a `ModalPanel` shell around
+  it). A successful edit calls `setFinderTags` and `FinderTagsLoader.setCached` (threaded in via a
+  new `finderTagsLoader` attr) so the directory-table badge updates immediately. The Comment section
+  is an inline textarea + Save calling `getSpotlightComment`/`setSpotlightComment`.
+- Capability signals are threaded from `loadWorkspace` (which already fetches
+  `getRuntimeCapabilities`) into `shellState.runtimeCapabilities`, exposed on `AppDialogsContext`
+  and passed to `PropertiesDialog` as `runtimeCapabilities`; sections render only when
+  `finderTags`/`extendedAttributes` are true **and** an `editingClient` is present. The read-only
+  metadata client stayed minimal — the four tag/comment methods live on a separate
+  `PropertiesEditingClient` slice (both attrs receive the full `FileManagerClient` in production).
+- The standalone `core.editFinderTags`/`core.editSpotlightComment` context-menu actions and their
+  dialogs are **kept** (additive change; a faster one-click path), per the task's note to confirm
+  with the reviewer before deleting a working surface.
+- Tests: `properties-dialog.test.ts` covers chip display, capability-gated hiding for both
+  sections, the comment round-trip, and the tag edit round-trip (display + loader cache).

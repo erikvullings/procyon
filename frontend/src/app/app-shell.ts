@@ -1517,6 +1517,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     setFinderTagsLoader: (loader) => {
       shellState.finderTagsLoader = loader;
     },
+    getRuntimeCapabilities: () => shellState.runtimeCapabilities,
+    setRuntimeCapabilities: (capabilities) => {
+      shellState.runtimeCapabilities = capabilities;
+    },
     getSystemLocations: () => shellState.systemLocations,
     setSystemLocations: (locs) => {
       shellState.systemLocations = locs;
@@ -2630,6 +2634,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       });
     },
     getFinderTagsLoader: () => shellState.finderTagsLoader,
+    getRuntimeCapabilities: () => shellState.runtimeCapabilities,
     cancelAutoDismiss: opsWiring.cancelAutoDismiss,
     rememberDismissedOperation: opsWiring.rememberDismissedOperation,
     hasDismissedOperations: () => shellState.dismissedOperationIds.size > 0,

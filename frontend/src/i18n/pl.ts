@@ -1153,6 +1153,9 @@ export const pl = {
     folders: 'Foldery',
     totalSize: 'Rozmiar całkowity',
     unableToLoadMetadata: 'Nie można wczytać metadanych',
+    tags: 'Znaczniki',
+    editTags: 'Edytuj znaczniki…',
+    comment: 'Komentarz',
   },
   closeLastTab: {
     title: 'Zamknąć jedyną kartę?',

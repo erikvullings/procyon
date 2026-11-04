@@ -107,6 +107,7 @@ import type {
   PaneId,
   PluginDescriptor,
   RagScope,
+  RuntimeCapabilities,
   ScanDiskUsageResult,
   SearchExecutionMode,
   SearchQuery,
@@ -299,6 +300,9 @@ export function createShellState(client: FileManagerClient) {
     nativeIconLoaderSource: undefined as unknown as NativeIconLoader | undefined,
     thumbnailLoader: undefined as unknown as ThumbnailLoader | undefined,
     finderTagsLoader: undefined as unknown as FinderTagsLoader | undefined,
+    /** Runtime capabilities discovered once at bootstrap (task 0145), used to capability-gate
+     * affordances like the Properties dialog's Tags/Comment sections. */
+    runtimeCapabilities: undefined as RuntimeCapabilities | undefined,
     contextMenu: undefined as unknown as
       | {
           readonly paneId: PaneId;

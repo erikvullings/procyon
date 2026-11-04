@@ -1152,6 +1152,9 @@ export const it = {
     folders: 'Cartelle',
     totalSize: 'Dimensione totale',
     unableToLoadMetadata: 'Impossibile caricare i metadati',
+    tags: 'Etichette',
+    editTags: 'Modifica etichette…',
+    comment: 'Commento',
   },
   closeLastTab: {
     title: "Chiudere l'unica scheda?",

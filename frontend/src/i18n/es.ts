@@ -1155,6 +1155,9 @@ export const es = {
     folders: 'Carpetas',
     totalSize: 'Tamaño total',
     unableToLoadMetadata: 'No se pueden cargar los metadatos',
+    tags: 'Etiquetas',
+    editTags: 'Editar etiquetas…',
+    comment: 'Comentario',
   },
   closeLastTab: {
     title: '¿Cerrar la única pestaña?',

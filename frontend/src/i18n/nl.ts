@@ -1550,6 +1550,9 @@ export const nl = {
     folders: 'Mappen',
     totalSize: 'Totale grootte',
     unableToLoadMetadata: 'Metadata kan niet worden geladen',
+    tags: 'Tags',
+    editTags: 'Tags bewerken…',
+    comment: 'Opmerking',
   },
   closeLastTab: {
     title: 'Enige tabblad sluiten?',

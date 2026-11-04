@@ -1170,6 +1170,9 @@ export const de = {
     folders: 'Ordner',
     totalSize: 'Gesamtgröße',
     unableToLoadMetadata: 'Metadaten können nicht geladen werden',
+    tags: 'Tags',
+    editTags: 'Tags bearbeiten…',
+    comment: 'Kommentar',
   },
   closeLastTab: {
     title: 'Einzigen Tab schließen?',

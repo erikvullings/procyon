@@ -100,6 +100,7 @@ export const ENGLISH_IDENTICAL_ALLOWLIST: Readonly<Record<string, Allowlisted>> 
   'editor.no': ['es', 'it'],
   'entryMetadata.colorOrange': ['de', 'fr'],
   'entryMetadata.tagsTitle': ['de'],
+  'properties.tags': ['de', 'nl'],
   'geoConvert.files.1': ['it'],
   'geoEdit.jsonErrorPath': ['nl', 'de', 'es', 'it', 'pt', 'pl'],
   'geoEdit.propertyType': ['nl', 'fr'],

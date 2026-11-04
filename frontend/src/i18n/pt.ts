@@ -1157,6 +1157,9 @@ export const pt = {
     folders: 'Pastas',
     totalSize: 'Tamanho total',
     unableToLoadMetadata: 'Não é possível carregar os metadados',
+    tags: 'Etiquetas',
+    editTags: 'Editar etiquetas…',
+    comment: 'Comentário',
   },
   closeLastTab: {
     title: 'Fechar o único separador?',

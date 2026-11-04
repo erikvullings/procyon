@@ -3,6 +3,7 @@ import { t } from '../../i18n';
 import type {
   Connection,
   Location,
+  RuntimeCapabilities,
   SystemLocation,
   Volume,
   WorkspaceId,
@@ -44,6 +45,8 @@ export interface WorkspaceControllerContext {
   setNativeIconLoader(loader?: NativeIconLoader): void;
   setThumbnailLoader(loader?: ThumbnailLoader): void;
   setFinderTagsLoader(loader?: FinderTagsLoader): void;
+  getRuntimeCapabilities(): RuntimeCapabilities | undefined;
+  setRuntimeCapabilities(capabilities?: RuntimeCapabilities): void;
   getSystemLocations(): readonly SystemLocation[];
   setSystemLocations(locs: readonly SystemLocation[]): void;
   setSystemLocationsError(msg?: string): void;
@@ -211,6 +214,7 @@ export function createWorkspaceController(
     context.setWorkspaceRequest(request);
     try {
       const capabilities = await client.getRuntimeCapabilities(request.signal);
+      context.setRuntimeCapabilities(capabilities);
       await loadSystemLocations(request.signal);
       await loadVolumes(request.signal);
       await loadHomeDirectory(request.signal);

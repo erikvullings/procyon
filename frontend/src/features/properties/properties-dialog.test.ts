@@ -1,8 +1,20 @@
 import m from 'mithril';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import type { EntryId, EntryMetadata, EntrySummary, Location } from '../../models';
-import { PropertiesDialog, type PropertiesMetadataClient } from './properties-dialog';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import type {
+  EntryId,
+  EntryMetadata,
+  EntrySummary,
+  FinderTags,
+  Location,
+  RuntimeCapabilities,
+  SpotlightComment,
+} from '../../models';
+import type { FinderTagsLoader } from '../directory-table/finder-tags-loader';
+import {
+  PropertiesDialog,
+  type PropertiesEditingClient,
+  type PropertiesMetadataClient,
+} from './properties-dialog';
 
 let root: HTMLElement;
 
@@ -211,6 +223,242 @@ describe('PropertiesDialog', () => {
     );
     closeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(onCancel).toHaveBeenCalledOnce();
+  });
+
+  function editingClientStub(): {
+    getFinderTags: Mock;
+    setFinderTags: Mock;
+    getSpotlightComment: Mock;
+    setSpotlightComment: Mock;
+  } {
+    return {
+      getFinderTags: vi.fn().mockResolvedValue(undefined),
+      setFinderTags: vi.fn().mockResolvedValue(undefined),
+      getSpotlightComment: vi.fn().mockResolvedValue(undefined),
+      setSpotlightComment: vi.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  function capabilities(overrides: Partial<RuntimeCapabilities>): RuntimeCapabilities {
+    return {
+      clipboard: true,
+      extendedAttributes: true,
+      finderAliases: false,
+      finderTags: true,
+      freshInstall: false,
+      nativeDragOut: false,
+      nativeFileIcons: false,
+      nativeMenus: false,
+      nativeThumbnails: false,
+      openTerminal: false,
+      osFileClipboard: false,
+      platform: 'macos',
+      platformContextMenu: false,
+      plugins: true,
+      revealInSystemFileManager: true,
+      runtime: 'tauri',
+      semanticComponentAuthority: 'unavailable',
+      semanticRuntimeExecutableDownload: 'prohibitedByMacAppStore',
+      serverAdministration: false,
+      ...overrides,
+    } as unknown as RuntimeCapabilities;
+  }
+
+  function setCachedSpy(): { loader: FinderTagsLoader; callUri: () => string | undefined } {
+    const setCached = vi.fn();
+    let capturedUri: string | undefined;
+    setCached.mockImplementation((uri: string) => {
+      capturedUri = uri;
+    });
+    return { loader: { setCached } as unknown as FinderTagsLoader, callUri: () => capturedUri };
+  }
+
+  it('shows fetched Finder tags as chips for a single entry when the runtime supports them', async () => {
+    const localEntry = entry({
+      id: 'tags-1',
+      location: location('local', 'file:///Users/erik/photo.png'),
+    });
+    const editing = editingClientStub();
+    editing.getFinderTags.mockResolvedValue({
+      tags: [
+        { name: 'Important', color: 'red' },
+        { name: 'Done', color: 'green' },
+      ],
+    } satisfies FinderTags);
+
+    m.mount(root, {
+      view: () =>
+        m(PropertiesDialog, {
+          open: true,
+          entries: [localEntry],
+          client: { getEntryMetadata: vi.fn().mockResolvedValue(emptyMetadata(localEntry.id)) },
+          editingClient: editing as unknown as PropertiesEditingClient,
+          runtimeCapabilities: capabilities({ finderTags: true }),
+          finderTagsLoader: setCachedSpy().loader,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    await flush();
+
+    expect(root.querySelector('.fm-properties-tags')).not.toBeNull();
+    expect(root.textContent).toContain('Important');
+    expect(root.textContent).toContain('Done');
+    expect(editing.getFinderTags).toHaveBeenCalledWith(localEntry.location.uri, expect.anything());
+  });
+
+  it('hides the Tags section when finder tags are not supported', async () => {
+    const localEntry = entry({
+      id: 'tags-2',
+      location: location('local', 'file:///Users/erik/photo.png'),
+    });
+    const editing = editingClientStub();
+
+    m.mount(root, {
+      view: () =>
+        m(PropertiesDialog, {
+          open: true,
+          entries: [localEntry],
+          client: { getEntryMetadata: vi.fn().mockResolvedValue(emptyMetadata(localEntry.id)) },
+          editingClient: editing as unknown as PropertiesEditingClient,
+          runtimeCapabilities: capabilities({ finderTags: false }),
+          finderTagsLoader: setCachedSpy().loader,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    await flush();
+
+    expect(root.querySelector('.fm-properties-tags')).toBeNull();
+    expect(editing.getFinderTags).not.toHaveBeenCalled();
+  });
+
+  it('shows an editable Spotlight comment and persists a change', async () => {
+    const localEntry = entry({
+      id: 'comment-1',
+      location: location('local', 'file:///Users/erik/notes.txt'),
+    });
+    const editing = editingClientStub();
+    editing.getSpotlightComment.mockResolvedValue({
+      comment: 'initial',
+    } satisfies SpotlightComment);
+
+    m.mount(root, {
+      view: () =>
+        m(PropertiesDialog, {
+          open: true,
+          entries: [localEntry],
+          client: { getEntryMetadata: vi.fn().mockResolvedValue(emptyMetadata(localEntry.id)) },
+          editingClient: editing as unknown as PropertiesEditingClient,
+          runtimeCapabilities: capabilities({ extendedAttributes: true }),
+          finderTagsLoader: setCachedSpy().loader,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    await flush();
+
+    const textarea = root.querySelector<HTMLTextAreaElement>('#spotlight-comment-text');
+    expect(textarea?.value).toBe('initial');
+
+    const field = textarea as HTMLTextAreaElement;
+    field.value = 'updated';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    field.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true }),
+    );
+    await flush();
+
+    expect(editing.setSpotlightComment).toHaveBeenCalledWith(
+      localEntry.location.uri,
+      { comment: 'updated' },
+      expect.anything(),
+    );
+    expect(root.querySelector('.fm-properties-save-comment')?.textContent).toContain('Save');
+  });
+
+  it('hides the Comment section when extended attributes are not supported', async () => {
+    const localEntry = entry({
+      id: 'comment-2',
+      location: location('local', 'file:///Users/erik/notes.txt'),
+    });
+    const editing = editingClientStub();
+
+    m.mount(root, {
+      view: () =>
+        m(PropertiesDialog, {
+          open: true,
+          entries: [localEntry],
+          client: { getEntryMetadata: vi.fn().mockResolvedValue(emptyMetadata(localEntry.id)) },
+          editingClient: editing as unknown as PropertiesEditingClient,
+          runtimeCapabilities: capabilities({ extendedAttributes: false }),
+          finderTagsLoader: setCachedSpy().loader,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    await flush();
+
+    expect(root.querySelector('#spotlight-comment-text')).toBeNull();
+    expect(editing.getSpotlightComment).not.toHaveBeenCalled();
+  });
+
+  it('round-trips a tag edit through the nested editor, updating the display and the loader cache', async () => {
+    const localEntry = entry({
+      id: 'tags-3',
+      location: location('local', 'file:///Users/erik/photo.png'),
+    });
+    const editing = editingClientStub();
+    editing.getFinderTags.mockResolvedValue({ tags: [] } satisfies FinderTags);
+    editing.setFinderTags.mockImplementation((_uri: string, request: FinderTags) =>
+      Promise.resolve(request),
+    );
+    const spy = setCachedSpy();
+
+    m.mount(root, {
+      view: () =>
+        m(PropertiesDialog, {
+          open: true,
+          entries: [localEntry],
+          client: { getEntryMetadata: vi.fn().mockResolvedValue(emptyMetadata(localEntry.id)) },
+          editingClient: editing as unknown as PropertiesEditingClient,
+          runtimeCapabilities: capabilities({ finderTags: true }),
+          finderTagsLoader: spy.loader,
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    await flush();
+
+    // Open the nested tag editor and add a tag.
+    root.querySelector<HTMLButtonElement>('.fm-properties-edit-tags')?.click();
+    m.redraw.sync();
+    await flush();
+    const nameInput = root.querySelector<HTMLInputElement>('#finder-tags-new-name');
+    if (nameInput === null) throw new Error('tag name input missing');
+    nameInput.value = 'Urgent';
+    nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+    m.redraw.sync();
+    root
+      .querySelector<HTMLButtonElement>('.fm-finder-tags-add-button')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    m.redraw.sync();
+    await flush();
+    expect(root.textContent).toContain('Urgent');
+
+    // Confirm the editor (its own Save button, not the comment section's).
+    root
+      .querySelector<HTMLButtonElement>('.fm-finder-tags-save')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flush();
+
+    expect(editing.setFinderTags).toHaveBeenCalledWith(
+      localEntry.location.uri,
+      { tags: [{ name: 'Urgent', color: 'none' }] },
+      expect.anything(),
+    );
+    expect(root.textContent).toContain('Urgent');
+    expect(spy.callUri()).toBe(localEntry.location.uri);
   });
 
   it('offers "Change attributes..." only when the host provides it and passes the entries on', async () => {

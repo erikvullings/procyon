@@ -1158,6 +1158,9 @@ export const fr = {
     folders: 'Dossiers',
     totalSize: 'Taille totale',
     unableToLoadMetadata: 'Impossible de charger les métadonnées',
+    tags: 'Étiquettes',
+    editTags: 'Modifier les étiquettes…',
+    comment: 'Commentaire',
   },
   closeLastTab: {
     title: 'Fermer le seul onglet ?',

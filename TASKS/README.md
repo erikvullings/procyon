@@ -315,8 +315,10 @@ disk-usage visualization.
 - [x] 0233 Disk usage: flat-array tree transport *(needs 0230–0232)*
 - [x] 0234 Disk usage: macOS getattrlistbulk scanner *(needs 0230)*
 - [ ] 0170 Perceptual image duplicate detection *(needs 0077, 0134)*
-- [ ] 0145 Surface Finder tags/Spotlight comment editing in the Properties dialog *(split out of
-  0136; 0140 landed mid-task, after 0136's own standalone dialogs were already built)*
+- [x] 0145 Surface Finder tags/Spotlight comment editing in the Properties dialog *(split out of
+  0136; 0140 landed mid-task, after 0136's own standalone dialogs were already built — done: the
+  Properties dialog gained capability-gated Tags/Comment sections for a single entry, reusing a
+  shared `FinderTagsEditor`; the standalone context-menu dialogs are kept)*
 - [x] 0151 Fix Windows git-status/history: `canonicalize()` vs. `git2` path mismatch *(needs 0135;
   uses `dunce::canonicalize()` to keep filesystem and libgit2 paths comparable on Windows)*
 - [x] 0265 Duplicate and near-duplicate music finder *(needs 0077)*

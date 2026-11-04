@@ -1525,6 +1525,9 @@ export const en = {
     folders: 'Folders',
     totalSize: 'Total size',
     unableToLoadMetadata: 'Unable to load metadata',
+    tags: 'Tags',
+    editTags: 'Edit tags…',
+    comment: 'Comment',
   },
   closeLastTab: {
     title: 'Close the only tab?',

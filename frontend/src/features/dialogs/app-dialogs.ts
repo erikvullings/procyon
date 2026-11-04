@@ -11,6 +11,7 @@ import type {
   PaneId,
   ResolvedRagCitation,
   ResolveRagCitationRequest,
+  RuntimeCapabilities,
   SavedSearch,
   Settings,
   TabId,
@@ -99,6 +100,7 @@ export interface AppDialogsContext {
   resolvePermanentDeleteRequest(confirmed: boolean): void;
   getDialogs(): DialogUIController;
   getFinderTagsLoader(): FinderTagsLoader | undefined;
+  getRuntimeCapabilities(): RuntimeCapabilities | undefined;
   getFormatSettings(): EntryFormatSettings;
   getFindFilesController(): FindFilesController;
   getTabController(): TabController;
@@ -356,6 +358,9 @@ export function renderAppDialogs(
       open: ds.propertiesOpen,
       entries: ds.propertiesEntries,
       client,
+      editingClient: client,
+      runtimeCapabilities: ctx.getRuntimeCapabilities(),
+      finderTagsLoader: ctx.getFinderTagsLoader(),
       formatSettings: ctx.getFormatSettings(),
       onCancel: () => dialogs.cancelProperties(),
       ...(ctx.openChangeAttributes === undefined
