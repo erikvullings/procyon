@@ -2,30 +2,30 @@
   "schemaVersion": 1,
   "decision": "go",
   "repository": "erikvullings/procyon",
-  "releaseTag": "semantic-v0.7.5",
-  "qualificationRunId": 41647231701,
-  "sourceRevision": "059f0d5f98d0da0c55ba503e3882d5f7baf10b6a",
-  "releaseCandidateFingerprint": "sha256:92ab4f7647193fa3b06cb6665b5a3796af3bb4727d253b5c4503b7bbd5b6ef3c",
+  "releaseTag": "semantic-v0.7.6",
+  "qualificationRunId": 41811707075,
+  "sourceRevision": "e08047534e274ae09e5ba748035e44d238a91580",
+  "releaseCandidateFingerprint": "sha256:7468939fdeb253260473b815e337cb44af72b80524c0c1f9bdd5c196cc339379",
   "targets": {
     "linux-aarch64": {
-      "catalogRevision": "procyon-linux-aarch64-0.7.0-9-b7b6f69182f0a3a1fc668548241c94dc",
-      "catalogSha256": "752920d0ec371d1aaa1384d38a956498d59b9d79e0744cc47e1ba33ef954fbe5",
-      "signatureSha256": "fee113910d7af8a531314725374602bb54ca33b26040893fe737210697a5de2f"
+      "catalogRevision": "procyon-linux-aarch64-0.7.0-10-bfe5bff83a806bbe85b47fc6883e2361",
+      "catalogSha256": "3d8ea26c7a08c3b3a627c76f5adcc319460582d9df2457d6f92a7e74b3776bc4",
+      "signatureSha256": "c54302fef849069d70f104f844fa31b06e1aaa6b0d97bd781e734c5a2871e395"
     },
     "linux-x86_64": {
-      "catalogRevision": "procyon-linux-x86_64-0.7.0-9-ab38b1bd07b74dbe84b87b28ca921821",
-      "catalogSha256": "4918f49708fcd21233f28aed84c0330b3ea3dd9e6aede4e5bfa44cb6150e3b9d",
-      "signatureSha256": "35dfa75d789105bf5ef023da5330efd44a996792f60f562e9b0b195d06ae1cad"
+      "catalogRevision": "procyon-linux-x86_64-0.7.0-10-44f456dfae1f88c4b09ea953c61e9a0a",
+      "catalogSha256": "cb8ad2d3158954ebc9c17316ebbf1775bc65523bdd78767351fb36f3b91095d8",
+      "signatureSha256": "b6f05f4cb23b2ed4a57455159716108088dea5e7779faf8acdd49fa5804c1ec6"
     },
     "macos-aarch64": {
-      "catalogRevision": "procyon-macos-aarch64-0.7.0-9-06c2fbc6ef0870a3419104b76a1f250b",
-      "catalogSha256": "1e7ee310d8cbe4077e1839c6a306e13c3d22ded99944021a84577b9d54d73f38",
-      "signatureSha256": "2b8a0cb055356e1482f8c37e36e2ad8db2f1089dfb04977db4087216c371815d"
+      "catalogRevision": "procyon-macos-aarch64-0.7.0-10-9a5034143a5689f3388e9ec026bb841e",
+      "catalogSha256": "670f62e7f5c0387352143493624b62d9bca3718984284006217c9dc8c51d171b",
+      "signatureSha256": "abf4681bfa0c04d0cb17d416b056c8d84d89abc4c13332d879c5e3e51881001f"
     },
     "windows-x86_64": {
-      "catalogRevision": "procyon-windows-x86_64-0.7.0-9-766629e1e0ee64071e4edcd22e77dd67",
-      "catalogSha256": "f1000e10aa3897ca4697b5675daa18f1de77d1428848ad2be10baf02bc5d1276",
-      "signatureSha256": "acf8de8e1bf6d185cd6bd9c38503f7bb69714828ac2c28077af7139cc20c0598"
+      "catalogRevision": "procyon-windows-x86_64-0.7.0-10-499930d842fd4c55aea3de24547c441c",
+      "catalogSha256": "a1a68eb3127e089470bd89cb98163537b1f69c51f375b772565d4ca459366672",
+      "signatureSha256": "c8a93192ea842a014ff217e5723160a760a4e9f9403128181765829ea7ebd25b"
     }
   },
   "riskAcceptedGemma": {
@@ -33,9 +33,9 @@
     "candidateDecision": "noGo",
     "qualificationStatus": "not-five-gate-qualified",
     "modelRevision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
-    "candidateManifestSha256": "77abf9ed9df0438fc075fb352e03f6a0dd672f0a8ca0397fcc761c018dba9bb8",
+    "candidateManifestSha256": "a6331eb43577e24abdd7e2b4e2f15e7ddbeb2afa4a3155e9baeb3ae831dd9eb2",
     "approvedBy": "erikvullings",
-    "approvedAt": "2026-11-03T15:37:13Z",
+    "approvedAt": "2026-11-04T11:12:53Z",
     "acceptedLimitations": [
       "five-gate-qualification-not-performed",
       "metal-resource-gates-1a-and-1c-fail",
