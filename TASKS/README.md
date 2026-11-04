@@ -519,3 +519,5 @@ previous pass stopped where it did.
   medium — implemented; retrieval A/B negative at 512 tokens, open decision)*
 - [x] 0297 Semantic settings redesign: global folders, workspace multi-select, per-file details
   *(done — frontend + backend; per-file size override replaced by a global limit, see Agent Notes)*
+- [ ] 0298 Corpus themes: folder scope selector and export (Markdown, Word, SKOS) *(backend +
+  frontend, medium — scope clusters to chosen folders; global remembered choice; export model + 3 renderers)*
