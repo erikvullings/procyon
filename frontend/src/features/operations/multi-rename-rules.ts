@@ -1,5 +1,6 @@
 import { t } from '../../i18n';
 import type { MultiRenameCaseTransform, MultiRenameRules, MultiRenameSequence } from '../../models';
+import { escapeRegExp } from '../../utilities/regex';
 import { validateEntryName } from './create-directory-dialog';
 
 /** How the whole proposed name is cased after every other rule has been applied. */
@@ -66,10 +67,6 @@ function splitExtension(name: string): { stem: string; extension: string } {
   // stem so a leading dot is never mistaken for an empty-stem extension.
   if (lastDot <= 0) return { stem: name, extension: '' };
   return { stem: name.slice(0, lastDot), extension: name.slice(lastDot + 1) };
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
 
 function applySearchReplace(stem: string, rules: MultiRenameRules): string {

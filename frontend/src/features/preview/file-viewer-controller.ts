@@ -14,6 +14,7 @@ import type {
   SearchInFileMatch,
   StructuredRow,
 } from '../../models';
+import { escapeRegExp } from '../../utilities/regex';
 import { IMAGE_EXTENSIONS } from '../directory-table/entry-icons';
 import { editableLanguageForExtension } from '../editor/editor-language';
 import {
@@ -592,8 +593,7 @@ function previousZoomStep(zoom: number): number {
 export function searchExpression(
   search: Pick<FileViewerPdfSearchState, 'query' | 'regex' | 'caseSensitive' | 'wholeWord'>,
 ): RegExp {
-  const source =
-    search.regex === true ? search.query : search.query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const source = search.regex === true ? search.query : escapeRegExp(search.query);
   return new RegExp(
     search.wholeWord === true ? `\\b(?:${source})\\b` : source,
     search.caseSensitive === true ? 'u' : 'iu',

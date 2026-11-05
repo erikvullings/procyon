@@ -34,6 +34,7 @@ import type {
   WorkspaceId,
   WorkspaceProjection,
 } from '../../models';
+import { escapeRegExp } from '../../utilities/regex';
 import { bindLocalisedMessage } from '../error-localiser';
 
 export interface FixtureEntry {
@@ -364,7 +365,7 @@ export function firstContentMatch(
       : { index: match.index, length: match[0]?.length ?? 0 };
   }
   if (predicate?.wholeWord) {
-    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escaped = escapeRegExp(query);
     const match = new RegExp(`\\b${escaped}\\b`, predicate.caseSensitive ? 'mu' : 'imu').exec(text);
     return match?.index === undefined
       ? undefined

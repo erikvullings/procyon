@@ -1,4 +1,5 @@
 import type { SearchInFileMatch } from '../../models';
+import { escapeRegExp } from '../../utilities/regex';
 
 const MAX_HTML_SEARCH_MATCHES = 5_000;
 
@@ -18,7 +19,7 @@ export function searchHtml(
   activeIndex: number | undefined,
 ): HtmlSearchResult {
   if (query === '') return { html: safeHtml, matches: [], truncated: false };
-  const source = regex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const source = regex ? query : escapeRegExp(query);
   const expression = new RegExp(
     wholeWord ? `\\b(?:${source})\\b` : source,
     caseSensitive ? 'gu' : 'giu',

@@ -18,6 +18,7 @@ import type {
   SavedRagConversation,
   SemanticRootStatus,
 } from '../../models';
+import { escapeRegExp } from '../../utilities/regex';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
 import { copyText } from '../preview/clipboard';
 import { decodeEvidenceTitle } from './evidence-title';
@@ -105,10 +106,6 @@ function coverageText(preview: RagPreview): string {
     excluded: coverage.excluded,
     unavailable: coverage.unavailable,
   });
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function citationTitle(citation: RagCitation, preview: RagPreview | undefined): string {

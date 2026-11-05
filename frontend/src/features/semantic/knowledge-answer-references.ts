@@ -1,12 +1,8 @@
 import type { KnowledgeAnswerCitation, KnowledgeEvidence } from '../../models';
+import { escapeRegExp } from '../../utilities/regex';
 import { decodeEvidenceTitle } from './evidence-title';
 
 export const REFERENCE_ANCHOR = '#fm-knowledge-reference-';
-
-/** Escapes a citation label for use inside a regular expression. */
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-}
 
 /** One numbered source an answer cites: a file, however many of its sections were cited. */
 export interface KnowledgeAnswerReference {
