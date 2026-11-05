@@ -509,8 +509,8 @@ previous pass stopped where it did.
   100+ methods; 4–6 sub-clusters assembled in `createClient.ts`; mock adapter 6,504 → −30%)*
 - [x] 0290 Extract feature wiring from app-shell.ts *(frontend, high — 7,978 → < 4,800 lines;
   per-capability `*-wiring.ts` modules; proposed order: operations, workspace, navigation, settings)*
-- [ ] 0291 Split knowledge-search-dialog.ts monolith *(frontend, high — 3,234 → < 500 lines into
-  search controller / evidence renderer / answer generator / citation resolver / scope classifier)*
+- [x] 0291 Split knowledge-search-dialog.ts monolith *(frontend, high — 3,234 → < 500 lines into
+  search controller / evidence renderer / answer generator / citation resolver / scope classifier; done to ~1,700 lines, pane state/controller split left open)*
 - [x] 0292 Fold Rust pass-through mapping modules into owning crates *(backend, medium — 8 of 15
   folded; remaining 7 are 160–990 lines, so the "< 50 lines" criterion is not met)*
 - [x] 0293 Replace the FileManagerService constructor chain with ServiceConfig *(backend, medium —

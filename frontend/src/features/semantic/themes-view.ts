@@ -16,7 +16,7 @@ import type {
   ThemePassage,
 } from '../../models';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
-import { knowledgeProvenanceLabel } from './knowledge-search-dialog';
+import { knowledgeProvenanceLabel } from './knowledge-evidence-view';
 import {
   cleanTitle,
   decodeEntities,

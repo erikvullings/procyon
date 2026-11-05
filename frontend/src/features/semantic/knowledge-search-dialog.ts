@@ -1,29 +1,24 @@
 import m, { type FactoryComponent } from 'mithril';
-import { FlatButton, IconButton, ModalPanel, Skeleton } from 'mithril-materialized';
+import { FlatButton, IconButton, ModalPanel } from 'mithril-materialized';
 import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
 import type { ConnectionClient } from '../../api/client/connection-client.ts';
 import type { SemanticClient } from '../../api/client/semantic-client.ts';
 import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import {
-  brainIcon,
   checkIcon,
   chevronDownIcon,
   chevronUpIcon,
   closeIcon,
-  cloudIcon,
   copyIcon,
   cornerDownLeftIcon,
   dotsIcon,
-  externalLinkIcon,
   filterIcon,
-  photoIcon,
   sparklesIcon,
 } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type {
   KnowledgeAnswer,
-  KnowledgeAnswerCitation,
   KnowledgeCapabilities,
   KnowledgeDiagnostic,
   KnowledgeEvidence,
@@ -33,27 +28,55 @@ import type {
   KnowledgeQueryInterpretation,
   KnowledgeRetrievalMode,
   KnowledgeRoot,
-  KnowledgeRouteFallbackReason,
   KnowledgeScope,
   KnowledgeScopeKind,
   KnowledgeScopeSelector,
   KnowledgeSearchOptions,
   KnowledgeSearchPlan,
-  KnowledgeSearchReason,
   KnowledgeSearchResult,
   LlmProfile,
   Location,
 } from '../../models';
 import { defaultKnowledgeSearchOptions } from '../../models';
-import { thumbnailMimeType } from '../../utilities/image-mime';
-import { safeMarkdownHtml } from '../editor/markdown-preview';
 import { lastPathSegment } from '../navigation/navigation';
-import { copyImageDataUri, copyText } from '../preview/clipboard';
+import { copyText } from '../preview/clipboard';
 import { SemanticFolderEnrolmentPrompt } from '../settings/semantic-library-management';
 import { pathFromUri } from '../workspace/workspace-layout';
-import { pdfPageRenderProvenance } from './evidence-provenance';
-import { decodeEvidenceTitle } from './evidence-title';
-import { mediaDescription, mediaKind, mediaLabel, mediaModifiedLabel } from './media-evidence';
+import { numberKnowledgeAnswer } from './knowledge-answer-references';
+import { knowledgeAnswerBody, knowledgeAskBar } from './knowledge-answer-view';
+import {
+  evidenceDocument,
+  type KnowledgeEvidenceContext,
+  knowledgeTraceView,
+} from './knowledge-evidence-list';
+import { groupEvidenceByDocument } from './knowledge-evidence-view';
+import {
+  intentLabel,
+  isKnowledgeEvidenceRefreshRequired,
+  knowledgeSearchErrorMessage,
+  modeLabel,
+  needLabel,
+  scopeKindLabel,
+} from './knowledge-labels';
+import {
+  INTENTS,
+  loadPreferredNeeds,
+  MODES,
+  NEEDS,
+  persistPreferredNeeds,
+  SCOPE_KINDS,
+} from './knowledge-options';
+import { knowledgePlanBody, knowledgeResultDetails } from './knowledge-plan-view';
+import {
+  classifyKnowledgeScopeSelectors,
+  emptyDraft,
+  joinSubjects,
+  joinValues,
+  type KnowledgeScopeIssue,
+  quoteValue,
+  scopeSelectorText,
+  splitSubjects,
+} from './knowledge-scope';
 
 /** Everything the shell knows about the default scope when the dialog opens. */
 export interface KnowledgeSearchDialogAttrs {
@@ -74,1002 +97,25 @@ export interface KnowledgeSearchDialogAttrs {
   readonly onConfigureAnswers?: () => void;
 }
 
+export {
+  type KnowledgeAnswerReference,
+  linkKnowledgeReferences,
+  type NumberedKnowledgeAnswer,
+  numberKnowledgeAnswer,
+} from './knowledge-answer-references';
 /** Canonical need order, matching the backend enum declaration order. */
-const NEEDS: readonly KnowledgeNeed[] = [
-  'overview',
-  'definition',
-  'procedure',
-  'examples',
-  'evidence',
-  'arguments',
-  'comparison',
-  'limitations',
-  'references',
-];
-
-const MODES: readonly KnowledgeRetrievalMode[] = ['hybrid', 'fullText', 'semantic'];
-const INTENTS: readonly KnowledgeQueryIntent[] = ['search', 'questionAnswering', 'codeRetrieval'];
-
-const SCOPE_KINDS: readonly KnowledgeScopeKind[] = [
-  'entireLibrary',
-  'enrolledRoots',
-  'semanticResults',
-];
-
-const PREFERENCES_STORAGE_KEY = 'procyon.knowledgeSearch.preferences.v1';
-
-interface KnowledgeImagePreviewAttrs {
-  readonly client: ConnectionClient & SemanticClient & WorkspaceClient;
-  readonly workspaceId: string;
-  readonly evidence: KnowledgeEvidence;
-  readonly title: string;
-}
-
-const KnowledgeImagePreview: FactoryComponent<KnowledgeImagePreviewAttrs> = () => {
-  let observer: IntersectionObserver | undefined;
-  let controller: AbortController | undefined;
-  let started = false;
-  let dataUri: string | undefined;
-  let unavailable = false;
-  let removed = false;
-
-  async function load(attrs: KnowledgeImagePreviewAttrs): Promise<void> {
-    if (started || removed) return;
-    started = true;
-    controller = new AbortController();
-    const signal = controller.signal;
-    try {
-      const source = await attrs.client.resolveKnowledgeSource(
-        { workspaceId: attrs.workspaceId, sourceId: attrs.evidence.sourceId },
-        signal,
-      );
-      // PDF page thumbnails are not the indexed embedded image; never present
-      // one as a preview of that image.
-      if (!source.available || !/\.(?:jpe?g|png|gif|webp|ico)$/iu.test(source.location.uri)) {
-        unavailable = true;
-        return;
-      }
-      const bytes = await attrs.client.getThumbnail(source.location.uri, 'small', signal);
-      if (bytes === undefined || bytes.length === 0 || bytes.length > 128 * 1024) {
-        unavailable = true;
-        return;
-      }
-      let binary = '';
-      for (const byte of bytes) binary += String.fromCharCode(byte);
-      dataUri = `data:${thumbnailMimeType(bytes)};base64,${btoa(binary)}`;
-    } catch {
-      if (!signal.aborted) unavailable = true;
-    } finally {
-      if (!signal.aborted) m.redraw();
-    }
-  }
-
-  return {
-    oncreate: ({ dom, attrs }) => {
-      if (typeof IntersectionObserver === 'undefined') {
-        void load(attrs);
-        return;
-      }
-      observer = new IntersectionObserver(
-        (entries) => {
-          if (!entries.some((entry) => entry.isIntersecting)) return;
-          observer?.disconnect();
-          void load(attrs);
-        },
-        { rootMargin: '96px' },
-      );
-      observer.observe(dom);
-    },
-    onremove: () => {
-      removed = true;
-      observer?.disconnect();
-      controller?.abort();
-    },
-    view: ({ attrs }) =>
-      m(
-        'span.fm-knowledge-image-preview',
-        dataUri === undefined
-          ? m(
-              'span.fm-knowledge-image-placeholder',
-              {
-                role: 'img',
-                'aria-label': t(
-                  'knowledgeSearch',
-                  unavailable ? 'imagePreviewUnavailable' : 'imagePreviewLoading',
-                ),
-              },
-              photoIcon(),
-            )
-          : m('img', {
-              src: dataUri,
-              alt: t('knowledgeSearch', 'imagePreviewAlt', { title: attrs.title }),
-              loading: 'lazy',
-              decoding: 'async',
-              onerror: () => {
-                dataUri = undefined;
-                unavailable = true;
-                m.redraw();
-              },
-            }),
-      ),
-  };
-};
-
-const KnowledgeChunkCopy: FactoryComponent<{
-  readonly evidence: KnowledgeEvidence;
-  readonly title: string;
-}> = () => {
-  let copied = false;
-  let failed = false;
-  let resetTimer: number | undefined;
-
-  return {
-    onremove: () => {
-      if (resetTimer !== undefined) clearTimeout(resetTimer);
-    },
-    view: ({ attrs }) =>
-      m('span.fm-knowledge-chunk-copy', [
-        m(
-          'button.fm-knowledge-chunk-copy-button',
-          {
-            type: 'button',
-            'aria-label': t('knowledgeSearch', 'copyChunk'),
-            onclick: (event: MouseEvent) => {
-              const section = (event.currentTarget as Element).closest('.fm-knowledge-result');
-              const content = section
-                ?.querySelector('.fm-knowledge-chunk-content')
-                ?.textContent?.trim();
-              if (content === undefined || content === '') return;
-              const position = knowledgeProvenanceLabel(attrs.evidence.provenance);
-              const source = t('knowledgeSearch', 'chunkSource', {
-                title: `${attrs.title}${position === '' ? '' : `, ${position}`}`,
-              });
-              void (async () => {
-                try {
-                  await copyText(`${content}\n\n${source}`);
-                  copied = true;
-                  failed = false;
-                  if (resetTimer !== undefined) clearTimeout(resetTimer);
-                  resetTimer = window.setTimeout(() => {
-                    copied = false;
-                    m.redraw();
-                  }, 1500);
-                } catch {
-                  copied = false;
-                  failed = true;
-                }
-                m.redraw();
-              })();
-            },
-          },
-          copied ? checkIcon({ size: 14 }) : copyIcon({ size: 14 }),
-        ),
-        copied
-          ? m('span.fm-visually-hidden', { role: 'status' }, t('knowledgeSearch', 'chunkCopied'))
-          : undefined,
-        failed
-          ? m('span.fm-knowledge-error', { role: 'alert' }, t('knowledgeSearch', 'copyChunkFailed'))
-          : undefined,
-      ]),
-  };
-};
-
-const KNOWLEDGE_COPY_IMAGE_LIMIT = 8 * 1024 * 1024;
-const KNOWLEDGE_COPY_READ_LENGTH = 1024 * 1024;
-
-const KnowledgeMediaCopy: FactoryComponent<{
-  readonly client: ConnectionClient & SemanticClient & WorkspaceClient;
-  readonly workspaceId: string;
-  readonly evidence: KnowledgeEvidence;
-  readonly title: string;
-  readonly description: string;
-}> = () => {
-  let copied = false;
-  let error: string | undefined;
-  let resetTimer: number | undefined;
-  let controller: AbortController | undefined;
-  let busy = false;
-
-  async function copy(attrs: {
-    readonly client: ConnectionClient & SemanticClient & WorkspaceClient;
-    readonly workspaceId: string;
-    readonly evidence: KnowledgeEvidence;
-    readonly title: string;
-    readonly description: string;
-  }): Promise<void> {
-    if (busy) return;
-    busy = true;
-    controller = new AbortController();
-    const signal = controller.signal;
-    const kind = mediaKind(attrs.evidence.mediaType);
-    try {
-      const source = await attrs.client.resolveKnowledgeSource(
-        { workspaceId: attrs.workspaceId, sourceId: attrs.evidence.sourceId },
-        signal,
-      );
-      if (!source.available) throw new Error(t('knowledgeSearch', 'copySourceUnavailable'));
-      if (kind === 'image') {
-        if (!/\.(?:jpe?g|png|gif|webp|ico)$/iu.test(source.location.uri)) {
-          throw new Error(t('knowledgeSearch', 'copyEmbeddedImageUnavailable'));
-        }
-        const bytes = new Uint8Array(KNOWLEDGE_COPY_IMAGE_LIMIT);
-        let offset = 0;
-        let eof = false;
-        while (!eof && offset < KNOWLEDGE_COPY_IMAGE_LIMIT) {
-          const part = await attrs.client.readFileRange(
-            { location: source.location, offset, length: KNOWLEDGE_COPY_READ_LENGTH },
-            signal,
-          );
-          if (part.offset !== offset || part.length === 0 || part.length !== part.data.length) {
-            throw new Error(t('knowledgeSearch', 'copyMediaFailed'));
-          }
-          if (offset + part.length > KNOWLEDGE_COPY_IMAGE_LIMIT) {
-            throw new Error(t('knowledgeSearch', 'copyImageTooLarge'));
-          }
-          bytes.set(part.data, offset);
-          offset += part.length;
-          eof = part.eof;
-        }
-        if (!eof || offset === 0) {
-          throw new Error(t('knowledgeSearch', 'copyImageTooLarge'));
-        }
-        const png =
-          bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
-        const jpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
-        if (!png && !jpeg) throw new Error(t('knowledgeSearch', 'copyImageUnsupported'));
-        let binary = '';
-        for (const byte of bytes.subarray(0, offset)) binary += String.fromCharCode(byte);
-        if (signal.aborted) return;
-        await copyImageDataUri(`data:image/${png ? 'png' : 'jpeg'};base64,${btoa(binary)}`);
-      } else {
-        const uri = source.location.uri;
-        if (source.location.providerId !== 'local' || !uri.startsWith('file:///')) {
-          throw new Error(t('knowledgeSearch', 'copyLocalLinkUnavailable'));
-        }
-        if (signal.aborted) return;
-        await copyText(
-          `${decodeEvidenceText(attrs.description)}\n\n${t('knowledgeSearch', 'chunkSource', { title: attrs.title })}\n${uri}`,
-        );
-      }
-      if (signal.aborted) return;
-      error = undefined;
-      copied = true;
-      if (resetTimer !== undefined) clearTimeout(resetTimer);
-      resetTimer = window.setTimeout(() => {
-        copied = false;
-        m.redraw();
-      }, 1500);
-    } catch (cause) {
-      if (!signal.aborted) {
-        copied = false;
-        error = cause instanceof Error ? cause.message : t('knowledgeSearch', 'copyMediaFailed');
-      }
-    } finally {
-      busy = false;
-      if (!signal.aborted) m.redraw();
-    }
-  }
-
-  return {
-    onremove: () => {
-      controller?.abort();
-      if (resetTimer !== undefined) clearTimeout(resetTimer);
-    },
-    view: ({ attrs }) => {
-      const image = mediaKind(attrs.evidence.mediaType) === 'image';
-      return m('span.fm-knowledge-media-copy', [
-        m(
-          'button.fm-knowledge-media-copy-button',
-          {
-            type: 'button',
-            disabled: busy || attrs.evidence.unavailable || attrs.evidence.stale === true,
-            'aria-label': t('knowledgeSearch', image ? 'copyImage' : 'copyMediaDetails'),
-            onclick: () => void copy(attrs),
-          },
-          copied ? checkIcon({ size: 14 }) : copyIcon({ size: 14 }),
-        ),
-        copied
-          ? m(
-              'span.fm-visually-hidden',
-              { role: 'status' },
-              t('knowledgeSearch', image ? 'imageCopied' : 'mediaDetailsCopied'),
-            )
-          : undefined,
-        error === undefined ? undefined : m('span.fm-knowledge-error', { role: 'alert' }, error),
-      ]);
-    },
-  };
-};
-
-function decodeEvidenceText(text: string): string {
-  const textarea = document.createElement('textarea');
-  textarea.innerHTML = text.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-  return textarea.value.replace(
-    /(https?:\/\/doi\.org\/10\.1016\/j\.)\s+([a-z]+\.\d{4}\.)/giu,
-    '$1$2',
-  );
-}
-
-function externalEvidenceUrl(value: string): string | undefined {
-  if (!/^https?:\/\//iu.test(value)) return undefined;
-  try {
-    const parsed = new URL(value);
-    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
-      parsed.hostname !== '' &&
-      parsed.username === '' &&
-      parsed.password === ''
-      ? parsed.href
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function evidenceTextWithLinks(text: string): m.Children {
-  const nodes: m.Children[] = [];
-  const urlPattern = /https?:\/\/[^\s<>"']+/giu;
-  let last = 0;
-  for (const match of text.matchAll(urlPattern)) {
-    const start = match.index;
-    const raw = match[0];
-    let end = raw.length;
-    while (
-      end > 0 &&
-      (/[.,;:!?]/u.test(raw[end - 1] ?? '') ||
-        (raw[end - 1] === ')' &&
-          (raw.slice(0, end).match(/\)/gu)?.length ?? 0) >
-            (raw.slice(0, end).match(/\(/gu)?.length ?? 0)))
-    ) {
-      end--;
-    }
-    const label = raw.slice(0, end);
-    const href = externalEvidenceUrl(label);
-    if (href === undefined) continue;
-    nodes.push(
-      text.slice(last, start),
-      m('a', { href, target: '_blank', rel: 'noopener noreferrer' }, label),
-    );
-    last = start + end;
-  }
-  nodes.push(text.slice(last));
-  return nodes;
-}
-
-function loadPreferredNeeds(): KnowledgeNeed[] {
-  try {
-    const stored = globalThis.localStorage?.getItem(PREFERENCES_STORAGE_KEY);
-    if (stored == null) return [];
-    const value: unknown = JSON.parse(stored);
-    if (
-      typeof value !== 'object' ||
-      value === null ||
-      !('needs' in value) ||
-      !Array.isArray(value.needs)
-    ) {
-      return [];
-    }
-    const selected = new Set(
-      value.needs.filter(
-        (need): need is KnowledgeNeed =>
-          typeof need === 'string' && NEEDS.includes(need as KnowledgeNeed),
-      ),
-    );
-    return NEEDS.filter((need) => selected.has(need));
-  } catch {
-    return [];
-  }
-}
-
-function persistPreferredNeeds(needs: readonly KnowledgeNeed[]): void {
-  try {
-    globalThis.localStorage?.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify({ needs }));
-  } catch {
-    // Search remains usable when a host disables persistent browser storage.
-  }
-}
-
-function needLabel(need: KnowledgeNeed): string {
-  switch (need) {
-    case 'overview':
-      return t('knowledgeSearch', 'needOverview');
-    case 'definition':
-      return t('knowledgeSearch', 'needDefinition');
-    case 'procedure':
-      return t('knowledgeSearch', 'needProcedure');
-    case 'examples':
-      return t('knowledgeSearch', 'needExamples');
-    case 'evidence':
-      return t('knowledgeSearch', 'needEvidence');
-    case 'arguments':
-      return t('knowledgeSearch', 'needArguments');
-    case 'comparison':
-      return t('knowledgeSearch', 'needComparison');
-    case 'limitations':
-      return t('knowledgeSearch', 'needLimitations');
-    case 'references':
-      return t('knowledgeSearch', 'needReferences');
-  }
-}
-
-function intentLabel(intent: KnowledgeQueryIntent): string {
-  switch (intent) {
-    case 'search':
-      return t('knowledgeSearch', 'intentDocuments');
-    case 'questionAnswering':
-      return t('knowledgeSearch', 'intentQuestions');
-    case 'codeRetrieval':
-      return t('knowledgeSearch', 'intentCode');
-  }
-}
-
-function modeLabel(mode: KnowledgeRetrievalMode): string {
-  switch (mode) {
-    case 'hybrid':
-      return t('knowledgeSearch', 'modeHybrid');
-    case 'fullText':
-      return t('knowledgeSearch', 'modeFullText');
-    case 'semantic':
-      return t('knowledgeSearch', 'modeSemantic');
-  }
-}
-
-function scopeKindLabel(kind: KnowledgeScopeKind): string {
-  switch (kind) {
-    case 'entireLibrary':
-      return t('knowledgeSearch', 'scopeEntireLibrary');
-    case 'enrolledRoots':
-      return t('knowledgeSearch', 'scopeEnrolledRoots');
-    case 'currentFolder':
-      return t('knowledgeSearch', 'scopeCurrentFolder');
-    case 'semanticResults':
-      return t('knowledgeSearch', 'scopeSemanticResults');
-  }
-}
-
-function fallbackReasonLabel(reason: KnowledgeRouteFallbackReason): string {
-  switch (reason) {
-    case 'queryEmbeddingsUnavailable':
-      return t('knowledgeSearch', 'fallbackQueryEmbeddingsUnavailable');
-    case 'queryEmbeddingFailed':
-      return t('knowledgeSearch', 'fallbackQueryEmbeddingFailed');
-    case 'semanticQueryFailed':
-      return t('knowledgeSearch', 'fallbackSemanticQueryFailed');
-    case 'fullTextIndexUnavailable':
-      return t('knowledgeSearch', 'fallbackFullTextIndexUnavailable');
-    case 'fullTextQueryFailed':
-      return t('knowledgeSearch', 'fallbackFullTextQueryFailed');
-  }
-}
-
-function reasonLabel(reason: KnowledgeSearchReason): string {
-  switch (reason.kind) {
-    case 'subject':
-      return t('knowledgeSearch', 'reasonSubject');
-    case 'need':
-      return t('knowledgeSearch', 'reasonNeed', {
-        need: reason.need == null ? '' : needLabel(reason.need),
-      });
-    case 'actionDefault':
-      return t('knowledgeSearch', 'reasonActionDefault', {
-        action: reason.action ?? '',
-        need: reason.need == null ? '' : needLabel(reason.need),
-      });
-    case 'relatedTerm':
-      return t('knowledgeSearch', 'reasonRelatedTerm');
-  }
-}
-
-function priorityLabel(priority: KnowledgeSearchPlan['searches'][number]['priority']): string {
-  switch (priority) {
-    case 'primary':
-      return t('knowledgeSearch', 'planSearchPrimary');
-    case 'secondary':
-      return t('knowledgeSearch', 'planSearchSecondary');
-    case 'related':
-      return t('knowledgeSearch', 'planSearchRelated');
-  }
-}
-
-/** Renders serialized structural provenance as a short human location. */
-export function knowledgeProvenanceLabel(provenance: string): string {
-  const describe = (value: unknown): string | undefined => {
-    if (typeof value === 'string') {
-      try {
-        return describe(JSON.parse(value));
-      } catch {
-        return value.length === 0 ? undefined : value;
-      }
-    }
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
-    const node = value as Record<string, unknown>;
-    const number = (key: string): number | undefined =>
-      typeof node[key] === 'number' ? node[key] : undefined;
-    switch (node.kind) {
-      case 'exact':
-        return describe(node.value);
-      case 'span': {
-        const span =
-          node.value !== null && typeof node.value === 'object' && !Array.isArray(node.value)
-            ? (node.value as Record<string, unknown>)
-            : node;
-        const first = describe(span.first);
-        const last = describe(span.last);
-        if (first === undefined) return last;
-        if (last === undefined || last === first) return first;
-        return `${first} – ${last}`;
-      }
-      case 'pdfBlock': {
-        const page = number('page_number');
-        return page === undefined ? undefined : t('ragAsk', 'citationPage', { page });
-      }
-      case 'pdfImage': {
-        const page = number('page_number');
-        const image = number('image_index');
-        return page === undefined ||
-          !Number.isInteger(page) ||
-          page <= 0 ||
-          image === undefined ||
-          !Number.isInteger(image) ||
-          image <= 0
-          ? undefined
-          : t('knowledgeSearch', 'pdfImageCitation', { page, image });
-      }
-      case 'pdfPageRender': {
-        const page = number('page_number');
-        return page === undefined || !Number.isInteger(page) || page <= 0
-          ? undefined
-          : t('ragAsk', 'citationPage', { page });
-      }
-      case 'textLines':
-      case 'codeLines': {
-        const start = number('start_line');
-        const end = number('end_line');
-        return start === undefined || end === undefined
-          ? undefined
-          : t('ragAsk', 'citationLines', { start, end });
-      }
-      case 'epubText': {
-        const spine = number('spine_index');
-        const start = number('start_line');
-        const end = number('end_line');
-        return spine === undefined || start === undefined || end === undefined
-          ? undefined
-          : t('ragAsk', 'citationEpubLines', { chapter: spine + 1, start, end });
-      }
-      case 'jsonlRecord': {
-        const line = number('line');
-        return line === undefined ? undefined : t('ragAsk', 'citationRecord', { line });
-      }
-      case 'slide': {
-        const slide = number('slide_number');
-        return slide === undefined ? undefined : t('ragAsk', 'citationSlide', { slide });
-      }
-      case 'spreadsheetRange': {
-        const range = spreadsheetRangeLabel(node);
-        if (range === undefined) return undefined;
-        const sheet = typeof node.sheet === 'string' ? node.sheet.trim() : '';
-        return sheet.length === 0
-          ? t('ragAsk', 'citationCells', { range })
-          : t('ragAsk', 'citationSheetCells', { sheet, range });
-      }
-      case 'docxBlock': {
-        const block = number('block_index');
-        return block === undefined ? undefined : t('ragAsk', 'citationBlock', { block: block + 1 });
-      }
-      default:
-        return undefined;
-    }
-  };
-  return describe(provenance) ?? '';
-}
-
-/**
- * Renders a 0-based inclusive spreadsheet cell rectangle as A1 notation. A
- * single cell renders as `B3`, a rectangle as `B3:D8`; anything with a missing
- * or non-numeric bound renders as nothing rather than as an invented range.
- */
-function spreadsheetRangeLabel(node: Record<string, unknown>): string | undefined {
-  const index = (key: string): number | undefined => {
-    const value = node[key];
-    return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
-  };
-  const startRow = index('start_row');
-  const startColumn = index('start_column');
-  const endRow = index('end_row');
-  const endColumn = index('end_column');
-  if (
-    startRow === undefined ||
-    startColumn === undefined ||
-    endRow === undefined ||
-    endColumn === undefined
-  ) {
-    return undefined;
-  }
-  const first = `${spreadsheetColumnName(startColumn)}${startRow + 1}`;
-  const last = `${spreadsheetColumnName(endColumn)}${endRow + 1}`;
-  return first === last ? first : `${first}:${last}`;
-}
-
-/** Converts a 0-based column index into its spreadsheet letters (0 → `A`). */
-function spreadsheetColumnName(column: number): string {
-  let remaining = column;
-  let name = '';
-  do {
-    name = String.fromCharCode(65 + (remaining % 26)) + name;
-    remaining = Math.floor(remaining / 26) - 1;
-  } while (remaining >= 0);
-  return name;
-}
-
-/** Canonical DSL text for one scope selector, matching the backend serialiser. */
-function scopeSelectorText(selector: KnowledgeScopeSelector): string {
-  switch (selector.kind) {
-    case 'wholeLibrary':
-      return 'library';
-    case 'root':
-      return `root:${selector.id ?? ''}`;
-    case 'workspace':
-      return `workspace:${selector.id ?? ''}`;
-  }
-}
-
-/** Quotes a value exactly like the DSL serialiser, so a round-trip is lossless. */
-function quoteValue(value: string): string {
-  return /[\s,:;"]/u.test(value) ? `"${value.replace(/(["\\])/gu, '\\$1')}"` : value;
-}
-
-/** Serialises a value list into the comma-separated DSL form. */
-function joinValues(values: readonly string[]): string {
-  return values.map(quoteValue).join(', ');
-}
-
-/**
- * Splits a comma-separated DSL value list, honouring quotes and escapes, so a
- * value that itself contains a comma - `"ACME, Inc."` - stays one value.
- */
-function splitValues(raw: string): string[] {
-  const values: string[] = [];
-  let current = '';
-  let quoted = false;
-  for (let index = 0; index < raw.length; index += 1) {
-    const character = raw[index];
-    if (character === '\\' && quoted && index + 1 < raw.length) {
-      current += raw[index + 1] ?? '';
-      index += 1;
-      continue;
-    }
-    if (character === '"') {
-      quoted = !quoted;
-      continue;
-    }
-    if (character === ',' && !quoted) {
-      values.push(current.trim());
-      current = '';
-      continue;
-    }
-    current += character;
-  }
-  values.push(current.trim());
-  return values.filter((value) => value.length > 0);
-}
-
-/**
- * Reads the subject editor: one subject per line or comma-separated, using the
- * same quoting rules as the DSL, so a subject like `"ACME, Inc."` survives
- * editing as the single value the parser returned.
- */
-function splitSubjects(value: string): string[] {
-  return value.split('\n').flatMap((line) => splitValues(line));
-}
-
-/** Writes the subject editor: one quoted-as-needed subject per line. */
-function joinSubjects(values: readonly string[]): string {
-  return values.map(quoteValue).join('\n');
-}
-
-/**
- * Ranks documents by their best match and chunks within each document by
- * relevance. Adjacent chunks remain available to grounded-answer generation,
- * but are not presented as search matches. Two documents can share a title,
- * so the stable `documentId` remains the key.
- */
-export function groupEvidenceByDocument(evidence: readonly KnowledgeEvidence[]): readonly {
-  readonly documentId: string;
-  readonly title: string;
-  readonly rows: KnowledgeEvidence[];
-  readonly openEvidence: KnowledgeEvidence;
-  readonly bestRank: number;
-  readonly bestScore: number;
-}[] {
-  const groups = new Map<
-    string,
-    {
-      documentId: string;
-      title: string;
-      rows: KnowledgeEvidence[];
-      openEvidence: KnowledgeEvidence;
-      bestRank: number;
-      bestScore: number;
-    }
-  >();
-  for (const row of evidence) {
-    if (row.adjacent) continue;
-    const existing = groups.get(row.documentId);
-    if (existing === undefined) {
-      groups.set(row.documentId, {
-        documentId: row.documentId,
-        title: decodeEvidenceTitle(row.title) ?? row.title,
-        rows: [row],
-        openEvidence: row,
-        bestRank: row.finalRank,
-        bestScore: row.fusedScore,
-      });
-      continue;
-    }
-    existing.rows.push(row);
-    const outranksBest =
-      row.finalRank < existing.bestRank ||
-      (row.finalRank === existing.bestRank && row.fusedScore > existing.bestScore);
-    if (outranksBest) {
-      existing.bestRank = row.finalRank;
-      existing.bestScore = row.fusedScore;
-    }
-    const outranksOpenTarget =
-      row.finalRank < existing.openEvidence.finalRank ||
-      (row.finalRank === existing.openEvidence.finalRank &&
-        row.fusedScore > existing.openEvidence.fusedScore);
-    if (
-      (!row.unavailable && existing.openEvidence.unavailable) ||
-      (row.unavailable === existing.openEvidence.unavailable && outranksOpenTarget)
-    ) {
-      existing.openEvidence = row;
-    }
-  }
-  return [...groups.values()]
-    .map((group) => ({
-      ...group,
-      rows: group.rows.toSorted(
-        (left, right) =>
-          left.finalRank - right.finalRank ||
-          left.sourcePosition - right.sourcePosition ||
-          left.recordId.localeCompare(right.recordId),
-      ),
-    }))
-    .toSorted(
-      (left, right) =>
-        left.bestRank - right.bestRank ||
-        right.bestScore - left.bestScore ||
-        left.documentId.localeCompare(right.documentId),
-    );
-}
-
-/** An emptied canonical draft; every field is explicit so nothing is inferred. */
-function emptyDraft(): KnowledgeQueryDraft {
-  return {
-    about: [],
-    needs: [],
-    related: [],
-    scopes: [],
-    action: null,
-    context: null,
-    constraints: [],
-    format: null,
-    depth: null,
-  };
-}
-
-/** Why one DSL scope selector cannot be applied to the visual scope control. */
-export interface KnowledgeScopeIssue {
-  readonly selector: KnowledgeScopeSelector;
-  readonly reason: 'unknownRoot' | 'unsupported';
-}
-
-/**
- * Splits DSL scope selectors into the ones the visual scope control can
- * represent and the ones it cannot.
- *
- * `library` maps to the entire-library scope and `root:<id>` to a selected
- * indexed root; a root the host never reported, and any `workspace:<id>`
- * selector (which the backend resolves against a different authority), are
- * returned as issues so the dialog can say so instead of dropping them.
- */
-export function classifyKnowledgeScopeSelectors(
-  selectors: readonly KnowledgeScopeSelector[],
-  knownRootIds: ReadonlySet<string>,
-): {
-  readonly wholeLibrary: boolean;
-  readonly rootIds: readonly string[];
-  readonly issues: readonly KnowledgeScopeIssue[];
-} {
-  const rootIds: string[] = [];
-  const issues: KnowledgeScopeIssue[] = [];
-  let wholeLibrary = false;
-  for (const selector of selectors) {
-    switch (selector.kind) {
-      case 'wholeLibrary':
-        wholeLibrary = true;
-        break;
-      case 'root': {
-        const id = selector.id ?? '';
-        if (knownRootIds.has(id)) rootIds.push(id);
-        else issues.push({ selector, reason: 'unknownRoot' });
-        break;
-      }
-      case 'workspace':
-        issues.push({ selector, reason: 'unsupported' });
-        break;
-    }
-  }
-  return { wholeLibrary, rootIds, issues };
-}
-
-/** Anchor prefix for a numbered source reference inside a generated answer. */
-const REFERENCE_ANCHOR = '#fm-knowledge-reference-';
-
-/** Escapes a citation label for use inside a regular expression. */
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-}
-
-/** One numbered source an answer cites: a file, however many of its sections were cited. */
-export interface KnowledgeAnswerReference {
-  readonly number: number;
-  readonly title: string;
-  readonly citations: readonly KnowledgeAnswerCitation[];
-  /** The first displayed row the answer cited from this file, if any. */
-  readonly row: KnowledgeEvidence | undefined;
-}
-
-/** A generated answer with its opaque `E#` labels resolved to numbered file references. */
-export interface NumberedKnowledgeAnswer {
-  /** Markdown in which every cited group is a `⟦1,4⟧` placeholder. */
-  readonly markdown: string;
-  /** Plain text in which every cited group reads `[1, 4]`. */
-  readonly text: string;
-  readonly references: readonly KnowledgeAnswerReference[];
-}
-
-const REFERENCE_PLACEHOLDER = /⟦(\d+(?:,\d+)*)⟧/gu;
-
-/**
- * A closing "Sources: ⟦1,4⟧" line, in whatever language the model answered.
- * The reference list below the answer already shows these sources.
- */
-const TRAILING_SOURCES_LINE =
-  /\n[ \t]*(?:[*_]{1,2})?[\p{L}][\p{L} ]{0,24}(?:[*_]{1,2})?[ \t]*:[ \t]*(?:[*_]{1,2})?[ \t]*⟦[\d,]+⟧[ \t.]*(?:[*_]{1,2})?\s*$/u;
-
-/**
- * Replaces the opaque evidence labels a model copied - `E1`, `[E1]`,
- * `(E1, E4)`, `E1, E4, E5` - with per-file reference numbers in order of first
- * mention, so several cited sections of one file share one number.
- *
- * Only labels the host resolved to a citation are touched; anything else the
- * model wrote stays as text.
- */
-export function numberKnowledgeAnswer(
-  text: string,
-  citations: readonly KnowledgeAnswerCitation[],
-  displayed: ReadonlyMap<string, KnowledgeEvidence>,
-): NumberedKnowledgeAnswer {
-  const rowFor = (citation: KnowledgeAnswerCitation): KnowledgeEvidence | undefined => {
-    const row = displayed.get(citation.recordId);
-    return row?.sourceId === citation.sourceId ? row : undefined;
-  };
-  const documentKey = (citation: KnowledgeAnswerCitation): string =>
-    rowFor(citation)?.documentId ?? `source:${citation.sourceId}`;
-  const byLabel = new Map(citations.map((citation) => [citation.label, citation]));
-  const numbers = new Map<string, number>();
-  const numberOf = (citation: KnowledgeAnswerCitation): number => {
-    const key = documentKey(citation);
-    let number = numbers.get(key);
-    if (number === undefined) {
-      number = numbers.size + 1;
-      numbers.set(key, number);
-    }
-    return number;
-  };
-  let markdown = text;
-  if (byLabel.size > 0) {
-    const label = [...byLabel.keys()]
-      .sort((left, right) => right.length - left.length)
-      .map(escapeRegExp)
-      .join('|');
-    const one = `(?<![\\p{L}\\p{N}])(?:${label})(?![\\p{L}\\p{N}])`;
-    const group = `${one}(?:\\s*[,;]?\\s*${one})*`;
-    const cited = new RegExp(`\\[\\s*${group}\\s*\\]|\\(\\s*${group}\\s*\\)|${group}`, 'gu');
-    const labelPattern = new RegExp(one, 'gu');
-    markdown = text.replace(cited, (match) => {
-      const groupNumbers = [
-        ...new Set(
-          [...match.matchAll(labelPattern)].flatMap(([found]) => {
-            const citation = byLabel.get(found);
-            return citation === undefined ? [] : [numberOf(citation)];
-          }),
-        ),
-      ].sort((left, right) => left - right);
-      return groupNumbers.length === 0 ? match : `⟦${groupNumbers.join(',')}⟧`;
-    });
-  }
-  markdown = markdown
-    .replace(/⟦[\d,]+⟧(?:\s*[,;]\s*⟦[\d,]+⟧)+/gu, (run) => {
-      const merged = [...new Set(run.match(/\d+/gu)?.map(Number) ?? [])];
-      return `⟦${merged.sort((left, right) => left - right).join(',')}⟧`;
-    })
-    .replace(TRAILING_SOURCES_LINE, '')
-    .trimEnd();
-  for (const citation of citations) numberOf(citation);
-  const references = [...numbers.entries()].map(([key, number]) => {
-    const cited = citations.filter((citation) => documentKey(citation) === key);
-    const row = cited.map(rowFor).find((candidate) => candidate !== undefined);
-    const title =
-      (row === undefined ? undefined : (decodeEvidenceTitle(row.title) ?? row.title)) ??
-      cited[0]?.sectionPath.join(' / ') ??
-      cited[0]?.label ??
-      '';
-    return { number, title: title === '' ? (cited[0]?.label ?? '') : title, citations: cited, row };
-  });
-  return {
-    markdown,
-    text: markdown.replace(
-      REFERENCE_PLACEHOLDER,
-      (_match, list: string) => `[${list.split(',').join(', ')}]`,
-    ),
-    references,
-  };
-}
-
-/**
- * Turns the reference placeholders in already-sanitised answer HTML into
- * `[1, 4]` groups whose numbers link to openable sources. Only digits are
- * ever inserted, so the sanitised HTML stays safe.
- */
-export function linkKnowledgeReferences(html: string, openable: ReadonlySet<number>): string {
-  return html.replace(REFERENCE_PLACEHOLDER, (_match, list: string) => {
-    const links = list
-      .split(',')
-      .map((number) =>
-        openable.has(Number(number))
-          ? `<a href="${REFERENCE_ANCHOR}${number}">${number}</a>`
-          : number,
-      );
-    return `<span class="fm-knowledge-reference">[${links.join(', ')}]</span>`;
-  });
-}
-
-/**
- * Whether a host refused to answer because the inspected evidence set is gone.
- *
- * Every host reports this the same way - an `ApiError`, a Tauri
- * `ApplicationErrorDto`, or the mock's `MockClientError` all carry the typed
- * `code` - so the dialog can tell the user to search again instead of guessing
- * from a message, and never re-searches on their behalf.
- */
-export function isKnowledgeEvidenceRefreshRequired(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  return (error as { readonly code?: unknown }).code === 'knowledgeEvidenceRefreshRequired';
-}
-
-/** Maps transport-stable error codes to actionable, localized search guidance. */
-export function knowledgeSearchErrorMessage(error: unknown): string {
-  const code =
-    typeof error === 'object' && error !== null
-      ? (error as { readonly code?: unknown }).code
-      : undefined;
-  switch (code) {
-    case 'notFound':
-      return t('knowledgeSearch', 'searchNoSources');
-    case 'providerUnavailable':
-      return t('knowledgeSearch', 'searchUnavailable');
-    case 'permissionDenied':
-      return t('knowledgeSearch', 'searchDenied');
-    case 'invalidRequest':
-      return t('knowledgeSearch', 'searchInvalid');
-    case 'operationCancelled':
-      return t('knowledgeSearch', 'cancelled');
-    default:
-      return t('knowledgeSearch', 'searchFailed');
-  }
-}
+export {
+  groupEvidenceByDocument,
+  knowledgeProvenanceLabel,
+} from './knowledge-evidence-view';
+export {
+  isKnowledgeEvidenceRefreshRequired,
+  knowledgeSearchErrorMessage,
+} from './knowledge-labels';
+export {
+  classifyKnowledgeScopeSelectors,
+  type KnowledgeScopeIssue,
+} from './knowledge-scope';
 
 export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> = () => {
   let wasOpen = false;
@@ -1800,6 +846,17 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     }
   }
 
+  function evidenceContext(attrs: KnowledgeSearchDialogAttrs): KnowledgeEvidenceContext {
+    return {
+      client: attrs.client,
+      workspaceId: attrs.workspaceId,
+      canOpen: attrs.onOpenSource !== undefined,
+      isSourceOpen: (row) => attrs.isSourceOpen?.(row) === true,
+      openSource: (row) => openSource(attrs, row),
+      openExternal: (url) => openExternalEvidence(attrs, url),
+    };
+  }
+
   function diagnosticText(diagnostic: KnowledgeDiagnostic): string {
     const suggestion =
       diagnostic.suggestion == null
@@ -1856,282 +913,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     }
   }
 
-  function relevanceIndicator(row: KnowledgeEvidence): m.Children {
-    const relevanceStrength = row.finalRank <= 3 ? 'high' : row.finalRank <= 10 ? 'medium' : 'low';
-    const relevanceKey =
-      relevanceStrength === 'high'
-        ? 'resultRelevanceHigh'
-        : relevanceStrength === 'medium'
-          ? 'resultRelevanceMedium'
-          : 'resultRelevanceLow';
-    const relevance = t('knowledgeSearch', relevanceKey);
-    return tooltip(
-      relevance,
-      m('span.fm-knowledge-relevance-indicator', {
-        role: 'img',
-        tabindex: 0,
-        'aria-label': relevance,
-        'data-strength': relevanceStrength,
-      }),
-      { 'data-tooltip-placement': 'above' },
-    );
-  }
-
-  function evidenceSection(
-    attrs: KnowledgeSearchDialogAttrs,
-    row: KnowledgeEvidence,
-    key: string,
-    fileTitle?: string,
-    positionInHeader = false,
-  ): m.Vnode {
-    const position = knowledgeProvenanceLabel(row.provenance);
-    const pdfImage = row.mediaType === 'application/pdf' && row.chunkKind === 'pdf_image';
-    const renderedPage = pdfImage ? pdfPageRenderProvenance(row.provenance) : undefined;
-    const indexedTitle = row.sectionPath.join(' / ');
-    const openable = !row.unavailable && attrs.onOpenSource !== undefined;
-    const kind = mediaKind(row.mediaType);
-    const sourceOpen = attrs.isSourceOpen?.(row) === true;
-    const modifiedLabel = mediaModifiedLabel(row.modifiedAtMs);
-    const description = kind === undefined ? undefined : mediaDescription(row.excerpt);
-    const redundantImageDescription =
-      kind === 'image' &&
-      fileTitle !== undefined &&
-      description === `image: ${fileTitle} (file-level evidence)`;
-    const states = [
-      row.adjacent ? t('knowledgeSearch', 'adjacentEvidence') : undefined,
-      row.generated ? t('knowledgeSearch', 'generatedEvidence') : undefined,
-      row.stale === true ? t('knowledgeSearch', 'staleEvidence') : undefined,
-      row.stale == null ? t('knowledgeSearch', 'unknownFreshness') : undefined,
-      row.unavailable ? t('knowledgeSearch', 'unavailableEvidence') : undefined,
-      (row.pdfImageSkippedPages ?? 0) > 0
-        ? t('semanticLibrary', 'pdfImagesSkippedPages', {
-            pages: row.pdfImageSkippedPages ?? 0,
-          })
-        : undefined,
-      row.duplicateSourceIds.length === 0
-        ? undefined
-        : t('knowledgeSearch', 'duplicateSources', { count: row.duplicateSourceIds.length }),
-    ].filter((value): value is string => value !== undefined);
-    return m('section.fm-knowledge-result', { key }, [
-      fileTitle !== undefined || positionInHeader
-        ? undefined
-        : m('.fm-knowledge-section-heading', [
-            indexedTitle === '' ? undefined : m('span.fm-knowledge-section-title', indexedTitle),
-            m('.fm-knowledge-section-metadata', [
-              position === ''
-                ? undefined
-                : m(
-                    'button.fm-knowledge-page-link',
-                    {
-                      type: 'button',
-                      disabled: !openable,
-                      'aria-label': t('knowledgeSearch', 'openSection', { section: position }),
-                      onclick: () => void openSource(attrs, row),
-                    },
-                    position,
-                  ),
-              relevanceIndicator(row),
-            ]),
-          ]),
-      pdfImage
-        ? m(
-            '.fm-knowledge-pdf-image-evidence',
-            t('knowledgeSearch', renderedPage ? 'pdfPageRenderEvidence' : 'pdfImageEvidence'),
-          )
-        : kind === undefined
-          ? m(
-              '.fm-knowledge-result-markdown',
-              {
-                onclick: (event: MouseEvent) => {
-                  if (!(event.target instanceof Element)) return;
-                  const anchor = event.target.closest<HTMLAnchorElement>('a[href]');
-                  if (anchor === null) return;
-                  event.preventDefault();
-                  const url = externalEvidenceUrl(anchor.getAttribute('href') ?? '');
-                  if (url === undefined || document.getSelection()?.toString()) return;
-                  void openExternalEvidence(attrs, url);
-                },
-              },
-              [
-                m(KnowledgeChunkCopy, {
-                  evidence: row,
-                  title: fileTitle ?? decodeEvidenceTitle(row.title) ?? row.title,
-                }),
-                m(
-                  '.fm-knowledge-chunk-content',
-                  row.mediaType === 'application/pdf'
-                    ? m('p', evidenceTextWithLinks(decodeEvidenceText(row.content)))
-                    : m.trust(safeMarkdownHtml(row.content)),
-                ),
-              ],
-            )
-          : m('.fm-knowledge-media-evidence', [
-              kind === 'image' &&
-              !row.unavailable &&
-              row.stale !== true &&
-              row.sectionPath.length === 0 &&
-              row.provenance === ''
-                ? m(KnowledgeImagePreview, {
-                    client: attrs.client,
-                    workspaceId: attrs.workspaceId,
-                    evidence: row,
-                    title: fileTitle ?? decodeEvidenceTitle(row.title) ?? row.title,
-                  })
-                : undefined,
-              m('.fm-knowledge-media-summary', [
-                m('strong', mediaLabel(kind)),
-                modifiedLabel === undefined
-                  ? undefined
-                  : m('small.fm-knowledge-media-modified', modifiedLabel),
-                m(KnowledgeMediaCopy, {
-                  client: attrs.client,
-                  workspaceId: attrs.workspaceId,
-                  evidence: row,
-                  title: fileTitle ?? decodeEvidenceTitle(row.title) ?? row.title,
-                  description: description ?? '',
-                }),
-                m(
-                  'button.fm-knowledge-media-open',
-                  {
-                    type: 'button',
-                    disabled: !openable,
-                    'aria-expanded': sourceOpen ? 'true' : 'false',
-                    onclick: () => void openSource(attrs, row),
-                  },
-                  t('search', sourceOpen ? 'closeMedia' : 'openMedia', {
-                    type: mediaLabel(kind).toLowerCase(),
-                  }),
-                ),
-              ]),
-              redundantImageDescription ? undefined : m('p', description),
-            ]),
-      states.length === 0
-        ? undefined
-        : m(
-            'p.fm-knowledge-state',
-            states.flatMap((state, index) => (index === 0 ? [state] : [' · ', state])),
-          ),
-    ]);
-  }
-
-  function evidenceDocument(
-    attrs: KnowledgeSearchDialogAttrs,
-    group: ReturnType<typeof groupEvidenceByDocument>[number],
-    index: number,
-  ): m.Vnode {
-    const openable = !group.openEvidence.unavailable && attrs.onOpenSource !== undefined;
-    const firstRow = group.rows[0];
-    const firstPosition =
-      firstRow !== undefined && firstRow.sectionPath.length === 0
-        ? knowledgeProvenanceLabel(firstRow.provenance)
-        : '';
-    const compactFileMedia =
-      group.rows.length === 1 &&
-      firstRow !== undefined &&
-      mediaKind(firstRow.mediaType) !== undefined &&
-      firstRow.sectionPath.length === 0 &&
-      knowledgeProvenanceLabel(firstRow.provenance) === '';
-    return m(
-      'li.fm-knowledge-document-item',
-      { key: `document-${group.documentId}`, value: index + 1 },
-      m(
-        'article.fm-knowledge-group',
-        { className: compactFileMedia ? 'fm-knowledge-group-compact-media' : '' },
-        [
-          m('.fm-knowledge-document-heading', [
-            m('span.fm-knowledge-document-number', { 'aria-hidden': 'true' }, `${index + 1}.`),
-            m('h4.fm-knowledge-result-heading', [
-              m(
-                'button.fm-knowledge-source-link',
-                {
-                  type: 'button',
-                  disabled: !openable,
-                  'aria-label': t('knowledgeSearch', 'openSource', { title: group.title }),
-                  title: group.title,
-                  onclick: () => void openSource(attrs, group.openEvidence),
-                },
-                [externalLinkIcon({ size: 14 }), m('span', group.title)],
-              ),
-              firstRow !== undefined && firstPosition !== ''
-                ? m(
-                    'button.fm-knowledge-page-link',
-                    {
-                      type: 'button',
-                      disabled: firstRow.unavailable || attrs.onOpenSource === undefined,
-                      'aria-label': t('knowledgeSearch', 'openSection', { section: firstPosition }),
-                      onclick: () => void openSource(attrs, firstRow),
-                    },
-                    firstPosition,
-                  )
-                : undefined,
-              firstRow !== undefined && firstPosition !== ''
-                ? relevanceIndicator(firstRow)
-                : undefined,
-              compactFileMedia && firstRow !== undefined ? relevanceIndicator(firstRow) : undefined,
-            ]),
-          ]),
-          m(
-            '.fm-knowledge-sections',
-            group.rows.map((row, rowIndex) =>
-              evidenceSection(
-                attrs,
-                row,
-                `${group.documentId}-${row.recordId}`,
-                compactFileMedia ? group.title : undefined,
-                rowIndex === 0 && firstPosition !== '',
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /**
-   * Renders the privacy-safe retrieval trace the search was asked for: the
-   * bounded planned queries with their per-route candidate counts, the fused
-   * row count, and the rank constant that produced the fusion. When a trace was
-   * requested but the host returned none, that is said explicitly rather than
-   * leaving the checkbox looking like it did nothing.
-   */
-  function traceView(): m.Children {
-    if (result === undefined || !traceRequested) return undefined;
-    const trace = result.trace;
-    if (trace == null) {
-      return m(
-        'p.fm-knowledge-trace-body.fm-knowledge-hint',
-        { role: 'status' },
-        t('knowledgeSearch', 'traceUnavailable'),
-      );
-    }
-    return m('.fm-knowledge-trace-body', [
-      m('h4', t('knowledgeSearch', 'traceHeading')),
-      m(
-        'p',
-        t('knowledgeSearch', 'traceSummary', {
-          queries: trace.queries.length,
-          fused: result.evidence.length,
-          constant: trace.rankConstant,
-        }),
-      ),
-      m(
-        'ol.fm-knowledge-trace-queries',
-        trace.queries.map((query, index) =>
-          m('li', { key: `trace-${index}` }, [
-            m('code', query.text),
-            m(
-              'small.fm-knowledge-hint',
-              ` · ${t('knowledgeSearch', 'traceCandidates', {
-                fullText: query.fullTextCandidates,
-                semantic: query.semanticCandidates,
-              })}`,
-            ),
-          ]),
-        ),
-      ),
-    ]);
-  }
-
   function resultsView(attrs: KnowledgeSearchDialogAttrs): m.Children {
     if (busy === 'searching') {
       return m('p.fm-knowledge-status', { role: 'status' }, t('knowledgeSearch', 'searching'));
@@ -2183,10 +964,11 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         m('p.fm-knowledge-hint', t('knowledgeSearch', 'emptyHint')),
       ]);
     }
+    const context = evidenceContext(attrs);
     return m(
       'ol.fm-knowledge-document-list',
       groupEvidenceByDocument(result.evidence).map((group, index) =>
-        evidenceDocument(attrs, group, index),
+        evidenceDocument(context, group, index),
       ),
     );
   }
@@ -2198,142 +980,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
    */
   function displayedEvidence(): ReadonlyMap<string, KnowledgeEvidence> {
     return new Map((result?.evidence ?? []).map((row) => [row.recordId, row]));
-  }
-
-  /** The generated answer itself, plus how honest it is about its evidence. */
-  function answerBody(
-    attrs: KnowledgeSearchDialogAttrs,
-    displayed: ReadonlyMap<string, KnowledgeEvidence>,
-  ): m.Children {
-    if (generatingAnswer) {
-      return m('.fm-knowledge-status.fm-knowledge-answer-progress', { role: 'status' }, [
-        m('span', t('knowledgeSearch', 'generatingAnswer')),
-        m(Skeleton, { count: 3, className: 'fm-knowledge-answer-skeleton' }),
-      ]);
-    }
-    const current = answer;
-    if (current === undefined) {
-      return m(
-        'p.fm-knowledge-status',
-        { role: 'status' },
-        answerNotice ?? t('knowledgeSearch', 'answerPlaceholder'),
-      );
-    }
-    const numbered = numberKnowledgeAnswer(current.text, current.citations, displayed);
-    const openable = (reference: KnowledgeAnswerReference): boolean =>
-      reference.row !== undefined &&
-      reference.citations.some((citation) => !citation.unavailable) &&
-      attrs.onOpenSource !== undefined;
-    const openReference = (reference: KnowledgeAnswerReference): void => {
-      if (reference.row !== undefined && openable(reference)) void openSource(attrs, reference.row);
-    };
-    return [
-      m(
-        '.fm-knowledge-answer-markdown',
-        {
-          onclick: (event: MouseEvent) => {
-            if (!(event.target instanceof Element)) return;
-            const link = event.target.closest<HTMLAnchorElement>(`a[href^="${REFERENCE_ANCHOR}"]`);
-            if (link === null) return;
-            event.preventDefault();
-            const number = Number(link.getAttribute('href')?.slice(REFERENCE_ANCHOR.length));
-            const reference = numbered.references.find((item) => item.number === number);
-            if (reference !== undefined) openReference(reference);
-          },
-        },
-        m.trust(
-          linkKnowledgeReferences(
-            safeMarkdownHtml(numbered.markdown),
-            new Set(numbered.references.filter(openable).map((reference) => reference.number)),
-          ),
-        ),
-      ),
-      current.modelKnowledgeAllowed
-        ? m('p.fm-knowledge-warning', t('knowledgeSearch', 'modelKnowledgeUsed'))
-        : undefined,
-      current.insufficient
-        ? m('p.fm-knowledge-warning', t('knowledgeSearch', 'answerInsufficient'))
-        : undefined,
-      current.staleEvidence === 0
-        ? undefined
-        : m(
-            'p.fm-knowledge-warning',
-            t('knowledgeSearch', 'answerStaleEvidence', { count: current.staleEvidence }),
-          ),
-      current.unavailableEvidence === 0
-        ? undefined
-        : m(
-            'p.fm-knowledge-warning',
-            t('knowledgeSearch', 'answerUnavailableEvidence', {
-              count: current.unavailableEvidence,
-            }),
-          ),
-      current.withheldUnauthorized === 0
-        ? undefined
-        : m(
-            'p.fm-knowledge-warning',
-            t('knowledgeSearch', 'answerWithheldUnauthorized', {
-              count: current.withheldUnauthorized,
-            }),
-          ),
-      numbered.references.length === 0
-        ? undefined
-        : // Keyed so each new answer starts with its sources collapsed again.
-          [
-            m('details.fm-knowledge-answer-references', { key: current.requestId }, [
-              m(
-                'summary',
-                t('knowledgeSearch', 'answerCitations', { count: numbered.references.length }),
-              ),
-              m(
-                'ol.fm-knowledge-citations',
-                numbered.references.map((reference) => {
-                  const sections = [
-                    ...new Set(
-                      reference.citations
-                        .map((citation) => citation.sectionPath.join(' / '))
-                        .filter((section) => section !== '' && section !== reference.title),
-                    ),
-                  ];
-                  const states = [
-                    ...sections,
-                    reference.citations.some((citation) => citation.generated)
-                      ? t('knowledgeSearch', 'generatedEvidence')
-                      : undefined,
-                    reference.citations.some((citation) => citation.stale === true)
-                      ? t('knowledgeSearch', 'staleEvidence')
-                      : undefined,
-                    reference.citations.every((citation) => citation.unavailable)
-                      ? t('knowledgeSearch', 'unavailableEvidence')
-                      : undefined,
-                    reference.row === undefined
-                      ? t('knowledgeSearch', 'answerCitationNotDisplayed')
-                      : undefined,
-                  ].filter((value): value is string => value !== undefined);
-                  return m('li', { key: `reference-${reference.number}` }, [
-                    m('span.fm-knowledge-reference-number', `[${reference.number}]`),
-                    m(
-                      'button.fm-knowledge-source-link',
-                      {
-                        type: 'button',
-                        title: reference.title,
-                        disabled: !openable(reference),
-                        'aria-label': t('knowledgeSearch', 'openCitation', {
-                          label: reference.title,
-                        }),
-                        onclick: () => openReference(reference),
-                      },
-                      m('span', reference.title),
-                    ),
-                    states.length === 0
-                      ? undefined
-                      : m('small.fm-knowledge-hint', states.join(' · ')),
-                  ]);
-                }),
-              ),
-            ]),
-          ],
-    ];
   }
 
   /** Copies the answer as plain text, with its numbered source list appended. */
@@ -2473,100 +1119,35 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
               'aria-live': 'polite',
               hidden: answerCollapsed,
             },
-            hasOutput ? answerBody(attrs, displayed) : undefined,
+            hasOutput
+              ? knowledgeAnswerBody({
+                  answer,
+                  generating: generatingAnswer,
+                  notice: answerNotice,
+                  displayed,
+                  canOpen: attrs.onOpenSource !== undefined,
+                  openRow: (row) => void openSource(attrs, row),
+                })
+              : undefined,
           ),
         ]),
-        m('.fm-knowledge-ask-bar', [
-          sparklesIcon({ className: 'fm-knowledge-ask-icon', size: 15 }),
-          m(
-            'label.fm-visually-hidden',
-            { for: 'fm-knowledge-question' },
-            t('knowledgeSearch', 'question'),
-          ),
-          m('textarea#fm-knowledge-question', {
-            ...technicalTextInputAttrs,
-            name: 'knowledge-answer-question',
-            rows: 1,
-            maxlength: 8192,
-            value: questionText,
-            placeholder: t('knowledgeSearch', 'questionPlaceholder'),
-            oninput: (event: InputEvent) => {
-              // The previous answer stays until the new question is actually asked.
-              questionText = (event.currentTarget as HTMLTextAreaElement).value;
-            },
-            onkeydown: (event: KeyboardEvent) => {
-              event.stopPropagation();
-              if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
-                event.preventDefault();
-                void ask(attrs);
-              }
-            },
-          }),
-          profile?.locality === 'cloud'
-            ? tooltip(
-                t('knowledgeSearch', 'answerCloudEndpoint', { profile: profile.name }),
-                cloudIcon({ className: 'fm-knowledge-ask-cloud', size: 15 }),
-                {
-                  tabindex: 0,
-                  role: 'img',
-                  'aria-label': t('knowledgeSearch', 'answerCloudEndpoint', {
-                    profile: profile.name,
-                  }),
-                },
-              )
-            : undefined,
-          tooltip(
-            t('knowledgeSearch', 'allowModelKnowledgeHint'),
-            m(
-              'label.fm-knowledge-model-knowledge',
-              {
-                for: 'fm-knowledge-model-knowledge',
-                class: allowModelKnowledge ? 'is-active' : undefined,
-              },
-              [
-                m('input#fm-knowledge-model-knowledge.fm-visually-hidden', {
-                  type: 'checkbox',
-                  checked: allowModelKnowledge,
-                  disabled: generatingAnswer,
-                  onchange: (event: Event) => {
-                    allowModelKnowledge = (event.currentTarget as HTMLInputElement).checked;
-                    resetAnswer();
-                  },
-                }),
-                brainIcon({ size: 15 }),
-                m('span.fm-visually-hidden', t('knowledgeSearch', 'allowModelKnowledge')),
-              ],
-            ),
-          ),
-          generatingAnswer
-            ? tooltip(
-                t('knowledgeSearch', 'cancelAnswer'),
-                m(
-                  IconButton,
-                  {
-                    type: 'button',
-                    className: 'fm-knowledge-ask-cancel',
-                    'aria-label': t('knowledgeSearch', 'cancelAnswer'),
-                    onclick: cancelAnswer,
-                  },
-                  closeIcon({ size: 13 }),
-                ),
-              )
-            : tooltip(
-                t('knowledgeSearch', 'askWith', { profile: profile?.name ?? '' }),
-                m(
-                  IconButton,
-                  {
-                    type: 'button',
-                    className: 'fm-knowledge-generate',
-                    'aria-label': t('knowledgeSearch', 'ask'),
-                    disabled: !canGenerateAnswer(attrs),
-                    onclick: () => void ask(attrs),
-                  },
-                  cornerDownLeftIcon({ size: 16 }),
-                ),
-              ),
-        ]),
+        knowledgeAskBar({
+          question: questionText,
+          allowModelKnowledge,
+          generating: generatingAnswer,
+          profile,
+          canAsk: canGenerateAnswer(attrs),
+          onQuestion: (value) => {
+            // The previous answer stays until the new question is actually asked.
+            questionText = value;
+          },
+          onAllowModelKnowledge: (value) => {
+            allowModelKnowledge = value;
+            resetAnswer();
+          },
+          onAsk: () => void ask(attrs),
+          onCancel: cancelAnswer,
+        }),
       ],
     );
   }
@@ -2626,7 +1207,6 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     view: ({ attrs }) => {
       const offline = attrs.client.connection.get() === 'closed';
       const searchable = canSearch(attrs);
-      const route = result?.route;
       if (!attrs.open) return undefined;
       return m(
         'section#fm-knowledge-search-pane.fm-knowledge-search',
@@ -3057,7 +1637,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                           }),
                           m('span', t('knowledgeSearch', 'trace')),
                         ]),
-                        traceView(),
+                        knowledgeTraceView(result, traceRequested),
                         plan === undefined
                           ? m(
                               FlatButton,
@@ -3068,123 +1648,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                               },
                               t('knowledgeSearch', 'plan'),
                             )
-                          : m('.fm-knowledge-plan-body', [
-                              m(
-                                'p',
-                                t('knowledgeSearch', 'planVersion', { version: plan.version }),
-                              ),
-                              m('p', t('knowledgeSearch', 'planScope', { scope: plan.scopeLabel })),
-                              m(
-                                'p',
-                                t('knowledgeSearch', 'planSources', {
-                                  count: plan.authorizedSources,
-                                }),
-                              ),
-                              m(
-                                'p',
-                                t('knowledgeSearch', 'planSearches', {
-                                  count: plan.searches.length,
-                                }),
-                              ),
-                              plan.omittedSearches === 0
-                                ? undefined
-                                : m(
-                                    'p.fm-knowledge-warning',
-                                    t('knowledgeSearch', 'planOmitted', {
-                                      count: plan.omittedSearches,
-                                    }),
-                                  ),
-                              m(
-                                'ol.fm-knowledge-planned-searches',
-                                plan.searches.map((planned, index) =>
-                                  m('li', { key: `planned-${index}` }, [
-                                    m('code', planned.text),
-                                    m(
-                                      'small.fm-knowledge-hint',
-                                      ` · ${priorityLabel(planned.priority)}`,
-                                    ),
-                                    m(
-                                      'ul',
-                                      planned.reasons.map((reason, reasonIndex) =>
-                                        m(
-                                          'li',
-                                          { key: `planned-${index}-reason-${reasonIndex}` },
-                                          reasonLabel(reason),
-                                        ),
-                                      ),
-                                    ),
-                                  ]),
-                                ),
-                              ),
-                              plan.excludedFromRetrieval.length === 0
-                                ? undefined
-                                : m('.fm-knowledge-excluded', [
-                                    m('h4', t('knowledgeSearch', 'excludedFromRetrieval')),
-                                    m(
-                                      'ul',
-                                      plan.excludedFromRetrieval.map((field, index) =>
-                                        m(
-                                          'li',
-                                          { key: `plan-excluded-${index}` },
-                                          t('knowledgeSearch', 'excludedField', {
-                                            field: field.field,
-                                            value: field.value,
-                                          }),
-                                        ),
-                                      ),
-                                    ),
-                                  ]),
-                            ]),
+                          : knowledgePlanBody(plan),
                       ],
                     ),
-                    result === undefined
-                      ? undefined
-                      : m('details.fm-knowledge-result-details', [
-                          m('summary', t('knowledgeSearch', 'searchDetails')),
-                          route === undefined
-                            ? undefined
-                            : m(
-                                route.fallbackReason == null ? 'p' : 'p.fm-knowledge-warning',
-                                route.fallbackReason == null
-                                  ? t('knowledgeSearch', 'routeApplied', {
-                                      route: modeLabel(route.applied),
-                                    })
-                                  : t('knowledgeSearch', 'routeFallback', {
-                                      requested: modeLabel(route.requested),
-                                      applied: modeLabel(route.applied),
-                                      reason: fallbackReasonLabel(route.fallbackReason),
-                                    }),
-                              ),
-                          m(
-                            'p',
-                            result.coverage.indexed == null
-                              ? t('knowledgeSearch', 'coverageUnknownIndexed', {
-                                  eligible: result.coverage.eligible,
-                                  fingerprinted: result.coverage.fingerprinted,
-                                  unavailable: result.coverage.unavailable,
-                                })
-                              : t('knowledgeSearch', 'coverage', {
-                                  indexed: result.coverage.indexed,
-                                  eligible: result.coverage.eligible,
-                                  fingerprinted: result.coverage.fingerprinted,
-                                  unavailable: result.coverage.unavailable,
-                                }),
-                          ),
-                          result.coverage.partial
-                            ? m('p.fm-knowledge-warning', t('knowledgeSearch', 'coveragePartial'))
-                            : undefined,
-                          result.coverage.scopeIsExact
-                            ? undefined
-                            : m('p.fm-knowledge-warning', t('knowledgeSearch', 'coverageInexact')),
-                          result.withheldUnauthorized === 0
-                            ? undefined
-                            : m(
-                                'p.fm-knowledge-warning',
-                                t('knowledgeSearch', 'withheldUnauthorized', {
-                                  count: result.withheldUnauthorized,
-                                }),
-                              ),
-                        ]),
+                    result === undefined ? undefined : knowledgeResultDetails(result),
                   ]),
                 ]),
               ]),

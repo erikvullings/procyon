@@ -1,6 +1,6 @@
 # 0291 Split knowledge-search-dialog.ts monolith
 
-Status: open
+Status: done
 Priority: high
 Subsystem: frontend
 Depends on: none
@@ -35,3 +35,5 @@ Depends on: none
 - `rag-ask-dialog.ts` (839 lines) can stay as-is or be further split; it's a separate concern from the knowledge search
 - The `document-summary-dialog.ts` (351 lines) is smaller and already focused — no split needed
 - Watch for cross-references between the target file and other semantic features that may need updating
+- 2026-11-05 claude: Split by pure extraction; `knowledge-search-dialog.ts` 3236 -> ~1700 lines. New modules in `frontend/src/features/semantic/`: `knowledge-options.ts` (need/mode/intent consts, persisted needs), `knowledge-labels.ts` (label fns, error messages), `knowledge-evidence-view.ts` (image/copy components, provenance label, grouping), `knowledge-evidence-list.ts` (section/document/trace renderers over a `KnowledgeEvidenceContext`), `knowledge-scope.ts` (DSL value/subject helpers, scope classifier, empty draft), `knowledge-answer-references.ts` (numbering/linking), `knowledge-answer-view.ts` (answer body, ask bar), `knowledge-plan-view.ts` (plan, result details). All previous exports still re-exported from the dialog. Existing evidence-provenance/evidence-title/media-evidence files left as is (already focused; imported by the new modules). Verified: tsc clean, biome clean, full vitest 3382 passed, 5 new tests in `knowledge-scope.test.ts`. Code review: only cleanups, applied (hoisted context, themes-view imports owning module, un-exported escapeRegExp).
+- KNOWN GAP: the <500-line target is NOT met. The rest is the `KnowledgeSearchPane` closure: ~50 shared mutable `let` state vars with load/search/ask orchestration and the settings modal view. A real "search controller" needs the state lifted into an explicit controller object first (own task); doing that mechanically here would be a risky rewrite. `escapeRegExp` is duplicated in rag-ask-dialog.ts and multi-rename-rules.ts (not consolidated).
