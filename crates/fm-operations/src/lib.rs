@@ -5,6 +5,7 @@
 //! tasks 0037 through 0044.
 
 pub mod codes;
+pub mod journal;
 mod model;
 mod naming;
 mod pause;

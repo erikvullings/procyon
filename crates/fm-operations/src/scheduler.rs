@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use fm_domain::OperationId;
+use fm_domain::{Location, OperationId};
 use fm_events::{
     BackendEventPayload, ConflictPolicyPayload, EntryKindPayload, EntryRefPayload, EventAudience,
     EventBus, LocationPayload, OperationConflictEntryPayload, OperationConflictPayload,
@@ -16,6 +16,7 @@ use thiserror::Error;
 use tokio::sync::{Notify, Semaphore};
 use tokio_util::sync::CancellationToken;
 
+use crate::journal::{JournalEvent, JournalIntent, JournalItem, SharedJournal, SourceRevision};
 use crate::{
     ConflictResolution, Operation, OperationConflict, OperationProgress, OperationState,
     OperationUndo, PauseToken, ProgressPublisher, TransitionError,
@@ -163,6 +164,17 @@ pub trait OperationProgressReporter: Send + Sync {
     fn report_bytes(&self, additional_bytes: u64);
     /// Reports a batch of completed entries without publishing one event per entry.
     fn report_items(&self, _additional_items: u64) {}
+    /// Announces the private partial destination now holding `source`'s bytes,
+    /// so a crash leaves a journal entry that owns it (task 0299).
+    fn note_partial(&self, _source: &Location, _partial: &Location) {}
+    /// Records what `source` looked like before it was transferred, so a later
+    /// resume can prove the source did not change (task 0299).
+    fn note_source_revision(&self, _source: &Location, _revision: SourceRevision) {}
+    /// Whether the notes above are being kept. Executors check this before
+    /// doing extra work (such as a source `stat`) that only the journal needs.
+    fn journaling(&self) -> bool {
+        false
+    }
 }
 
 impl<F> OperationProgressReporter for F
@@ -235,12 +247,48 @@ pub trait OperationExecutor: Send + Sync + 'static {
     }
 }
 
+/// A journaled job's handle: resolved once per job so the per-item hot path
+/// never clones the operation snapshot just to learn its id.
+#[derive(Clone)]
+struct JobJournal {
+    journal: SharedJournal,
+    operation: OperationId,
+}
+
+impl JobJournal {
+    /// Records newly known work units.
+    fn items<'a>(&self, items: impl Iterator<Item = &'a PlanItem>) {
+        let items: Vec<JournalItem> = items
+            .map(|item| JournalItem {
+                source: item.entry.location.clone(),
+                bytes: item.bytes,
+            })
+            .collect();
+        if !items.is_empty() {
+            self.journal
+                .record(self.operation, JournalEvent::Items { items });
+        }
+    }
+
+    /// Records that `item` finished and its destination is published.
+    fn committed(&self, item: &PlanItem) {
+        self.journal.record(
+            self.operation,
+            JournalEvent::Committed {
+                source: item.entry.location.clone(),
+                bytes: item.bytes,
+            },
+        );
+    }
+}
+
 struct ItemProgressReporter<'a> {
     scheduler: &'a Scheduler,
     job: &'a Job,
     publisher: &'a Mutex<ProgressPublisher>,
     current_entry: EntryRef,
     reported_bytes: AtomicU64,
+    journal: Option<&'a JobJournal>,
 }
 
 impl ItemProgressReporter<'_> {
@@ -270,6 +318,34 @@ impl ItemProgressReporter<'_> {
 }
 
 impl OperationProgressReporter for ItemProgressReporter<'_> {
+    fn journaling(&self) -> bool {
+        self.journal.is_some()
+    }
+
+    fn note_partial(&self, source: &Location, partial: &Location) {
+        if let Some(journal) = self.journal {
+            journal.journal.record(
+                journal.operation,
+                JournalEvent::Partial {
+                    source: source.clone(),
+                    partial: partial.clone(),
+                },
+            );
+        }
+    }
+
+    fn note_source_revision(&self, source: &Location, revision: SourceRevision) {
+        if let Some(journal) = self.journal {
+            journal.journal.record(
+                journal.operation,
+                JournalEvent::SourceRevision {
+                    source: source.clone(),
+                    revision,
+                },
+            );
+        }
+    }
+
     fn report_items(&self, additional_items: u64) {
         let mut state = self.job.lock();
         state.operation.progress.completed_items = state
@@ -520,6 +596,7 @@ pub struct Scheduler {
     permits: Arc<Semaphore>,
     events: EventBus,
     observer: Option<Arc<dyn OperationSnapshotObserver>>,
+    journal: Option<SharedJournal>,
 }
 
 impl Scheduler {
@@ -531,6 +608,7 @@ impl Scheduler {
             permits: Arc::new(Semaphore::new(usize::from(operation_concurrency.max(1)))),
             events,
             observer: None,
+            journal: None,
         }
     }
 
@@ -541,6 +619,23 @@ impl Scheduler {
         self
     }
 
+    /// Journals transfer jobs so a restart can tell what was interrupted (task 0299).
+    #[must_use]
+    pub fn with_journal(mut self, journal: SharedJournal) -> Self {
+        self.journal = Some(journal);
+        self
+    }
+
+    /// The journal for `kind`, when jobs of that kind are journaled.
+    fn journal_for(&self, kind: crate::OperationKind) -> Option<&SharedJournal> {
+        match kind {
+            crate::OperationKind::Copy
+            | crate::OperationKind::Move
+            | crate::OperationKind::Duplicate => self.journal.as_ref(),
+            _ => None,
+        }
+    }
+
     /// Queues an operation and immediately returns its stable identifier.
     pub fn submit(
         &self,
@@ -548,6 +643,7 @@ impl Scheduler {
         executor: Arc<dyn OperationExecutor>,
     ) -> Result<OperationId, SchedulerError> {
         let id = operation.id;
+        let kind = operation.kind;
         self.events.publish(
             EventAudience::Global,
             BackendEventPayload::OperationCreated {
@@ -582,6 +678,11 @@ impl Scheduler {
                     let _ = executor.cleanup_partial(&snapshot).await;
                     scheduler.fail_job(&job, error.code(), &error.to_string(), error.details());
                 }
+            }
+            // Terminal either way: the history entry carries the outcome, so the
+            // journal record (which only exists to recover interrupted jobs) goes.
+            if let Some(journal) = scheduler.journal_for(kind) {
+                journal.finish(id).await;
             }
             job.completed.notify_waiters();
         });
@@ -716,6 +817,18 @@ impl Scheduler {
         job: Arc<Job>,
         executor: Arc<dyn OperationExecutor>,
     ) -> Result<(), SchedulerError> {
+        let snapshot = job.snapshot();
+        let journal = self.journal_for(snapshot.kind).map(|journal| JobJournal {
+            journal: Arc::clone(journal),
+            operation: snapshot.id,
+        });
+        if let Some(journal) = &journal {
+            // Journaling degrades recovery, never the transfer itself.
+            if let Err(error) = journal.journal.begin(JournalIntent::of(&snapshot)).await {
+                tracing::warn!(%error, "transfer journal begin failed; job is not recoverable");
+            }
+        }
+        drop(snapshot);
         let _permit = self
             .permits
             .acquire()
@@ -734,6 +847,9 @@ impl Scheduler {
         if job.is_cancelled() {
             self.finish_cancelled(&job, executor.as_ref()).await?;
             return Ok(());
+        }
+        if let Some(journal) = &journal {
+            journal.items(plan.items.iter());
         }
         {
             let mut state = job.lock();
@@ -772,6 +888,7 @@ impl Scheduler {
                     publisher: &progress,
                     current_entry: item.entry.clone(),
                     reported_bytes: AtomicU64::new(0),
+                    journal: journal.as_ref(),
                 };
                 let execution = executor
                     .execute(
@@ -790,9 +907,17 @@ impl Scheduler {
                     return Ok(());
                 }
                 match execution {
-                    Ok(ExecutionOutcome::Completed) => reporter.finish_completed(item.bytes),
+                    Ok(ExecutionOutcome::Completed) => {
+                        reporter.finish_completed(item.bytes);
+                        if let Some(journal) = &journal {
+                            journal.committed(&item);
+                        }
+                    }
                     Ok(ExecutionOutcome::CompletedWithWarnings(errors)) => {
                         reporter.finish_completed(item.bytes);
+                        if let Some(journal) = &journal {
+                            journal.committed(&item);
+                        }
                         job.lock().operation.errors.extend(errors);
                     }
                     Ok(ExecutionOutcome::BulkCompleted(errors)) => {
@@ -827,6 +952,9 @@ impl Scheduler {
                     let children = executor
                         .expand(&job.snapshot(), &item, &job.cancellation)
                         .await?;
+                    if let Some(journal) = &journal {
+                        journal.items(children.iter());
+                    }
                     for child in children.into_iter().rev() {
                         pending.push_front(child);
                     }
@@ -872,6 +1000,7 @@ impl Scheduler {
                         publisher: &progress,
                         current_entry: item.entry.clone(),
                         reported_bytes: AtomicU64::new(0),
+                        journal: journal.as_ref(),
                     };
                     match executor
                         .execute(
@@ -886,9 +1015,15 @@ impl Scheduler {
                     {
                         Ok(ExecutionOutcome::Completed) => {
                             reporter.finish_completed(item.bytes);
+                            if let Some(journal) = &journal {
+                                journal.committed(&item);
+                            }
                             let children = executor
                                 .expand(&job.snapshot(), &item, &job.cancellation)
                                 .await?;
+                            if let Some(journal) = &journal {
+                                journal.items(children.iter());
+                            }
                             for child in children.into_iter().rev() {
                                 pending.push_front(child);
                             }
@@ -896,6 +1031,9 @@ impl Scheduler {
                         }
                         Ok(ExecutionOutcome::CompletedWithWarnings(errors)) => {
                             reporter.finish_completed(item.bytes);
+                            if let Some(journal) = &journal {
+                                journal.committed(&item);
+                            }
                             job.lock().operation.errors.extend(errors);
                             break;
                         }

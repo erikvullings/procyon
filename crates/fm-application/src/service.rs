@@ -3,7 +3,7 @@
 use crate::rejection::{Rejection, reason};
 use std::collections::HashMap;
 use std::io::Cursor;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -18,6 +18,7 @@ use fm_domain::{ActionId, DirectorySnapshot, EntryMetadata, Location, PaneId};
 use fm_events::{
     BackendEventPayload, EventAudience, EventBus, NotificationLevelPayload, NotificationPayload,
 };
+use fm_operations::journal::{FileOperationJournal, OperationJournal};
 use fm_operations::{Scheduler, SchedulerError};
 use fm_platform::PlatformAdapter;
 use fm_plugin_runtime::{PluginDiscovery, PluginRuntime};
@@ -482,6 +483,7 @@ impl FileManagerService {
         }
         let operation_concurrency = loaded.settings.operation_concurrency;
         let operation_history = Arc::new(OperationHistory::load(&settings_directory));
+        let transfer_journal = open_transfer_journal(&settings_directory);
         let directories = DirectoryService::with_event_bus(providers.clone(), events.clone());
         let operation_observer = Arc::new(ApplicationOperationObserver::new(
             operation_history.clone(),
@@ -638,7 +640,10 @@ impl FileManagerService {
             settings: settings_mutex.clone(),
             plugin_manager,
             operations: OperationsCoordinator::new(
-                Scheduler::new(operation_concurrency, events).with_observer(operation_observer),
+                with_transfer_journal(
+                    Scheduler::new(operation_concurrency, events).with_observer(operation_observer),
+                    transfer_journal,
+                ),
                 operation_history,
                 planner,
                 force_cross_volume_moves,
@@ -4912,6 +4917,50 @@ pub(crate) fn rag_scope_selection(
             )
         }
     })
+}
+
+/// Opens the durable transfer journal beside settings (task 0299).
+///
+/// Jobs a previous process left queued or running are only logged here: deciding
+/// whether to resume, restart or ask is task 0300, and their files stay in place
+/// until then. A journal that cannot be opened degrades recovery, never startup.
+fn open_transfer_journal(settings_directory: &Path) -> Option<Arc<dyn OperationJournal>> {
+    match FileOperationJournal::open(settings_directory.join("transfer-journal")) {
+        Ok((journal, recovery)) => {
+            for job in &recovery.jobs {
+                tracing::warn!(
+                    operation = %job.intent.operation_id,
+                    kind = ?job.intent.kind,
+                    items = job.items.len(),
+                    committed = job.items.iter().filter(|item| item.committed).count(),
+                    damage = ?job.damage,
+                    "transfer was interrupted by the previous shutdown"
+                );
+            }
+            for file in &recovery.quarantined {
+                tracing::warn!(
+                    path = %file.path.display(),
+                    reason = %file.reason,
+                    "unreadable transfer journal set aside"
+                );
+            }
+            Some(Arc::new(journal))
+        }
+        Err(error) => {
+            tracing::warn!(%error, "transfer journal unavailable; interrupted transfers cannot be recovered");
+            None
+        }
+    }
+}
+
+fn with_transfer_journal(
+    scheduler: Scheduler,
+    journal: Option<Arc<dyn OperationJournal>>,
+) -> Scheduler {
+    match journal {
+        Some(journal) => scheduler.with_journal(journal),
+        None => scheduler,
+    }
 }
 
 #[cfg(test)]

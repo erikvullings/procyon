@@ -17,7 +17,7 @@ use fm_domain::{EntryId, EntryKind, Location, ProviderId};
 use fm_operations::{
     ConflictResolution, EntryFingerprint, ExecutionError, ExecutionOutcome, Operation,
     OperationExecutor, OperationPlan, OperationProgressReporter, OperationUndo, PauseToken,
-    PlanItem, UndoAction, UndoPlan,
+    PlanItem, UndoAction, UndoPlan, journal::SourceRevision,
 };
 use fm_platform::{PlatformAdapter, PlatformCapabilities};
 use fm_settings::Settings;
@@ -3093,6 +3093,26 @@ impl CopyExecutor {
             .join(&format!(".fm-copy-{}", Uuid::new_v4()))
             .map_err(|error| ExecutionError::Failed(error.to_string()))?;
         *self.temporary.lock().unwrap_or_else(|e| e.into_inner()) = Some(temporary.clone());
+        if progress.journaling() {
+            // Task 0299: leave a record that owns this private partial and says
+            // what the source looked like. A failed `stat` only costs the
+            // revision; it never fails the copy.
+            if let Ok(summary) = self
+                .source_provider
+                .inspect(&item.entry, cancellation.clone())
+                .await
+            {
+                progress.note_source_revision(
+                    &item.entry.location,
+                    SourceRevision {
+                        size: summary.size,
+                        modified_at_ms: summary.modified_at.map(|at| at.timestamp_millis()),
+                        validator: None,
+                    },
+                );
+            }
+            progress.note_partial(&item.entry.location, &temporary);
+        }
         // Task 0108: the planner picked the strategy from both sides'
         // capabilities and endpoints; execution never re-derives it.
         let cloned = self.transfer.strategy == TransferStrategy::ServerSideCopy
@@ -5186,6 +5206,119 @@ mod tests {
                 destination_resumable_upload,
             },
         }
+    }
+
+    /// Reporter that records what the copy announces to the transfer journal.
+    #[derive(Default)]
+    struct JournalingReporter {
+        enabled: bool,
+        partials: Mutex<Vec<(Location, Location)>>,
+        revisions: Mutex<Vec<(Location, SourceRevision)>>,
+    }
+
+    impl OperationProgressReporter for JournalingReporter {
+        fn report_bytes(&self, _additional_bytes: u64) {}
+
+        fn journaling(&self) -> bool {
+            self.enabled
+        }
+
+        fn note_partial(&self, source: &Location, partial: &Location) {
+            self.partials
+                .lock()
+                .unwrap()
+                .push((source.clone(), partial.clone()));
+        }
+
+        fn note_source_revision(&self, source: &Location, revision: SourceRevision) {
+            self.revisions
+                .lock()
+                .unwrap()
+                .push((source.clone(), revision));
+        }
+    }
+
+    async fn copy_with(reporter: &JournalingReporter) -> (Location, std::path::PathBuf) {
+        let root = tempfile::tempdir().expect("temp root");
+        let root = root.keep();
+        let source_path = root.join("source.bin");
+        std::fs::write(&source_path, b"journaled content").expect("write source");
+        let destination_path = root.join("destination");
+        std::fs::create_dir(&destination_path).expect("create destination dir");
+        let source_location = Location::from_native_path(&source_path).expect("source location");
+        let destination =
+            Location::from_native_path(&destination_path).expect("destination location");
+        let executor = copy_only_executor(
+            Arc::new(fm_vfs_local::LocalFileSystemProvider::new()),
+            Arc::new(fm_vfs_local::LocalFileSystemProvider::new()),
+            source_location.clone(),
+            destination.clone(),
+            false,
+        );
+        let operation = Operation::new(
+            fm_operations::OperationKind::Copy,
+            Vec::new(),
+            Some(destination),
+            fm_operations::ConflictPolicy::Ask,
+        );
+        let cancellation = CancellationToken::new();
+        let plan = executor
+            .plan(&operation, &cancellation)
+            .await
+            .expect("plan succeeds");
+        let item = plan.items.first().cloned().expect("one planned item");
+        executor
+            .execute(
+                &operation,
+                &item,
+                None,
+                reporter,
+                &PauseToken::default(),
+                &cancellation,
+            )
+            .await
+            .expect("execute succeeds");
+        (source_location, destination_path)
+    }
+
+    /// Task 0299: while journaling, a copy announces the source's revision and
+    /// the private `.fm-copy-*` partial it is about to write, so a crash leaves
+    /// a record that owns the partial.
+    #[tokio::test]
+    async fn copy_file_announces_its_partial_and_source_revision_when_journaling() {
+        let reporter = JournalingReporter {
+            enabled: true,
+            ..JournalingReporter::default()
+        };
+        let (source, destination) = copy_with(&reporter).await;
+
+        let partials = reporter.partials.lock().unwrap();
+        assert_eq!(partials.len(), 1);
+        assert_eq!(partials[0].0, source);
+        let partial_uri = &partials[0].1.uri;
+        assert!(
+            partial_uri.contains("/.fm-copy-"),
+            "partial is the private temporary: {partial_uri}"
+        );
+        assert!(
+            !destination.join("source.bin").to_string_lossy().is_empty()
+                && destination.join("source.bin").exists(),
+            "the copy still publishes its final destination"
+        );
+        let revisions = reporter.revisions.lock().unwrap();
+        assert_eq!(revisions.len(), 1);
+        assert_eq!(revisions[0].1.size, Some(17));
+        assert!(revisions[0].1.modified_at_ms.is_some());
+    }
+
+    /// Task 0299: without a journal the copy does no extra work and announces
+    /// nothing.
+    #[tokio::test]
+    async fn copy_file_announces_nothing_when_not_journaling() {
+        let reporter = JournalingReporter::default();
+        copy_with(&reporter).await;
+        assert!(reporter.partials.lock().unwrap().is_empty());
+        assert!(reporter.revisions.lock().unwrap().is_empty());
     }
 
     /// Task 0110 review: the shared copy path must not unconditionally

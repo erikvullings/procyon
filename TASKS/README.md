@@ -523,7 +523,7 @@ previous pass stopped where it did.
   *(done — frontend + backend; per-file size override replaced by a global limit, see Agent Notes)*
 - [x] 0298 Corpus themes: folder scope selector and export (Markdown, Word, SKOS) *(backend +
   frontend, medium — scope clusters to chosen folders; global remembered choice; export model + 3 renderers)*
-- [ ] 0299 Durable transfer journal *(parent 0163; needs 0035, 0047)*
+- [x] 0299 Durable transfer journal *(parent 0163; needs 0035, 0047; commits group-flushed every 250 ms, see Agent Notes)*
 - [ ] 0300 Transfer recovery classification on restart *(parent 0163; needs 0299)*
 - [ ] 0301 Bounded retry with exponential backoff for transfers *(parent 0163; needs 0035)*
 - [ ] 0302 Optional post-transfer verification *(parent 0163; needs 0035, 0047)*

@@ -3212,6 +3212,7 @@ version = "0.7.0-10"
 dependencies = [
  "async-trait",
  "chrono",
+ "crc32fast",
  "criterion",
  "fm-domain",
  "fm-events",

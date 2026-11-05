@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 async-trait.workspace = true
 chrono.workspace = true
+crc32fast.workspace = true
 fm-domain.workspace = true
 fm-events.workspace = true
 fm-vfs.workspace = true
