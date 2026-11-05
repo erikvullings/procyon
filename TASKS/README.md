@@ -228,7 +228,7 @@ engine, conflict handling, clipboard, drag-and-drop, comparison and checksums th
 - [x] 0093 Copy filename and path actions
 - [x] 0160 Safe operation undo
 - [x] 0161 Saved synchronization profiles *(needs 0030, 0075)*
-- [ ] 0163 Durable transfer recovery *(needs 0035, 0047, 0108)*
+- [ ] 0163 Durable transfer recovery *(umbrella; needs 0035, 0047, 0108; split into 0299–0303)*
 - [x] 0165 File collection basket *(needs 0035, 0048, 0108)*
 - [x] 0168 Create symbolic links and Windows shortcuts *(needs 0035, 0058)*
 - [x] 0222 File operation dialog clarity *(needs 0044, 0045, 0112)*
@@ -523,3 +523,8 @@ previous pass stopped where it did.
   *(done — frontend + backend; per-file size override replaced by a global limit, see Agent Notes)*
 - [x] 0298 Corpus themes: folder scope selector and export (Markdown, Word, SKOS) *(backend +
   frontend, medium — scope clusters to chosen folders; global remembered choice; export model + 3 renderers)*
+- [ ] 0299 Durable transfer journal *(parent 0163; needs 0035, 0047)*
+- [ ] 0300 Transfer recovery classification on restart *(parent 0163; needs 0299)*
+- [ ] 0301 Bounded retry with exponential backoff for transfers *(parent 0163; needs 0035)*
+- [ ] 0302 Optional post-transfer verification *(parent 0163; needs 0035, 0047)*
+- [ ] 0303 Provider byte-range and multipart resume *(parent 0163; needs 0299, 0300, 0301)*
