@@ -123,6 +123,7 @@ import type { PlayerState } from '../features/player/player-state';
 import { SavePlaylistDialog } from '../features/playlist/save-playlist-dialog';
 import { filterEntriesAdvanced } from '../features/quick-filter/advanced-filter';
 import { filterEntries } from '../features/quick-filter/quick-filter';
+import { collectRecursiveQuickFilterEntries } from '../features/quick-filter/recursive-quick-filter';
 import {
   createFindFilesController,
   type FindFilesControllerContext,
@@ -684,12 +685,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     query: string,
   ): readonly EntrySummary[] {
     const criteria = shellState.advancedFilters.criteriaFor(key);
+    // Task 0310: when the recursive "this folder + subfolders" scope is on and a query is present,
+    // filter the walk's collected results instead of just the current folder's entries.
+    const source =
+      quickFilterRecursiveFor(key) && query.trim() !== ''
+        ? (recursiveQuickFilterResultsFor(key) ?? entries)
+        : entries;
     const cached = shellState.filteredEntries.get(key);
-    if (cached?.input === entries && cached.query === query && cached.criteria === criteria) {
+    if (cached?.input === source && cached.query === query && cached.criteria === criteria) {
       return cached.entries;
     }
-    const filtered = filterEntriesAdvanced(filterEntries(entries, query), criteria);
-    shellState.filteredEntries.set(key, { input: entries, query, criteria, entries: filtered });
+    const filtered = filterEntriesAdvanced(filterEntries(source, query), criteria);
+    shellState.filteredEntries.set(key, { input: source, query, criteria, entries: filtered });
     return filtered;
   }
 
@@ -705,6 +712,75 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       (tab?.view.quickFilter ?? null) !== null ||
       shellState.advancedFilters.isActive(key)
     );
+  }
+
+  /** Task 0310: is the recursive "this folder + subfolders" quick-filter scope on for this tab? */
+  function quickFilterRecursiveFor(key: string): boolean {
+    return shellState.quickFilterRecursive.get(key)?.recursive === true;
+  }
+
+  function setQuickFilterRecursive(key: string, recursive: boolean): void {
+    const state = shellState.quickFilterRecursive.get(key) ?? {
+      recursive: false,
+      controller: undefined,
+      results: undefined,
+      base: [],
+    };
+    state.recursive = recursive;
+    shellState.quickFilterRecursive.set(key, state);
+  }
+
+  function recursiveQuickFilterResultsFor(key: string): readonly EntrySummary[] | undefined {
+    return shellState.quickFilterRecursive.get(key)?.results;
+  }
+
+  /** Task 0310: (re)run the bounded recursive walk for `key`'s current query over `baseEntries`.
+   * A no-op for tabs that have never toggled the recursive scope on. */
+  function runRecursiveQuickFilter(
+    key: string,
+    query: string,
+    baseEntries: readonly EntrySummary[],
+  ): void {
+    const state = shellState.quickFilterRecursive.get(key);
+    if (state === undefined) return;
+    state.base = baseEntries;
+    state.controller?.abort();
+    if (!state.recursive || query.trim() === '') {
+      state.results = undefined;
+      m.redraw();
+      return;
+    }
+    const controller = new AbortController();
+    state.controller = controller;
+    state.results = undefined;
+    const showHidden = shellState.currentSettings?.showHiddenFiles === true;
+    void collectRecursiveQuickFilterEntries(
+      baseEntries,
+      query,
+      (location, signal) => vnode.attrs.client.listDirectoryChildren(location, showHidden, signal),
+      { signal: controller.signal },
+    )
+      .then((results) => {
+        if (controller.signal.aborted) return;
+        state.results = results;
+        m.redraw();
+      })
+      .catch(() => undefined);
+  }
+
+  /** Task 0310: flip the recursive scope for a tab and immediately re-search the current query. */
+  function toggleQuickFilterScope(key: string): void {
+    const next = !quickFilterRecursiveFor(key);
+    setQuickFilterRecursive(key, next);
+    const state = shellState.quickFilterRecursive.get(key);
+    if (next) {
+      const draft = shellState.appState?.quickFilterDrafts.byTabKey[key] ?? '';
+      runRecursiveQuickFilter(key, draft, state?.base ?? []);
+    } else {
+      state?.controller?.abort();
+      if (state) state.results = undefined;
+    }
+    m.redraw();
   }
 
   /** If `entry` came from a content-search results tab (`locationUri`) and has content matches,
@@ -2284,6 +2360,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     entriesFilteredFor,
     quickFilterQueryFor,
     quickFilterOpenFor,
+    quickFilterRecursiveFor,
+    toggleQuickFilterScope,
+    runRecursiveQuickFilter,
     advancedFilters: shellState.advancedFilters,
     contentSearchInitialQuery,
     searchQueryForLocationUri: (locationUri) =>
@@ -2639,6 +2718,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     rememberDismissedOperation: opsWiring.rememberDismissedOperation,
     hasDismissedOperations: () => shellState.dismissedOperationIds.size > 0,
     showAllOperations: opsWiring.showAllOperations,
+    getInterruptedTransfers: () => shellState.interruptedTransfers,
+    getInterruptedTransferBusyId: () => shellState.interruptedTransferBusyId,
+    getInterruptedTransferError: () => shellState.interruptedTransferError,
+    restartInterruptedTransfer: opsWiring.restartInterruptedTransfer,
+    discardInterruptedTransfer: opsWiring.discardInterruptedTransfer,
     refetchAffectedPanes,
     redraw: () => m.redraw(),
   };
@@ -3009,6 +3093,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         })
         .catch(() => undefined);
       void shellState.workspaceController.loadWorkspace();
+      opsWiring.loadInterruptedTransfers();
       void Promise.resolve()
         .then(() => attrs.client.listOperations())
         .then((listed) => {

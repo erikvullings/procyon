@@ -563,6 +563,38 @@ export const pl = {
     linkUnsupported: 'Nie można tworzyć łączy między tymi lokalizacjami.',
     failureRecoveryPrivilegeRequired:
       'Utworzenie tego łącza wymaga dodatkowych uprawnień. Włącz tryb dewelopera, uruchom Procyon jako administrator lub utwórz skrót.',
+    interruptedHeading: 'Przerwane transfery',
+    interruptedIntro:
+      'Te transfery trwały jeszcze, gdy Procyon zatrzymał się ostatnim razem. Nic nie ruszy ponownie, dopóki tego nie wybierzesz.',
+    interruptedSummary: 'Ukończono {done} z {total} elementów, pozostało {remaining}',
+    interruptedClassResumable: 'Można kontynuować',
+    interruptedClassSafelyRestartable: 'Można bezpiecznie powtórzyć',
+    interruptedClassCompletedUnconfirmed: 'Prawdopodobnie zakończony',
+    interruptedClassNeedsIntervention: 'Wymaga Twojej decyzji',
+    interruptedReasonNotStarted: 'Transfer nie zaczął jeszcze kopiowania.',
+    interruptedReasonPartialUnfinished:
+      'Plik został skopiowany w połowie. Jego niedokończony plik tymczasowy zostanie usunięty przed ponownym uruchomieniem.',
+    interruptedReasonPublishedUnconfirmed:
+      'Pliki wyglądają na będące na miejscu, ale transfer nigdy nie potwierdził zakończenia.',
+    interruptedReasonSourceChanged: 'Plik źródłowy zmienił się po zaplanowaniu transferu.',
+    interruptedReasonSourceMissing: 'Plik źródłowy już nie istnieje.',
+    interruptedReasonDestinationReplaced:
+      'Plik w miejscu docelowym został zastąpiony lub nie pasuje do źródła.',
+    interruptedReasonProviderUnavailable:
+      'Nie udało się połączyć z lokalizacją, aby sprawdzić transfer.',
+    interruptedReasonJournalDamaged:
+      'Zapis transferu jest uszkodzony, więc nie wiadomo, jak daleko zaszedł.',
+    interruptedRunAgain: 'Uruchom ponownie',
+    interruptedRunAgainAnyway: 'Uruchom ponownie mimo to',
+    interruptedDiscard: 'Odrzuć',
+    interruptedConfirmDone: 'Oznacz jako zakończony',
+    interruptedRunAgainHint:
+      'Niedokończone pliki tymczasowe są najpierw usuwane. Elementy już ukończone są pomijane.',
+    interruptedDiscardHint:
+      'Usuwa niedokończone pliki tymczasowe i zapomina ten transfer. Ukończone pliki zostają.',
+    interruptedActionFailed: 'Nie udało się wykonać tej czynności. Spróbuj ponownie.',
+    interruptedToast:
+      'Procyon został przerwany podczas przesyłania plików. Otwórz panel operacji, aby to sprawdzić.',
     failureRecoveryLinkCycle:
       'Łącze wskazywałoby na siebie lub na własny folder nadrzędny. Wybierz inne miejsce docelowe.',
     kindRename: 'Zmień nazwę',
@@ -2301,6 +2333,8 @@ export const pl = {
   quickFilter: {
     placeholder: 'Filtr…',
     clear: 'Wyczyść filtr',
+    scopeOff: 'tylko ten katalog',
+    scopeOn: 'ten katalog i podkatalogi',
   },
   advancedFilter: {
     toggle: 'Filtr zaawansowany',

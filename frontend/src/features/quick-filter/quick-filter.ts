@@ -1,4 +1,5 @@
 import type { EntryId, EntrySummary } from '../../models';
+import { foldCase, fuzzyMatches } from '../../utilities/fuzzy-match';
 
 /**
  * How one `;`-separated quick-filter mask matches (spec §24). The mode is auto-detected per mask:
@@ -51,8 +52,8 @@ export function compileQuickFilter(query: string): ((name: string) => boolean) |
         const pattern = globMaskRegExp(mask);
         return (name) => pattern.test(name);
       }
-      const needle = mask.toLocaleLowerCase();
-      return (name) => name.toLocaleLowerCase().includes(needle);
+      const needle = foldCase(mask);
+      return (name) => fuzzyMatches(needle, name);
     });
   if (matchers.length === 0) return undefined;
   if (matchers.length === 1) return matchers[0];

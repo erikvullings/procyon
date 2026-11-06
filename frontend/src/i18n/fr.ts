@@ -568,6 +568,39 @@ export const fr = {
     linkUnsupported: 'Impossible de créer des liens entre ces emplacements.',
     failureRecoveryPrivilegeRequired:
       'La création de ce lien exige des privilèges supplémentaires. Activez le mode développeur, lancez Procyon en administrateur ou créez plutôt un raccourci.',
+    interruptedHeading: 'Transferts interrompus',
+    interruptedIntro:
+      'Ces transferts étaient encore en cours lors du dernier arrêt de Procyon. Rien ne reprend tant que vous ne le choisissez pas.',
+    interruptedSummary: '{done} éléments sur {total} terminés, {remaining} restants',
+    interruptedClassResumable: 'Peut reprendre',
+    interruptedClassSafelyRestartable: 'Relançable sans risque',
+    interruptedClassCompletedUnconfirmed: 'Probablement terminé',
+    interruptedClassNeedsIntervention: 'Votre décision est requise',
+    interruptedReasonNotStarted: "Le transfert n'avait pas encore commencé à copier.",
+    interruptedReasonPartialUnfinished:
+      'Un fichier était copié à moitié. Son fichier temporaire inachevé est supprimé avant la relance.',
+    interruptedReasonPublishedUnconfirmed:
+      "Les fichiers semblent en place, mais le transfert n'a jamais confirmé qu'il était terminé.",
+    interruptedReasonSourceChanged:
+      'Un fichier source a changé après la planification du transfert.',
+    interruptedReasonSourceMissing: "Un fichier source n'existe plus.",
+    interruptedReasonDestinationReplaced:
+      'Un fichier de destination a été remplacé ou ne correspond pas à sa source.',
+    interruptedReasonProviderUnavailable:
+      'Un emplacement était inaccessible pour vérifier le transfert.',
+    interruptedReasonJournalDamaged:
+      "L'enregistrement du transfert est endommagé : on ne sait pas jusqu'où il est allé.",
+    interruptedRunAgain: 'Relancer',
+    interruptedRunAgainAnyway: 'Relancer quand même',
+    interruptedDiscard: 'Abandonner',
+    interruptedConfirmDone: 'Marquer comme terminé',
+    interruptedRunAgainHint:
+      "Les fichiers temporaires inachevés sont supprimés d'abord. Les éléments déjà terminés sont ignorés.",
+    interruptedDiscardHint:
+      'Supprime les fichiers temporaires inachevés et oublie ce transfert. Les fichiers terminés sont conservés.',
+    interruptedActionFailed: "Cette action n'a pas pu être terminée. Réessayez.",
+    interruptedToast:
+      'Procyon a été interrompu pendant un transfert de fichiers. Ouvrez le panneau des opérations pour le consulter.',
     failureRecoveryLinkCycle:
       'Le lien pointerait vers lui-même ou vers son dossier parent. Choisissez une autre destination.',
     kindRename: 'Renommer',
@@ -2315,6 +2348,8 @@ export const fr = {
   quickFilter: {
     placeholder: 'Filtre…',
     clear: 'Effacer le filtre',
+    scopeOff: 'ce dossier uniquement',
+    scopeOn: 'ce dossier et ses sous-dossiers',
   },
   advancedFilter: {
     toggle: 'Filtre avancé',

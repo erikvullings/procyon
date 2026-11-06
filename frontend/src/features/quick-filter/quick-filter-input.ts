@@ -1,6 +1,11 @@
 import m, { type FactoryComponent, type VnodeDOM } from 'mithril';
 import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
-import { adjustmentsHorizontalIcon, closeIcon, filterIcon } from '../../components/tabler-icons';
+import {
+  adjustmentsHorizontalIcon,
+  closeIcon,
+  directoryTreeIcon,
+  filterIcon,
+} from '../../components/tabler-icons';
 import { t } from '../../i18n';
 import { FILE_CLIPBOARD_PASSTHROUGH_ATTRIBUTE } from './quick-filter';
 import './quick-filter.css';
@@ -17,6 +22,11 @@ export interface QuickFilterInputAttrs {
     readonly open: boolean;
     /** How many structured criteria are set. */
     readonly activeCount: number;
+    readonly onToggle: () => void;
+  };
+  /** Recursive "this folder + subfolders" scope toggle (task 0310); absent where unavailable. */
+  readonly scope?: {
+    readonly recursive: boolean;
     readonly onToggle: () => void;
   };
 }
@@ -108,6 +118,25 @@ export const QuickFilterInput: FactoryComponent<QuickFilterInputAttrs> = () => {
                   ? m('span.fm-quick-filter-advanced-count', String(attrs.advanced.activeCount))
                   : undefined,
               ],
+            ),
+        attrs.scope === undefined
+          ? undefined
+          : m(
+              'button.fm-quick-filter-scope',
+              {
+                type: 'button',
+                'aria-label': attrs.scope.recursive
+                  ? t('quickFilter', 'scopeOn')
+                  : t('quickFilter', 'scopeOff'),
+                'aria-pressed': String(attrs.scope.recursive),
+                title: attrs.scope.recursive
+                  ? t('quickFilter', 'scopeOn')
+                  : t('quickFilter', 'scopeOff'),
+                // Keep the text input's blur from committing before the toggle flips.
+                onmousedown: (event: MouseEvent) => event.preventDefault(),
+                onclick: () => attrs.scope?.onToggle(),
+              },
+              directoryTreeIcon({ size: 14 }),
             ),
         m(
           'button.fm-quick-filter-clear',

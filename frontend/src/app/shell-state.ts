@@ -100,6 +100,7 @@ import type {
   BackendEvent,
   Connection,
   EntrySummary,
+  InterruptedTransfer,
   Location,
   NativeMenuSpec,
   OperationConflict,
@@ -376,6 +377,18 @@ export function createShellState(client: FileManagerClient) {
     cursorLoadTokens: new Map<string, object>(),
     /** Whether the inline quick-filter box is shown for a pane, independent of a persisted query. */
     quickFilterOpen: new Map<string, boolean>(),
+    /** Per-tab recursive quick-filter scope (task 0310): whether "this folder + subfolders" is on,
+     * the in-flight walk's AbortController, its latest collected results, and the base entries the
+     * walk started from. Keyed by tab key (`paneId:tabId`). */
+    quickFilterRecursive: new Map<
+      string,
+      {
+        recursive: boolean;
+        controller: AbortController | undefined;
+        results: readonly EntrySummary[] | undefined;
+        base: readonly EntrySummary[];
+      }
+    >(),
     /** Structured (advanced) filter criteria and panel state per tab (task 0169). */
     advancedFilters: new AdvancedFilterStore(),
     filteredEntries: new Map<
@@ -427,6 +440,10 @@ export function createShellState(client: FileManagerClient) {
     musicDuplicatesState: INITIAL_MUSIC_DUPLICATES_STATE as MusicDuplicatesState,
     emptyPlayerState: createInitialPlayerState(),
     operations: createOperationsState(),
+    /** Transfers the previous session left interrupted, awaiting a decision (task 0300). */
+    interruptedTransfers: [] as readonly InterruptedTransfer[],
+    interruptedTransferBusyId: undefined as unknown as OperationId | undefined,
+    interruptedTransferError: undefined as unknown as string | undefined,
     /** Failed operations whose low-space dialog was already answered (task 0272). */
     answeredSpaceShortfalls: new Set<OperationId>(),
     pendingConflict: undefined as unknown as OperationConflict | undefined,

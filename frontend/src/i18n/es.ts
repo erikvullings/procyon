@@ -563,6 +563,39 @@ export const es = {
     linkUnsupported: 'No se pueden crear enlaces entre estas ubicaciones.',
     failureRecoveryPrivilegeRequired:
       'Crear este enlace requiere privilegios adicionales. Active el Modo de desarrollador, ejecute Procyon como administrador o cree un acceso directo.',
+    interruptedHeading: 'Transferencias interrumpidas',
+    interruptedIntro:
+      'Estas transferencias seguían en curso cuando Procyon se detuvo por última vez. Nada se reanuda hasta que usted lo decida.',
+    interruptedSummary: '{done} de {total} elementos terminados, {remaining} pendientes',
+    interruptedClassResumable: 'Puede continuar',
+    interruptedClassSafelyRestartable: 'Se puede repetir sin riesgo',
+    interruptedClassCompletedUnconfirmed: 'Probablemente terminada',
+    interruptedClassNeedsIntervention: 'Requiere su decisión',
+    interruptedReasonNotStarted: 'La transferencia aún no había empezado a copiar.',
+    interruptedReasonPartialUnfinished:
+      'Un archivo estaba copiado a medias. Su archivo temporal sin terminar se elimina antes de volver a ejecutarla.',
+    interruptedReasonPublishedUnconfirmed:
+      'Los archivos parecen estar en su sitio, pero la transferencia nunca confirmó que había terminado.',
+    interruptedReasonSourceChanged:
+      'Un archivo de origen cambió después de planificar la transferencia.',
+    interruptedReasonSourceMissing: 'Un archivo de origen ya no existe.',
+    interruptedReasonDestinationReplaced:
+      'Un archivo del destino fue reemplazado o no coincide con su origen.',
+    interruptedReasonProviderUnavailable:
+      'No se pudo acceder a una ubicación para comprobar la transferencia.',
+    interruptedReasonJournalDamaged:
+      'El registro de la transferencia está dañado, por lo que se desconoce hasta dónde llegó.',
+    interruptedRunAgain: 'Volver a ejecutar',
+    interruptedRunAgainAnyway: 'Volver a ejecutar de todos modos',
+    interruptedDiscard: 'Descartar',
+    interruptedConfirmDone: 'Marcar como terminada',
+    interruptedRunAgainHint:
+      'Primero se eliminan los archivos temporales sin terminar. Los elementos que ya terminaron se omiten.',
+    interruptedDiscardHint:
+      'Elimina los archivos temporales sin terminar y olvida esta transferencia. Los archivos terminados se conservan.',
+    interruptedActionFailed: 'No se pudo completar esa acción. Inténtelo de nuevo.',
+    interruptedToast:
+      'Procyon se interrumpió mientras transfería archivos. Abra el panel de operaciones para revisarlo.',
     failureRecoveryLinkCycle:
       'El enlace apuntaría a sí mismo o a su carpeta superior. Elija otro destino.',
     kindRename: 'Renombrar',
@@ -2304,6 +2337,8 @@ export const es = {
   quickFilter: {
     placeholder: 'Filtro…',
     clear: 'Borrar filtro',
+    scopeOff: 'solo esta carpeta',
+    scopeOn: 'esta carpeta y subcarpetas',
   },
   advancedFilter: {
     toggle: 'Filtro avanzado',

@@ -565,6 +565,39 @@ export const it = {
     linkUnsupported: 'Impossibile creare collegamenti tra queste posizioni.',
     failureRecoveryPrivilegeRequired:
       'Questo collegamento richiede privilegi aggiuntivi. Attiva la Modalità sviluppatore, esegui Procyon come amministratore o crea un collegamento .lnk.',
+    interruptedHeading: 'Trasferimenti interrotti',
+    interruptedIntro:
+      "Questi trasferimenti erano ancora in corso quando Procyon si è fermato l'ultima volta. Nulla riparte finché non lo scegli.",
+    interruptedSummary: '{done} di {total} elementi completati, {remaining} da fare',
+    interruptedClassResumable: 'Può continuare',
+    interruptedClassSafelyRestartable: 'Rieseguibile senza rischi',
+    interruptedClassCompletedUnconfirmed: 'Probabilmente completato',
+    interruptedClassNeedsIntervention: 'Serve la tua decisione',
+    interruptedReasonNotStarted: 'Il trasferimento non aveva ancora iniziato a copiare.',
+    interruptedReasonPartialUnfinished:
+      'Un file era copiato a metà. Il suo file temporaneo incompleto viene rimosso prima di rieseguire.',
+    interruptedReasonPublishedUnconfirmed:
+      'I file sembrano al loro posto, ma il trasferimento non ha mai confermato di essere terminato.',
+    interruptedReasonSourceChanged:
+      'Un file di origine è cambiato dopo la pianificazione del trasferimento.',
+    interruptedReasonSourceMissing: 'Un file di origine non esiste più.',
+    interruptedReasonDestinationReplaced:
+      'Un file nella destinazione è stato sostituito o non corrisponde alla sua origine.',
+    interruptedReasonProviderUnavailable:
+      'Una posizione non era raggiungibile per verificare il trasferimento.',
+    interruptedReasonJournalDamaged:
+      'Il record del trasferimento è danneggiato, quindi non si sa fin dove sia arrivato.',
+    interruptedRunAgain: 'Esegui di nuovo',
+    interruptedRunAgainAnyway: 'Esegui di nuovo comunque',
+    interruptedDiscard: 'Scarta',
+    interruptedConfirmDone: 'Segna come completato',
+    interruptedRunAgainHint:
+      'I file temporanei incompleti vengono rimossi prima. Gli elementi già completati vengono saltati.',
+    interruptedDiscardHint:
+      'Rimuove i file temporanei incompleti e dimentica questo trasferimento. I file completati restano.',
+    interruptedActionFailed: "Impossibile completare l'azione. Riprova.",
+    interruptedToast:
+      'Procyon è stato interrotto durante il trasferimento di file. Apri il pannello Operazioni per controllare.',
     failureRecoveryLinkCycle:
       'Il collegamento punterebbe a se stesso o alla propria cartella superiore. Scegli un’altra destinazione.',
     kindRename: 'Rinomina',
@@ -2298,6 +2331,8 @@ export const it = {
   quickFilter: {
     placeholder: 'Filtro…',
     clear: 'Cancella filtro',
+    scopeOff: 'solo questa cartella',
+    scopeOn: 'questa cartella e sottocartelle',
   },
   advancedFilter: {
     toggle: 'Filtro avanzato',

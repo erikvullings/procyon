@@ -567,6 +567,38 @@ export const nl = {
     linkUnsupported: 'Tussen deze locaties kunnen geen koppelingen worden gemaakt.',
     failureRecoveryPrivilegeRequired:
       'Voor deze koppeling zijn extra rechten nodig. Schakel de ontwikkelaarsmodus in, start Procyon als beheerder of maak een snelkoppeling.',
+    interruptedHeading: 'Onderbroken overdrachten',
+    interruptedIntro:
+      'Deze overdrachten liepen nog toen Procyon voor het laatst stopte. Er start niets opnieuw totdat u dat kiest.',
+    interruptedSummary: '{done} van {total} items klaar, nog {remaining} te gaan',
+    interruptedClassResumable: 'Kan doorgaan',
+    interruptedClassSafelyRestartable: 'Veilig opnieuw te starten',
+    interruptedClassCompletedUnconfirmed: 'Waarschijnlijk voltooid',
+    interruptedClassNeedsIntervention: 'Uw keuze is nodig',
+    interruptedReasonNotStarted: 'De overdracht was nog niet begonnen met kopiëren.',
+    interruptedReasonPartialUnfinished:
+      'Een bestand was half gekopieerd. Het onvoltooide tijdelijke bestand wordt verwijderd voordat opnieuw wordt gestart.',
+    interruptedReasonPublishedUnconfirmed:
+      'De bestanden lijken op hun plek te staan, maar de overdracht heeft nooit bevestigd dat ze klaar was.',
+    interruptedReasonSourceChanged: 'Een bronbestand is gewijzigd nadat de overdracht was gepland.',
+    interruptedReasonSourceMissing: 'Een bronbestand bestaat niet meer.',
+    interruptedReasonDestinationReplaced:
+      'Een bestand op de bestemming is vervangen of komt niet overeen met de bron.',
+    interruptedReasonProviderUnavailable:
+      'Een locatie was niet bereikbaar om de overdracht te controleren.',
+    interruptedReasonJournalDamaged:
+      'Het overdrachtsrecord is beschadigd, dus het is onbekend hoe ver de overdracht kwam.',
+    interruptedRunAgain: 'Opnieuw uitvoeren',
+    interruptedRunAgainAnyway: 'Toch opnieuw uitvoeren',
+    interruptedDiscard: 'Verwerpen',
+    interruptedConfirmDone: 'Markeren als klaar',
+    interruptedRunAgainHint:
+      'Onvoltooide tijdelijke bestanden worden eerst verwijderd. Items die al klaar waren, worden overgeslagen.',
+    interruptedDiscardHint:
+      'Verwijdert onvoltooide tijdelijke bestanden en vergeet deze overdracht. Voltooide bestanden blijven staan.',
+    interruptedActionFailed: 'Die actie kon niet worden voltooid. Probeer het opnieuw.',
+    interruptedToast:
+      'Procyon werd onderbroken tijdens het overdragen van bestanden. Open het paneel Bewerkingen om dit te bekijken.',
     failureRecoveryLinkCycle:
       'De koppeling zou naar zichzelf of naar de eigen bovenliggende map verwijzen. Kies een andere bestemming.',
     kindRename: 'Hernoemen',
@@ -2300,6 +2332,8 @@ export const nl = {
   quickFilter: {
     placeholder: 'Filter…',
     clear: 'Filter wissen',
+    scopeOff: 'alleen deze map',
+    scopeOn: 'deze map + submappen',
   },
   advancedFilter: {
     toggle: 'Geavanceerd filter',

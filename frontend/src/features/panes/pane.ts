@@ -155,6 +155,11 @@ export interface FilterAttrs {
   readonly onFilterQueryChange: (query: string) => void;
   readonly onFilterCommit: () => void;
   readonly onFilterClose: () => void;
+  /** Recursive "this folder + subfolders" scope toggle (task 0310); absent where unavailable. */
+  readonly scope?: {
+    readonly recursive: boolean;
+    readonly onToggle: () => void;
+  };
 }
 
 /** Backend-reported directory totals used by the status bar. */
@@ -1714,6 +1719,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                           onToggle: attrs.filter.advanced.onTogglePanel,
                         },
                       }),
+                  ...(attrs.filter.scope === undefined ? {} : { scope: attrs.filter.scope }),
                 })
               : attrs.breadcrumbLabel !== undefined
                 ? m(

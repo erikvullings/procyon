@@ -222,6 +222,12 @@ export interface PaneContentContext {
   /** Per-tab structured-filter state (task 0169). */
   readonly advancedFilters: AdvancedFilterStore;
   quickFilterOpenFor(key: string, tab: TabProjection | undefined): boolean;
+  /** Task 0310: is the recursive "this folder + subfolders" quick-filter scope on for this tab? */
+  quickFilterRecursiveFor(key: string): boolean;
+  /** Task 0310: flip the recursive quick-filter scope for a tab (and re-search the current query). */
+  toggleQuickFilterScope(key: string): void;
+  /** Task 0310: (re)run the bounded recursive walk for this tab's query over its loaded entries. */
+  runRecursiveQuickFilter(key: string, query: string, baseEntries: readonly EntrySummary[]): void;
   contentSearchInitialQuery(locationUri: string, entry: EntrySummary): InitialSearch | undefined;
   searchQueryForLocationUri(locationUri: string): SearchQuery | undefined;
   searchFavouriteNameForLocationUri(locationUri: string): string | undefined;
@@ -583,6 +589,15 @@ export function createPaneContentBuilder(
           }),
       filterOpen: key === undefined ? false : context.quickFilterOpenFor(key, tab),
       filterQuery: quickFilterQuery,
+      // Task 0310: recursive "this folder + subfolders" scope toggle, exposed to the filter box.
+      ...(key === undefined
+        ? {}
+        : {
+            quickFilterScope: {
+              recursive: context.quickFilterRecursiveFor(key),
+              onToggle: () => context.toggleQuickFilterScope(key),
+            },
+          }),
       formatSettings: entryFormatSettings,
       ...(nativeIconLoader === undefined ? {} : { nativeIconLoader }),
       ...(thumbnailLoader === undefined ? {} : { thumbnailLoader }),
@@ -898,6 +913,8 @@ export function createPaneContentBuilder(
         const appState = context.getAppState();
         if (appState === undefined) return;
         context.setAppState(applyAppPatches(appState, setQuickFilterDraftPatch(key, query)));
+        // Task 0310: keep the recursive walk (if this tab has that scope on) in step with the query.
+        context.runRecursiveQuickFilter(key, query, directory.entries);
         m.redraw();
       },
       onFilterCommit: () => {

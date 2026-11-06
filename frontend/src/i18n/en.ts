@@ -560,6 +560,37 @@ export const en = {
     linkUnsupported: 'Links cannot be created between these locations.',
     failureRecoveryPrivilegeRequired:
       'Creating this link needs extra privileges. Enable Developer Mode or run Procyon as administrator, or create a shortcut instead.',
+    interruptedHeading: 'Interrupted transfers',
+    interruptedIntro:
+      'These transfers were still running when Procyon last stopped. Nothing runs again until you choose.',
+    interruptedSummary: '{done} of {total} items finished, {remaining} still to do',
+    interruptedClassResumable: 'Can continue',
+    interruptedClassSafelyRestartable: 'Safe to run again',
+    interruptedClassCompletedUnconfirmed: 'Probably finished',
+    interruptedClassNeedsIntervention: 'Needs your decision',
+    interruptedReasonNotStarted: 'The transfer had not started copying yet.',
+    interruptedReasonPartialUnfinished:
+      'A file was half copied. Its unfinished temporary file is removed before running again.',
+    interruptedReasonPublishedUnconfirmed:
+      'The files appear to be in place, but the transfer never confirmed it finished.',
+    interruptedReasonSourceChanged: 'A source file changed after the transfer was planned.',
+    interruptedReasonSourceMissing: 'A source file no longer exists.',
+    interruptedReasonDestinationReplaced:
+      'A file at the destination was replaced or does not match its source.',
+    interruptedReasonProviderUnavailable: 'A location could not be reached to check the transfer.',
+    interruptedReasonJournalDamaged:
+      'The transfer record is damaged, so it is unknown how far it got.',
+    interruptedRunAgain: 'Run again',
+    interruptedRunAgainAnyway: 'Run again anyway',
+    interruptedDiscard: 'Discard',
+    interruptedConfirmDone: 'Mark as done',
+    interruptedRunAgainHint:
+      'Unfinished temporary files are removed first. Items that already finished are skipped.',
+    interruptedDiscardHint:
+      'Removes unfinished temporary files and forgets this transfer. Finished files are kept.',
+    interruptedActionFailed: 'That action could not be completed. Try again.',
+    interruptedToast:
+      'Procyon was interrupted while transferring files. Open the Operations panel to review.',
     failureRecoveryLinkCycle:
       'The link would point at itself or its own parent. Choose another destination.',
     kindRename: 'Rename',
@@ -2264,6 +2295,8 @@ export const en = {
   quickFilter: {
     placeholder: 'Filter…',
     clear: 'Clear filter',
+    scopeOff: 'this folder only',
+    scopeOn: 'this folder + subfolders',
   },
   advancedFilter: {
     toggle: 'Advanced filter',

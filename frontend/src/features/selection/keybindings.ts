@@ -1,4 +1,5 @@
 import type { ActionId, EntryId, EntrySummary } from '../../models';
+import { bestFuzzyMatch } from '../../utilities/fuzzy-match';
 
 /** Action identifiers reserved for selection before the configurable action registry lands. */
 export const CORE_SELECTION_ACTION_IDS = {
@@ -124,7 +125,7 @@ export function reduceTypeahead(
     state === undefined || now - state.lastInputAt > timeoutMs
       ? normalizedInput
       : state.prefix + normalizedInput;
-  const match = entries.find((entry) => entry.name.toLocaleLowerCase().includes(prefix));
+  const match = bestFuzzyMatch(prefix, entries, (entry) => entry.name);
   return {
     state: { prefix, lastInputAt: now },
     ...(match === undefined ? {} : { matchedEntryId: match.id }),

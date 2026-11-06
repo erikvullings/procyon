@@ -1,4 +1,5 @@
 import type { EntryId, EntrySummary } from '../../models';
+import { rankFuzzyMatches } from '../../utilities/fuzzy-match';
 import { reduceTypeahead, type TypeaheadState } from '../selection/keybindings';
 import type { SelectionAction } from '../selection/selection';
 
@@ -107,7 +108,7 @@ export function createTypeaheadController(onRedraw: () => void): TypeaheadContro
     moveWithinMatches(entries, cursorEntry, offset, edge, extend) {
       if (_state === undefined) return false;
       const prefix = _state.prefix;
-      const matches = entries.filter((entry) => entry.name.toLocaleLowerCase().includes(prefix));
+      const matches = rankFuzzyMatches(prefix, entries, (entry) => entry.name);
       if (matches.length === 0) return undefined;
       const currentMatchIndex = matches.findIndex((e) => e.id === cursorEntry?.id);
       const targetIndex =

@@ -3101,19 +3101,21 @@ describe('Pane navigation input', () => {
     );
     const pane = root.querySelector<HTMLElement>('.fm-pane');
 
-    for (const typed of 'dox') {
+    // 'doz' is not a subsequence of 'document.txt' (no z), so it's an error — unlike a fuzzy match
+    // such as 'dox', which the new subsequence matcher correctly accepts.
+    for (const typed of 'doz') {
       pane?.dispatchEvent(new KeyboardEvent('keydown', { key: typed, bubbles: true }));
     }
     m.redraw.sync();
 
-    expect(root.querySelector('.fm-typeahead-status')?.textContent).toBe('dox');
+    expect(root.querySelector('.fm-typeahead-status')?.textContent).toBe('doz');
     expect(root.querySelector('.fm-typeahead-status')?.classList).toContain(
       'fm-typeahead-status-error',
     );
 
     vi.runAllTimers();
     m.redraw.sync();
-    expect(root.querySelector('.fm-typeahead-status')?.textContent).toBe('dox');
+    expect(root.querySelector('.fm-typeahead-status')?.textContent).toBe('doz');
     expect(root.querySelector('.fm-typeahead-status')?.classList).not.toContain(
       'fm-typeahead-status-error',
     );

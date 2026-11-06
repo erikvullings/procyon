@@ -524,7 +524,30 @@ previous pass stopped where it did.
 - [x] 0298 Corpus themes: folder scope selector and export (Markdown, Word, SKOS) *(backend +
   frontend, medium — scope clusters to chosen folders; global remembered choice; export model + 3 renderers)*
 - [x] 0299 Durable transfer journal *(parent 0163; needs 0035, 0047; commits group-flushed every 250 ms, see Agent Notes)*
-- [ ] 0300 Transfer recovery classification on restart *(parent 0163; needs 0299)*
+- [x] 0300 Transfer recovery classification on restart *(parent 0163; needs 0299; no resumable verdict until 0303)*
 - [ ] 0301 Bounded retry with exponential backoff for transfers *(parent 0163; needs 0035)*
 - [ ] 0302 Optional post-transfer verification *(parent 0163; needs 0035, 0047)*
 - [ ] 0303 Provider byte-range and multipart resume *(parent 0163; needs 0299, 0300, 0301)*
+
+## Proposed features (new backlog)
+
+Freshly proposed user-facing features, not yet picked up. Numbers 0306+ avoid the transfer-recovery
+subtask block (0299–0303) and the earlier corpus-themes follow-ups.
+
+- [ ] 0306 Find similar files (semantic neighbors) *(frontend + backend, medium — "find files like
+  this one" over the existing embedding index; the highest-leverage way to surface the semantic
+  investment)*
+- [ ] 0307 Watched-folder auto-organizer *(backend + frontend, high — standing rules that act on new
+  file arrivals; composes VFS watching + operation engine, designed as a subset of future 0167 recipes)*
+- [ ] 0308 Disk-cleanup report *(frontend + backend, medium — actionable by-type/largest/oldest/junk
+  lists over already-loaded entries, reusing disk-usage totals)*
+- [ ] 0309 Quick hash panel *(frontend + backend, low — instant SHA-256/MD5/etc. for a selection via
+  the existing checksum capability)*
+- [x] 0310 Fuzzy quick-filter (and type-to-select) *(frontend, medium — fzf-style subsequence matching
+  shared by the quick filter and keyboard type-to-select; opt-in recursive scope; done — see Agent Notes)*
+- [ ] 0311 Gallery lightbox *(frontend, low — full-screen flip-through over the grid + F3 viewer; needs 0134)*
+- [ ] 0312 New-file-from-template *(frontend + backend, low — context-menu "New ▸" templates, built-in
+  + plugin-contributed, over the create-file operation)*
+- [ ] 0313 More compelling timeline / date view *(frontend, medium — enhance 0134's photo-mode day
+  grouping into a real, virtualized timeline: day/week/month/year granularity, a chosen date axis
+  incl. EXIF date-taken, and a calendar-strip minimap; additive, day stays the default)*

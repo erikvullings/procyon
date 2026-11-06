@@ -572,6 +572,40 @@ export const de = {
     linkUnsupported: 'Zwischen diesen Orten können keine Verknüpfungen erstellt werden.',
     failureRecoveryPrivilegeRequired:
       'Für diese Verknüpfung sind zusätzliche Rechte nötig. Aktivieren Sie den Entwicklermodus, starten Sie Procyon als Administrator oder erstellen Sie stattdessen eine .lnk-Verknüpfung.',
+    interruptedHeading: 'Unterbrochene Übertragungen',
+    interruptedIntro:
+      'Diese Übertragungen liefen noch, als Procyon zuletzt beendet wurde. Nichts startet erneut, bevor Sie es wählen.',
+    interruptedSummary: '{done} von {total} Elementen fertig, noch {remaining} offen',
+    interruptedClassResumable: 'Kann fortgesetzt werden',
+    interruptedClassSafelyRestartable: 'Sicher erneut ausführbar',
+    interruptedClassCompletedUnconfirmed: 'Wahrscheinlich abgeschlossen',
+    interruptedClassNeedsIntervention: 'Ihre Entscheidung ist nötig',
+    interruptedReasonNotStarted: 'Die Übertragung hatte noch nicht mit dem Kopieren begonnen.',
+    interruptedReasonPartialUnfinished:
+      'Eine Datei war halb kopiert. Ihre unfertige temporäre Datei wird vor dem erneuten Ausführen entfernt.',
+    interruptedReasonPublishedUnconfirmed:
+      'Die Dateien scheinen vorhanden zu sein, aber die Übertragung hat ihren Abschluss nie bestätigt.',
+    interruptedReasonSourceChanged:
+      'Eine Quelldatei wurde geändert, nachdem die Übertragung geplant wurde.',
+    interruptedReasonSourceMissing: 'Eine Quelldatei existiert nicht mehr.',
+    interruptedReasonDestinationReplaced:
+      'Eine Datei am Ziel wurde ersetzt oder stimmt nicht mit ihrer Quelle überein.',
+    interruptedReasonProviderUnavailable:
+      'Ein Speicherort war nicht erreichbar, um die Übertragung zu prüfen.',
+    interruptedReasonJournalDamaged:
+      'Der Übertragungseintrag ist beschädigt, daher ist unbekannt, wie weit sie kam.',
+    interruptedRunAgain: 'Erneut ausführen',
+    interruptedRunAgainAnyway: 'Trotzdem erneut ausführen',
+    interruptedDiscard: 'Verwerfen',
+    interruptedConfirmDone: 'Als erledigt markieren',
+    interruptedRunAgainHint:
+      'Unfertige temporäre Dateien werden zuerst entfernt. Bereits abgeschlossene Elemente werden übersprungen.',
+    interruptedDiscardHint:
+      'Entfernt unfertige temporäre Dateien und vergisst diese Übertragung. Fertige Dateien bleiben erhalten.',
+    interruptedActionFailed:
+      'Diese Aktion konnte nicht abgeschlossen werden. Versuchen Sie es erneut.',
+    interruptedToast:
+      'Procyon wurde beim Übertragen von Dateien unterbrochen. Öffnen Sie das Vorgangsfenster, um dies zu prüfen.',
     failureRecoveryLinkCycle:
       'Die Verknüpfung würde auf sich selbst oder ihr eigenes übergeordnetes Verzeichnis zeigen. Wählen Sie ein anderes Ziel.',
     kindRename: 'Umbenennen',
@@ -2321,6 +2355,8 @@ export const de = {
   quickFilter: {
     placeholder: 'Filter…',
     clear: 'Filter löschen',
+    scopeOff: 'nur dieser Ordner',
+    scopeOn: 'dieser Ordner + Unterordner',
   },
   advancedFilter: {
     toggle: 'Erweiterter Filter',

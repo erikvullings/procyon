@@ -72,6 +72,11 @@ export interface WorkspacePaneContent {
   readonly advancedFilter?: AdvancedFilterAttrs;
   readonly filterOpen: boolean;
   readonly filterQuery: string;
+  /** Recursive "this folder + subfolders" quick-filter scope (task 0310); absent where unavailable. */
+  readonly quickFilterScope?: {
+    readonly recursive: boolean;
+    readonly onToggle: () => void;
+  };
   readonly formatSettings?: EntryFormatSettings;
   readonly pluginColumns?: readonly DirectoryColumnDescriptor[];
   /** Restricts non-mandatory columns to this set; see `DirectoryTableAttrs.visibleColumnIds`. */
@@ -691,6 +696,7 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
             onFilterQueryChange: content.onFilterQueryChange,
             onFilterCommit: content.onFilterCommit,
             onFilterClose: content.onFilterClose,
+            ...(content.quickFilterScope === undefined ? {} : { scope: content.quickFilterScope }),
           } satisfies FilterAttrs,
           navigation: {
             onNavigate: content.onNavigate,

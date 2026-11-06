@@ -566,6 +566,39 @@ export const pt = {
     linkUnsupported: 'Não é possível criar ligações entre estas localizações.',
     failureRecoveryPrivilegeRequired:
       'Criar esta ligação requer privilégios adicionais. Ative o Modo de programador, execute o Procyon como administrador ou crie um atalho.',
+    interruptedHeading: 'Transferências interrompidas',
+    interruptedIntro:
+      'Estas transferências ainda estavam em curso quando o Procyon parou pela última vez. Nada recomeça até você escolher.',
+    interruptedSummary: '{done} de {total} itens concluídos, {remaining} por fazer',
+    interruptedClassResumable: 'Pode continuar',
+    interruptedClassSafelyRestartable: 'Seguro executar de novo',
+    interruptedClassCompletedUnconfirmed: 'Provavelmente concluída',
+    interruptedClassNeedsIntervention: 'Precisa da sua decisão',
+    interruptedReasonNotStarted: 'A transferência ainda não tinha começado a copiar.',
+    interruptedReasonPartialUnfinished:
+      'Um ficheiro estava copiado a meio. O seu ficheiro temporário inacabado é removido antes de executar de novo.',
+    interruptedReasonPublishedUnconfirmed:
+      'Os ficheiros parecem estar no lugar, mas a transferência nunca confirmou que terminou.',
+    interruptedReasonSourceChanged:
+      'Um ficheiro de origem mudou depois de a transferência ser planeada.',
+    interruptedReasonSourceMissing: 'Um ficheiro de origem já não existe.',
+    interruptedReasonDestinationReplaced:
+      'Um ficheiro no destino foi substituído ou não corresponde à sua origem.',
+    interruptedReasonProviderUnavailable:
+      'Não foi possível aceder a uma localização para verificar a transferência.',
+    interruptedReasonJournalDamaged:
+      'O registo da transferência está danificado, por isso não se sabe até onde chegou.',
+    interruptedRunAgain: 'Executar de novo',
+    interruptedRunAgainAnyway: 'Executar de novo mesmo assim',
+    interruptedDiscard: 'Descartar',
+    interruptedConfirmDone: 'Marcar como concluída',
+    interruptedRunAgainHint:
+      'Os ficheiros temporários inacabados são removidos primeiro. Os itens já concluídos são ignorados.',
+    interruptedDiscardHint:
+      'Remove os ficheiros temporários inacabados e esquece esta transferência. Os ficheiros concluídos são mantidos.',
+    interruptedActionFailed: 'Não foi possível concluir essa ação. Tente novamente.',
+    interruptedToast:
+      'O Procyon foi interrompido durante a transferência de ficheiros. Abra o painel de operações para rever.',
     failureRecoveryLinkCycle:
       'A ligação apontaria para si própria ou para a pasta ascendente. Escolha outro destino.',
     kindRename: 'Renomear',
@@ -2311,6 +2344,8 @@ export const pt = {
   quickFilter: {
     placeholder: 'Filtro…',
     clear: 'Limpar filtro',
+    scopeOff: 'apenas esta pasta',
+    scopeOn: 'esta pasta e subpastas',
   },
   advancedFilter: {
     toggle: 'Filtro avançado',
