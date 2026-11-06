@@ -92,3 +92,40 @@
   outline-offset: 1px;
   color: inherit;
 }
+
+.fm-quick-filter-scope,
+.fm-quick-filter-match-mode {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.5rem;
+  min-width: 1.5rem;
+  padding: 0 0.25rem;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fm-text-muted);
+  cursor: pointer;
+}
+
+.fm-quick-filter-scope svg,
+.fm-quick-filter-match-mode svg {
+  width: 14px;
+  height: 14px;
+}
+
+.fm-quick-filter-scope:hover,
+.fm-quick-filter-scope[aria-pressed="true"],
+.fm-quick-filter-match-mode:hover,
+.fm-quick-filter-match-mode[aria-pressed="true"] {
+  color: inherit;
+  background: var(--fm-hover);
+}
+
+.fm-quick-filter-scope:focus-visible,
+.fm-quick-filter-match-mode:focus-visible {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: 1px;
+  color: inherit;
+}

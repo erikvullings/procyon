@@ -43,12 +43,21 @@ describe('fuzzyScore', () => {
     expect(defined(perfect, 'perfect matched')).toBeGreaterThan(defined(buried, 'buried matched'));
   });
 
-  it('rewards word boundaries', () => {
-    const atWord = fuzzyScore('fm', 'file_manager');
-    const midWord = fuzzyScore('fm', 'aardvarkform');
-    expect(atWord).not.toBeUndefined();
-    expect(midWord).not.toBeUndefined();
-    expect(defined(atWord, 'atWord matched')).toBeGreaterThan(defined(midWord, 'midWord matched'));
+  it('rewards a leading match within a token', () => {
+    const leading = fuzzyScore('math', 'mathematics'); // 'math' at the token start
+    const buried = fuzzyScore('math', 'xmathematics'); // 'math' buried after an extra char
+    expect(leading).not.toBeUndefined();
+    expect(buried).not.toBeUndefined();
+    expect(defined(leading, 'leading matched')).toBeGreaterThan(defined(buried, 'buried matched'));
+  });
+
+  it('matches a multi-word query against a joined name, in order', () => {
+    // 'file manager' -> tokens [file, manager] match [file, manager] of 'file_manager'.
+    expect(fuzzyMatches('file manager', 'file_manager')).toBe(true);
+    expect(fuzzyMatches('file manager', 'manager file')).toBe(false); // order matters
+    // A separators-only query matches nothing (see the guard in fuzzyScore).
+    expect(fuzzyScore(' ', 'anything here')).toBeUndefined();
+    expect(fuzzyMatches('  - ', 'anything here')).toBe(false);
   });
 
   it('is diacritic- and case-insensitive', () => {
@@ -85,14 +94,14 @@ describe('bestFuzzyMatch', () => {
 
 describe('rankFuzzyMatches', () => {
   it('orders best-first and drops non-matches', () => {
-    const names = ['appliance.pdf', 'phonograph.wav', 'photo.png', 'nomatch.xyz'];
-    const ranked = rankFuzzyMatches('op', names, (n) => n);
+    const names = ['appliance.pdf', 'phonograph.wav', 'photo.png', 'xyz.jpg'];
+    const ranked = rankFuzzyMatches('ph', names, (n) => n);
     expect(ranked).toContain('photo.png');
     expect(ranked).toContain('phonograph.wav');
-    expect(ranked).not.toContain('nomatch.xyz');
+    expect(ranked).not.toContain('xyz.jpg');
     expect(ranked).not.toContain('appliance.pdf');
     // Ordered best-first (non-increasing score), ties stable.
-    const scores = ranked.map((n) => defined(fuzzyScore('op', n), `op matches ${n}`));
+    const scores = ranked.map((n) => defined(fuzzyScore('ph', n), `ph matches ${n}`));
     expect(scores).toEqual([...scores].sort((a, b) => b - a));
   });
 });

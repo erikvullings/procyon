@@ -13,51 +13,86 @@ export function foldCase(input: string): string {
     .toLowerCase();
 }
 
-/** A single character is a word boundary when it isn't an ASCII alnum — the cheap token separator
- * fzf-style scorers use (covers `_`, `-`, `.`, space, `/`, start-of-string, etc.). */
-function isWordSeparator(char: string | undefined): boolean {
-  return char === undefined || !/[a-z0-9]/i.test(char);
+/** Split a folded name into alphanumeric tokens (any run of non-alphanumeric characters — spaces,
+ * `_`, `.`, `-`, `/`, … — is a boundary). Fuzzy matching is confined to word tokens so a query
+ * like `math` matches `mathematics` but not a name whose letters are scattered across unrelated
+ * words; a multi-word query (e.g. `file manager`) still matches token-by-token in order. */
+function foldedTokens(name: string): string[] {
+  const tokens: string[] = [];
+  let current = '';
+  for (const ch of name) {
+    if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) current += ch;
+    else if (current.length > 0) {
+      tokens.push(current);
+      current = '';
+    }
+  }
+  if (current.length > 0) tokens.push(current);
+  return tokens;
+}
+
+/** Score `query` as a subsequence of a single folded `token`, or `undefined` if it isn't one.
+ * Higher is better: base per match, plus leading / token-start / consecutive (burstiness) bonuses
+ * and a small capped gap penalty. */
+function scoreTokenSubsequence(query: string, token: string): number | undefined {
+  if (query.length === 0) return 0;
+  if (token.length === 0) return undefined;
+  let score = 0;
+  let qi = 0;
+  let previous = -2; // far enough back that the first match isn't treated as consecutive
+  for (let ti = 0; ti < token.length && qi < query.length; ti += 1) {
+    if (token[ti] !== query[qi]) continue;
+    score += 100;
+    if (qi === 0) score += 60; // leading bonus
+    if (ti === 0) score += 40; // token-start bonus
+    if (ti === previous + 1)
+      score += 30; // burstiness
+    else if (previous >= 0) score -= Math.min(ti - previous - 1, 12) * 3; // gap penalty
+    previous = ti;
+    qi += 1;
+  }
+  return qi === query.length ? score : undefined;
 }
 
 /**
- * Score of `query` against `name` treating `query` as a subsequence of `name`.
- *
- * Returns `undefined` when `query` is NOT a subsequence of `name` (no match). Otherwise a number
- * where **higher is better**:
- * - +100 per matched character;
- * - +60 when the very first query character matches at the start of the name (leading bonus);
- * - +40 when a matched character sits at a word boundary (so `fz` beats `x_f_z`);
- * - +30 burstiness when consecutive query characters land on consecutive name characters;
- * - a small gap penalty for jumps between non-consecutive matches.
- *
- * An empty query scores `0` against any name (matches everything equally, like a blank filter).
+ * Score of `query` against `name` treating `query` as a **token-wise subsequence**: `query` is
+ * split on separators into word tokens, and each must appear (as a subsequence) in a distinct
+ * name token, in order. So `entry-99999` matches `entry-99999` and `file manager` matches
+ * `file_manager`, but `math` still rejects a name whose letters are scattered across unrelated
+ * words (the old whole-name subsequence matched far too much). Returns `undefined` when no such
+ * alignment exists; otherwise a number where **higher is better** (the sum of the per-token
+ * scores, plus a bonus for query tokens landing in adjacent name tokens). An empty query scores `0`.
  */
 export function fuzzyScore(query: string, name: string): number | undefined {
   const q = foldCase(query);
   if (q.length === 0) return 0;
+  const queryTokens = foldedTokens(q);
+  // A non-empty query made only of separators (e.g. a lone space from a type-to-select keystroke)
+  // has no token to match, so it matches nothing - otherwise every entry would "match" vacuously.
+  if (queryTokens.length === 0) return undefined;
   const n = foldCase(name);
   if (n.length === 0) return undefined;
-
+  const nameTokens = foldedTokens(n);
   let score = 0;
   let qi = 0;
-  let previousMatch = -2; // far enough back that the first real match isn't treated as consecutive
-
-  for (let ni = 0; ni < n.length && qi < q.length; ni += 1) {
-    if (n[ni] !== q[qi]) continue;
-    const atWordStart = ni === 0 || isWordSeparator(n[ni - 1]);
-    score += 100;
-    if (qi === 0) score += 60; // leading bonus, only for the first query character
-    if (atWordStart) score += 40;
-    if (ni === previousMatch + 1)
-      score += 30; // burstiness
-    else if (previousMatch >= 0) score -= Math.min(ni - previousMatch - 1, 12) * 3; // gap penalty, capped
-    previousMatch = ni;
+  let lastNameToken = -10;
+  for (let ni = 0; ni < nameTokens.length; ni += 1) {
+    if (qi >= queryTokens.length) break;
+    const nameToken = nameTokens[ni];
+    const queryToken = queryTokens[qi];
+    if (nameToken === undefined || queryToken === undefined) continue;
+    const sub = scoreTokenSubsequence(queryToken, nameToken);
+    if (sub === undefined) continue;
+    score += sub;
+    if (ni === lastNameToken + 1) score += 20; // query tokens in adjacent name tokens
+    lastNameToken = ni;
     qi += 1;
   }
-  return qi === q.length ? score : undefined;
+  return qi === queryTokens.length ? score : undefined;
 }
 
-/** True when `query` fuzzy-matches `name` (empty query matches everything). */
+/** True when `query` fuzzy-matches `name` as a token-wise subsequence (see {@link fuzzyScore});
+ * an empty query matches everything. */
 export function fuzzyMatches(query: string, name: string): boolean {
   return fuzzyScore(query, name) !== undefined;
 }

@@ -8,6 +8,7 @@ import {
   searchIcon,
   sparklesIcon,
 } from '../../components/tabler-icons';
+import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import { FILE_CLIPBOARD_PASSTHROUGH_ATTRIBUTE, type QuickFilterMatchMode } from './quick-filter';
 import './quick-filter.css';
@@ -100,86 +101,92 @@ export const QuickFilterInput: FactoryComponent<QuickFilterInputAttrs> = () => {
         }),
         attrs.advanced === undefined
           ? undefined
-          : m(
-              'button.fm-quick-filter-advanced',
-              {
-                type: 'button',
-                'aria-label': t('advancedFilter', 'toggle'),
-                'aria-pressed': String(attrs.advanced.open),
-                title: t('advancedFilter', 'toggle'),
-                // Keep the text input's blur from committing before the panel opens.
-                onmousedown: (event: MouseEvent) => event.preventDefault(),
-                onclick: () => attrs.advanced?.onToggle(),
-                onkeydown: (event: KeyboardEvent) => {
-                  event.stopPropagation();
-                  if (event.key === 'Escape') {
-                    event.preventDefault();
-                    close(attrs);
-                  }
+          : tooltip(
+              t('advancedFilter', 'toggle'),
+              m(
+                'button.fm-quick-filter-advanced',
+                {
+                  type: 'button',
+                  'aria-label': t('advancedFilter', 'toggle'),
+                  'aria-pressed': String(attrs.advanced.open),
+                  // Keep the text input's blur from committing before the panel opens.
+                  onmousedown: (event: MouseEvent) => event.preventDefault(),
+                  onclick: () => attrs.advanced?.onToggle(),
+                  onkeydown: (event: KeyboardEvent) => {
+                    event.stopPropagation();
+                    if (event.key === 'Escape') {
+                      event.preventDefault();
+                      close(attrs);
+                    }
+                  },
                 },
-              },
-              [
-                adjustmentsHorizontalIcon({ size: 14 }),
-                attrs.advanced.activeCount > 0
-                  ? m('span.fm-quick-filter-advanced-count', String(attrs.advanced.activeCount))
-                  : undefined,
-              ],
+                [
+                  adjustmentsHorizontalIcon({ size: 14 }),
+                  attrs.advanced.activeCount > 0
+                    ? m('span.fm-quick-filter-advanced-count', String(attrs.advanced.activeCount))
+                    : undefined,
+                ],
+              ),
             ),
         attrs.scope === undefined
           ? undefined
-          : m(
-              'button.fm-quick-filter-scope',
-              {
-                type: 'button',
-                'aria-label': attrs.scope.recursive
-                  ? t('quickFilter', 'scopeOn')
-                  : t('quickFilter', 'scopeOff'),
-                'aria-pressed': String(attrs.scope.recursive),
-                title: attrs.scope.recursive
-                  ? t('quickFilter', 'scopeOn')
-                  : t('quickFilter', 'scopeOff'),
-                // Keep the text input's blur from committing before the toggle flips.
-                onmousedown: (event: MouseEvent) => event.preventDefault(),
-                onclick: () => attrs.scope?.onToggle(),
-              },
-              directoryTreeIcon({ size: 14 }),
+          : tooltip(
+              attrs.scope.recursive ? t('quickFilter', 'scopeOn') : t('quickFilter', 'scopeOff'),
+              m(
+                'button.fm-quick-filter-scope',
+                {
+                  type: 'button',
+                  'aria-label': attrs.scope.recursive
+                    ? t('quickFilter', 'scopeOn')
+                    : t('quickFilter', 'scopeOff'),
+                  'aria-pressed': String(attrs.scope.recursive),
+                  // Keep the text input's blur from committing before the toggle flips.
+                  onmousedown: (event: MouseEvent) => event.preventDefault(),
+                  onclick: () => attrs.scope?.onToggle(),
+                },
+                directoryTreeIcon({ size: 14 }),
+              ),
             ),
         attrs.matchMode === undefined || attrs.onToggleMatchMode === undefined
           ? undefined
-          : m(
-              'button.fm-quick-filter-match-mode',
-              {
-                type: 'button',
-                'aria-label': t(
-                  'quickFilter',
-                  attrs.matchMode === 'fuzzy' ? 'modeFuzzy' : 'modeContains',
-                ),
-                'aria-pressed': String(attrs.matchMode === 'fuzzy'),
-                title: t('quickFilter', attrs.matchMode === 'fuzzy' ? 'modeFuzzy' : 'modeContains'),
-                // Keep the text input's blur from committing before the toggle flips.
-                onmousedown: (event: MouseEvent) => event.preventDefault(),
-                onclick: () => attrs.onToggleMatchMode?.(),
-              },
-              attrs.matchMode === 'fuzzy' ? sparklesIcon({ size: 14 }) : searchIcon({ size: 14 }),
+          : tooltip(
+              t('quickFilter', attrs.matchMode === 'fuzzy' ? 'modeFuzzy' : 'modeContains'),
+              m(
+                'button.fm-quick-filter-match-mode',
+                {
+                  type: 'button',
+                  'aria-label': t(
+                    'quickFilter',
+                    attrs.matchMode === 'fuzzy' ? 'modeFuzzy' : 'modeContains',
+                  ),
+                  'aria-pressed': String(attrs.matchMode === 'fuzzy'),
+                  // Keep the text input's blur from committing before the toggle flips.
+                  onmousedown: (event: MouseEvent) => event.preventDefault(),
+                  onclick: () => attrs.onToggleMatchMode?.(),
+                },
+                attrs.matchMode === 'fuzzy' ? sparklesIcon({ size: 14 }) : searchIcon({ size: 14 }),
+              ),
             ),
-        m(
-          'button.fm-quick-filter-clear',
-          {
-            type: 'button',
-            'aria-label': t('quickFilter', 'clear'),
-            title: t('quickFilter', 'clear'),
-            // Keep focus in the input on pointer press so its blur doesn't commit before clearing.
-            onmousedown: (event: MouseEvent) => event.preventDefault(),
-            onclick: () => close(attrs),
-            onkeydown: (event: KeyboardEvent) => {
-              event.stopPropagation();
-              if (event.key === 'Escape') {
-                event.preventDefault();
-                close(attrs);
-              }
+        tooltip(
+          t('quickFilter', 'clear'),
+          m(
+            'button.fm-quick-filter-clear',
+            {
+              type: 'button',
+              'aria-label': t('quickFilter', 'clear'),
+              // Keep focus in the input on pointer press so its blur doesn't commit before clearing.
+              onmousedown: (event: MouseEvent) => event.preventDefault(),
+              onclick: () => close(attrs),
+              onkeydown: (event: KeyboardEvent) => {
+                event.stopPropagation();
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  close(attrs);
+                }
+              },
             },
-          },
-          closeIcon({ size: 14 }),
+            closeIcon({ size: 14 }),
+          ),
         ),
       ]),
   };
