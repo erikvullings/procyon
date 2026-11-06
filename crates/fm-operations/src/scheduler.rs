@@ -164,9 +164,10 @@ pub trait OperationProgressReporter: Send + Sync {
     fn report_bytes(&self, additional_bytes: u64);
     /// Reports a batch of completed entries without publishing one event per entry.
     fn report_items(&self, _additional_items: u64) {}
-    /// Announces the private partial destination now holding `source`'s bytes,
-    /// so a crash leaves a journal entry that owns it (task 0299).
-    fn note_partial(&self, _source: &Location, _partial: &Location) {}
+    /// Announces the private partial destination now holding `source`'s bytes, and
+    /// where the finished copy will be published, so a crash leaves a journal entry
+    /// that owns the partial (tasks 0299, 0300).
+    fn note_partial(&self, _source: &Location, _partial: &Location, _destination: &Location) {}
     /// Records what `source` looked like before it was transferred, so a later
     /// resume can prove the source did not change (task 0299).
     fn note_source_revision(&self, _source: &Location, _revision: SourceRevision) {}
@@ -322,13 +323,14 @@ impl OperationProgressReporter for ItemProgressReporter<'_> {
         self.journal.is_some()
     }
 
-    fn note_partial(&self, source: &Location, partial: &Location) {
+    fn note_partial(&self, source: &Location, partial: &Location, destination: &Location) {
         if let Some(journal) = self.journal {
             journal.journal.record(
                 journal.operation,
                 JournalEvent::Partial {
                     source: source.clone(),
                     partial: partial.clone(),
+                    destination: Some(destination.clone()),
                 },
             );
         }

@@ -149,6 +149,10 @@ pub enum JournalEvent {
         source: Location,
         /// Private, not-yet-published destination.
         partial: Location,
+        /// Where the finished copy will be published; recovery looks here to tell a
+        /// published-but-unconfirmed item from an unfinished one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        destination: Option<Location>,
     },
     /// The source revision observed before transferring `source`.
     SourceRevision {
@@ -212,6 +216,8 @@ pub struct RecoveredItem {
     pub bytes: u64,
     /// Last private partial destination announced for this item.
     pub partial: Option<Location>,
+    /// Where the item's finished copy is published, when announced.
+    pub destination: Option<Location>,
     /// Source revision observed before transferring.
     pub revision: Option<SourceRevision>,
     /// Whether the item's commit record survived.
@@ -658,15 +664,21 @@ fn apply(
                     source: item.source,
                     bytes: item.bytes,
                     partial: None,
+                    destination: None,
                     revision: None,
                     committed: false,
                     committed_bytes: 0,
                 });
             }
         }
-        JournalEvent::Partial { source, partial } => {
+        JournalEvent::Partial {
+            source,
+            partial,
+            destination,
+        } => {
             if let Some(item) = index.get(&source).and_then(|at| items.get_mut(*at)) {
                 item.partial = Some(partial);
+                item.destination = destination;
             }
         }
         JournalEvent::SourceRevision { source, revision } => {
@@ -725,6 +737,7 @@ mod tests {
             JournalEvent::Partial {
                 source: location("a"),
                 partial: location(".fm-copy-1"),
+                destination: Some(location("dest/a")),
             },
         );
         journal.record(
@@ -770,6 +783,7 @@ mod tests {
         let first = &job.items[0];
         assert!(first.committed && first.committed_bytes == 10);
         assert_eq!(first.partial, Some(location(".fm-copy-1")));
+        assert_eq!(first.destination, Some(location("dest/a")));
         assert_eq!(first.revision.as_ref().and_then(|r| r.size), Some(10));
         let second = &job.items[1];
         assert!(!second.committed && second.partial.is_none());

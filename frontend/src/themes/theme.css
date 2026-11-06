@@ -2608,6 +2608,71 @@ input[type="text"].fm-shortcuts-help-capture-input {
   color: var(--fm-text);
 }
 
+/* Transfers a crash or restart interrupted (task 0300). */
+.fm-interrupted-transfers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--fm-border);
+}
+
+.fm-interrupted-transfers h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.fm-interrupted-intro,
+.fm-interrupted-paths,
+.fm-interrupted-summary,
+.fm-interrupted-reason {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--fm-text-muted);
+}
+
+.fm-interrupted-paths {
+  overflow-wrap: anywhere;
+  font-family: var(--fm-font-mono);
+}
+
+.fm-interrupted-reason {
+  color: var(--fm-text);
+}
+
+.fm-interrupted-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fm-interrupted-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.4rem 0.6rem;
+  border-left: 3px solid var(--fm-warning);
+}
+
+.fm-interrupted-item[data-class="needsIntervention"] {
+  border-left-color: var(--fm-error);
+}
+
+.fm-interrupted-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.fm-interrupted-class {
+  font-size: 0.8rem;
+  color: var(--fm-text-muted);
+}
+
 .fm-operation-failure pre {
   margin: 0.25rem 0 0;
   white-space: pre-wrap;

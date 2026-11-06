@@ -3097,10 +3097,14 @@ impl CopyExecutor {
             // Task 0299: leave a record that owns this private partial and says
             // what the source looked like. A failed `stat` only costs the
             // revision; it never fails the copy.
-            if let Ok(summary) = self
-                .source_provider
-                .inspect(&item.entry, cancellation.clone())
-                .await
+            // Local sources are never resumed (a restart is always cheap and safe), so
+            // only remote ones pay for the revision `stat`.
+            let remote_source = item.entry.location.provider_id.as_str() != "local";
+            if remote_source
+                && let Ok(summary) = self
+                    .source_provider
+                    .inspect(&item.entry, cancellation.clone())
+                    .await
             {
                 progress.note_source_revision(
                     &item.entry.location,
@@ -3111,7 +3115,7 @@ impl CopyExecutor {
                     },
                 );
             }
-            progress.note_partial(&item.entry.location, &temporary);
+            progress.note_partial(&item.entry.location, &temporary, final_destination);
         }
         // Task 0108: the planner picked the strategy from both sides'
         // capabilities and endpoints; execution never re-derives it.
@@ -5212,7 +5216,7 @@ mod tests {
     #[derive(Default)]
     struct JournalingReporter {
         enabled: bool,
-        partials: Mutex<Vec<(Location, Location)>>,
+        partials: Mutex<Vec<(Location, Location, Location)>>,
         revisions: Mutex<Vec<(Location, SourceRevision)>>,
     }
 
@@ -5223,11 +5227,12 @@ mod tests {
             self.enabled
         }
 
-        fn note_partial(&self, source: &Location, partial: &Location) {
-            self.partials
-                .lock()
-                .unwrap()
-                .push((source.clone(), partial.clone()));
+        fn note_partial(&self, source: &Location, partial: &Location, destination: &Location) {
+            self.partials.lock().unwrap().push((
+                source.clone(),
+                partial.clone(),
+                destination.clone(),
+            ));
         }
 
         fn note_source_revision(&self, source: &Location, revision: SourceRevision) {
@@ -5281,11 +5286,12 @@ mod tests {
         (source_location, destination_path)
     }
 
-    /// Task 0299: while journaling, a copy announces the source's revision and
-    /// the private `.fm-copy-*` partial it is about to write, so a crash leaves
-    /// a record that owns the partial.
+    /// Tasks 0299/0300: while journaling, a copy announces the private `.fm-copy-*`
+    /// partial it is about to write and where it will publish the result, so a
+    /// crash leaves a record that owns the partial. A local source skips the
+    /// revision `stat`: local transfers are never resumed.
     #[tokio::test]
-    async fn copy_file_announces_its_partial_and_source_revision_when_journaling() {
+    async fn copy_file_announces_its_partial_and_destination_when_journaling() {
         let reporter = JournalingReporter {
             enabled: true,
             ..JournalingReporter::default()
@@ -5301,14 +5307,18 @@ mod tests {
             "partial is the private temporary: {partial_uri}"
         );
         assert!(
-            !destination.join("source.bin").to_string_lossy().is_empty()
-                && destination.join("source.bin").exists(),
+            partials[0].2.uri.ends_with("/source.bin"),
+            "the announced destination is the published name: {}",
+            partials[0].2.uri
+        );
+        assert!(
+            destination.join("source.bin").exists(),
             "the copy still publishes its final destination"
         );
-        let revisions = reporter.revisions.lock().unwrap();
-        assert_eq!(revisions.len(), 1);
-        assert_eq!(revisions[0].1.size, Some(17));
-        assert!(revisions[0].1.modified_at_ms.is_some());
+        assert!(
+            reporter.revisions.lock().unwrap().is_empty(),
+            "a local source is not stat-ed for a revision"
+        );
     }
 
     /// Task 0299: without a journal the copy does no extra work and announces

@@ -90,6 +90,7 @@ import type {
   InspectAttributesResult,
   InspectSplitSetResult,
   InstallSemanticWorkerPatchRequest,
+  InterruptedTransfers,
   InvokeActionRequest,
   KnowledgeAnswer,
   KnowledgeCapabilities,
@@ -308,6 +309,9 @@ import {
   readImageMetadata as requestImageMetadata,
   inspectAttributes as requestInspectAttributes,
   inspectSplitSet as requestInspectSplitSet,
+  discardInterruptedTransfer as requestInterruptedTransferDiscard,
+  restartInterruptedTransfer as requestInterruptedTransferRestart,
+  listInterruptedTransfers as requestInterruptedTransfers,
   cancelKnowledgeAnswer as requestKnowledgeAnswerCancellation,
   generateKnowledgeAnswer as requestKnowledgeAnswerGeneration,
   getKnowledgeCapabilities as requestKnowledgeCapabilities,
@@ -1970,6 +1974,40 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     return response.data.operations.map(operationFromDto);
+  }
+
+  async listInterruptedTransfers(signal?: AbortSignal): Promise<InterruptedTransfers> {
+    const response = await requestInterruptedTransfers(
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw unexpectedResponseError('listInterruptedTransfers', response.status);
+    }
+    return response.data;
+  }
+
+  async restartInterruptedTransfer(
+    operationId: OperationId,
+    signal?: AbortSignal,
+  ): Promise<Operation> {
+    const response = await requestInterruptedTransferRestart(
+      operationId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 201) {
+      throw unexpectedResponseError('restartInterruptedTransfer', response.status);
+    }
+    return operationFromDto(response.data);
+  }
+
+  async discardInterruptedTransfer(operationId: OperationId, signal?: AbortSignal): Promise<void> {
+    const response = await requestInterruptedTransferDiscard(
+      operationId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204) {
+      throw unexpectedResponseError('discardInterruptedTransfer', response.status);
+    }
   }
 
   async cancelOperation(operationId: OperationId, signal?: AbortSignal): Promise<void> {

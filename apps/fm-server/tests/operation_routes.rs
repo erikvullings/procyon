@@ -141,9 +141,52 @@ fn openapi_reserves_all_stable_operation_ids() {
         "pauseOperation",
         "resumeOperation",
         "resolveOperationConflict",
+        "listInterruptedTransfers",
+        "restartInterruptedTransfer",
+        "discardInterruptedTransfer",
     ] {
         assert!(text.contains(operation_id), "missing {operation_id}");
     }
+}
+
+#[tokio::test]
+async fn interrupted_transfer_routes_list_nothing_and_reject_unknown_ids() {
+    // A fresh server has no journal left over from a crash (task 0300).
+    let server = common::TestServer::spawn().await;
+    let client = reqwest::Client::new();
+    let listed: serde_json::Value = client
+        .get(format!("{}/api/v1/operations/interrupted", server.base_url))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(listed["transfers"], json!([]));
+
+    let unknown = uuid::Uuid::new_v4();
+    for action in ["restart", "discard"] {
+        let response = client
+            .post(format!(
+                "{}/api/v1/operations/interrupted/{unknown}/{action}",
+                server.base_url
+            ))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 404, "{action} of an unknown transfer");
+    }
+    let malformed = client
+        .post(format!(
+            "{}/api/v1/operations/interrupted/not-a-uuid/restart",
+            server.base_url
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(malformed.status(), 400);
 }
 
 #[tokio::test]

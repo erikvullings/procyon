@@ -88,6 +88,7 @@ import type {
   InspectAttributesResult,
   InspectSplitSetResult,
   InstallSemanticWorkerPatchRequest,
+  InterruptedTransfers,
   InvokeActionRequest,
   KnowledgeAnswer,
   KnowledgeCapabilities,
@@ -868,6 +869,15 @@ export class MockFileManagerClient implements FileManagerClient {
   }
   listOperations(signal?: AbortSignal): Promise<Operation[]> {
     return this.operationClient.listOperations(signal);
+  }
+  listInterruptedTransfers(signal?: AbortSignal): Promise<InterruptedTransfers> {
+    return this.operationClient.listInterruptedTransfers(signal);
+  }
+  restartInterruptedTransfer(operationId: OperationId, signal?: AbortSignal): Promise<Operation> {
+    return this.operationClient.restartInterruptedTransfer(operationId, signal);
+  }
+  discardInterruptedTransfer(operationId: OperationId, signal?: AbortSignal): Promise<void> {
+    return this.operationClient.discardInterruptedTransfer(operationId, signal);
   }
   cancelOperation(operationId: OperationId, signal?: AbortSignal): Promise<void> {
     return this.operationClient.cancelOperation(operationId, signal);

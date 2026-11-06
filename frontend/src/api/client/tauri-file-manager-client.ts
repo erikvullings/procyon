@@ -99,6 +99,7 @@ import type {
   InspectAttributesResult,
   InspectSplitSetResult,
   InstallSemanticWorkerPatchRequest,
+  InterruptedTransfers,
   InvokeActionRequest,
   KnowledgeAnswer,
   KnowledgeCapabilities,
@@ -1338,6 +1339,23 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   async listOperations(_signal?: AbortSignal): Promise<Operation[]> {
     return (await invoke<OperationDto[]>('list_operations')).map(operationFromDto);
+  }
+
+  async listInterruptedTransfers(_signal?: AbortSignal): Promise<InterruptedTransfers> {
+    return invoke<InterruptedTransfers>('list_interrupted_transfers');
+  }
+
+  async restartInterruptedTransfer(
+    operationId: OperationId,
+    _signal?: AbortSignal,
+  ): Promise<Operation> {
+    return operationFromDto(
+      await invoke<OperationDto>('restart_interrupted_transfer', { operationId }),
+    );
+  }
+
+  async discardInterruptedTransfer(operationId: OperationId, _signal?: AbortSignal): Promise<void> {
+    await invoke('discard_interrupted_transfer', { operationId });
   }
 
   async cancelOperation(operationId: OperationId, _signal?: AbortSignal): Promise<void> {

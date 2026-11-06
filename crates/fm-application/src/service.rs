@@ -34,14 +34,14 @@ use fm_transport_dto::{
     DiscoverApplicationUninstallCandidatesResponseDto, DuplicatePageDto, EntryMetadataRequest,
     FinderTagsDto, GenerateRagAnswerRequestDto, GenerateRagAnswerResponseDto,
     GenerateSyncPlanRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
-    InvokeActionRequestDto, LinkOptionsDto, LinkOptionsRequestDto, ListDirectoryRequest,
-    LlmModelLimitsDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto,
-    LlmProfileTestResultDto, NavigateRequest, OperationDto, PluginDescriptorDto, PluginLogEntryDto,
-    PreviewRagRequestDto, RagPreviewDto, RagScopeDto, RagScopeKindDto, ReadFileRangeRequestDto,
-    ReadFileRangeResponseDto, RemoveApplicationDockIconRequestDto,
-    RemoveApplicationDockIconResponseDto, RenderChecksumFileRequestDto,
-    ResolveOperationConflictRequestDto, ResolveRagCitationRequestDto, ResolvedRagCitationDto,
-    RuntimeCapabilitiesDto, RuntimeKindDto, SaveLlmProfileRequestDto,
+    InterruptedTransfersDto, InvokeActionRequestDto, LinkOptionsDto, LinkOptionsRequestDto,
+    ListDirectoryRequest, LlmModelLimitsDto, LlmProfileDto, LlmProfileExportDto,
+    LlmProfilePresetDto, LlmProfileTestResultDto, NavigateRequest, OperationDto,
+    PluginDescriptorDto, PluginLogEntryDto, PreviewRagRequestDto, RagPreviewDto, RagScopeDto,
+    RagScopeKindDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
+    RemoveApplicationDockIconRequestDto, RemoveApplicationDockIconResponseDto,
+    RenderChecksumFileRequestDto, ResolveOperationConflictRequestDto, ResolveRagCitationRequestDto,
+    ResolvedRagCitationDto, RuntimeCapabilitiesDto, RuntimeKindDto, SaveLlmProfileRequestDto,
     SaveRagConversationRequestDto, SavedRagConversationDto, SearchInFileRequestDto,
     SearchInFileResponseDto, SetPaneActivityRequest, SettingsDto, SpotlightCommentDto,
     StartChecksumRequestDto, StartChecksumResponseDto, StartComparisonRequestDto,
@@ -255,6 +255,7 @@ pub struct FileManagerService {
     settings: Arc<Mutex<Settings>>,
     plugin_manager: PluginManager,
     operations: OperationsCoordinator,
+    transfer_recovery: crate::transfer_recovery::TransferRecoveryCoordinator,
     action_invoker: ActionInvoker,
     search_comparison: SearchComparisonCoordinator,
     checksums: ChecksumCoordinator,
@@ -483,7 +484,7 @@ impl FileManagerService {
         }
         let operation_concurrency = loaded.settings.operation_concurrency;
         let operation_history = Arc::new(OperationHistory::load(&settings_directory));
-        let transfer_journal = open_transfer_journal(&settings_directory);
+        let (transfer_journal, interrupted_transfers) = open_transfer_journal(&settings_directory);
         let directories = DirectoryService::with_event_bus(providers.clone(), events.clone());
         let operation_observer = Arc::new(ApplicationOperationObserver::new(
             operation_history.clone(),
@@ -602,6 +603,11 @@ impl FileManagerService {
             onedrive_token_resolver,
             onedrive_config,
         );
+        let transfer_recovery = crate::transfer_recovery::TransferRecoveryCoordinator::new(
+            providers.clone(),
+            transfer_journal.clone(),
+            interrupted_transfers,
+        );
         Self {
             runtime,
             fresh_install,
@@ -639,6 +645,7 @@ impl FileManagerService {
             settings_store: settings_store.clone(),
             settings: settings_mutex.clone(),
             plugin_manager,
+            transfer_recovery,
             operations: OperationsCoordinator::new(
                 with_transfer_journal(
                     Scheduler::new(operation_concurrency, events).with_observer(operation_observer),
@@ -3156,6 +3163,52 @@ impl FileManagerService {
         self.operations.start(request, idempotency_key)
     }
 
+    /// Lists transfers the previous process left queued or running, each with what is safe to
+    /// do about it (task 0300). Re-checks the providers on every call.
+    pub async fn list_interrupted_transfers(&self) -> InterruptedTransfersDto {
+        self.transfer_recovery.list().await
+    }
+
+    /// The locations an interrupted transfer was asked to touch, read from its stored intent
+    /// without probing any provider, so a host can authorise an action on it cheaply (task 0300).
+    #[must_use]
+    pub fn interrupted_transfer_locations(
+        &self,
+        id: &str,
+    ) -> Option<(
+        Vec<fm_transport_dto::LocationDto>,
+        Option<fm_transport_dto::LocationDto>,
+    )> {
+        let id = parse_interrupted_id(id).ok()?;
+        self.transfer_recovery
+            .intent_locations(id)
+            .map(|(sources, destination)| {
+                (
+                    sources.into_iter().map(Into::into).collect(),
+                    destination.map(Into::into),
+                )
+            })
+    }
+
+    /// Runs an interrupted transfer's unfinished work again as a new operation (task 0300).
+    pub async fn restart_interrupted_transfer(
+        &self,
+        id: &str,
+    ) -> Result<OperationDto, ApplicationError> {
+        let id = parse_interrupted_id(id)?;
+        self.transfer_recovery
+            .restart(id, |request| self.operations.start(request, None))
+            .await
+    }
+
+    /// Acknowledges an interrupted transfer: removes its private partials and its record,
+    /// leaving published files alone (task 0300).
+    pub async fn discard_interrupted_transfer(&self, id: &str) -> Result<(), ApplicationError> {
+        self.transfer_recovery
+            .discard(parse_interrupted_id(id)?)
+            .await
+    }
+
     /// Lists active and retained historical operation snapshots.
     #[must_use]
     pub fn list_operations(&self) -> Vec<OperationDto> {
@@ -4924,7 +4977,12 @@ pub(crate) fn rag_scope_selection(
 /// Jobs a previous process left queued or running are only logged here: deciding
 /// whether to resume, restart or ask is task 0300, and their files stay in place
 /// until then. A journal that cannot be opened degrades recovery, never startup.
-fn open_transfer_journal(settings_directory: &Path) -> Option<Arc<dyn OperationJournal>> {
+fn open_transfer_journal(
+    settings_directory: &Path,
+) -> (
+    Option<Arc<dyn OperationJournal>>,
+    Vec<fm_operations::journal::RecoveredJob>,
+) {
     match FileOperationJournal::open(settings_directory.join("transfer-journal")) {
         Ok((journal, recovery)) => {
             for job in &recovery.jobs {
@@ -4944,13 +5002,18 @@ fn open_transfer_journal(settings_directory: &Path) -> Option<Arc<dyn OperationJ
                     "unreadable transfer journal set aside"
                 );
             }
-            Some(Arc::new(journal))
+            (Some(Arc::new(journal)), recovery.jobs)
         }
         Err(error) => {
             tracing::warn!(%error, "transfer journal unavailable; interrupted transfers cannot be recovered");
-            None
+            (None, Vec::new())
         }
     }
+}
+
+fn parse_interrupted_id(id: &str) -> Result<fm_domain::OperationId, ApplicationError> {
+    id.parse()
+        .map_err(|_| ApplicationError::InvalidRequest("invalid transfer id".into()))
 }
 
 fn with_transfer_journal(

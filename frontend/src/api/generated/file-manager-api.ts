@@ -100,6 +100,7 @@ import type {
   InspectSplitSetRequestDto,
   InspectSplitSetResponseDto,
   InstallSemanticWorkerPatchRequestDto,
+  InterruptedTransfersDto,
   InvokeActionRequestDto,
   KnowledgeAnswerDto,
   KnowledgeCapabilitiesDto,
@@ -6189,6 +6190,150 @@ return fetchMutator<startOperationResponse>(getStartOperationUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(startOperationRequestDto)
+  }
+);}
+
+
+
+export type listInterruptedTransfersResponse200 = {
+  data: InterruptedTransfersDto
+  status: 200
+}
+
+export type listInterruptedTransfersResponseSuccess = (listInterruptedTransfersResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listInterruptedTransfersResponse = (listInterruptedTransfersResponseSuccess)
+
+export const getListInterruptedTransfersUrl = () => {
+
+
+
+
+  return `/api/v1/operations/interrupted`
+}
+
+/**
+ * @summary Lists transfers the previous process left queued or running, with what is safe to do about
+each (task 0300). In browser/server mode only transfers wholly inside the accessible roots
+are listed.
+ */
+export const listInterruptedTransfers = async ( options?: Parameters<typeof fetchMutator>[1]): Promise<listInterruptedTransfersResponse> => {
+
+  return fetchMutator<listInterruptedTransfersResponse>(getListInterruptedTransfersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type discardInterruptedTransferResponse204 = {
+  data: void
+  status: 204
+}
+
+export type discardInterruptedTransferResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type discardInterruptedTransferResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type discardInterruptedTransferResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type discardInterruptedTransferResponseSuccess = (discardInterruptedTransferResponse204) & {
+  headers: Headers;
+};
+export type discardInterruptedTransferResponseError = (discardInterruptedTransferResponse400 | discardInterruptedTransferResponse403 | discardInterruptedTransferResponse404) & {
+  headers: Headers;
+};
+
+export type discardInterruptedTransferResponse = (discardInterruptedTransferResponseSuccess | discardInterruptedTransferResponseError)
+
+export const getDiscardInterruptedTransferUrl = (operationId: string,) => {
+
+
+
+
+  return `/api/v1/operations/interrupted/${operationId}/discard`
+}
+
+/**
+ * @summary Acknowledges an interrupted transfer: removes its private partials and its record (task 0300).
+ */
+export const discardInterruptedTransfer = async (operationId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<discardInterruptedTransferResponse> => {
+
+  return fetchMutator<discardInterruptedTransferResponse>(getDiscardInterruptedTransferUrl(operationId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type restartInterruptedTransferResponse201 = {
+  data: OperationDto
+  status: 201
+}
+
+export type restartInterruptedTransferResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type restartInterruptedTransferResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type restartInterruptedTransferResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type restartInterruptedTransferResponseSuccess = (restartInterruptedTransferResponse201) & {
+  headers: Headers;
+};
+export type restartInterruptedTransferResponseError = (restartInterruptedTransferResponse400 | restartInterruptedTransferResponse403 | restartInterruptedTransferResponse404) & {
+  headers: Headers;
+};
+
+export type restartInterruptedTransferResponse = (restartInterruptedTransferResponseSuccess | restartInterruptedTransferResponseError)
+
+export const getRestartInterruptedTransferUrl = (operationId: string,) => {
+
+
+
+
+  return `/api/v1/operations/interrupted/${operationId}/restart`
+}
+
+/**
+ * @summary Runs an interrupted transfer's unfinished work again as a new operation (task 0300).
+ */
+export const restartInterruptedTransfer = async (operationId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<restartInterruptedTransferResponse> => {
+
+  return fetchMutator<restartInterruptedTransferResponse>(getRestartInterruptedTransferUrl(operationId),
+  {
+    ...options,
+    method: 'POST'
+
+
   }
 );}
 

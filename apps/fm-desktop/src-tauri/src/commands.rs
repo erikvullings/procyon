@@ -2606,6 +2606,37 @@ pub(crate) async fn get_link_options(
         .await
         .map_err(|e| e.into_dto(Uuid::new_v4()))
 }
+/// Lists interrupted transfers, same as `GET /api/v1/operations/interrupted` (task 0300).
+#[tauri::command]
+pub(crate) async fn list_interrupted_transfers(
+    state: State<'_, AppState>,
+) -> Result<fm_transport_dto::InterruptedTransfersDto, ApplicationErrorDto> {
+    Ok(state.service.list_interrupted_transfers().await)
+}
+/// Restarts an interrupted transfer, same as `POST /api/v1/operations/interrupted/{id}/restart`.
+#[tauri::command]
+pub(crate) async fn restart_interrupted_transfer(
+    state: State<'_, AppState>,
+    operation_id: String,
+) -> Result<OperationDto, ApplicationErrorDto> {
+    state
+        .service
+        .restart_interrupted_transfer(&operation_id)
+        .await
+        .map_err(|e| e.into_dto(Uuid::new_v4()))
+}
+/// Discards an interrupted transfer, same as `POST /api/v1/operations/interrupted/{id}/discard`.
+#[tauri::command]
+pub(crate) async fn discard_interrupted_transfer(
+    state: State<'_, AppState>,
+    operation_id: String,
+) -> Result<(), ApplicationErrorDto> {
+    state
+        .service
+        .discard_interrupted_transfer(&operation_id)
+        .await
+        .map_err(|e| e.into_dto(Uuid::new_v4()))
+}
 /// Lists operation snapshots through the shared service.
 #[tauri::command]
 pub(crate) fn list_operations(state: State<'_, AppState>) -> Vec<OperationDto> {

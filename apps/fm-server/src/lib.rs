@@ -274,6 +274,15 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::workspace::list_workspaces))
         .routes(utoipa_axum::routes!(routes::workspace::start_workspace))
         .routes(utoipa_axum::routes!(routes::operation::list_operations))
+        .routes(utoipa_axum::routes!(
+            routes::operation::list_interrupted_transfers
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::operation::restart_interrupted_transfer
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::operation::discard_interrupted_transfer
+        ))
         .routes(utoipa_axum::routes!(routes::operation::start_operation))
         .routes(utoipa_axum::routes!(routes::operation::get_link_options))
         .routes(utoipa_axum::routes!(

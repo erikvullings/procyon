@@ -12,6 +12,7 @@ import type {
   FindLinkReplacementsRequest,
   FindLinkReplacementsResult,
   GenerateSyncPlanRequest,
+  InterruptedTransfers,
   LinkDoctorPage,
   LinkOptions,
   LinkOptionsRequest,
@@ -156,6 +157,15 @@ export interface OperationClient {
   ): Promise<SnapshotJobPage>;
 
   listOperations(signal?: AbortSignal): Promise<Operation[]>;
+
+  /** Transfers the previous process left queued or running, with what is safe to do (task 0300). */
+  listInterruptedTransfers(signal?: AbortSignal): Promise<InterruptedTransfers>;
+
+  /** Runs an interrupted transfer's unfinished work again as a new operation. */
+  restartInterruptedTransfer(operationId: OperationId, signal?: AbortSignal): Promise<Operation>;
+
+  /** Acknowledges an interrupted transfer: removes its private partials and its record. */
+  discardInterruptedTransfer(operationId: OperationId, signal?: AbortSignal): Promise<void>;
 
   pauseOperation(operationId: OperationId, signal?: AbortSignal): Promise<void>;
 

@@ -10,6 +10,7 @@ import { reduceSelection } from '../features/selection/selection';
 import { dispatchWorkspaceCommand } from '../features/workspace/dispatch-workspace-command';
 import { t } from '../i18n';
 import type {
+  InterruptedTransfer,
   Location,
   Operation,
   OperationId,
@@ -423,6 +424,60 @@ export function createOperationsWiring(state: ShellState, core: OperationsCore) 
     });
   }
 
+  /**
+   * Loads what the previous session left interrupted (task 0300). The startup load tells the user
+   * once; a reload after a failed action only refreshes the list, so a stale row (another window
+   * already handled it) disappears instead of lingering behind an error.
+   */
+  function loadInterruptedTransfers(announce = true): void {
+    void state.client
+      .listInterruptedTransfers()
+      .then(({ transfers }) => {
+        if (state.removed) return;
+        state.interruptedTransfers = transfers;
+        if (announce && transfers.length > 0) {
+          toast({ html: t('operation', 'interruptedToast') });
+        }
+        m.redraw();
+      })
+      .catch(() => undefined);
+  }
+
+  function withoutInterruptedTransfer(operationId: OperationId): readonly InterruptedTransfer[] {
+    return state.interruptedTransfers.filter((transfer) => transfer.operationId !== operationId);
+  }
+
+  async function settleInterruptedTransfer(
+    operationId: OperationId,
+    act: () => Promise<unknown>,
+  ): Promise<void> {
+    state.interruptedTransferBusyId = operationId;
+    state.interruptedTransferError = undefined;
+    try {
+      await act();
+      state.interruptedTransfers = withoutInterruptedTransfer(operationId);
+    } catch {
+      state.interruptedTransferError = t('operation', 'interruptedActionFailed');
+      loadInterruptedTransfers(false);
+    } finally {
+      state.interruptedTransferBusyId = undefined;
+      m.redraw();
+    }
+  }
+
+  function restartInterruptedTransfer(operationId: OperationId): void {
+    void settleInterruptedTransfer(operationId, async () => {
+      const restarted = await state.client.restartInterruptedTransfer(operationId);
+      state.operations = mergeOperationHistory(state.operations, [restarted]);
+    });
+  }
+
+  function discardInterruptedTransfer(operationId: OperationId): void {
+    void settleInterruptedTransfer(operationId, () =>
+      state.client.discardInterruptedTransfer(operationId),
+    );
+  }
+
   function toggleOperationCentre(): void {
     setOperationCentreVisible(state.workspace?.operationCentre.visible !== true);
   }
@@ -444,6 +499,9 @@ export function createOperationsWiring(state: ShellState, core: OperationsCore) 
   }
 
   return {
+    loadInterruptedTransfers,
+    restartInterruptedTransfer,
+    discardInterruptedTransfer,
     rememberDismissedOperation,
     clearDismissedOperation,
     scheduleAutoDismiss,

@@ -37,4 +37,5 @@ export * from './settings';
 export * from './snapshot';
 export * from './snapshots';
 export * from './split';
+export * from './transfer-recovery';
 export * from './workspace';

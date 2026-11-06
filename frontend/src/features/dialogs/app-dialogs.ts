@@ -5,6 +5,7 @@ import type {
   Connection,
   ConnectionId,
   EntrySummary,
+  InterruptedTransfer,
   Location,
   OperationConflict,
   OperationId,
@@ -121,6 +122,11 @@ export interface AppDialogsContext {
   rememberDismissedOperation(operationId: OperationId): void;
   hasDismissedOperations(): boolean;
   showAllOperations(): void;
+  getInterruptedTransfers(): readonly InterruptedTransfer[];
+  getInterruptedTransferBusyId(): OperationId | undefined;
+  getInterruptedTransferError(): string | undefined;
+  restartInterruptedTransfer(operationId: OperationId): void;
+  discardInterruptedTransfer(operationId: OperationId): void;
   refetchAffectedPanes(): void;
   redraw(): void;
 }
@@ -242,6 +248,13 @@ export function renderAppDialogs(
           },
           hasDismissedOperations: ctx.hasDismissedOperations(),
           onShowAll: () => ctx.showAllOperations(),
+          interrupted: {
+            transfers: ctx.getInterruptedTransfers(),
+            busyId: ctx.getInterruptedTransferBusyId(),
+            error: ctx.getInterruptedTransferError(),
+            onRestart: (operationId) => ctx.restartInterruptedTransfer(operationId),
+            onDiscard: (operationId) => ctx.discardInterruptedTransfer(operationId),
+          },
         })
       : undefined,
     m(CreateDirectoryDialog, {

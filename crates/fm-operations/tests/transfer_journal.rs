@@ -120,6 +120,7 @@ impl OperationExecutor for TransferExecutor {
         progress.note_partial(
             &item.entry.location,
             &location(&format!("file:///dest/.fm-copy-{index}")),
+            &location(&format!("file:///dest/{index}")),
         );
         if index == 1 {
             if self.block_second {

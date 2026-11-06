@@ -4882,6 +4882,135 @@
         }
       }
     },
+    "/api/v1/operations/interrupted": {
+      "get": {
+        "summary": "Lists transfers the previous process left queued or running, with what is safe to do about\neach (task 0300). In browser/server mode only transfers wholly inside the accessible roots\nare listed.",
+        "operationId": "listInterruptedTransfers",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterruptedTransfersDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/operations/interrupted/{operationId}/discard": {
+      "post": {
+        "summary": "Acknowledges an interrupted transfer: removes its private partials and its record (task 0300).",
+        "operationId": "discardInterruptedTransfer",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/operations/interrupted/{operationId}/restart": {
+      "post": {
+        "summary": "Runs an interrupted transfer's unfinished work again as a new operation (task 0300).",
+        "operationId": "restartInterruptedTransfer",
+        "parameters": [
+          {
+            "name": "operationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/operations/transfer-conflicts": {
       "post": {
         "summary": "Lists the sources of a planned copy/move whose names already exist in the destination, so\nthe confirmation can offer a conflict policy before the job starts (task 0062).",
@@ -15232,6 +15361,110 @@
           "active",
           "rollback"
         ]
+      },
+      "InterruptedTransferDto": {
+        "type": "object",
+        "description": "One transfer that was queued or running when the previous process stopped.",
+        "required": [
+          "operationId",
+          "kind",
+          "createdAt",
+          "class",
+          "reason",
+          "sources",
+          "totalItems",
+          "committedItems",
+          "unconfirmedItems",
+          "partialItems",
+          "remainingItems"
+        ],
+        "properties": {
+          "class": {
+            "$ref": "#/components/schemas/TransferRecoveryClassDto",
+            "description": "What can safely be done with it."
+          },
+          "committedItems": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Items confirmed finished.",
+            "minimum": 0
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the job was accepted."
+          },
+          "destination": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LocationDto",
+                "description": "Requested destination, if any."
+              }
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/OperationKindDto",
+            "description": "What the job was doing."
+          },
+          "operationId": {
+            "type": "string",
+            "description": "Identifier of the interrupted job."
+          },
+          "partialItems": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Private partial destinations that still exist.",
+            "minimum": 0
+          },
+          "reason": {
+            "$ref": "#/components/schemas/TransferRecoveryReasonDto",
+            "description": "Why it was classified this way."
+          },
+          "remainingItems": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Items that still have to run.",
+            "minimum": 0
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocationDto"
+            },
+            "description": "Requested sources."
+          },
+          "totalItems": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Items the job had planned.",
+            "minimum": 0
+          },
+          "unconfirmedItems": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Items that look published but were never confirmed.",
+            "minimum": 0
+          }
+        }
+      },
+      "InterruptedTransfersDto": {
+        "type": "object",
+        "description": "The interrupted transfers awaiting a decision.",
+        "required": [
+          "transfers"
+        ],
+        "properties": {
+          "transfers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InterruptedTransferDto"
+            },
+            "description": "Interrupted transfers, oldest first."
+          }
+        }
       },
       "InvokeActionRequestDto": {
         "type": "object",
@@ -27454,6 +27687,30 @@
             "description": "Entries that would be copied or moved."
           }
         }
+      },
+      "TransferRecoveryClassDto": {
+        "type": "string",
+        "description": "What can safely be done with an interrupted transfer.",
+        "enum": [
+          "resumable",
+          "safelyRestartable",
+          "completedUnconfirmed",
+          "needsIntervention"
+        ]
+      },
+      "TransferRecoveryReasonDto": {
+        "type": "string",
+        "description": "Why an interrupted transfer was classified the way it was.",
+        "enum": [
+          "notStarted",
+          "partialUnfinished",
+          "publishedUnconfirmed",
+          "sourceChanged",
+          "sourceMissing",
+          "destinationReplaced",
+          "providerUnavailable",
+          "journalDamaged"
+        ]
       },
       "UninstallSemanticComponentsRequestDto": {
         "type": "object",

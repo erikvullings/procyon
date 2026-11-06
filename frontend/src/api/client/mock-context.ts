@@ -16,6 +16,7 @@ import type {
   ExecuteKnowledgeSearchRequest,
   FinderTags,
   FrontendDiagnostic,
+  InterruptedTransfer,
   KnowledgeScope,
   KnowledgeSearchPlan,
   ListDirectoryRequest,
@@ -162,6 +163,8 @@ export class MockContext {
   readonly scriptedEvents: BackendEvent[] = [];
 
   readonly operations = new Map<OperationId, Operation>();
+  /** Transfers a pretend crash left behind; empty unless a test or demo seeds it. */
+  readonly interruptedTransfers = new Map<OperationId, InterruptedTransfer>();
 
   readonly navigationHistory = new Map<string, { back: Location[]; forward: Location[] }>();
 

@@ -14,6 +14,7 @@ import {
   type EntryFormatSettings,
   formatEntrySize,
 } from '../entry-formatting/entry-formatting';
+import { InterruptedTransfers, type InterruptedTransfersAttrs } from './interrupted-transfers';
 import type { OperationCentreState } from './operation-state';
 
 export interface OperationCentreAttrs {
@@ -27,6 +28,8 @@ export interface OperationCentreAttrs {
   onShowAll?: () => void;
   onClose?: () => void;
   formatSettings?: EntryFormatSettings;
+  /** Transfers a crash or restart interrupted, awaiting the user's decision (task 0300). */
+  interrupted?: InterruptedTransfersAttrs;
 }
 
 function formatBytes(value: number, settings: EntryFormatSettings): string {
@@ -286,6 +289,7 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
     const formatSettings = attrs.formatSettings ?? DEFAULT_ENTRY_FORMAT_SETTINGS;
     return m('.fm-operation-centre', { 'aria-label': t('operation', 'centre') }, [
+      attrs.interrupted === undefined ? undefined : m(InterruptedTransfers, attrs.interrupted),
       m(
         '.fm-operation-list',
         operations.length === 0

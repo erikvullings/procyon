@@ -13,6 +13,7 @@ import type {
   FindLinkReplacementsRequest,
   FindLinkReplacementsResult,
   GenerateSyncPlanRequest,
+  InterruptedTransfers,
   LinkDoctorPage,
   LinkOptions,
   LinkOptionsRequest,
@@ -150,6 +151,48 @@ export class MockOperationClient implements OperationClient {
     return this.ctx.perform('listOperations', signal, () =>
       [...this.ctx.operations.values()].map((operation) => structuredClone(operation)),
     );
+  }
+
+  listInterruptedTransfers(signal?: AbortSignal): Promise<InterruptedTransfers> {
+    return this.ctx.perform('listInterruptedTransfers', signal, () => ({
+      transfers: [...this.ctx.interruptedTransfers.values()].map((transfer) =>
+        structuredClone(transfer),
+      ),
+    }));
+  }
+
+  restartInterruptedTransfer(operationId: OperationId, signal?: AbortSignal): Promise<Operation> {
+    return this.ctx.perform('restartInterruptedTransfer', signal, () => {
+      const transfer = this.ctx.interruptedTransfers.get(operationId);
+      if (transfer === undefined) {
+        throw new MockClientError('notFound', `No interrupted transfer ${operationId}`);
+      }
+      this.ctx.interruptedTransfers.delete(operationId);
+      this.ctx.operationSequence += 1;
+      const restarted: Operation = {
+        id: `mock-operation-${this.ctx.seed}-${this.ctx.operationSequence}`,
+        kind: transfer.kind,
+        state: 'queued',
+        sources: transfer.sources.map((location: Location) => ({ id: location.uri, location })),
+        ...(transfer.destination === undefined || transfer.destination === null
+          ? {}
+          : { destination: transfer.destination }),
+        progress: { completedItems: 0, completedBytes: 0 },
+        conflictPolicy: transfer.committedItems + transfer.unconfirmedItems > 0 ? 'skip' : 'ask',
+        createdAt: new Date().toISOString(),
+        errors: [],
+      };
+      this.ctx.operations.set(restarted.id, restarted);
+      return structuredClone(restarted);
+    });
+  }
+
+  discardInterruptedTransfer(operationId: OperationId, signal?: AbortSignal): Promise<void> {
+    return this.ctx.perform('discardInterruptedTransfer', signal, () => {
+      if (!this.ctx.interruptedTransfers.delete(operationId)) {
+        throw new MockClientError('notFound', `No interrupted transfer ${operationId}`);
+      }
+    });
   }
 
   cancelOperation(operationId: OperationId, signal?: AbortSignal): Promise<void> {

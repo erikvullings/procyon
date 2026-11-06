@@ -46,6 +46,7 @@ pub mod snapshots;
 pub mod split;
 pub mod sqlite;
 pub mod system_location;
+pub mod transfer_recovery;
 pub mod workspace;
 pub mod workspace_command;
 
@@ -254,6 +255,10 @@ pub use sqlite::{
     SqliteSortDto, SqliteValueTypeDto, SqliteViewSessionRequestDto,
 };
 pub use system_location::{SystemLocationDto, SystemLocationKindDto, VolumeDto};
+pub use transfer_recovery::{
+    InterruptedTransferDto, InterruptedTransfersDto, TransferRecoveryClassDto,
+    TransferRecoveryReasonDto,
+};
 pub use workspace::{
     ColumnConfigurationDto, CreateWorkspaceRequestDto, DirectoryViewConfigurationDto,
     DirectoryViewModeDto, IconSizeDto, NavigationHistoryDto, OperationCentrePreferencesDto,

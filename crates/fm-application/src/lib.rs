@@ -96,6 +96,7 @@ mod structured_view;
 mod sync_profile_mapping;
 mod thumbnails;
 mod transfer_conflicts;
+mod transfer_recovery;
 mod tree_walk;
 mod webdav;
 pub mod workspace;
