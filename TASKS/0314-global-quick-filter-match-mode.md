@@ -1,6 +1,6 @@
 # 0314 Global quick-filter match-mode toggle (fuzzy vs contains)
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: frontend
 Depends on: 0310
@@ -41,4 +41,19 @@ the cursor and the filter agree.
   semantics.
 
 ## Agent Notes
-- (none yet)
+- Done (commit 0c11dd11). Added `substringMatches()` to fuzzy-match.ts and a `matchMode` param
+  (default `fuzzy`) on `compileQuickFilter`/`filterEntries`/`matchesQuickFilter` and the recursive
+  walk's options, so globs/`;`/fuzzy all keep behaving as before in `fuzzy` mode.
+- `reduceTypeahead` + `typeahead-controller.moveWithinMatches` switch between best-fuzzy and
+  first-substring by mode, keeping the cursor and the filter in agreement (the 0310 principle).
+- Mode is a single **global** `shellState.quickFilterMatchMode` (not per-tab), flipped by a button
+  in `QuickFilterInput`; every open pane re-filters on the next redraw. `pane.ts` can't read `attrs`
+  at the body-scoped controller-creation site, so it captures the latest mode in a `let` updated in
+  the view.
+- **Durable persistence deferred**: the concurrent transfer-recovery backend work was touching the
+  backend settings DTO / OpenAPI, so v1 is in-memory-global only (follow-up noted in the task).
+- **Entanglement note**: while implementing, the other agent's transfer-recovery commits
+  (0299–0302) swept my uncommitted i18n files (en/es/fr/it/nl/pl/pt) into their commits; my source
+  changes and `de.ts` were committed here. The `backend-codes.test.ts` failure at commit time is
+  theirs (uncommitted `codes.rs` transfer codes without translations), not this task.
+- Tests: full frontend suite green (3417 pass); tsc + biome clean.

@@ -551,3 +551,5 @@ subtask block (0299–0303) and the earlier corpus-themes follow-ups.
 - [ ] 0313 More compelling timeline / date view *(frontend, medium — enhance 0134's photo-mode day
   grouping into a real, virtualized timeline: day/week/month/year granularity, a chosen date axis
   incl. EXIF date-taken, and a calendar-strip minimap; additive, day stays the default)*
+- [x] 0314 Global quick-filter match-mode toggle *(frontend — fuzzy vs contains switch driving both
+  the filter and type-to-select; done, global in-memory, commit 0c11dd11)*
