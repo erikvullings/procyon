@@ -50,6 +50,17 @@ impl OperationsCoordinator {
         request: StartOperationRequestDto,
         idempotency_key: Option<String>,
     ) -> Result<OperationDto, ApplicationError> {
+        self.start_resuming(request, idempotency_key, Vec::new())
+    }
+
+    /// Starts an operation whose copies may continue from interrupted private partials
+    /// (task 0303): `resume` pairs a source file with the partial a previous run left for it.
+    pub(crate) fn start_resuming(
+        &self,
+        request: StartOperationRequestDto,
+        idempotency_key: Option<String>,
+        resume: Vec<(Location, Location)>,
+    ) -> Result<OperationDto, ApplicationError> {
         if request.conflict_policy == OperationConflictPolicyDto::KeepNewer {
             return Err(ApplicationError::from(Rejection::new(
                 reason::KEEP_NEWER_UNSUPPORTED,
@@ -67,7 +78,11 @@ impl OperationsCoordinator {
             return self.get(existing);
         }
         let destination: Option<Location> = request.destination.clone().map(Into::into);
-        let executor = self.planner.plan(request.operation_type, &request)?;
+        let executor = self.planner.plan_with_resume(
+            request.operation_type,
+            &request,
+            Arc::new(resume.into_iter().collect()),
+        )?;
         let sources: Vec<EntryRef> = request
             .sources
             .into_iter()

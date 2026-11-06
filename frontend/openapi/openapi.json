@@ -4965,6 +4965,15 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "resume",
+            "in": "query",
+            "description": "Continue copies from the partials that can be proven instead of starting over\n(task 0303). Refused when nothing in the transfer can be resumed.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {

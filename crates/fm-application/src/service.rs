@@ -3191,13 +3191,19 @@ impl FileManagerService {
     }
 
     /// Runs an interrupted transfer's unfinished work again as a new operation (task 0300).
+    ///
+    /// With `resume`, copies continue from the partials that can be proven instead of starting
+    /// over (task 0303).
     pub async fn restart_interrupted_transfer(
         &self,
         id: &str,
+        resume: bool,
     ) -> Result<OperationDto, ApplicationError> {
         let id = parse_interrupted_id(id)?;
         self.transfer_recovery
-            .restart(id, |request| self.operations.start(request, None))
+            .restart(id, resume, |request, hints| {
+                self.operations.start_resuming(request, None, hints)
+            })
             .await
     }
 

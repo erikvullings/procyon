@@ -590,6 +590,9 @@ export const fr = {
       'Un emplacement était inaccessible pour vérifier le transfert.',
     interruptedReasonJournalDamaged:
       "L'enregistrement du transfert est endommagé : on ne sait pas jusqu'où il est allé.",
+    interruptedResume: 'Reprendre',
+    interruptedResumeHint:
+      'Reprend à partir de la partie déjà copiée, après avoir vérifié qu’elle correspond à la source.',
     interruptedRunAgain: 'Relancer',
     interruptedRunAgainAnyway: 'Relancer quand même',
     interruptedDiscard: 'Abandonner',
@@ -2531,6 +2534,13 @@ export const fr = {
       'Problème temporaire (tentative {attempt} sur {max}) ; nouvel essai dans {seconds} s : {cause}',
     verificationMismatch:
       'La copie de {name} différait de sa source (première différence à l’octet {offset}) et n’a pas été enregistrée.',
+    resumeFallbackPartialGone:
+      '{name} a été recopié depuis le début car la copie inachevée avait disparu.',
+    resumeFallbackSourceChanged: '{name} a été recopié depuis le début car la source a changé.',
+    resumeFallbackPartialMismatch:
+      '{name} a été recopié depuis le début car la copie inachevée ne correspondait pas à la source.',
+    resumeFallbackUnverifiable:
+      '{name} a été recopié depuis le début car la copie inachevée n’a pas pu être vérifiée.',
     diskSpaceCheckSkipped:
       'Vérification de l’espace disque ignorée à votre demande : {required} nécessaires, {available} signalés libres.',
     attributeNotPermitted:

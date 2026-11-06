@@ -465,9 +465,9 @@ export function createOperationsWiring(state: ShellState, core: OperationsCore) 
     }
   }
 
-  function restartInterruptedTransfer(operationId: OperationId): void {
+  function restartInterruptedTransfer(operationId: OperationId, resume = false): void {
     void settleInterruptedTransfer(operationId, async () => {
-      const restarted = await state.client.restartInterruptedTransfer(operationId);
+      const restarted = await state.client.restartInterruptedTransfer(operationId, { resume });
       state.operations = mergeOperationHistory(state.operations, [restarted]);
     });
   }

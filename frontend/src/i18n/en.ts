@@ -580,6 +580,9 @@ export const en = {
     interruptedReasonProviderUnavailable: 'A location could not be reached to check the transfer.',
     interruptedReasonJournalDamaged:
       'The transfer record is damaged, so it is unknown how far it got.',
+    interruptedResume: 'Resume',
+    interruptedResumeHint:
+      'Continues from the part already copied, after checking that it matches the source.',
     interruptedRunAgain: 'Run again',
     interruptedRunAgainAnyway: 'Run again anyway',
     interruptedDiscard: 'Discard',
@@ -2474,6 +2477,14 @@ export const en = {
       'Temporary problem (attempt {attempt} of {max}); trying again in {seconds} s: {cause}',
     verificationMismatch:
       'The copy of {name} differed from its source (first difference at byte {offset}) and was not saved.',
+    resumeFallbackPartialGone:
+      '{name} was copied again from the start because the unfinished copy was gone.',
+    resumeFallbackSourceChanged:
+      '{name} was copied again from the start because the source changed.',
+    resumeFallbackPartialMismatch:
+      '{name} was copied again from the start because the unfinished copy did not match the source.',
+    resumeFallbackUnverifiable:
+      '{name} was copied again from the start because the unfinished copy could not be checked.',
     diskSpaceCheckSkipped:
       'Disk-space check skipped at your request: {required} needed, {available} reported free.',
     attributeNotPermitted:

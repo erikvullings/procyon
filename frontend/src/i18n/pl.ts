@@ -584,6 +584,9 @@ export const pl = {
       'Nie udało się połączyć z lokalizacją, aby sprawdzić transfer.',
     interruptedReasonJournalDamaged:
       'Zapis transferu jest uszkodzony, więc nie wiadomo, jak daleko zaszedł.',
+    interruptedResume: 'Wznów',
+    interruptedResumeHint:
+      'Kontynuuje od już skopiowanej części, po sprawdzeniu, że zgadza się ze źródłem.',
     interruptedRunAgain: 'Uruchom ponownie',
     interruptedRunAgainAnyway: 'Uruchom ponownie mimo to',
     interruptedDiscard: 'Odrzuć',
@@ -2514,6 +2517,14 @@ export const pl = {
       'Tymczasowy problem (próba {attempt} z {max}); ponowna próba za {seconds} s: {cause}',
     verificationMismatch:
       'Kopia pliku {name} różniła się od źródła (pierwsza różnica na bajcie {offset}) i nie została zapisana.',
+    resumeFallbackPartialGone:
+      'Plik {name} skopiowano ponownie od początku, bo niedokończonej kopii już nie było.',
+    resumeFallbackSourceChanged:
+      'Plik {name} skopiowano ponownie od początku, bo źródło się zmieniło.',
+    resumeFallbackPartialMismatch:
+      'Plik {name} skopiowano ponownie od początku, bo niedokończona kopia nie zgadzała się ze źródłem.',
+    resumeFallbackUnverifiable:
+      'Plik {name} skopiowano ponownie od początku, bo nie dało się sprawdzić niedokończonej kopii.',
     diskSpaceCheckSkipped:
       'Sprawdzanie miejsca na dysku pominięto na Twoje żądanie: potrzeba {required}, zgłoszono {available} wolnego miejsca.',
     attributeNotPermitted:

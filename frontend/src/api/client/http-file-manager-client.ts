@@ -1988,10 +1988,12 @@ export class HttpFileManagerClient implements FileManagerClient {
 
   async restartInterruptedTransfer(
     operationId: OperationId,
+    options?: { readonly resume?: boolean },
     signal?: AbortSignal,
   ): Promise<Operation> {
     const response = await requestInterruptedTransferRestart(
       operationId,
+      options?.resume === true ? { resume: true } : undefined,
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 201) {

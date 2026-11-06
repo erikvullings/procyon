@@ -59,6 +59,7 @@ use fm_vfs::{
 use futures::future::BoxFuture;
 use russh_sftp::client::SftpSession;
 use russh_sftp::protocol::{FileAttributes, FileType, OpenFlags};
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -305,20 +306,23 @@ impl FileSystemProvider for SftpFileSystemProvider {
     ///
     /// `server_side_move` is `true` (SFTPv3 `rename` within one connection);
     /// `server_side_copy` stays `false` for the reason given in this module's
-    /// documentation. Resumable transfers and offset reads/writes are left
-    /// `false`: SFTPv3 can express them, but this provider implements neither,
-    /// and advertising an unimplemented fast path would make the planner pick
-    /// one that cannot work.
+    /// documentation. Offset reads ([`FileSystemProvider::read_range`]) and offset writes
+    /// ([`FileSystemProvider::open_write_at`]) are implemented over SFTPv3 `seek`, so an
+    /// interrupted copy can continue from a byte offset (task 0303); that is advertised as
+    /// `random_read` / `random_write`, not as the sized `resumable_*` upload sessions.
     fn transfer_capabilities(&self, location: &Location) -> Result<TransferCapabilities, VfsError> {
         let parsed = ParsedSftpLocation::parse(location)?;
         Ok(TransferCapabilities {
             endpoint: TransferEndpoint::new(format!("sftp:{}", parsed.connection_id)),
             server_side_copy: false,
             server_side_move: true,
+            // `resumable_*` describe sized upload sessions (Microsoft Graph) that make the
+            // planner declare a size up front; SFTP needs none of that. Resuming is gated on
+            // `random_write` (append at an offset) and read on `random_read`.
             resumable_upload: false,
             resumable_download: false,
-            random_read: false,
-            random_write: false,
+            random_read: true,
+            random_write: true,
         })
     }
 
@@ -579,6 +583,69 @@ impl FileSystemProvider for SftpFileSystemProvider {
                 async move { sftp.open(remote_path).await }
             })
             .await?;
+        Ok(Box::pin(file))
+    }
+
+    async fn read_range(
+        &self,
+        entry: &EntryRef,
+        offset: u64,
+        length: Option<u64>,
+        cancellation: CancellationToken,
+    ) -> Result<ProviderReadStream, VfsError> {
+        check_cancelled(&cancellation)?;
+        let parsed = ParsedSftpLocation::parse(&entry.location)?;
+        let remote_path = parsed.remote_path.clone();
+        let mut file = self
+            .with_sftp(&parsed.connection_id, move |sftp| {
+                let remote_path = remote_path.clone();
+                async move { sftp.open(remote_path).await }
+            })
+            .await?;
+        file.seek(std::io::SeekFrom::Start(offset))
+            .await
+            .map_err(|error| VfsError::Io {
+                message: error.to_string(),
+            })?;
+        Ok(match length {
+            Some(length) => Box::pin(file.take(length)),
+            None => Box::pin(file),
+        })
+    }
+
+    async fn open_write_at(
+        &self,
+        partial: &Location,
+        offset: u64,
+        cancellation: CancellationToken,
+    ) -> Result<ProviderWriteStream, VfsError> {
+        check_cancelled(&cancellation)?;
+        let parsed = ParsedSftpLocation::parse(partial)?;
+        let remote_path = parsed.remote_path.clone();
+        // Open for writing without CREATE or TRUNCATE: a missing partial is NotFound, and the
+        // bytes already there are left alone.
+        let (mut file, existing) = self
+            .with_sftp(&parsed.connection_id, move |sftp| {
+                let remote_path = remote_path.clone();
+                async move {
+                    let existing = sftp.metadata(remote_path.clone()).await?.size.unwrap_or(0);
+                    let file = sftp.open_with_flags(remote_path, OpenFlags::WRITE).await?;
+                    Ok((file, existing))
+                }
+            })
+            .await?;
+        if existing != offset {
+            // Shorter would leave a hole that publishes as zeroes; longer would keep a stale
+            // tail after the new end. Either way the partial is not what the caller proved.
+            return Err(VfsError::Io {
+                message: format!("partial is {existing} bytes, not the resume offset {offset}"),
+            });
+        }
+        file.seek(std::io::SeekFrom::Start(offset))
+            .await
+            .map_err(|error| VfsError::Io {
+                message: error.to_string(),
+            })?;
         Ok(Box::pin(file))
     }
 

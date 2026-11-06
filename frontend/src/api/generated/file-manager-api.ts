@@ -183,6 +183,7 @@ import type {
   ResolveOperationConflictRequestDto,
   ResolveRagCitationRequestDto,
   ResolvedRagCitationDto,
+  RestartInterruptedTransferParams,
   ResumeSemanticCleanupRequestDto,
   ReviewConceptCandidateRequestDto,
   RuntimeCapabilitiesDto,
@@ -6315,20 +6316,29 @@ export type restartInterruptedTransferResponseError = (restartInterruptedTransfe
 
 export type restartInterruptedTransferResponse = (restartInterruptedTransferResponseSuccess | restartInterruptedTransferResponseError)
 
-export const getRestartInterruptedTransferUrl = (operationId: string,) => {
+export const getRestartInterruptedTransferUrl = (operationId: string,
+    params?: RestartInterruptedTransferParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/v1/operations/interrupted/${operationId}/restart`
+  return stringifiedParams.length > 0 ? `/api/v1/operations/interrupted/${operationId}/restart?${stringifiedParams}` : `/api/v1/operations/interrupted/${operationId}/restart`
 }
 
 /**
  * @summary Runs an interrupted transfer's unfinished work again as a new operation (task 0300).
  */
-export const restartInterruptedTransfer = async (operationId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<restartInterruptedTransferResponse> => {
+export const restartInterruptedTransfer = async (operationId: string,
+    params?: RestartInterruptedTransferParams, options?: Parameters<typeof fetchMutator>[1]): Promise<restartInterruptedTransferResponse> => {
 
-  return fetchMutator<restartInterruptedTransferResponse>(getRestartInterruptedTransferUrl(operationId),
+  return fetchMutator<restartInterruptedTransferResponse>(getRestartInterruptedTransferUrl(operationId,params),
   {
     ...options,
     method: 'POST'

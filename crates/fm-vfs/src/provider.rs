@@ -220,6 +220,27 @@ pub trait FileSystemProvider: Send + Sync {
         cancellation: CancellationToken,
     ) -> Result<ProviderWriteStream, VfsError>;
 
+    /// Opens an existing private partial destination for writing at `offset`, without
+    /// truncating it (task 0303).
+    ///
+    /// Only providers that advertise [`crate::TransferCapabilities::random_write`] implement this;
+    /// everyone else reports `UnsupportedCapability`, and the caller restarts the transfer. The
+    /// partial must already exist (a missing one is `NotFound`) and its length must be exactly
+    /// `offset`: a shorter partial would leave a hole, and a longer one would keep a stale tail
+    /// past the end of what is written, either of which publishes a corrupt file. The caller is
+    /// responsible for proving the first `offset` bytes are the right ones before it appends.
+    async fn open_write_at(
+        &self,
+        partial: &Location,
+        offset: u64,
+        cancellation: CancellationToken,
+    ) -> Result<ProviderWriteStream, VfsError> {
+        let _ = (partial, offset, cancellation);
+        Err(VfsError::UnsupportedCapability {
+            capability: ProviderCapabilities::WRITE,
+        })
+    }
+
     /// Opens a destination as a streaming writer when the caller already
     /// knows the exact final size of the data it is about to write (task
     /// 0110), for example the operation engine copying a source whose

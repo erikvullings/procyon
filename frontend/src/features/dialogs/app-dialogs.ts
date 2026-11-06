@@ -125,7 +125,7 @@ export interface AppDialogsContext {
   getInterruptedTransfers(): readonly InterruptedTransfer[];
   getInterruptedTransferBusyId(): OperationId | undefined;
   getInterruptedTransferError(): string | undefined;
-  restartInterruptedTransfer(operationId: OperationId): void;
+  restartInterruptedTransfer(operationId: OperationId, resume?: boolean): void;
   discardInterruptedTransfer(operationId: OperationId): void;
   refetchAffectedPanes(): void;
   redraw(): void;
@@ -252,7 +252,7 @@ export function renderAppDialogs(
             transfers: ctx.getInterruptedTransfers(),
             busyId: ctx.getInterruptedTransferBusyId(),
             error: ctx.getInterruptedTransferError(),
-            onRestart: (operationId) => ctx.restartInterruptedTransfer(operationId),
+            onRestart: (operationId, resume) => ctx.restartInterruptedTransfer(operationId, resume),
             onDiscard: (operationId) => ctx.discardInterruptedTransfer(operationId),
           },
         })

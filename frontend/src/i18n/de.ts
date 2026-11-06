@@ -2547,8 +2547,6 @@ export const de = {
       'Vorübergehendes Problem (Versuch {attempt} von {max}); neuer Versuch in {seconds} s: {cause}',
     verificationMismatch:
       'Die Kopie von {name} wich von der Quelle ab (erster Unterschied bei Byte {offset}) und wurde nicht gespeichert.',
-    transferResumed:
-      '{name} wurde dort fortgesetzt, wo es stehen geblieben war; {bytes} Bytes mussten nicht erneut gesendet werden.',
     resumeFallbackPartialGone:
       '{name} wurde von Anfang an erneut kopiert, weil die unfertige Kopie fehlte.',
     resumeFallbackSourceChanged:

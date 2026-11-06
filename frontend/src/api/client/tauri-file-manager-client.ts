@@ -1347,10 +1347,14 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   async restartInterruptedTransfer(
     operationId: OperationId,
+    options?: { readonly resume?: boolean },
     _signal?: AbortSignal,
   ): Promise<Operation> {
     return operationFromDto(
-      await invoke<OperationDto>('restart_interrupted_transfer', { operationId }),
+      await invoke<OperationDto>('restart_interrupted_transfer', {
+        operationId,
+        resume: options?.resume === true,
+      }),
     );
   }
 

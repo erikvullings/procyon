@@ -90,12 +90,22 @@ fn require_interrupted_within_roots(
     Ok(())
 }
 
+/// Options for restarting an interrupted transfer.
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RestartInterruptedQuery {
+    /// Continue copies from the partials that can be proven instead of starting over
+    /// (task 0303). Refused when nothing in the transfer can be resumed.
+    resume: Option<bool>,
+}
+
 /// Runs an interrupted transfer's unfinished work again as a new operation (task 0300).
 #[utoipa::path(
     post,
     path = "/api/v1/operations/interrupted/{operationId}/restart",
     operation_id = "restartInterruptedTransfer",
-    params(("operationId" = Uuid, Path)),
+    params(("operationId" = Uuid, Path), RestartInterruptedQuery),
     responses(
         (status = 201, body = OperationDto),
         (status = 400, body = ApplicationErrorDto),
@@ -107,12 +117,13 @@ pub(crate) async fn restart_interrupted_transfer(
     State(state): State<AppState>,
     Extension(request_id): Extension<RequestId>,
     Path(id): Path<Uuid>,
+    Query(query): Query<RestartInterruptedQuery>,
 ) -> Result<(StatusCode, Json<OperationDto>), ApiError> {
     let correlation_id = extract_request_id(&request_id);
     require_interrupted_within_roots(&state, id, correlation_id)?;
     state
         .service
-        .restart_interrupted_transfer(&id.to_string())
+        .restart_interrupted_transfer(&id.to_string(), query.resume.unwrap_or(false))
         .await
         .map(|operation| (StatusCode::CREATED, Json(operation)))
         .map_err(|error| ApiError::new(error, correlation_id))

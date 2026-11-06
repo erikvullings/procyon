@@ -2618,10 +2618,11 @@ pub(crate) async fn list_interrupted_transfers(
 pub(crate) async fn restart_interrupted_transfer(
     state: State<'_, AppState>,
     operation_id: String,
+    resume: Option<bool>,
 ) -> Result<OperationDto, ApplicationErrorDto> {
     state
         .service
-        .restart_interrupted_transfer(&operation_id)
+        .restart_interrupted_transfer(&operation_id, resume.unwrap_or(false))
         .await
         .map_err(|e| e.into_dto(Uuid::new_v4()))
 }

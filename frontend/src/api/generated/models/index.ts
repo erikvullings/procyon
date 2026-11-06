@@ -407,6 +407,7 @@ export * from './resolveMetadataTokensRequestDto.ts';
 export * from './resolveMetadataTokensResponseDto.ts';
 export * from './resolveOperationConflictRequestDto.ts';
 export * from './resolveRagCitationRequestDto.ts';
+export * from './restartInterruptedTransferParams.ts';
 export * from './resumeSemanticCleanupRequestDto.ts';
 export * from './reviewConceptCandidateActionDto.ts';
 export * from './reviewConceptCandidateRequestDto.ts';

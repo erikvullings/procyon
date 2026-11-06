@@ -585,6 +585,9 @@ export const es = {
       'No se pudo acceder a una ubicación para comprobar la transferencia.',
     interruptedReasonJournalDamaged:
       'El registro de la transferencia está dañado, por lo que se desconoce hasta dónde llegó.',
+    interruptedResume: 'Reanudar',
+    interruptedResumeHint:
+      'Continúa desde la parte ya copiada, tras comprobar que coincide con el origen.',
     interruptedRunAgain: 'Volver a ejecutar',
     interruptedRunAgainAnyway: 'Volver a ejecutar de todos modos',
     interruptedDiscard: 'Descartar',
@@ -2520,6 +2523,14 @@ export const es = {
       'Problema temporal (intento {attempt} de {max}); se reintentará en {seconds} s: {cause}',
     verificationMismatch:
       'La copia de {name} difería de su origen (primera diferencia en el byte {offset}) y no se guardó.',
+    resumeFallbackPartialGone:
+      '{name} se copió de nuevo desde el principio porque la copia sin terminar ya no existía.',
+    resumeFallbackSourceChanged:
+      '{name} se copió de nuevo desde el principio porque el origen cambió.',
+    resumeFallbackPartialMismatch:
+      '{name} se copió de nuevo desde el principio porque la copia sin terminar no coincidía con el origen.',
+    resumeFallbackUnverifiable:
+      '{name} se copió de nuevo desde el principio porque no se pudo comprobar la copia sin terminar.',
     diskSpaceCheckSkipped:
       'Comprobación de espacio en disco omitida a petición suya: se necesitan {required}, se informan {available} libres.',
     attributeNotPermitted:

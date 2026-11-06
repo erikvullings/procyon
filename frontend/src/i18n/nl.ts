@@ -588,6 +588,9 @@ export const nl = {
       'Een locatie was niet bereikbaar om de overdracht te controleren.',
     interruptedReasonJournalDamaged:
       'Het overdrachtsrecord is beschadigd, dus het is onbekend hoe ver de overdracht kwam.',
+    interruptedResume: 'Hervatten',
+    interruptedResumeHint:
+      'Gaat verder bij het al gekopieerde deel, nadat is gecontroleerd dat het overeenkomt met de bron.',
     interruptedRunAgain: 'Opnieuw uitvoeren',
     interruptedRunAgainAnyway: 'Toch opnieuw uitvoeren',
     interruptedDiscard: 'Verwerpen',
@@ -2517,6 +2520,14 @@ export const nl = {
       'Tijdelijk probleem (poging {attempt} van {max}); opnieuw proberen over {seconds} s: {cause}',
     verificationMismatch:
       'De kopie van {name} week af van de bron (eerste verschil op byte {offset}) en is niet opgeslagen.',
+    resumeFallbackPartialGone:
+      '{name} is opnieuw vanaf het begin gekopieerd omdat de onvoltooide kopie weg was.',
+    resumeFallbackSourceChanged:
+      '{name} is opnieuw vanaf het begin gekopieerd omdat de bron is gewijzigd.',
+    resumeFallbackPartialMismatch:
+      '{name} is opnieuw vanaf het begin gekopieerd omdat de onvoltooide kopie niet overeenkwam met de bron.',
+    resumeFallbackUnverifiable:
+      '{name} is opnieuw vanaf het begin gekopieerd omdat de onvoltooide kopie niet kon worden gecontroleerd.',
     diskSpaceCheckSkipped:
       'Controle op schijfruimte overgeslagen op uw verzoek: {required} nodig, {available} als vrij gemeld.',
     attributeNotPermitted:

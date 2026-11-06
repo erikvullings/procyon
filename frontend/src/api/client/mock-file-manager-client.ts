@@ -873,8 +873,12 @@ export class MockFileManagerClient implements FileManagerClient {
   listInterruptedTransfers(signal?: AbortSignal): Promise<InterruptedTransfers> {
     return this.operationClient.listInterruptedTransfers(signal);
   }
-  restartInterruptedTransfer(operationId: OperationId, signal?: AbortSignal): Promise<Operation> {
-    return this.operationClient.restartInterruptedTransfer(operationId, signal);
+  restartInterruptedTransfer(
+    operationId: OperationId,
+    options?: { readonly resume?: boolean },
+    signal?: AbortSignal,
+  ): Promise<Operation> {
+    return this.operationClient.restartInterruptedTransfer(operationId, options, signal);
   }
   discardInterruptedTransfer(operationId: OperationId, signal?: AbortSignal): Promise<void> {
     return this.operationClient.discardInterruptedTransfer(operationId, signal);

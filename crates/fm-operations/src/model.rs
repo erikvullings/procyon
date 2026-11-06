@@ -45,6 +45,33 @@ pub struct Operation {
     pub verification: OperationVerification,
 }
 
+/// Why continuing an interrupted copy from its partial was given up (task 0303).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ResumeFallback {
+    /// The private partial no longer exists.
+    PartialGone,
+    /// The source is gone, no longer reports a size, or is shorter than the partial.
+    SourceChanged,
+    /// The partial's bytes are not a prefix of the source, so it is not this job's data.
+    PartialMismatch,
+    /// The partial or its source could not be read to prove it, or the provider cannot append.
+    Unverifiable,
+}
+
+/// What happened when a copy tried to continue from a journaled partial (task 0303).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ResumeOutcome {
+    /// The partial was proven to be a prefix of the source and the copy continued after it.
+    Resumed {
+        /// Bytes that did not have to be transferred again.
+        bytes: u64,
+    },
+    /// Resuming was given up; the partial was discarded and the file copied from the start.
+    FellBack(ResumeFallback),
+}
+
 /// What verifying one copied file concluded (task 0302).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

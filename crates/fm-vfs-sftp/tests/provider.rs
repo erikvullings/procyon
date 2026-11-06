@@ -189,10 +189,10 @@ async fn transfer_capabilities_identify_the_connection_rather_than_the_provider_
     // connection is a genuine server-side move.
     assert!(!here.server_side_copy);
     assert!(here.server_side_move);
-    // Honestly under-advertised: this provider implements neither offset
-    // reads/writes nor resumable transfers (see the module documentation).
-    assert!(!here.random_read);
-    assert!(!here.random_write);
+    // Offset reads and writes are implemented over SFTPv3 `seek` (task 0303), and the flags
+    // claim exactly that. The sized-upload-session flags stay off: SFTP needs no declared size.
+    assert!(here.random_read);
+    assert!(here.random_write);
     assert!(!here.resumable_upload);
     assert!(!here.resumable_download);
 }
@@ -762,4 +762,98 @@ async fn windows_attributes_are_unsupported_over_sftp() {
         .await
         .unwrap_err();
     assert!(matches!(error, VfsError::UnsupportedCapability { .. }));
+}
+
+/// Task 0303: offset reads start at the requested byte and honour an optional length.
+#[tokio::test]
+async fn read_range_returns_the_requested_slice() {
+    let (provider, fixture) = provider_and_fixture().await;
+    std::fs::write(fixture.path("range.txt"), b"0123456789").unwrap();
+    let entry = entry_ref(location(&fixture, "range.txt"));
+
+    let mut tail = provider
+        .read_range(&entry, 4, None, cancellation())
+        .await
+        .expect("open at offset");
+    let mut bytes = Vec::new();
+    tail.read_to_end(&mut bytes).await.unwrap();
+    assert_eq!(bytes, b"456789");
+
+    let mut middle = provider
+        .read_range(&entry, 2, Some(3), cancellation())
+        .await
+        .expect("open a bounded slice");
+    let mut bytes = Vec::new();
+    middle.read_to_end(&mut bytes).await.unwrap();
+    assert_eq!(bytes, b"234");
+}
+
+/// Task 0303: writing at an offset continues a partial without truncating what is there.
+#[tokio::test]
+async fn open_write_at_continues_a_partial_without_truncating_it() {
+    let (provider, fixture) = provider_and_fixture().await;
+    std::fs::write(fixture.path(".fm-copy-partial"), b"ABCDE").unwrap();
+    let partial = location(&fixture, ".fm-copy-partial");
+
+    let mut writer = provider
+        .open_write_at(&partial, 5, cancellation())
+        .await
+        .expect("open at the end of the partial");
+    writer.write_all(b"FGHIJ").await.unwrap();
+    writer.shutdown().await.unwrap();
+
+    let mut on_disk = Vec::new();
+    for _ in 0..50 {
+        on_disk = std::fs::read(fixture.path(".fm-copy-partial")).unwrap();
+        if on_disk.len() == 10 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert_eq!(
+        on_disk, b"ABCDEFGHIJ",
+        "the existing prefix is untouched and the tail appended"
+    );
+}
+
+/// Task 0303: a writer that could leave a hole or a stale tail, or whose partial is gone, is
+/// refused.
+#[tokio::test]
+async fn open_write_at_refuses_a_missing_partial_and_an_offset_past_its_end() {
+    let (provider, fixture) = provider_and_fixture().await;
+
+    let missing = location(&fixture, ".fm-copy-missing");
+    let error = expect_err(
+        provider.open_write_at(&missing, 0, cancellation()).await,
+        "a missing partial cannot be resumed",
+    );
+    assert!(matches!(error, VfsError::NotFound { .. }), "got {error:?}");
+    assert!(
+        !fixture.path(".fm-copy-missing").exists(),
+        "resuming must never create the partial"
+    );
+
+    std::fs::write(fixture.path(".fm-copy-short"), b"abc").unwrap();
+    let short = location(&fixture, ".fm-copy-short");
+    let error = expect_err(
+        provider.open_write_at(&short, 10, cancellation()).await,
+        "an offset past the end would publish a hole",
+    );
+    assert!(matches!(error, VfsError::Io { .. }), "got {error:?}");
+    assert_eq!(
+        std::fs::read(fixture.path(".fm-copy-short")).unwrap(),
+        b"abc"
+    );
+
+    std::fs::write(fixture.path(".fm-copy-long"), b"abcdefghij").unwrap();
+    let long = location(&fixture, ".fm-copy-long");
+    let error = expect_err(
+        provider.open_write_at(&long, 4, cancellation()).await,
+        "an offset before the end would keep a stale tail",
+    );
+    assert!(matches!(error, VfsError::Io { .. }), "got {error:?}");
+    assert_eq!(
+        std::fs::read(fixture.path(".fm-copy-long")).unwrap(),
+        b"abcdefghij"
+    );
 }

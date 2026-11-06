@@ -587,6 +587,9 @@ export const it = {
       'Una posizione non era raggiungibile per verificare il trasferimento.',
     interruptedReasonJournalDamaged:
       'Il record del trasferimento è danneggiato, quindi non si sa fin dove sia arrivato.',
+    interruptedResume: 'Riprendi',
+    interruptedResumeHint:
+      'Continua dalla parte già copiata, dopo aver verificato che corrisponda all’originale.',
     interruptedRunAgain: 'Esegui di nuovo',
     interruptedRunAgainAnyway: 'Esegui di nuovo comunque',
     interruptedDiscard: 'Scarta',
@@ -2513,6 +2516,14 @@ export const it = {
       'Problema temporaneo (tentativo {attempt} di {max}); nuovo tentativo tra {seconds} s: {cause}',
     verificationMismatch:
       'La copia di {name} era diversa dall’originale (prima differenza al byte {offset}) e non è stata salvata.',
+    resumeFallbackPartialGone:
+      '{name} è stato copiato di nuovo dall’inizio perché la copia incompleta non c’era più.',
+    resumeFallbackSourceChanged:
+      '{name} è stato copiato di nuovo dall’inizio perché l’originale è cambiato.',
+    resumeFallbackPartialMismatch:
+      '{name} è stato copiato di nuovo dall’inizio perché la copia incompleta non corrispondeva all’originale.',
+    resumeFallbackUnverifiable:
+      '{name} è stato copiato di nuovo dall’inizio perché la copia incompleta non è stata verificabile.',
     diskSpaceCheckSkipped:
       'Controllo dello spazio su disco saltato su sua richiesta: servono {required}, ne risultano liberi {available}.',
     attributeNotPermitted:

@@ -65,6 +65,18 @@ impl OperationPlanner {
         kind: OperationKindDto,
         request: &StartOperationRequestDto,
     ) -> Result<Arc<dyn OperationExecutor>, ApplicationError> {
+        self.plan_with_resume(kind, request, Arc::new(HashMap::new()))
+    }
+
+    /// Plans like [`Self::plan`], but lets copies continue from interrupted private partials
+    /// (task 0303): `resume_hints` maps a source file to the partial a previous run left for it.
+    /// Each hint is proven again at execution time and discarded when it does not hold.
+    pub(crate) fn plan_with_resume(
+        &self,
+        kind: OperationKindDto,
+        request: &StartOperationRequestDto,
+        resume_hints: Arc<HashMap<Location, Location>>,
+    ) -> Result<Arc<dyn OperationExecutor>, ApplicationError> {
         let destination = request.destination.clone().map(Into::into);
         // Shared by every copy executor of this request: where the "space check skipped"
         // warning waits for the first completed item (task 0272).
@@ -330,6 +342,7 @@ impl OperationPlanner {
                         check_capacity: false,
                         skip_space_check: request.skip_space_check,
                         space_note: Arc::clone(&space_note),
+                        resume_hints: Arc::clone(&resume_hints),
                     });
                 }
                 Arc::new(CopyGroupExecutor {
@@ -381,6 +394,7 @@ impl OperationPlanner {
                         check_capacity: false,
                         skip_space_check: request.skip_space_check,
                         space_note: Arc::clone(&space_note),
+                        resume_hints: Arc::clone(&resume_hints),
                     };
                     moves.push(MoveExecutor {
                         source,
@@ -441,6 +455,7 @@ impl OperationPlanner {
                         check_capacity: true,
                         skip_space_check: request.skip_space_check,
                         space_note: Arc::clone(&space_note),
+                        resume_hints: Arc::clone(&resume_hints),
                     });
                 }
                 Arc::new(DuplicateExecutor { copies })
@@ -731,6 +746,8 @@ struct PlannedCopyEntry {
 }
 
 struct CopyExecutor {
+    /// Source file -> the interrupted private partial to try continuing from (task 0303).
+    resume_hints: Arc<HashMap<Location, Location>>,
     source_provider: Arc<dyn FileSystemProvider>,
     destination_provider: Arc<dyn FileSystemProvider>,
     destination_directory: Location,
@@ -3106,6 +3123,188 @@ impl CopyExecutor {
         unreachable!("u32 suffix iterator is non-empty")
     }
 
+    /// Tries to continue an interrupted upload from the private partial a previous run left for
+    /// this source (task 0303). `Ok(None)` means copy from the start: there was no hint, or the
+    /// hint could not be proven (the partial is then discarded and the reason recorded).
+    async fn try_resume(
+        &self,
+        item: &PlanItem,
+        progress: &dyn OperationProgressReporter,
+        pause: &PauseToken,
+        cancellation: &CancellationToken,
+    ) -> Result<Option<ResumedCopy>, ExecutionError> {
+        let Some(partial) = self.resume_hints.get(&item.entry.location).cloned() else {
+            return Ok(None);
+        };
+        match self
+            .prove_resume(item, &partial, pause, cancellation)
+            .await?
+        {
+            Ok(offset) => {
+                progress.note_resume(fm_operations::ResumeOutcome::Resumed { bytes: offset });
+                Ok(Some(ResumedCopy { partial, offset }))
+            }
+            Err(reason) => {
+                // Whatever is left there is not safe to build on: remove it and start over.
+                match self
+                    .destination_provider
+                    .discard_copy(&partial, CancellationToken::new())
+                    .await
+                {
+                    Ok(()) | Err(fm_vfs::VfsError::NotFound { .. }) => {}
+                    Err(error) => {
+                        tracing::warn!(%error, "an unprovable partial could not be removed");
+                    }
+                }
+                if let Some(reason) = reason {
+                    progress.note_resume(fm_operations::ResumeOutcome::FellBack(reason));
+                }
+                Ok(None)
+            }
+        }
+    }
+
+    /// Proves `partial` is the first `offset` bytes of the CURRENT source, and returns `offset`.
+    ///
+    /// Inner `Err(None)` is a silent fallback (an empty partial has nothing to continue);
+    /// `Err(Some(reason))` is reported. The proof does not trust the journal: it checks that the
+    /// provider can append, that the partial exists and is not longer than the source, and then
+    /// compares the partial with the source byte for byte, so a partial left by a different job,
+    /// replaced since, or written from an older version of the source is never extended.
+    async fn prove_resume(
+        &self,
+        item: &PlanItem,
+        partial: &Location,
+        pause: &PauseToken,
+        cancellation: &CancellationToken,
+    ) -> Result<Result<u64, Option<fm_operations::ResumeFallback>>, ExecutionError> {
+        use fm_operations::ResumeFallback as Why;
+        // A failure to CHECK the partial is not evidence against it. A transient one (a dropped
+        // connection) or a cancellation propagates, leaving a possibly-good partial in place for
+        // the retry; only a permanent one gives up on resuming.
+        let unproven = |error: fm_vfs::VfsError| -> Result<
+            Result<u64, Option<fm_operations::ResumeFallback>>,
+            ExecutionError,
+        > {
+            if matches!(error, fm_vfs::VfsError::Cancelled) || error.is_transient() {
+                Err(error.into())
+            } else {
+                Ok(Err(Some(Why::Unverifiable)))
+            }
+        };
+        let appendable = self
+            .destination_provider
+            .transfer_capabilities(partial)
+            .is_ok_and(|capabilities| capabilities.random_write);
+        if !appendable {
+            return Ok(Err(Some(Why::Unverifiable)));
+        }
+        let partial_entry = EntryRef {
+            id: EntryId::new(),
+            location: partial.clone(),
+        };
+        let partial_size = match self
+            .destination_provider
+            .inspect(&partial_entry, cancellation.clone())
+            .await
+        {
+            Ok(summary) => summary.size,
+            Err(fm_vfs::VfsError::NotFound { .. }) => return Ok(Err(Some(Why::PartialGone))),
+            Err(error) => return unproven(error),
+        };
+        let source_size = match self
+            .source_provider
+            .inspect(&item.entry, cancellation.clone())
+            .await
+        {
+            Ok(summary) => summary.size,
+            Err(fm_vfs::VfsError::NotFound { .. }) => return Ok(Err(Some(Why::SourceChanged))),
+            Err(error) => return unproven(error),
+        };
+        let (Some(partial_size), Some(source_size)) = (partial_size, source_size) else {
+            return Ok(Err(Some(Why::Unverifiable)));
+        };
+        if partial_size > source_size {
+            return Ok(Err(Some(Why::SourceChanged)));
+        }
+        if partial_size == 0 {
+            return Ok(Err(None));
+        }
+        match compare_copy(
+            self.source_provider.as_ref(),
+            &item.entry,
+            self.destination_provider.as_ref(),
+            &partial_entry,
+            Some(partial_size),
+            pause,
+            cancellation,
+        )
+        .await
+        {
+            Ok(CopyComparison::Identical) => Ok(Ok(partial_size)),
+            Ok(CopyComparison::Different { .. }) => Ok(Err(Some(Why::PartialMismatch))),
+            Ok(CopyComparison::Unreadable) => Ok(Err(Some(Why::Unverifiable))),
+            Err(ExecutionError::Provider(error)) => unproven(error),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Opens the source after `resumed.offset` and the partial for appending at it, and counts
+    /// the bytes that need not be sent again as already done.
+    async fn open_resumed_streams(
+        &self,
+        item: &PlanItem,
+        resumed: &ResumedCopy,
+        progress: &dyn OperationProgressReporter,
+        pause: &PauseToken,
+        cancellation: &CancellationToken,
+    ) -> Result<(fm_vfs::ProviderReadStream, fm_vfs::ProviderWriteStream), ExecutionError> {
+        let reader = match self
+            .source_provider
+            .read_range(&item.entry, resumed.offset, None, cancellation.clone())
+            .await
+        {
+            Ok(reader) => reader,
+            Err(fm_vfs::VfsError::UnsupportedCapability { .. }) => {
+                // The documented reduced-capability path: read and drop the already-sent prefix.
+                let mut reader = self
+                    .source_provider
+                    .open_read(&item.entry, cancellation.clone())
+                    .await?;
+                let mut skipped = 0_u64;
+                let mut chunk = vec![0_u8; 128 * 1024];
+                while skipped < resumed.offset {
+                    pause.checkpoint().await;
+                    if cancellation.is_cancelled() {
+                        return Err(fm_vfs::VfsError::Cancelled.into());
+                    }
+                    let wanted =
+                        usize::try_from((resumed.offset - skipped).min(chunk.len() as u64))
+                            .unwrap_or(chunk.len());
+                    let read = reader
+                        .read(&mut chunk[..wanted])
+                        .await
+                        .map_err(copy_stream_error)?;
+                    if read == 0 {
+                        return Err(fm_vfs::VfsError::Io {
+                            message: "source ended before the resume offset".into(),
+                        }
+                        .into());
+                    }
+                    skipped += read as u64;
+                }
+                reader
+            }
+            Err(error) => return Err(error.into()),
+        };
+        let writer = self
+            .destination_provider
+            .open_write_at(&resumed.partial, resumed.offset, cancellation.clone())
+            .await?;
+        progress.report_bytes(resumed.offset);
+        Ok((reader, writer))
+    }
+
     async fn copy_file(
         &self,
         item: &PlanItem,
@@ -3120,10 +3319,23 @@ impl CopyExecutor {
             .parent()
             .map_err(|error| ExecutionError::Failed(error.to_string()))?
             .ok_or_else(|| ExecutionError::Failed("copy destination has no parent".into()))?;
-        let temporary = self
-            .destination_directory
-            .join(&format!(".fm-copy-{}", Uuid::new_v4()))
-            .map_err(|error| ExecutionError::Failed(error.to_string()))?;
+        // Task 0303: continue an interrupted upload from its proven partial when there is one.
+        let resumed = if self.transfer.strategy == TransferStrategy::DirectStream {
+            self.try_resume(item, progress, pause, cancellation).await?
+        } else {
+            None
+        };
+        // A resumed file is verified whatever the user chose: the prefix was proven against the
+        // source a moment ago, but the source is re-read for the tail, and only the comparison
+        // before publishing guarantees the two halves belong to one version of it.
+        let verify = verify || resumed.is_some();
+        let temporary = match &resumed {
+            Some(resumed) => resumed.partial.clone(),
+            None => self
+                .destination_directory
+                .join(&format!(".fm-copy-{}", Uuid::new_v4()))
+                .map_err(|error| ExecutionError::Failed(error.to_string()))?,
+        };
         *self.temporary.lock().unwrap_or_else(|e| e.into_inner()) = Some(temporary.clone());
         if progress.journaling() {
             // Task 0299: leave a record that owns this private partial and says
@@ -3158,64 +3370,77 @@ impl CopyExecutor {
                 .await?;
         pause.checkpoint().await;
         if !cloned {
-            // `file_size` is only ever attempted when the destination
-            // actually benefits from a declared size - its
-            // `TransferCapabilities` advertised `resumable_upload`
-            // (Microsoft Graph's resumable upload sessions are the only
-            // such case in this workspace today). Every other destination
-            // (local, SFTP, FTP, S3, WebDAV) never pays for, and can never
-            // fail because of, a size lookup it has no use for.
-            //
-            // `item.bytes` is only a *plan-time* snapshot that can go stale
-            // between planning and this specific item's execution (a batch
-            // operation plans everything up front, then executes items one
-            // at a time), so when a size is actually needed it is re-read
-            // immediately before opening the reader, as close to the
-            // actual transfer as possible (task 0110 review). A failure
-            // here - the source vanished, or it simply does not support
-            // `file_size` - is not fatal: this specific transfer just falls
-            // back to the unknown-size `open_write` path rather than
-            // guessing or refusing outright; if the source has genuinely
-            // vanished, `open_read` right below reports that instead.
-            let expected_size = if self.transfer.destination_resumable_upload {
-                self.source_provider
-                    .file_size(&item.entry, cancellation.clone())
-                    .await
-                    .ok()
-            } else {
-                None
-            };
-            // Direct source -> destination streaming. Both handles belong to
-            // their own provider, so `SFTP -> FTP` (and the reverse) never
-            // stages bytes in a local temporary file: the reader pulls from
-            // one server while the writer pushes to the other.
-            let mut reader = self
-                .source_provider
-                .open_read(&item.entry, cancellation.clone())
-                .await?;
-            // Routing a known size through `open_write_sized` (task 0110)
-            // rather than the unknown-size `open_write` lets a provider
-            // whose native upload protocol needs the total declared
-            // upfront drive a real bounded-memory, resumable transfer
-            // instead of buffering the whole payload. Every provider that
-            // does not override `open_write_sized` keeps working
-            // unchanged, since its default forwards straight to
-            // `open_write` and ignores the size hint.
-            let mut writer = match expected_size {
-                Some(expected_size) => {
-                    self.destination_provider
-                        .open_write_sized(
-                            &temporary,
-                            WriteOptions::default(),
-                            expected_size,
-                            cancellation.clone(),
-                        )
+            let (mut reader, mut writer) = match &resumed {
+                Some(resumed) => {
+                    self.open_resumed_streams(item, resumed, progress, pause, cancellation)
                         .await?
                 }
                 None => {
-                    self.destination_provider
-                        .open_write(&temporary, WriteOptions::default(), cancellation.clone())
-                        .await?
+                    // `file_size` is only ever attempted when the destination
+                    // actually benefits from a declared size - its
+                    // `TransferCapabilities` advertised `resumable_upload`
+                    // (Microsoft Graph's resumable upload sessions are the only
+                    // such case in this workspace today). Every other destination
+                    // (local, SFTP, FTP, S3, WebDAV) never pays for, and can never
+                    // fail because of, a size lookup it has no use for.
+                    //
+                    // `item.bytes` is only a *plan-time* snapshot that can go stale
+                    // between planning and this specific item's execution (a batch
+                    // operation plans everything up front, then executes items one
+                    // at a time), so when a size is actually needed it is re-read
+                    // immediately before opening the reader, as close to the
+                    // actual transfer as possible (task 0110 review). A failure
+                    // here - the source vanished, or it simply does not support
+                    // `file_size` - is not fatal: this specific transfer just falls
+                    // back to the unknown-size `open_write` path rather than
+                    // guessing or refusing outright; if the source has genuinely
+                    // vanished, `open_read` right below reports that instead.
+                    let expected_size = if self.transfer.destination_resumable_upload {
+                        self.source_provider
+                            .file_size(&item.entry, cancellation.clone())
+                            .await
+                            .ok()
+                    } else {
+                        None
+                    };
+                    // Direct source -> destination streaming. Both handles belong to
+                    // their own provider, so `SFTP -> FTP` (and the reverse) never
+                    // stages bytes in a local temporary file: the reader pulls from
+                    // one server while the writer pushes to the other.
+                    let reader = self
+                        .source_provider
+                        .open_read(&item.entry, cancellation.clone())
+                        .await?;
+                    // Routing a known size through `open_write_sized` (task 0110)
+                    // rather than the unknown-size `open_write` lets a provider
+                    // whose native upload protocol needs the total declared
+                    // upfront drive a real bounded-memory, resumable transfer
+                    // instead of buffering the whole payload. Every provider that
+                    // does not override `open_write_sized` keeps working
+                    // unchanged, since its default forwards straight to
+                    // `open_write` and ignores the size hint.
+                    let writer = match expected_size {
+                        Some(expected_size) => {
+                            self.destination_provider
+                                .open_write_sized(
+                                    &temporary,
+                                    WriteOptions::default(),
+                                    expected_size,
+                                    cancellation.clone(),
+                                )
+                                .await?
+                        }
+                        None => {
+                            self.destination_provider
+                                .open_write(
+                                    &temporary,
+                                    WriteOptions::default(),
+                                    cancellation.clone(),
+                                )
+                                .await?
+                        }
+                    };
+                    (reader, writer)
                 }
             };
             let mut buffer = vec![0_u8; 128 * 1024];
@@ -3275,6 +3500,7 @@ impl CopyExecutor {
                 &item.entry,
                 self.destination_provider.as_ref(),
                 &copy,
+                None,
                 pause,
                 cancellation,
             )
@@ -3713,6 +3939,13 @@ fn conflict_entry(entry: &fm_domain::EntrySummary) -> fm_operations::ConflictEnt
     }
 }
 
+/// A private partial a copy proved it can continue from (task 0303).
+struct ResumedCopy {
+    partial: Location,
+    /// Bytes already in the partial, proven identical to the start of the source.
+    offset: u64,
+}
+
 /// How one file copy resolves conflicts and whether its result is verified (task 0302).
 #[derive(Debug, Clone, Copy)]
 struct CopyFileOptions {
@@ -3761,6 +3994,7 @@ async fn compare_copy(
     source: &EntryRef,
     copy_provider: &dyn FileSystemProvider,
     copy: &EntryRef,
+    limit: Option<u64>,
     pause: &PauseToken,
     cancellation: &CancellationToken,
 ) -> Result<CopyComparison, ExecutionError> {
@@ -3787,6 +4021,11 @@ async fn compare_copy(
         Err(error) if unreadable(&error) => return Ok(CopyComparison::Unreadable),
         Err(error) => return Err(error.into()),
     };
+    if let Some(limit) = limit {
+        // Only the first `limit` bytes of each side take part (proving a partial is a prefix).
+        left = Box::pin(left.take(limit));
+        right = Box::pin(right.take(limit));
+    }
     let mut left_chunk = vec![0_u8; 128 * 1024];
     let mut right_chunk = vec![0_u8; 128 * 1024];
     let mut offset = 0_u64;
@@ -4417,6 +4656,7 @@ mod tests {
             check_capacity: true,
             skip_space_check: false,
             space_note: Arc::new(Mutex::new(None)),
+            resume_hints: Arc::default(),
             source_provider,
             destination_provider: Arc::clone(&destination_provider),
             destination_directory: destination_directory.clone(),
@@ -4526,6 +4766,7 @@ mod tests {
             check_capacity: true,
             skip_space_check: false,
             space_note: Arc::new(Mutex::new(None)),
+            resume_hints: Arc::default(),
             source_provider: Arc::new(fm_vfs_local::LocalFileSystemProvider::new()),
             destination_provider,
             destination_directory: destination_directory.clone(),
@@ -4864,6 +5105,7 @@ mod tests {
             check_capacity: true,
             skip_space_check: false,
             space_note: Arc::new(Mutex::new(None)),
+            resume_hints: Arc::default(),
             source_provider,
             destination_provider,
             destination_directory: destination_directory.clone(),
@@ -4960,6 +5202,7 @@ mod tests {
             check_capacity: true,
             skip_space_check: false,
             space_note: Arc::new(Mutex::new(None)),
+            resume_hints: Arc::default(),
             source_provider,
             destination_provider,
             destination_directory: destination_directory.clone(),
@@ -5571,6 +5814,325 @@ mod tests {
         }
     }
 
+    struct ResumeRun {
+        result: Result<ExecutionOutcome, ExecutionError>,
+        destination: std::path::PathBuf,
+        source: std::path::PathBuf,
+    }
+
+    /// Copies a ten-byte source after leaving `partial` (when given) as the interrupted
+    /// partial and hinting the executor at it.
+    async fn resume_copy(
+        destination_provider: Arc<dyn FileSystemProvider>,
+        partial: Option<&[u8]>,
+        source_content: &[u8],
+        verify: bool,
+        reporter: &JournalingReporter,
+        cancellation: &CancellationToken,
+    ) -> ResumeRun {
+        let root = tempfile::tempdir().expect("temp root").keep();
+        let source_path = root.join("source.bin");
+        std::fs::write(&source_path, source_content).expect("write source");
+        let destination_path = root.join("destination");
+        std::fs::create_dir(&destination_path).expect("create destination dir");
+        let partial_path = destination_path.join(".fm-copy-interrupted");
+        if let Some(partial) = partial {
+            std::fs::write(&partial_path, partial).expect("write partial");
+        }
+        let source_location = Location::from_native_path(&source_path).expect("source location");
+        let destination =
+            Location::from_native_path(&destination_path).expect("destination location");
+        let mut executor = copy_only_executor(
+            Arc::new(fm_vfs_local::LocalFileSystemProvider::new()),
+            destination_provider,
+            source_location.clone(),
+            destination.clone(),
+            false,
+        );
+        executor.resume_hints = Arc::new(HashMap::from([(
+            source_location,
+            Location::from_native_path(&partial_path).expect("partial location"),
+        )]));
+        let operation = Operation::new(
+            fm_operations::OperationKind::Copy,
+            Vec::new(),
+            Some(destination),
+            fm_operations::ConflictPolicy::Ask,
+        )
+        .with_verification(verify);
+        // Planning uses its own token so a cancellation under test hits the copy, not the plan.
+        let plan = executor
+            .plan(&operation, &CancellationToken::new())
+            .await
+            .expect("plan succeeds");
+        let item = plan.items.first().cloned().expect("one planned item");
+        let result = executor
+            .execute(
+                &operation,
+                &item,
+                None,
+                reporter,
+                &PauseToken::default(),
+                cancellation,
+            )
+            .await;
+        ResumeRun {
+            result,
+            destination: destination_path,
+            source: source_path,
+        }
+    }
+
+    fn appendable() -> Arc<dyn FileSystemProvider> {
+        Arc::new(crate::appendable_test_provider::AppendableProvider::new(
+            "appendable-destination-test-double",
+        ))
+    }
+
+    fn resume_outcomes(reporter: &JournalingReporter) -> Vec<fm_operations::ResumeOutcome> {
+        reporter.resumes.lock().unwrap().clone()
+    }
+
+    /// Task 0303: a partial that is provably a prefix of the source is extended, not redone.
+    #[tokio::test]
+    async fn an_interrupted_copy_continues_from_its_proven_partial() {
+        let reporter = JournalingReporter::default();
+        let run = resume_copy(
+            appendable(),
+            Some(b"01234"),
+            b"0123456789",
+            false,
+            &reporter,
+            &CancellationToken::new(),
+        )
+        .await;
+        run.result.expect("copy succeeds");
+        assert_eq!(
+            std::fs::read(run.destination.join("source.bin")).expect("published"),
+            b"0123456789"
+        );
+        assert_eq!(
+            resume_outcomes(&reporter),
+            vec![fm_operations::ResumeOutcome::Resumed { bytes: 5 }]
+        );
+        assert_eq!(
+            *reporter.verifications.lock().unwrap(),
+            vec![fm_operations::VerificationOutcome::Verified],
+            "a resumed file is verified even when the user did not ask for verification"
+        );
+        assert_eq!(
+            reporter
+                .reported_bytes
+                .load(std::sync::atomic::Ordering::SeqCst),
+            10,
+            "the resumed prefix counts as done and only the rest is transferred"
+        );
+        assert_eq!(leftover_partials(&run.destination), 0);
+    }
+
+    /// Task 0303: a partial holding other bytes is never extended; it is discarded and the
+    /// file is copied from the start, with the reason recorded.
+    #[tokio::test]
+    async fn a_partial_that_is_not_a_prefix_of_the_source_is_discarded_and_the_copy_restarts() {
+        let reporter = JournalingReporter::default();
+        let run = resume_copy(
+            appendable(),
+            Some(b"XXXXX"),
+            b"0123456789",
+            false,
+            &reporter,
+            &CancellationToken::new(),
+        )
+        .await;
+        run.result.expect("copy succeeds");
+        assert_eq!(
+            std::fs::read(run.destination.join("source.bin")).expect("published"),
+            b"0123456789",
+            "the published file is the source, not the foreign partial plus an appended tail"
+        );
+        assert_eq!(
+            resume_outcomes(&reporter),
+            vec![fm_operations::ResumeOutcome::FellBack(
+                fm_operations::ResumeFallback::PartialMismatch
+            )]
+        );
+        assert_eq!(leftover_partials(&run.destination), 0);
+    }
+
+    /// Task 0303: a source that is now shorter than the partial has changed; start over.
+    #[tokio::test]
+    async fn a_source_shorter_than_the_partial_falls_back_to_a_full_copy() {
+        let reporter = JournalingReporter::default();
+        let run = resume_copy(
+            appendable(),
+            Some(b"0123456789ABCDEF"),
+            b"01234",
+            false,
+            &reporter,
+            &CancellationToken::new(),
+        )
+        .await;
+        run.result.expect("copy succeeds");
+        assert_eq!(
+            std::fs::read(run.destination.join("source.bin")).expect("published"),
+            b"01234"
+        );
+        assert_eq!(
+            resume_outcomes(&reporter),
+            vec![fm_operations::ResumeOutcome::FellBack(
+                fm_operations::ResumeFallback::SourceChanged
+            )]
+        );
+    }
+
+    /// Task 0303: a partial that has vanished is reported and the copy simply starts over.
+    #[tokio::test]
+    async fn a_missing_partial_falls_back_to_a_full_copy() {
+        let reporter = JournalingReporter::default();
+        let run = resume_copy(
+            appendable(),
+            None,
+            b"0123456789",
+            false,
+            &reporter,
+            &CancellationToken::new(),
+        )
+        .await;
+        run.result.expect("copy succeeds");
+        assert_eq!(
+            std::fs::read(run.destination.join("source.bin")).expect("published"),
+            b"0123456789"
+        );
+        assert_eq!(
+            resume_outcomes(&reporter),
+            vec![fm_operations::ResumeOutcome::FellBack(
+                fm_operations::ResumeFallback::PartialGone
+            )]
+        );
+    }
+
+    /// Task 0303: a provider that cannot append never resumes, however plausible the partial.
+    #[tokio::test]
+    async fn a_provider_without_offset_writes_never_resumes() {
+        let reporter = JournalingReporter::default();
+        let run = resume_copy(
+            Arc::new(fm_vfs_local::LocalFileSystemProvider::new()),
+            Some(b"01234"),
+            b"0123456789",
+            false,
+            &reporter,
+            &CancellationToken::new(),
+        )
+        .await;
+        run.result.expect("copy succeeds");
+        assert_eq!(
+            resume_outcomes(&reporter),
+            vec![fm_operations::ResumeOutcome::FellBack(
+                fm_operations::ResumeFallback::Unverifiable
+            )]
+        );
+        assert_eq!(
+            std::fs::read(run.destination.join("source.bin")).expect("published"),
+            b"0123456789"
+        );
+        assert_eq!(leftover_partials(&run.destination), 0);
+    }
+
+    /// Task 0303: an empty partial has nothing to continue; it is replaced without comment.
+    #[tokio::test]
+    async fn an_empty_partial_is_replaced_quietly() {
+        let reporter = JournalingReporter::default();
+        let run = resume_copy(
+            appendable(),
+            Some(b""),
+            b"0123456789",
+            false,
+            &reporter,
+            &CancellationToken::new(),
+        )
+        .await;
+        run.result.expect("copy succeeds");
+        assert!(resume_outcomes(&reporter).is_empty());
+        assert_eq!(
+            std::fs::read(run.destination.join("source.bin")).expect("published"),
+            b"0123456789"
+        );
+    }
+
+    /// Task 0303 with 0302: a resumed copy is still verified end to end before it is published.
+    #[tokio::test]
+    async fn a_resumed_copy_is_verified_like_any_other() {
+        let reporter = JournalingReporter::default();
+        let run = resume_copy(
+            appendable(),
+            Some(b"01234"),
+            b"0123456789",
+            true,
+            &reporter,
+            &CancellationToken::new(),
+        )
+        .await;
+        run.result.expect("copy succeeds");
+        assert_eq!(
+            *reporter.verifications.lock().unwrap(),
+            vec![fm_operations::VerificationOutcome::Verified]
+        );
+        assert_eq!(std::fs::read(run.source).expect("source"), b"0123456789");
+    }
+
+    /// Task 0303: failing to CHECK a partial is not evidence against it. A transient failure
+    /// propagates (the retry gets another go) and the possibly-good partial is left in place.
+    #[tokio::test]
+    async fn a_transient_failure_while_proving_a_partial_keeps_it() {
+        let reporter = JournalingReporter::default();
+        let flaky: Arc<dyn FileSystemProvider> = Arc::new(
+            crate::appendable_test_provider::AppendableProvider::new("appendable-flaky")
+                .with_flaky_partial_inspect(),
+        );
+        let run = resume_copy(
+            flaky,
+            Some(b"01234"),
+            b"0123456789",
+            false,
+            &reporter,
+            &CancellationToken::new(),
+        )
+        .await;
+        let error = run.result.expect_err("a dropped link fails the attempt");
+        assert!(
+            error.is_transient(),
+            "so the retry can try again: {error:?}"
+        );
+        assert!(
+            run.destination.join(".fm-copy-interrupted").exists(),
+            "the partial that could not be checked must not be deleted"
+        );
+        assert!(resume_outcomes(&reporter).is_empty());
+        assert!(!run.destination.join("source.bin").exists());
+    }
+
+    /// Task 0303: cancelling while the partial is being proven stops the copy.
+    #[tokio::test]
+    async fn cancelling_during_the_resume_proof_cancels_the_copy() {
+        let reporter = JournalingReporter::default();
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+        let run = resume_copy(
+            appendable(),
+            Some(b"01234"),
+            b"0123456789",
+            false,
+            &reporter,
+            &cancellation,
+        )
+        .await;
+        assert!(matches!(
+            run.result,
+            Err(ExecutionError::Provider(fm_vfs::VfsError::Cancelled))
+        ));
+        assert!(!run.destination.join("source.bin").exists());
+    }
+
     async fn verified_copy(
         source_provider: Arc<dyn FileSystemProvider>,
         content: &[u8],
@@ -5713,6 +6275,7 @@ mod tests {
             &entry(&left_path),
             &provider,
             &entry(&right_path),
+            None,
             &PauseToken::default(),
             &CancellationToken::new(),
         )
@@ -5785,6 +6348,7 @@ mod tests {
             &entry,
             &provider,
             &entry,
+            None,
             &PauseToken::default(),
             &cancellation,
         )
@@ -5806,6 +6370,7 @@ mod tests {
             check_capacity: true,
             skip_space_check: false,
             space_note: Arc::new(Mutex::new(None)),
+            resume_hints: Arc::default(),
             source_provider,
             destination_provider,
             destination_directory,
@@ -5835,6 +6400,8 @@ mod tests {
         partials: Mutex<Vec<(Location, Location, Location)>>,
         revisions: Mutex<Vec<(Location, SourceRevision)>>,
         verifications: Mutex<Vec<fm_operations::VerificationOutcome>>,
+        resumes: Mutex<Vec<fm_operations::ResumeOutcome>>,
+        reported_bytes: std::sync::atomic::AtomicU64,
     }
 
     impl OperationProgressReporter for JournalingReporter {
@@ -5842,7 +6409,14 @@ mod tests {
             self.verifications.lock().unwrap().push(outcome);
         }
 
-        fn report_bytes(&self, _additional_bytes: u64) {}
+        fn note_resume(&self, outcome: fm_operations::ResumeOutcome) {
+            self.resumes.lock().unwrap().push(outcome);
+        }
+
+        fn report_bytes(&self, additional_bytes: u64) {
+            self.reported_bytes
+                .fetch_add(additional_bytes, std::sync::atomic::Ordering::SeqCst);
+        }
 
         fn journaling(&self) -> bool {
             self.enabled

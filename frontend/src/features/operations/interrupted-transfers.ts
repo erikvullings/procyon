@@ -13,7 +13,8 @@ export interface InterruptedTransfersAttrs {
   /** Transfer an action is currently running for; its buttons are disabled. */
   readonly busyId?: OperationId | undefined;
   readonly error?: string | undefined;
-  readonly onRestart: (operationId: OperationId) => void;
+  /** `resume` continues copies from their proven partials instead of starting over (task 0303). */
+  readonly onRestart: (operationId: OperationId, resume?: boolean) => void;
   readonly onDiscard: (operationId: OperationId) => void;
 }
 
@@ -105,6 +106,18 @@ export const InterruptedTransfers: Component<InterruptedTransfersAttrs> = {
                 ),
                 m('p.fm-interrupted-reason', t('operation', REASON_KEY[transfer.reason])),
                 m('.fm-operation-controls', [
+                  transfer.class === 'resumable'
+                    ? m(
+                        'button',
+                        {
+                          type: 'button',
+                          disabled: busy,
+                          title: t('operation', 'interruptedResumeHint'),
+                          onclick: () => attrs.onRestart(transfer.operationId, true),
+                        },
+                        t('operation', 'interruptedResume'),
+                      )
+                    : undefined,
                   m(
                     'button',
                     {
@@ -112,7 +125,7 @@ export const InterruptedTransfers: Component<InterruptedTransfersAttrs> = {
                       class: unconfirmed ? 'fm-interrupted-secondary' : undefined,
                       disabled: busy,
                       title: t('operation', 'interruptedRunAgainHint'),
-                      onclick: () => attrs.onRestart(transfer.operationId),
+                      onclick: () => attrs.onRestart(transfer.operationId, false),
                     },
                     needsDecision
                       ? t('operation', 'interruptedRunAgainAnyway')

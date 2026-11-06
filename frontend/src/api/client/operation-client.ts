@@ -161,8 +161,15 @@ export interface OperationClient {
   /** Transfers the previous process left queued or running, with what is safe to do (task 0300). */
   listInterruptedTransfers(signal?: AbortSignal): Promise<InterruptedTransfers>;
 
-  /** Runs an interrupted transfer's unfinished work again as a new operation. */
-  restartInterruptedTransfer(operationId: OperationId, signal?: AbortSignal): Promise<Operation>;
+  /**
+   * Runs an interrupted transfer's unfinished work again as a new operation. With `resume`,
+   * copies continue from the partials that can be proven instead of starting over (task 0303).
+   */
+  restartInterruptedTransfer(
+    operationId: OperationId,
+    options?: { readonly resume?: boolean },
+    signal?: AbortSignal,
+  ): Promise<Operation>;
 
   /** Acknowledges an interrupted transfer: removes its private partials and its record. */
   discardInterruptedTransfer(operationId: OperationId, signal?: AbortSignal): Promise<void>;

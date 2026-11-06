@@ -313,9 +313,33 @@ async fn item_facts(
         source_size,
         destination,
         partial,
-        // Task 0303 turns this on per provider once it can prove ownership of a partial.
-        resume_proven: false,
+        resume_proven: resume_possible(providers, item, source, source_size, partial),
     }
+}
+
+/// Whether continuing `item` from its partial is worth offering (task 0303): the destination
+/// provider can append at an offset, the partial holds some bytes but not more than the source,
+/// and the source still looks like the one the job planned. This is the *offer*; the copy proves
+/// the partial byte for byte before it appends, and falls back to a full copy if it cannot.
+fn resume_possible(
+    providers: &ProviderRegistry,
+    item: &RecoveredItem,
+    source: SourceState,
+    source_size: Option<u64>,
+    partial: Presence,
+) -> bool {
+    let (Some(location), Presence::Present(Some(partial_size)), Some(source_size)) =
+        (&item.partial, partial, source_size)
+    else {
+        return false;
+    };
+    source == SourceState::Unchanged
+        && partial_size > 0
+        && partial_size <= source_size
+        && providers
+            .resolve(location)
+            .and_then(|provider| provider.transfer_capabilities(location))
+            .is_ok_and(|capabilities| capabilities.random_write)
 }
 
 /// An interrupted job together with its freshly computed verdict.
@@ -327,6 +351,8 @@ struct Assessed {
     unreachable_partial: bool,
     /// Sources whose items finished or look published.
     finished: Vec<Location>,
+    /// Source files with a partial a resume can continue from (task 0303).
+    resumable: Vec<(Location, Location)>,
 }
 
 /// Holds the jobs the previous process left behind and carries out the user's decisions.
@@ -379,6 +405,7 @@ impl TransferRecoveryCoordinator {
         let mut verdicts = Vec::with_capacity(job.items.len());
         let mut partials = Vec::new();
         let mut finished = Vec::new();
+        let mut resumable = Vec::new();
         let mut unreachable_partial = false;
         let created_at_ms = job.intent.created_at.timestamp_millis();
         for item in &job.items {
@@ -393,6 +420,11 @@ impl TransferRecoveryCoordinator {
             if matches!(verdict, ItemVerdict::Done | ItemVerdict::Unconfirmed) {
                 finished.push(item.source.clone());
             }
+            if verdict == ItemVerdict::Resumable
+                && let Some(partial) = &item.partial
+            {
+                resumable.push((item.source.clone(), partial.clone()));
+            }
             verdicts.push((verdict, facts.partial));
         }
         let verdict = classify_job(&verdicts, job.damage.as_ref());
@@ -402,6 +434,7 @@ impl TransferRecoveryCoordinator {
             partials,
             unreachable_partial,
             finished,
+            resumable,
         }
     }
 
@@ -510,19 +543,45 @@ impl TransferRecoveryCoordinator {
     /// failed start loses nothing. Sources that already finished are left out; when a finished
     /// item is a child of a directory source (which cannot be left out), the skip policy keeps it
     /// from being copied again or reported as a conflict.
+    ///
+    /// With `resume` the new operation continues the partials that can be proven (task 0303)
+    /// instead of discarding them; the rest are removed as usual. Resuming a transfer that has
+    /// nothing resumable is refused rather than silently turning into a full restart.
     pub(crate) async fn restart(
         &self,
         id: OperationId,
-        start: impl FnOnce(StartOperationRequestDto) -> Result<OperationDto, ApplicationError>,
+        resume: bool,
+        start: impl FnOnce(
+            StartOperationRequestDto,
+            Vec<(Location, Location)>,
+        ) -> Result<OperationDto, ApplicationError>,
     ) -> Result<OperationDto, ApplicationError> {
         let _claim = self.claim(id)?;
         let assessed = self.assess(self.find(id)?).await;
         if assessed.unreachable_partial {
             return Err(ApplicationError::ProviderUnavailable);
         }
+        if resume && assessed.resumable.is_empty() {
+            return Err(ApplicationError::InvalidRequest(
+                "nothing in this transfer can be resumed".into(),
+            ));
+        }
         let request = restart_request(&assessed)?;
-        let started = start(request)?;
-        if let Err(error) = self.remove_partials(&assessed.partials).await {
+        let hints = if resume {
+            assessed.resumable.clone()
+        } else {
+            Vec::new()
+        };
+        let started = start(request, hints.clone())?;
+        // Partials handed to the new run now belong to it; every other one is discarded.
+        let kept: HashSet<&Location> = hints.iter().map(|(_, partial)| partial).collect();
+        let discard: Vec<Location> = assessed
+            .partials
+            .iter()
+            .filter(|partial| !kept.contains(partial))
+            .cloned()
+            .collect();
+        if let Err(error) = self.remove_partials(&discard).await {
             // The transfer is already running again; a leftover partial is only wasted space.
             tracing::warn!(%error, "an interrupted transfer's partial could not be removed");
         }
@@ -891,7 +950,9 @@ mod tests {
                 sources: items.iter().map(|item| item.source.clone()).collect(),
                 destination: Some(local(&root.join("dest"))),
                 conflict_policy: policy,
-                created_at: chrono::Utc::now(),
+                // The job began before the files its fixture writes, so a destination written
+                // by the test is never "older than the job" however coarse the clock is.
+                created_at: chrono::Utc::now() - chrono::Duration::hours(1),
             },
             items,
             damage: None,
@@ -1061,7 +1122,7 @@ mod tests {
         let coordinator = TransferRecoveryCoordinator::new(registry(), None, vec![job]);
         let seen = Mutex::new(None);
         let started = coordinator
-            .restart(id, |request| {
+            .restart(id, false, |request, _hints| {
                 *seen.lock().unwrap() = Some(request.clone());
                 let operation = fm_operations::Operation::new(
                     OperationKind::Move,
@@ -1119,7 +1180,7 @@ mod tests {
         let coordinator = TransferRecoveryCoordinator::new(registry(), None, vec![job]);
         let seen = Mutex::new(None);
         let _ = coordinator
-            .restart(id, |request| {
+            .restart(id, false, |request, _hints| {
                 *seen.lock().unwrap() = Some(request);
                 Err(ApplicationError::InvalidRequest("stop".into()))
             })
@@ -1164,7 +1225,7 @@ mod tests {
         let coordinator = TransferRecoveryCoordinator::new(registry(), None, vec![job]);
         let seen = Mutex::new(None);
         let _ = coordinator
-            .restart(id, |request| {
+            .restart(id, false, |request, _hints| {
                 *seen.lock().unwrap() = Some(request);
                 Err(ApplicationError::InvalidRequest("stop".into()))
             })
@@ -1197,7 +1258,7 @@ mod tests {
         let id = job.intent.operation_id;
         let coordinator = TransferRecoveryCoordinator::new(registry(), None, vec![job]);
         let result = coordinator
-            .restart(id, |_| unreachable!("nothing to start"))
+            .restart(id, false, |_, _hints| unreachable!("nothing to start"))
             .await;
         assert!(matches!(result, Err(ApplicationError::InvalidRequest(_))));
         assert_eq!(coordinator.list().await.transfers.len(), 1);
@@ -1217,7 +1278,9 @@ mod tests {
         let id = job.intent.operation_id;
         let coordinator = TransferRecoveryCoordinator::new(registry(), None, vec![job]);
         let result = coordinator
-            .restart(id, |_| Err(ApplicationError::InvalidRequest("busy".into())))
+            .restart(id, false, |_, _hints| {
+                Err(ApplicationError::InvalidRequest("busy".into()))
+            })
             .await;
         assert!(result.is_err());
         assert!(partial.exists(), "the partial survives a start that failed");
@@ -1351,6 +1414,185 @@ mod tests {
         );
     }
 
+    /// A registry whose "local" provider can append at an offset, like SFTP (task 0303).
+    fn appendable_registry() -> ProviderRegistry {
+        let mut providers = ProviderRegistry::new();
+        providers.register(Arc::new(
+            crate::appendable_test_provider::AppendableProvider::new("local"),
+        ));
+        providers
+    }
+
+    fn success(kind: OperationKind) -> OperationDto {
+        crate::operation_history::operation_dto(
+            fm_operations::Operation::new(kind, Vec::new(), None, ConflictPolicy::Ask),
+            None,
+        )
+    }
+
+    #[tokio::test]
+    async fn a_partial_on_an_appending_provider_is_offered_as_resumable() {
+        let fixture = Fixture::new();
+        let source = fixture.write("a.bin", b"0123456789");
+        let partial = fixture.write("dest/.fm-copy-1", b"01234");
+        let job = job(
+            fixture.root.path(),
+            OperationKind::Copy,
+            ConflictPolicy::Ask,
+            vec![item(&source, &partial, &fixture.path("dest/a.bin"))],
+        );
+        let coordinator = TransferRecoveryCoordinator::new(appendable_registry(), None, vec![job]);
+        let transfer = coordinator.list().await.transfers.remove(0);
+        assert_eq!(
+            transfer.class,
+            TransferRecoveryClassDto::Resumable,
+            "reason: {:?}",
+            transfer.reason
+        );
+        assert_eq!(transfer.partial_items, 1);
+    }
+
+    #[tokio::test]
+    async fn the_same_partial_is_only_restartable_when_the_provider_cannot_append() {
+        let fixture = Fixture::new();
+        let source = fixture.write("a.bin", b"0123456789");
+        let partial = fixture.write("dest/.fm-copy-1", b"01234");
+        let job = job(
+            fixture.root.path(),
+            OperationKind::Copy,
+            ConflictPolicy::Ask,
+            vec![item(&source, &partial, &fixture.path("dest/a.bin"))],
+        );
+        let coordinator = TransferRecoveryCoordinator::new(registry(), None, vec![job]);
+        let transfer = coordinator.list().await.transfers.remove(0);
+        assert_eq!(transfer.class, TransferRecoveryClassDto::SafelyRestartable);
+    }
+
+    #[tokio::test]
+    async fn a_partial_longer_than_its_source_or_empty_is_never_offered_for_resume() {
+        let fixture = Fixture::new();
+        let source = fixture.write("a.bin", b"0123");
+        let too_long = fixture.write("dest/.fm-copy-1", b"0123456789");
+        let empty_source = fixture.write("b.bin", b"abcd");
+        let empty = fixture.write("dest/.fm-copy-2", b"");
+        let job = job(
+            fixture.root.path(),
+            OperationKind::Copy,
+            ConflictPolicy::Ask,
+            vec![
+                item(&source, &too_long, &fixture.path("dest/a.bin")),
+                item(&empty_source, &empty, &fixture.path("dest/b.bin")),
+            ],
+        );
+        let coordinator = TransferRecoveryCoordinator::new(appendable_registry(), None, vec![job]);
+        let transfer = coordinator.list().await.transfers.remove(0);
+        assert_ne!(transfer.class, TransferRecoveryClassDto::Resumable);
+        assert!(matches!(
+            coordinator
+                .restart(
+                    coordinator.snapshot()[0].intent.operation_id,
+                    true,
+                    |_, _| unreachable!("nothing resumable, so nothing starts")
+                )
+                .await,
+            Err(ApplicationError::InvalidRequest(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn resuming_hands_the_proven_partial_to_the_new_run_and_keeps_it() {
+        let fixture = Fixture::new();
+        let source = fixture.write("a.bin", b"0123456789");
+        let partial = fixture.write("dest/.fm-copy-1", b"01234");
+        let job = job(
+            fixture.root.path(),
+            OperationKind::Copy,
+            ConflictPolicy::Ask,
+            vec![item(&source, &partial, &fixture.path("dest/a.bin"))],
+        );
+        let id = job.intent.operation_id;
+        let coordinator = TransferRecoveryCoordinator::new(appendable_registry(), None, vec![job]);
+        let seen = Mutex::new(None);
+        coordinator
+            .restart(id, true, |request, hints| {
+                *seen.lock().unwrap() = Some((request, hints));
+                Ok(success(OperationKind::Copy))
+            })
+            .await
+            .expect("resume starts");
+        let (request, hints) = seen.lock().unwrap().take().expect("start was called");
+        assert_eq!(request.operation_type, OperationKindDto::Copy);
+        assert_eq!(hints, vec![(local(&source), local(&partial))]);
+        assert!(
+            partial.exists(),
+            "the partial now belongs to the resumed run and must not be deleted"
+        );
+        assert!(coordinator.list().await.transfers.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_plain_restart_of_a_resumable_transfer_still_discards_its_partial() {
+        let fixture = Fixture::new();
+        let source = fixture.write("a.bin", b"0123456789");
+        let partial = fixture.write("dest/.fm-copy-1", b"01234");
+        let job = job(
+            fixture.root.path(),
+            OperationKind::Copy,
+            ConflictPolicy::Ask,
+            vec![item(&source, &partial, &fixture.path("dest/a.bin"))],
+        );
+        let id = job.intent.operation_id;
+        let coordinator = TransferRecoveryCoordinator::new(appendable_registry(), None, vec![job]);
+        let seen = Mutex::new(None);
+        coordinator
+            .restart(id, false, |_, hints| {
+                *seen.lock().unwrap() = Some(hints);
+                Ok(success(OperationKind::Copy))
+            })
+            .await
+            .expect("restart starts");
+        assert_eq!(
+            seen.lock().unwrap().take(),
+            Some(Vec::new()),
+            "no resume hints"
+        );
+        assert!(!partial.exists(), "starting over removes the old partial");
+    }
+
+    #[tokio::test]
+    async fn resuming_only_hands_over_resumable_items_and_removes_the_other_partials() {
+        let fixture = Fixture::new();
+        let good = fixture.write("good.bin", b"0123456789");
+        let good_partial = fixture.write("dest/.fm-copy-1", b"01234");
+        let stale = fixture.write("stale.bin", b"abc");
+        let stale_partial = fixture.write("dest/.fm-copy-2", b"abcdefghij");
+        let job = job(
+            fixture.root.path(),
+            OperationKind::Copy,
+            ConflictPolicy::Ask,
+            vec![
+                item(&good, &good_partial, &fixture.path("dest/good.bin")),
+                item(&stale, &stale_partial, &fixture.path("dest/stale.bin")),
+            ],
+        );
+        let id = job.intent.operation_id;
+        let coordinator = TransferRecoveryCoordinator::new(appendable_registry(), None, vec![job]);
+        let seen = Mutex::new(None);
+        coordinator
+            .restart(id, true, |_, hints| {
+                *seen.lock().unwrap() = Some(hints);
+                Ok(success(OperationKind::Copy))
+            })
+            .await
+            .expect("resume starts");
+        assert_eq!(
+            seen.lock().unwrap().take(),
+            Some(vec![(local(&good), local(&good_partial))])
+        );
+        assert!(good_partial.exists());
+        assert!(!stale_partial.exists(), "an unprovable partial is cleared");
+    }
+
     #[tokio::test]
     async fn only_transfers_can_be_restarted() {
         let fixture = Fixture::new();
@@ -1363,7 +1605,9 @@ mod tests {
         let id = job.intent.operation_id;
         let coordinator = TransferRecoveryCoordinator::new(registry(), None, vec![job]);
         let result = coordinator
-            .restart(id, |_| unreachable!("a delete is never started"))
+            .restart(id, false, |_, _hints| {
+                unreachable!("a delete is never started")
+            })
             .await;
         assert!(matches!(result, Err(ApplicationError::InvalidRequest(_))));
     }

@@ -75,8 +75,26 @@ describe('InterruptedTransfers', () => {
     const [first, second] = [items[0], items[1]];
     first?.querySelectorAll('button')[0]?.click();
     second?.querySelectorAll('button')[1]?.click();
-    expect(onRestart).toHaveBeenCalledWith('first');
+    expect(onRestart).toHaveBeenCalledWith('first', false);
     expect(onDiscard).toHaveBeenCalledWith('second');
+  });
+
+  it('offers to resume a transfer that can continue, and to run it again from scratch', () => {
+    const { onRestart } = mount([
+      transfer({ operationId: 'r', class: 'resumable', reason: 'partialUnfinished' }),
+    ]);
+    const buttons = [...root.querySelectorAll('button')];
+    expect(buttons.map((button) => button.textContent)).toEqual(['Resume', 'Run again', 'Discard']);
+    buttons[0]?.click();
+    buttons[1]?.click();
+    expect(onRestart).toHaveBeenNthCalledWith(1, 'r', true);
+    expect(onRestart).toHaveBeenNthCalledWith(2, 'r', false);
+  });
+
+  it('never offers Resume for a transfer that cannot continue', () => {
+    mount([transfer({ operationId: 'n' })]);
+    const buttons = [...root.querySelectorAll('button')].map((button) => button.textContent);
+    expect(buttons).not.toContain('Resume');
   });
 
   it('asks for an informed choice when a transfer needs a decision', () => {

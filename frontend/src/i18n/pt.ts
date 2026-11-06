@@ -588,6 +588,9 @@ export const pt = {
       'Não foi possível aceder a uma localização para verificar a transferência.',
     interruptedReasonJournalDamaged:
       'O registo da transferência está danificado, por isso não se sabe até onde chegou.',
+    interruptedResume: 'Retomar',
+    interruptedResumeHint:
+      'Continua a partir da parte já copiada, depois de verificar que corresponde à origem.',
     interruptedRunAgain: 'Executar de novo',
     interruptedRunAgainAnyway: 'Executar de novo mesmo assim',
     interruptedDiscard: 'Descartar',
@@ -2528,6 +2531,13 @@ export const pt = {
       'Problema temporário (tentativa {attempt} de {max}); nova tentativa em {seconds} s: {cause}',
     verificationMismatch:
       'A cópia de {name} diferia da origem (primeira diferença no byte {offset}) e não foi guardada.',
+    resumeFallbackPartialGone:
+      '{name} foi copiado de novo desde o início porque a cópia inacabada tinha desaparecido.',
+    resumeFallbackSourceChanged: '{name} foi copiado de novo desde o início porque a origem mudou.',
+    resumeFallbackPartialMismatch:
+      '{name} foi copiado de novo desde o início porque a cópia inacabada não correspondia à origem.',
+    resumeFallbackUnverifiable:
+      '{name} foi copiado de novo desde o início porque a cópia inacabada não pôde ser verificada.',
     diskSpaceCheckSkipped:
       'Verificação de espaço em disco ignorada a seu pedido: são necessários {required}, são comunicados {available} livres.',
     attributeNotPermitted:

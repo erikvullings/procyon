@@ -43,6 +43,14 @@ pub mod entry_error {
     pub const TRANSFER_RETRIED: &str = "transferRetried";
     /// A verified copy differed from its source and was not published (task 0302).
     pub const VERIFICATION_MISMATCH: &str = "verificationMismatch";
+    /// Resuming was given up because the partial is gone (task 0303).
+    pub const RESUME_FALLBACK_PARTIAL_GONE: &str = "resumeFallbackPartialGone";
+    /// Resuming was given up because the source changed (task 0303).
+    pub const RESUME_FALLBACK_SOURCE_CHANGED: &str = "resumeFallbackSourceChanged";
+    /// Resuming was given up because the partial is not a prefix of the source (task 0303).
+    pub const RESUME_FALLBACK_PARTIAL_MISMATCH: &str = "resumeFallbackPartialMismatch";
+    /// Resuming was given up because the partial could not be proven (task 0303).
+    pub const RESUME_FALLBACK_UNVERIFIABLE: &str = "resumeFallbackUnverifiable";
 }
 
 /// Codes of an operation's terminal result summary.

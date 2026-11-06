@@ -161,11 +161,18 @@ export class MockOperationClient implements OperationClient {
     }));
   }
 
-  restartInterruptedTransfer(operationId: OperationId, signal?: AbortSignal): Promise<Operation> {
+  restartInterruptedTransfer(
+    operationId: OperationId,
+    options?: { readonly resume?: boolean },
+    signal?: AbortSignal,
+  ): Promise<Operation> {
     return this.ctx.perform('restartInterruptedTransfer', signal, () => {
       const transfer = this.ctx.interruptedTransfers.get(operationId);
       if (transfer === undefined) {
         throw new MockClientError('notFound', `No interrupted transfer ${operationId}`);
+      }
+      if (options?.resume === true && transfer.class !== 'resumable') {
+        throw new MockClientError('invalidRequest', 'Nothing in this transfer can be resumed.');
       }
       this.ctx.interruptedTransfers.delete(operationId);
       this.ctx.operationSequence += 1;

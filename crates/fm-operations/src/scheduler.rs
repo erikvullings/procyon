@@ -181,6 +181,8 @@ pub trait OperationProgressReporter: Send + Sync {
     fn note_source_revision(&self, _source: &Location, _revision: SourceRevision) {}
     /// Reports what verifying one copied file concluded (task 0302).
     fn note_verification(&self, _outcome: crate::VerificationOutcome) {}
+    /// Reports that a copy continued from, or gave up on, an interrupted partial (task 0303).
+    fn note_resume(&self, _outcome: crate::ResumeOutcome) {}
     /// Whether the notes above are being kept. Executors check this before
     /// doing extra work (such as a source `stat`) that only the journal needs.
     fn journaling(&self) -> bool {
@@ -344,6 +346,48 @@ impl OperationProgressReporter for ItemProgressReporter<'_> {
     fn note_verification(&self, outcome: crate::VerificationOutcome) {
         let mut state = self.job.lock();
         state.operation.verification.record(outcome);
+    }
+
+    fn note_resume(&self, outcome: crate::ResumeOutcome) {
+        use crate::codes::entry_error as code;
+        let name = self.current_entry.location.name().unwrap_or_default();
+        let (code, message) = match outcome {
+            crate::ResumeOutcome::Resumed { bytes } => {
+                // A clean resume is good news, not a warning: it must not turn a successful
+                // copy into "completed with warnings".
+                tracing::info!(%name, bytes, "copy resumed from its interrupted partial");
+                return;
+            }
+            crate::ResumeOutcome::FellBack(reason) => {
+                let (code, why) = match reason {
+                    crate::ResumeFallback::PartialGone => (
+                        code::RESUME_FALLBACK_PARTIAL_GONE,
+                        "the unfinished copy was gone",
+                    ),
+                    crate::ResumeFallback::SourceChanged => {
+                        (code::RESUME_FALLBACK_SOURCE_CHANGED, "the source changed")
+                    }
+                    crate::ResumeFallback::PartialMismatch => (
+                        code::RESUME_FALLBACK_PARTIAL_MISMATCH,
+                        "the unfinished copy did not match the source",
+                    ),
+                    crate::ResumeFallback::Unverifiable => (
+                        code::RESUME_FALLBACK_UNVERIFIABLE,
+                        "the unfinished copy could not be checked",
+                    ),
+                };
+                (
+                    code,
+                    format!("{name} was copied again from the start because {why}."),
+                )
+            }
+        };
+        let error = crate::OperationEntryError::new(self.current_entry.clone(), message)
+            .with_code(code)
+            .with_param("name", name);
+        let mut state = self.job.lock();
+        state.operation.errors.push(error);
+        self.scheduler.publish_progress(&state.operation);
     }
 
     fn note_partial(&self, source: &Location, partial: &Location, destination: &Location) {

@@ -40,3 +40,4 @@ unexplained restart or leave ambiguous partial files.
 - 2026-08-28: Created from the product feature review. This is especially valuable for SFTP, WebDAV,
   and S3 transfers and should preserve the operation engine as the sole mutation authority.
 - 2026-11-05 claude: Too large for one change (no journal, retry, verification or non-OneDrive resume exists). Split into 0299 journal, 0300 recovery classification, 0301 retry/backoff, 0302 verification, 0303 provider resume. This task is the umbrella: mark done when 0299-0303 are done.
+- 2026-11-06 claude: 0299-0303 are done. 0303 delivered the shared resume machinery and SFTP only; S3 multipart resume (0315) and WebDAV resume (0316) are split out. This umbrella closes when those are done.
