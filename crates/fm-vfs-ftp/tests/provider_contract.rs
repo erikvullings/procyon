@@ -116,6 +116,13 @@ impl Fixture {
         });
         Self { addr, files, task }
     }
+
+    async fn put(&self, path: &str, body: &[u8]) {
+        self.files
+            .lock()
+            .await
+            .insert(path.to_owned(), body.to_vec());
+    }
 }
 
 async fn start_untrusted_ftps_fixture() -> (SocketAddr, tokio::task::JoinHandle<()>) {
@@ -240,12 +247,18 @@ async fn serve(
                     write.write_all(b"550 not found\r\n").await.unwrap();
                 }
             }
-            "STOR" => {
+            "STOR" | "APPE" => {
                 write.write_all(b"150 opening data\r\n").await.unwrap();
                 let (mut data, _) = data_listener.take().unwrap().accept().await.unwrap();
                 let mut body = Vec::new();
                 data.read_to_end(&mut body).await.unwrap();
-                files.lock().await.insert(argument.to_owned(), body);
+                let mut files = files.lock().await;
+                if command.eq_ignore_ascii_case("APPE") {
+                    files.entry(argument.to_owned()).or_default().extend(body);
+                } else {
+                    files.insert(argument.to_owned(), body);
+                }
+                drop(files);
                 write.write_all(b"226 transfer complete\r\n").await.unwrap();
             }
             "MKD" => {
@@ -340,7 +353,8 @@ fn transfer_capabilities_identify_the_connection_rather_than_the_provider_type()
     assert!(!first.server_side_copy);
     assert!(first.server_side_move);
     assert!(!first.random_read);
-    assert!(!first.random_write);
+    // `APPE` can continue a proven partial (task 0317).
+    assert!(first.random_write);
     assert!(!first.resumable_upload);
     assert!(!first.resumable_download);
 }
@@ -536,4 +550,79 @@ async fn passive_ftp_fixture_supports_the_file_workflow() {
         .await
         .unwrap();
     assert!(!fixture.files.lock().await.contains_key("/moved.txt"));
+}
+
+// ---- task 0317: upload completion and resuming with APPE ----
+
+fn ftp_root() -> Location {
+    Location::parse("ftp://11111111-1111-4111-8111-111111111111/").unwrap()
+}
+
+#[tokio::test]
+async fn shutdown_waits_until_the_server_has_the_whole_upload() {
+    let fixture = Fixture::start().await;
+    let provider = provider_at(false, fixture.addr.port());
+    let mut writer = provider
+        .open_write(
+            &ftp_root().join("done.bin").unwrap(),
+            fm_vfs::WriteOptions { overwrite: true },
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    writer.write_all(b"complete").await.unwrap();
+    writer.shutdown().await.unwrap();
+    // No polling: the verdict only arrives once the server has stored the file.
+    assert_eq!(
+        fixture.files.lock().await.get("/done.bin").unwrap(),
+        b"complete"
+    );
+}
+
+#[tokio::test]
+async fn an_interrupted_upload_continues_with_appe_from_its_partial() {
+    let fixture = Fixture::start().await;
+    fixture.put("/.fm-copy-1", b"0123").await;
+    let provider = provider_at(false, fixture.addr.port());
+    let partial = ftp_root().join(".fm-copy-1").unwrap();
+
+    let mut writer = provider
+        .open_write_at(&partial, 4, CancellationToken::new())
+        .await
+        .unwrap();
+    writer.write_all(b"456789").await.unwrap();
+    writer.shutdown().await.unwrap();
+    assert_eq!(
+        fixture.files.lock().await.get("/.fm-copy-1").unwrap(),
+        b"0123456789"
+    );
+}
+
+#[tokio::test]
+async fn resuming_at_the_wrong_offset_or_without_a_partial_is_refused() {
+    let fixture = Fixture::start().await;
+    fixture.put("/.fm-copy-2", b"0123").await;
+    let provider = provider_at(false, fixture.addr.port());
+
+    let wrong = provider
+        .open_write_at(
+            &ftp_root().join(".fm-copy-2").unwrap(),
+            2,
+            CancellationToken::new(),
+        )
+        .await;
+    assert!(matches!(wrong, Err(VfsError::Io { .. })));
+    let missing = provider
+        .open_write_at(
+            &ftp_root().join(".fm-copy-3").unwrap(),
+            0,
+            CancellationToken::new(),
+        )
+        .await;
+    assert!(matches!(missing, Err(VfsError::NotFound { .. })));
+    // Nothing was appended to the partial that was refused.
+    assert_eq!(
+        fixture.files.lock().await.get("/.fm-copy-2").unwrap(),
+        b"0123"
+    );
 }

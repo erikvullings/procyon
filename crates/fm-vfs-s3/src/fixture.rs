@@ -32,6 +32,8 @@ pub const FIXTURE_REGION: &str = "us-east-1";
 struct Store {
     objects: HashMap<String, Vec<u8>>,
     uploads: HashMap<String, HashMap<u16, Vec<u8>>>,
+    /// Source of unique upload ids (an id is never reused after a completion or abort).
+    next_upload: u64,
 }
 
 /// A running in-process mock S3-compatible endpoint.
@@ -231,7 +233,14 @@ fn handle(request: &Request, store: &Arc<Mutex<Store>>) -> Response {
 
     match (request.method.as_str(), key.is_empty()) {
         ("GET", true) if request.query.contains_key("list-type") => list_objects(request, &store),
+        ("GET", false) if request.query.contains_key("uploadId") => list_parts(request, &store),
         ("GET", false) => get_object(request, &key, &store),
+        ("PUT", false)
+            if request.query.contains_key("uploadId")
+                && request.headers.contains_key("x-amz-copy-source") =>
+        {
+            upload_part_copy(request, &mut store)
+        }
         ("PUT", false) if request.query.contains_key("uploadId") => {
             upload_part(request, &key, &mut store)
         }
@@ -439,7 +448,8 @@ fn delete_object(key: &str, store: &mut Store) -> Response {
 }
 
 fn create_multipart_upload(key: &str, store: &mut Store) -> Response {
-    let upload_id = format!("upload-{}", store.uploads.len() + 1);
+    store.next_upload += 1;
+    let upload_id = format!("upload-{}", store.next_upload);
     store.uploads.insert(upload_id.clone(), HashMap::new());
     let body = format!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?><InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>{}</Bucket><Key>{}</Key><UploadId>{upload_id}</UploadId></InitiateMultipartUploadResult>",
@@ -474,6 +484,83 @@ fn upload_part(request: &Request, _key: &str, store: &mut Store) -> Response {
         reason: "OK",
         headers: vec![("ETag".to_owned(), format!("\"part-{part_number}\""))],
         body: Vec::new(),
+    }
+}
+
+/// `UploadPartCopy`: a part whose bytes are a range of an existing object.
+fn upload_part_copy(request: &Request, store: &mut Store) -> Response {
+    let (Some(upload_id), Some(part_number)) = (
+        request.query.get("uploadId"),
+        request
+            .query
+            .get("partNumber")
+            .and_then(|value| value.parse::<u16>().ok()),
+    ) else {
+        return bad_request();
+    };
+    let source_header = request
+        .headers
+        .get("x-amz-copy-source")
+        .cloned()
+        .unwrap_or_default();
+    let Some(source) = store
+        .objects
+        .get(&object_key(&percent_decode(&source_header)))
+    else {
+        return not_found();
+    };
+    let slice = match request
+        .headers
+        .get("x-amz-copy-source-range")
+        .and_then(|range| parse_range(range, source.len()))
+    {
+        Some((start, end)) if start <= end && end < source.len() => source[start..=end].to_vec(),
+        Some(_) => return bad_request(),
+        None => source.clone(),
+    };
+    let Some(parts) = store.uploads.get_mut(upload_id) else {
+        return not_found();
+    };
+    parts.insert(part_number, slice);
+    Response {
+        status: 200,
+        reason: "OK",
+        headers: vec![("Content-Type".to_owned(), "application/xml".to_owned())],
+        body: format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?><CopyPartResult><ETag>&quot;part-{part_number}&quot;</ETag></CopyPartResult>"
+        )
+        .into_bytes(),
+    }
+}
+
+/// `ListParts`: the parts committed so far for an upload, in part order.
+fn list_parts(request: &Request, store: &Store) -> Response {
+    let Some(parts) = request
+        .query
+        .get("uploadId")
+        .and_then(|upload_id| store.uploads.get(upload_id))
+    else {
+        return not_found();
+    };
+    let mut numbers: Vec<u16> = parts.keys().copied().collect();
+    numbers.sort_unstable();
+    let items: String = numbers
+        .iter()
+        .map(|number| {
+            format!(
+                "<Part><PartNumber>{number}</PartNumber><ETag>&quot;part-{number}&quot;</ETag><LastModified>2026-01-01T00:00:00.000Z</LastModified><Size>{}</Size></Part>",
+                parts[number].len()
+            )
+        })
+        .collect();
+    Response {
+        status: 200,
+        reason: "OK",
+        headers: vec![("Content-Type".to_owned(), "application/xml".to_owned())],
+        body: format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?><ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><MaxParts>1000</MaxParts><IsTruncated>false</IsTruncated>{items}</ListPartsResult>"
+        )
+        .into_bytes(),
     }
 }
 

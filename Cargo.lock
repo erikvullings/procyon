@@ -3642,6 +3642,7 @@ dependencies = [
  "rusty-s3",
  "tokio",
  "tokio-util",
+ "tracing",
  "uuid",
 ]
 

@@ -11,7 +11,9 @@ use fm_vfs::{
     VfsError, WriteOptions,
 };
 use futures::TryStreamExt;
-use rusty_s3::actions::{CreateMultipartUpload, DeleteObject, GetObject, ListObjectsV2, PutObject};
+use rusty_s3::actions::{
+    CreateMultipartUpload, DeleteObject, GetObject, ListObjectsV2, ListParts, PutObject,
+};
 use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
 use tokio_util::io::StreamReader;
 use tokio_util::sync::CancellationToken;
@@ -45,6 +47,18 @@ const MINIMUM_MULTIPART_PART_SIZE: u64 = 5 * 1024 * 1024;
 
 /// Maximum attempts for each part before the multipart upload is aborted.
 const MAX_UPLOAD_PART_ATTEMPTS: usize = 3;
+
+/// Name prefix of the private temporaries the operation engine writes before publishing a copy.
+/// Only these are resumable: their multipart upload is left in place when it is interrupted.
+const PRIVATE_TEMPORARY_PREFIX: &str = ".fm-copy-";
+
+/// Suffix of the marker object that names the multipart upload in progress for a private
+/// temporary (task 0315). An unfinished multipart upload is invisible in object listings, so
+/// without this marker a restarted process could not find the upload id again.
+const UPLOAD_MARKER_SUFFIX: &str = ".fm-upload";
+
+/// Largest range one `UploadPartCopy` request may copy (S3 allows 5 GiB; stay well below it).
+const MAX_COPY_PART_SIZE: u64 = 4 * 1024 * 1024 * 1024;
 
 /// Duration a presigned request stays valid for. Requests are signed and
 /// sent immediately, so this only needs to comfortably exceed one round trip.
@@ -119,6 +133,179 @@ impl S3FileSystemProvider {
     }
 }
 
+impl S3FileSystemProvider {
+    /// Starts the background upload behind a writer; `resume_from` continues a sealed partial.
+    async fn spawn_upload(
+        &self,
+        parsed: &Parsed,
+        resume_from: Option<u64>,
+        cancellation: CancellationToken,
+    ) -> Result<ProviderWriteStream, VfsError> {
+        let (bucket, credentials) = self.bucket_and_credentials(&parsed.connection_id).await?;
+        let http = self.http.clone();
+        let key = parsed.key.clone();
+        let threshold = self.multipart_threshold;
+        let (writer, mut reader, completion) = fm_vfs::upload_pipe(64 * 1024);
+        tokio::spawn(async move {
+            let client = ReqwestMultipartUploadClient {
+                http: &http,
+                bucket: &bucket,
+                credentials: &credentials,
+                key: &key,
+                resumable: is_private_temporary(&key),
+            };
+            let upload = tokio::select! {
+                result = async {
+                    match resume_from {
+                        Some(prefix) => resume_upload(&client, prefix, &mut reader).await,
+                        None => drive_upload(&client, threshold, &mut reader).await,
+                    }
+                } => result,
+                () = cancellation.cancelled() => Err(VfsError::Cancelled),
+            };
+            // The writer's `shutdown` waits for this verdict, so a refused or failed upload
+            // fails the copy instead of being noticed only when the temporary is published.
+            completion.finish(upload);
+        });
+        Ok(writer)
+    }
+
+    /// Turns the multipart upload an interrupted run left for a private temporary into a
+    /// regular object holding the parts that were committed (task 0315), so the engine can read
+    /// the partial back, prove it against the source and continue after it.
+    ///
+    /// Every part this provider writes except the last is at least 5 MiB, so any contiguous run
+    /// of parts from 1 is a valid object. A missing marker means there is nothing to seal; an
+    /// upload that no longer exists just loses its marker. Must not run while a writer for the
+    /// same temporary is still uploading.
+    async fn seal_partial(&self, parsed: &Parsed) -> Result<(), VfsError> {
+        let (bucket, credentials) = self.bucket_and_credentials(&parsed.connection_id).await?;
+        let marker = marker_key(&parsed.key);
+        let response = self
+            .http
+            .get(GetObject::new(&bucket, Some(&credentials), &marker).sign(SIGNED_URL_TTL))
+            .send()
+            .await
+            .map_err(map_reqwest)?;
+        let upload_id = match ensure_success(response).await {
+            Ok(response) => response.text().await.map_err(map_reqwest)?,
+            Err(VfsError::NotFound { .. }) => return Ok(()),
+            Err(error) => return Err(error),
+        };
+        let upload_id = upload_id.trim();
+        let client = ReqwestMultipartUploadClient {
+            http: &self.http,
+            bucket: &bucket,
+            credentials: &credentials,
+            key: &parsed.key,
+            resumable: true,
+        };
+        let etags = match self
+            .committed_parts(&bucket, &credentials, &parsed.key, upload_id)
+            .await
+        {
+            Ok(etags) => etags,
+            Err(VfsError::NotFound { .. }) => {
+                // The upload expired or was aborted: only the marker is left.
+                client.forget_upload().await;
+                return Ok(());
+            }
+            Err(error) => return Err(error),
+        };
+        if etags.is_empty() {
+            let _ = client.abort_multipart_upload(upload_id).await;
+        } else {
+            client.complete_multipart_upload(upload_id, &etags).await?;
+        }
+        client.forget_upload().await;
+        Ok(())
+    }
+
+    /// Aborts the multipart upload recorded for a private temporary, so a discarded partial does
+    /// not keep costing storage, and removes its marker. Best effort: failures are logged.
+    async fn abandon_upload(&self, temporary: &Location) {
+        let Ok(parsed) = Parsed::parse(temporary) else {
+            return;
+        };
+        if !is_private_temporary(&parsed.key) {
+            return;
+        }
+        let Ok((bucket, credentials)) = self.bucket_and_credentials(&parsed.connection_id).await
+        else {
+            return;
+        };
+        let marker = marker_key(&parsed.key);
+        let upload_id = match self
+            .http
+            .get(GetObject::new(&bucket, Some(&credentials), &marker).sign(SIGNED_URL_TTL))
+            .send()
+            .await
+        {
+            Ok(response) => match ensure_success(response).await {
+                Ok(response) => response.text().await.unwrap_or_default(),
+                Err(_) => return,
+            },
+            Err(_) => return,
+        };
+        let client = ReqwestMultipartUploadClient {
+            http: &self.http,
+            bucket: &bucket,
+            credentials: &credentials,
+            key: &parsed.key,
+            resumable: true,
+        };
+        if let Err(error) = client.abort_multipart_upload(upload_id.trim()).await
+            && !matches!(error, VfsError::NotFound { .. })
+        {
+            tracing::warn!(%error, "an abandoned multipart upload could not be aborted");
+        }
+        client.forget_upload().await;
+    }
+
+    /// ETags of the contiguous parts `1..=n` committed for `upload_id`.
+    async fn committed_parts(
+        &self,
+        bucket: &Bucket,
+        credentials: &Credentials,
+        key: &str,
+        upload_id: &str,
+    ) -> Result<Vec<String>, VfsError> {
+        let mut etags: Vec<String> = Vec::new();
+        let mut marker = 0_u16;
+        loop {
+            let mut action = ListParts::new(bucket, Some(credentials), key, upload_id);
+            if marker > 0 {
+                action.set_part_number_marker(marker);
+            }
+            let response = self
+                .http
+                .get(action.sign(SIGNED_URL_TTL))
+                .send()
+                .await
+                .map_err(map_reqwest)?;
+            let body = ensure_success(response)
+                .await?
+                .text()
+                .await
+                .map_err(map_reqwest)?;
+            let page = ListParts::parse_response(&body).map_err(|error| VfsError::Io {
+                message: format!("invalid ListParts response: {error}"),
+            })?;
+            let received = page.parts.len();
+            for part in page.parts {
+                if usize::from(part.number) != etags.len() + 1 {
+                    return Ok(etags);
+                }
+                marker = part.number;
+                etags.push(part.etag);
+            }
+            if received == 0 || received < usize::from(page.max_parts) {
+                return Ok(etags);
+            }
+        }
+    }
+}
+
 fn build_bucket(params: &S3ConnectionParameters) -> Result<Bucket, VfsError> {
     let endpoint_text = params
         .endpoint
@@ -176,20 +363,20 @@ impl FileSystemProvider for S3FileSystemProvider {
     /// this out explicitly, so the planner never expects an atomic
     /// same-backend move). `server_side_copy` is `true`: `CopyObject` is a
     /// real, implemented fast path within one bucket. `random_read` is
-    /// `true` (ranged `GetObject`, see [`Self::read_range`]). Resumable
-    /// upload/download and random writes are not implemented, so they stay
-    /// `false` rather than advertising a fast path this provider cannot
-    /// honour.
+    /// `true` (ranged `GetObject`, see [`Self::read_range`]).
+    /// `resumable_upload` and `random_write` are `true` for private
+    /// temporaries (task 0315): an interrupted multipart upload is sealed and
+    /// continued with `UploadPartCopy`, see [`Self::open_write_at`].
     fn transfer_capabilities(&self, location: &Location) -> Result<TransferCapabilities, VfsError> {
         let parsed = Parsed::parse(location)?;
         Ok(TransferCapabilities {
             endpoint: TransferEndpoint::new(format!("s3:{}", parsed.connection_id)),
             server_side_copy: true,
             server_side_move: false,
-            resumable_upload: false,
+            resumable_upload: true,
             resumable_download: false,
             random_read: true,
-            random_write: false,
+            random_write: true,
         })
     }
 
@@ -297,6 +484,12 @@ impl FileSystemProvider for S3FileSystemProvider {
         entry: &EntryRef,
         cancellation: CancellationToken,
     ) -> Result<EntrySummary, VfsError> {
+        if let Ok(parsed) = Parsed::parse(&entry.location)
+            && is_private_temporary(&parsed.key)
+        {
+            // A temporary an interrupted run left half-uploaded is only visible once sealed.
+            self.seal_partial(&parsed).await?;
+        }
         let parent = entry
             .location
             .parent()
@@ -476,28 +669,36 @@ impl FileSystemProvider for S3FileSystemProvider {
             });
         }
         let parsed = Parsed::parse(destination)?;
-        let (bucket, credentials) = self.bucket_and_credentials(&parsed.connection_id).await?;
-        let http = self.http.clone();
-        let key = parsed.key;
-        let threshold = self.multipart_threshold;
+        self.spawn_upload(&parsed, None, cancellation).await
+    }
 
-        let (writer, mut reader, completion) = fm_vfs::upload_pipe(64 * 1024);
-        tokio::spawn(async move {
-            let client = ReqwestMultipartUploadClient {
-                http: &http,
-                bucket: &bucket,
-                credentials: &credentials,
-                key: &key,
-            };
-            let upload = tokio::select! {
-                result = drive_upload(&client, threshold, &mut reader) => result,
-                () = cancellation.cancelled() => Err(VfsError::Cancelled),
-            };
-            // The writer's `shutdown` waits for this verdict, so a refused or failed upload
-            // fails the copy instead of being noticed only when the temporary is published.
-            completion.finish(upload);
-        });
-        Ok(writer)
+    async fn open_write_at(
+        &self,
+        partial: &Location,
+        offset: u64,
+        cancellation: CancellationToken,
+    ) -> Result<ProviderWriteStream, VfsError> {
+        cancelled(&cancellation)?;
+        let parsed = Parsed::parse(partial)?;
+        if !is_private_temporary(&parsed.key) {
+            return Err(VfsError::UnsupportedCapability {
+                capability: ProviderCapabilities::WRITE,
+            });
+        }
+        // Whatever an interrupted run left becomes the object this upload continues from.
+        self.seal_partial(&parsed).await?;
+        let summary = self
+            .inspect(&entry_ref(partial.clone()), CancellationToken::new())
+            .await?;
+        if summary.size != Some(offset) {
+            return Err(VfsError::Io {
+                message: format!(
+                    "the partial upload holds {:?} bytes, not the {offset} to resume from",
+                    summary.size
+                ),
+            });
+        }
+        self.spawn_upload(&parsed, Some(offset), cancellation).await
     }
 
     /// Attempts a real `CopyObject` into `temporary`. Only possible within
@@ -552,6 +753,7 @@ impl FileSystemProvider for S3FileSystemProvider {
         temporary: &Location,
         cancellation: CancellationToken,
     ) -> Result<(), VfsError> {
+        self.abandon_upload(temporary).await;
         match self
             .remove(
                 &entry_ref(temporary.clone()),
@@ -589,7 +791,7 @@ impl FileSystemProvider for S3FileSystemProvider {
 }
 
 #[async_trait]
-trait MultipartUploadClient {
+trait MultipartUploadClient: Sync {
     async fn put_object(&self, body: Vec<u8>) -> Result<(), VfsError>;
 
     async fn create_multipart_upload(&self) -> Result<String, VfsError>;
@@ -608,6 +810,34 @@ trait MultipartUploadClient {
     ) -> Result<(), VfsError>;
 
     async fn abort_multipart_upload(&self, upload_id: &str) -> Result<(), VfsError>;
+
+    /// Whether a failed or interrupted upload is left in place so a later run can continue it,
+    /// instead of aborted (task 0315). Only private temporaries are.
+    fn keeps_interrupted_upload(&self) -> bool {
+        false
+    }
+
+    /// Records `upload_id` where a restarted process can find it.
+    async fn remember_upload(&self, _upload_id: &str) -> Result<(), VfsError> {
+        Ok(())
+    }
+
+    /// Removes the record made by [`Self::remember_upload`].
+    async fn forget_upload(&self) {}
+
+    /// Server-side copies bytes `start..=end` of the object being written (the sealed partial)
+    /// into `part_number` of `upload_id`, so a resumed upload does not send them again.
+    async fn copy_part(
+        &self,
+        _upload_id: &str,
+        _part_number: u16,
+        _start: u64,
+        _end: u64,
+    ) -> Result<String, VfsError> {
+        Err(VfsError::UnsupportedCapability {
+            capability: ProviderCapabilities::WRITE,
+        })
+    }
 }
 
 struct ReqwestMultipartUploadClient<'a> {
@@ -615,10 +845,82 @@ struct ReqwestMultipartUploadClient<'a> {
     bucket: &'a Bucket,
     credentials: &'a Credentials,
     key: &'a str,
+    /// The key is a private temporary: keep an interrupted upload and record its id.
+    resumable: bool,
 }
 
 #[async_trait]
 impl MultipartUploadClient for ReqwestMultipartUploadClient<'_> {
+    fn keeps_interrupted_upload(&self) -> bool {
+        self.resumable
+    }
+
+    async fn remember_upload(&self, upload_id: &str) -> Result<(), VfsError> {
+        if !self.resumable {
+            return Ok(());
+        }
+        let marker = marker_key(self.key);
+        let action = PutObject::new(self.bucket, Some(self.credentials), &marker);
+        let response = self
+            .http
+            .put(action.sign(SIGNED_URL_TTL))
+            .body(upload_id.to_owned())
+            .send()
+            .await
+            .map_err(map_reqwest)?;
+        ensure_success(response).await?;
+        Ok(())
+    }
+
+    async fn forget_upload(&self) {
+        if self.resumable {
+            let _ = delete_object_ignoring_not_found(
+                self.http,
+                self.bucket,
+                self.credentials,
+                &marker_key(self.key),
+            )
+            .await;
+        }
+    }
+
+    async fn copy_part(
+        &self,
+        upload_id: &str,
+        part_number: u16,
+        start: u64,
+        end: u64,
+    ) -> Result<String, VfsError> {
+        let mut action =
+            self.bucket
+                .upload_part(Some(self.credentials), self.key, part_number, upload_id);
+        let source = format!("/{}/{}", self.bucket.name(), encode_copy_source(self.key));
+        let range = format!("bytes={start}-{end}");
+        // Signed header names must be lowercase (see `read_range`).
+        action
+            .headers_mut()
+            .insert("x-amz-copy-source", source.clone());
+        action
+            .headers_mut()
+            .insert("x-amz-copy-source-range", range.clone());
+        let response = self
+            .http
+            .put(action.sign(SIGNED_URL_TTL))
+            .header("x-amz-copy-source", source)
+            .header("x-amz-copy-source-range", range)
+            .send()
+            .await
+            .map_err(map_reqwest)?;
+        let body = ensure_success(response)
+            .await?
+            .text()
+            .await
+            .map_err(map_reqwest)?;
+        element_text(&body, "ETag").ok_or_else(|| VfsError::Io {
+            message: "UploadPartCopy response had no ETag".to_owned(),
+        })
+    }
+
     async fn put_object(&self, body: Vec<u8>) -> Result<(), VfsError> {
         let action = PutObject::new(self.bucket, Some(self.credentials), self.key);
         let url = action.sign(SIGNED_URL_TTL);
@@ -791,14 +1093,78 @@ where
     R: tokio::io::AsyncRead + Unpin,
 {
     let upload_id = client.create_multipart_upload().await?;
+    if let Err(error) = client.remember_upload(&upload_id).await {
+        let _ = client.abort_multipart_upload(&upload_id).await;
+        return Err(error);
+    }
     let result = match upload_parts(client, &upload_id, first_part, reader).await {
         Ok(etags) => client.complete_multipart_upload(&upload_id, &etags).await,
         Err(error) => Err(error),
     };
-    if result.is_err() {
-        let _ = client.abort_multipart_upload(&upload_id).await;
-    }
+    finish_upload(client, &upload_id, &result).await;
     result
+}
+
+/// Continues an interrupted upload (task 0315): the first `prefix` bytes are already in the
+/// object being written, so they are copied server-side into a new upload and only the rest of
+/// `reader` is sent.
+async fn resume_upload<C, R>(client: &C, prefix: u64, reader: &mut R) -> Result<(), VfsError>
+where
+    C: MultipartUploadClient + ?Sized,
+    R: tokio::io::AsyncRead + Unpin,
+{
+    let upload_id = client.create_multipart_upload().await?;
+    if let Err(error) = client.remember_upload(&upload_id).await {
+        let _ = client.abort_multipart_upload(&upload_id).await;
+        return Err(error);
+    }
+    let result = async {
+        let mut etags = Vec::new();
+        for (start, end) in copy_ranges(prefix) {
+            let part_number = u16::try_from(etags.len() + 1).map_err(|_| VfsError::Io {
+                message: "too many multipart parts".to_owned(),
+            })?;
+            etags.push(
+                client
+                    .copy_part(&upload_id, part_number, start, end)
+                    .await?,
+            );
+        }
+        let etags = continue_parts(client, &upload_id, etags, reader).await?;
+        client.complete_multipart_upload(&upload_id, &etags).await
+    }
+    .await;
+    finish_upload(client, &upload_id, &result).await;
+    result
+}
+
+/// Tidies up after an upload: success clears the record; a failure aborts the upload unless it
+/// is kept for a later resume.
+async fn finish_upload<C>(client: &C, upload_id: &str, result: &Result<(), VfsError>)
+where
+    C: MultipartUploadClient + ?Sized,
+{
+    match result {
+        Ok(()) => client.forget_upload().await,
+        Err(_) if client.keeps_interrupted_upload() => {}
+        Err(_) => {
+            let _ = client.abort_multipart_upload(upload_id).await;
+        }
+    }
+}
+
+/// Splits `0..prefix` into inclusive byte ranges for `UploadPartCopy`: as few as the 5 GiB
+/// request limit allows, all of similar size so none (they are never the last part) falls under
+/// S3's 5 MiB minimum.
+fn copy_ranges(prefix: u64) -> Vec<(u64, u64)> {
+    if prefix == 0 {
+        return Vec::new();
+    }
+    let pieces = prefix.div_ceil(MAX_COPY_PART_SIZE);
+    let size = prefix.div_ceil(pieces);
+    (0..pieces)
+        .map(|index| (index * size, ((index + 1) * size).min(prefix) - 1))
+        .collect()
 }
 
 async fn upload_parts<C, R>(
@@ -811,15 +1177,24 @@ where
     C: MultipartUploadClient + ?Sized,
     R: tokio::io::AsyncRead + Unpin,
 {
+    let etag = upload_part_with_retry(client, upload_id, 1, &Bytes::from(first_part)).await?;
+    continue_parts(client, upload_id, vec![etag], reader).await
+}
+
+/// Uploads the rest of `reader` as parts numbered after `etags`, in 8 MiB chunks.
+async fn continue_parts<C, R>(
+    client: &C,
+    upload_id: &str,
+    mut etags: Vec<String>,
+    reader: &mut R,
+) -> Result<Vec<String>, VfsError>
+where
+    C: MultipartUploadClient + ?Sized,
+    R: tokio::io::AsyncRead + Unpin,
+{
     use tokio::io::AsyncReadExt;
 
-    let mut etags = Vec::new();
-    let mut part_number: u16 = 1;
-    let mut part = Bytes::from(first_part);
     loop {
-        let etag = upload_part_with_retry(client, upload_id, part_number, &part).await?;
-        etags.push(etag);
-
         let mut next = vec![0_u8; 8 * 1024 * 1024];
         let mut filled = 0;
         loop {
@@ -838,13 +1213,16 @@ where
             }
         }
         if filled == 0 {
-            break;
+            return Ok(etags);
         }
         next.truncate(filled);
-        part = Bytes::from(next);
-        part_number += 1;
+        let part_number = u16::try_from(etags.len() + 1).map_err(|_| VfsError::Io {
+            message: "too many multipart parts".to_owned(),
+        })?;
+        let etag =
+            upload_part_with_retry(client, upload_id, part_number, &Bytes::from(next)).await?;
+        etags.push(etag);
     }
-    Ok(etags)
 }
 
 async fn upload_part_with_retry<C>(
@@ -1142,6 +1520,31 @@ fn decode_percent(segment: &str, location: &Location) -> Result<String, VfsError
     String::from_utf8(decoded).map_err(|_| invalid(&location.uri))
 }
 
+/// Whether `key` names a private temporary the engine writes before publishing a copy.
+fn is_private_temporary(key: &str) -> bool {
+    key.rsplit('/')
+        .next()
+        .is_some_and(|name| name.starts_with(PRIVATE_TEMPORARY_PREFIX))
+}
+
+/// Key of the marker object naming the multipart upload in progress for `key`.
+fn marker_key(key: &str) -> String {
+    format!("{key}{UPLOAD_MARKER_SUFFIX}")
+}
+
+/// Text of the first `<name>` element in an XML body (S3 responses are flat enough for this).
+fn element_text(xml: &str, name: &str) -> Option<String> {
+    let open = format!("<{name}>");
+    let start = xml.find(&open)? + open.len();
+    let end = start + xml[start..].find(&format!("</{name}>"))?;
+    // Servers differ in how they escape the quotes around an ETag.
+    Some(
+        xml[start..end]
+            .replace("&quot;", "\"")
+            .replace("&#34;", "\""),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::VecDeque;
@@ -1151,7 +1554,8 @@ mod tests {
     use bytes::Bytes;
 
     use super::{
-        MultipartUploadClient, UploadPartError, drive_upload, multipart_upload, upload_parts,
+        MAX_COPY_PART_SIZE, MultipartUploadClient, UploadPartError, copy_ranges, drive_upload,
+        element_text, is_private_temporary, multipart_upload, upload_parts,
     };
     use fm_vfs::VfsError;
 
@@ -1336,5 +1740,35 @@ mod tests {
             vec![vec!["etag-1".to_owned()]]
         );
         assert_eq!(*client.aborts.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn copy_ranges_cover_the_prefix_exactly_in_similar_sized_pieces() {
+        assert!(copy_ranges(0).is_empty());
+        assert_eq!(copy_ranges(13), vec![(0, 12)]);
+        let prefix = MAX_COPY_PART_SIZE + 10 * 1024 * 1024;
+        let ranges = copy_ranges(prefix);
+        assert_eq!(ranges.len(), 2);
+        assert_eq!(ranges[0].0, 0);
+        assert_eq!(ranges[0].1 + 1, ranges[1].0);
+        assert_eq!(ranges[1].1 + 1, prefix);
+        assert!(ranges.iter().all(|(a, b)| b - a + 1 >= 5 * 1024 * 1024));
+    }
+
+    #[test]
+    fn only_engine_temporaries_are_private_temporaries() {
+        assert!(is_private_temporary("dir/.fm-copy-1234"));
+        assert!(is_private_temporary(".fm-copy-1234"));
+        assert!(!is_private_temporary("dir/.fm-copy-1234/child"));
+        assert!(!is_private_temporary("dir/report.fm-copy-1"));
+    }
+
+    #[test]
+    fn element_text_reads_a_flat_xml_element() {
+        let xml = "<CopyPartResult><ETag>&quot;abc&quot;</ETag></CopyPartResult>";
+        assert_eq!(element_text(xml, "ETag").as_deref(), Some("\"abc\""));
+        assert_eq!(element_text(xml, "Missing"), None);
+        let numeric = "<CopyPartResult><ETag>&#34;abc&#34;</ETag></CopyPartResult>";
+        assert_eq!(element_text(numeric, "ETag").as_deref(), Some("\"abc\""));
     }
 }

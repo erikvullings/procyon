@@ -17,6 +17,7 @@ reqwest = { workspace = true, features = ["stream"] }
 rusty-s3.workspace = true
 tokio = { workspace = true, features = ["io-util", "net", "rt", "sync"] }
 tokio-util = { workspace = true, features = ["io"] }
+tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]

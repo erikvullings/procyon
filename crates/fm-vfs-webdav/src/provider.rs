@@ -422,6 +422,7 @@ impl FileSystemProvider for WebDavFileSystemProvider {
             | ProviderCapabilities::MOVE
             | ProviderCapabilities::SERVER_SIDE_COPY
             | ProviderCapabilities::DELETE
+            | ProviderCapabilities::RANDOM_ACCESS
     }
 
     /// Task 0108. `server_side_copy`/`server_side_move` are `true` — WebDAV's
@@ -705,6 +706,58 @@ impl FileSystemProvider for WebDavFileSystemProvider {
             .bytes_stream()
             .map(|chunk| chunk.map_err(std::io::Error::other));
         Ok(Box::pin(StreamReader::new(stream)))
+    }
+
+    /// A ranged `GET` (task 0316). A server that ignores `Range` answers `200` with the whole
+    /// body; the offset is then skipped here, so the caller always gets the bytes it asked for.
+    /// `random_read` in [`Self::transfer_capabilities`] still only reflects `Accept-Ranges`, so
+    /// planners do not choose a ranged read the server cannot serve cheaply.
+    async fn read_range(
+        &self,
+        entry_ref: &EntryRef,
+        offset: u64,
+        length: Option<u64>,
+        cancellation: CancellationToken,
+    ) -> Result<ProviderReadStream, VfsError> {
+        use tokio::io::AsyncReadExt;
+
+        cancelled(&cancellation)?;
+        let parsed = Parsed::parse(&entry_ref.location)?;
+        let parameters = self.resolve(&parsed).await?;
+        let url = self.url_for(&parsed, &parameters)?;
+        let range = match length {
+            Some(length) if length > 0 => format!("bytes={offset}-{}", offset + length - 1),
+            Some(_) => format!("bytes={offset}-{offset}"),
+            None => format!("bytes={offset}-"),
+        };
+        let response = self
+            .request(&parameters, Method::GET, url, Some(("Range", &range)), None)
+            .await?;
+        let status = response.status();
+        if status == StatusCode::RANGE_NOT_SATISFIABLE {
+            // The offset is at or past the end: there is nothing to read.
+            return Ok(Box::pin(tokio::io::empty()));
+        }
+        if !status.is_success() {
+            return Err(map_status(status, &entry_ref.location.uri));
+        }
+        let mut reader: ProviderReadStream = Box::pin(StreamReader::new(
+            response
+                .bytes_stream()
+                .map(|chunk| chunk.map_err(std::io::Error::other)),
+        ));
+        if status != StatusCode::PARTIAL_CONTENT && offset > 0 {
+            let mut skipped = (&mut reader).take(offset);
+            tokio::io::copy(&mut skipped, &mut tokio::io::sink())
+                .await
+                .map_err(|error| VfsError::Io {
+                    message: error.to_string(),
+                })?;
+        }
+        Ok(match length {
+            Some(length) => Box::pin(reader.take(length)),
+            None => reader,
+        })
     }
 
     async fn open_write(

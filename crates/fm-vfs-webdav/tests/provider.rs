@@ -63,6 +63,7 @@ fn reports_only_implemented_webdav_capabilities() {
         ProviderCapabilities::MOVE,
         ProviderCapabilities::SERVER_SIDE_COPY,
         ProviderCapabilities::DELETE,
+        ProviderCapabilities::RANDOM_ACCESS,
     ] {
         assert!(capabilities.contains(supported));
     }
@@ -72,7 +73,6 @@ fn reports_only_implemented_webdav_capabilities() {
         ProviderCapabilities::SET_TIMESTAMPS,
         ProviderCapabilities::SET_PERMISSIONS,
         ProviderCapabilities::TRASH,
-        ProviderCapabilities::RANDOM_ACCESS,
     ] {
         assert!(!capabilities.contains(unsupported));
     }
@@ -321,4 +321,89 @@ async fn wrong_credentials_report_permission_denied() {
     };
     let result = WebDavFileSystemProvider::verify_connectivity(&parameters).await;
     assert!(matches!(result, Err(VfsError::PermissionDenied { .. })));
+}
+
+// ---- task 0316: ranged reads ----
+
+async fn read_range_bytes(
+    provider: &WebDavFileSystemProvider,
+    name: &str,
+    offset: u64,
+    length: Option<u64>,
+) -> Vec<u8> {
+    let mut reader = provider
+        .read_range(
+            &EntryRef {
+                id: EntryId::new(),
+                location: root().join(name).unwrap(),
+            },
+            offset,
+            length,
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    let mut bytes = Vec::new();
+    reader.read_to_end(&mut bytes).await.unwrap();
+    bytes
+}
+
+#[tokio::test]
+async fn read_range_returns_exactly_the_requested_bytes() {
+    let fixture = WebDavFixture::start(FixtureAuth::Basic).await;
+    fixture.put("/data.bin", b"0123456789").await;
+    let provider = provider(&fixture.base_url, WebDavAuthScheme::Basic);
+
+    assert_eq!(
+        read_range_bytes(&provider, "data.bin", 3, None).await,
+        b"3456789"
+    );
+    assert_eq!(
+        read_range_bytes(&provider, "data.bin", 2, Some(4)).await,
+        b"2345"
+    );
+    assert_eq!(
+        read_range_bytes(&provider, "data.bin", 0, None).await,
+        b"0123456789"
+    );
+    // At or past the end there is nothing left, not an error.
+    assert!(
+        read_range_bytes(&provider, "data.bin", 10, None)
+            .await
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn read_range_skips_the_offset_when_the_server_ignores_range() {
+    let fixture = WebDavFixture::start(FixtureAuth::Basic).await;
+    fixture.put("/no-range-data.bin", b"0123456789").await;
+    let provider = provider(&fixture.base_url, WebDavAuthScheme::Basic);
+
+    assert_eq!(
+        read_range_bytes(&provider, "no-range-data.bin", 4, None).await,
+        b"456789"
+    );
+    assert_eq!(
+        read_range_bytes(&provider, "no-range-data.bin", 4, Some(2)).await,
+        b"45"
+    );
+}
+
+#[tokio::test]
+async fn read_range_of_a_missing_file_is_not_found() {
+    let fixture = WebDavFixture::start(FixtureAuth::Basic).await;
+    let provider = provider(&fixture.base_url, WebDavAuthScheme::Basic);
+    let result = provider
+        .read_range(
+            &EntryRef {
+                id: EntryId::new(),
+                location: root().join("missing.bin").unwrap(),
+            },
+            1,
+            None,
+            CancellationToken::new(),
+        )
+        .await;
+    assert!(matches!(result, Err(VfsError::NotFound { .. })));
 }

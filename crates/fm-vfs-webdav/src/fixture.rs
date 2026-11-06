@@ -448,6 +448,39 @@ async fn write_response<W: AsyncWriteExt + Unpin>(
     let _ = write.shutdown().await;
 }
 
+/// Files whose name starts with this are always served whole, as a server that ignores `Range`
+/// would (task 0316).
+pub const IGNORES_RANGES_PREFIX: &str = "no-range-";
+
+/// Answers a single `bytes=start-[end]` range with `206`, or `416` when it starts past the end.
+async fn serve_range<W: AsyncWriteExt + Unpin>(write: &mut W, bytes: &[u8], range: &str) {
+    let parsed = range.strip_prefix("bytes=").and_then(|spec| {
+        let (start, end) = spec.split_once('-')?;
+        let start: usize = start.parse().ok()?;
+        let end = if end.is_empty() {
+            bytes.len().checked_sub(1)?
+        } else {
+            end.parse::<usize>()
+                .ok()?
+                .min(bytes.len().saturating_sub(1))
+        };
+        Some((start, end))
+    });
+    match parsed {
+        Some((start, end)) if start < bytes.len() && start <= end => {
+            let headers = format!(
+                "Content-Range: bytes {start}-{end}/{}\r\nAccept-Ranges: bytes\r\n",
+                bytes.len()
+            );
+            write_response(write, "206 Partial Content", &headers, &bytes[start..=end]).await;
+        }
+        _ => {
+            let headers = format!("Content-Range: bytes */{}\r\n", bytes.len());
+            write_response(write, "416 Range Not Satisfiable", &headers, b"").await;
+        }
+    }
+}
+
 async fn serve<S>(stream: S, entries: Entries, locked: Locked, auth: FixtureAuth)
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
@@ -515,9 +548,16 @@ where
                     StoredEntry::File(bytes) => Some(bytes.clone()),
                     StoredEntry::Directory => None,
                 });
-            match body {
-                Some(bytes) => write_response(&mut write_half, "200 OK", "", &bytes).await,
-                None => write_response(&mut write_half, "404 Not Found", "", b"").await,
+            let ignores_ranges = path
+                .rsplit('/')
+                .next()
+                .is_some_and(|name| name.starts_with(IGNORES_RANGES_PREFIX));
+            match (body, request.headers.get("range")) {
+                (Some(bytes), Some(range)) if !ignores_ranges => {
+                    serve_range(&mut write_half, &bytes, range).await;
+                }
+                (Some(bytes), _) => write_response(&mut write_half, "200 OK", "", &bytes).await,
+                (None, _) => write_response(&mut write_half, "404 Not Found", "", b"").await,
             }
         }
         "PUT" => {

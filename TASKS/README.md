@@ -228,7 +228,7 @@ engine, conflict handling, clipboard, drag-and-drop, comparison and checksums th
 - [x] 0093 Copy filename and path actions
 - [x] 0160 Safe operation undo
 - [x] 0161 Saved synchronization profiles *(needs 0030, 0075)*
-- [ ] 0163 Durable transfer recovery *(umbrella; needs 0035, 0047, 0108; split into 0299–0303)*
+- [x] 0163 Durable transfer recovery *(umbrella; needs 0035, 0047, 0108; split into 0299–0303, 0315–0317)*
 - [x] 0165 File collection basket *(needs 0035, 0048, 0108)*
 - [x] 0168 Create symbolic links and Windows shortcuts *(needs 0035, 0058)*
 - [x] 0222 File operation dialog clarity *(needs 0044, 0045, 0112)*
@@ -528,8 +528,9 @@ previous pass stopped where it did.
 - [x] 0301 Bounded retry with exponential backoff for transfers *(parent 0163; needs 0035; copies/duplicates only)*
 - [x] 0302 Optional post-transfer verification *(parent 0163; needs 0035, 0047; copies only, streaming read-back)*
 - [x] 0303 Provider byte-range and multipart resume *(parent 0163; needs 0299, 0300, 0301; shared machinery + SFTP; S3 and WebDAV split into 0315/0316)*
-- [ ] 0315 S3 multipart upload resume *(parent 0163; needs 0303)*
-- [ ] 0316 WebDAV transfer resume *(parent 0163; needs 0303)*
+- [x] 0315 S3 multipart upload resume *(parent 0163; needs 0303; seal + UploadPartCopy)*
+- [x] 0316 WebDAV transfer resume *(parent 0163; needs 0303; ranged reads only, uploads restart)*
+- [x] 0317 FTP upload completion and resume *(parent 0163; needs 0303; APPE)*
 
 ## Proposed features (new backlog)
 

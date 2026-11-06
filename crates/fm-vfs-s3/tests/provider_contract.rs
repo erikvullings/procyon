@@ -138,7 +138,9 @@ async fn transfer_capabilities_report_no_native_move_but_native_copy_and_ranged_
     assert!(!capabilities.server_side_move);
     assert!(capabilities.server_side_copy);
     assert!(capabilities.random_read);
-    assert!(!capabilities.random_write);
+    // Private temporaries resume an interrupted multipart upload (task 0315).
+    assert!(capabilities.random_write);
+    assert!(capabilities.resumable_upload);
 }
 
 #[tokio::test]
@@ -559,4 +561,161 @@ async fn real_endpoint_smoke_test() {
         )
         .await
         .expect("cleanup delete against the real endpoint must succeed");
+}
+
+// ---- task 0315: resuming an interrupted multipart upload ----
+
+const MIB: usize = 1024 * 1024;
+
+/// A provider that switches to multipart at S3's 5 MiB minimum, so small test bodies exercise it.
+async fn multipart_provider() -> (S3Fixture, S3FileSystemProvider) {
+    let fixture = S3Fixture::start().await;
+    let resolver = Arc::new(FixedResolver {
+        endpoint: fixture.endpoint.clone(),
+    });
+    let provider = S3FileSystemProvider::with_multipart_threshold(resolver, 5 * MIB as u64);
+    (fixture, provider)
+}
+
+fn patterned(len: usize) -> Vec<u8> {
+    (0..len).map(|index| (index * 7 % 251) as u8).collect()
+}
+
+fn temporary() -> Location {
+    root()
+        .join(&format!(".fm-copy-{}", uuid::Uuid::new_v4()))
+        .expect("temporary location")
+}
+
+/// Starts an upload of `data` to `temporary` and drops the writer without finishing it, as a
+/// crash would: the parts uploaded so far stay as an unfinished multipart upload.
+async fn interrupt_upload(provider: &S3FileSystemProvider, temporary: &Location, data: &[u8]) {
+    let mut writer = provider
+        .open_write(
+            temporary,
+            WriteOptions { overwrite: true },
+            CancellationToken::new(),
+        )
+        .await
+        .expect("open_write");
+    writer.write_all(data).await.expect("write");
+    drop(writer);
+    // The background task finishes the parts it already holds before it sees the broken pipe.
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+}
+
+async fn finish_upload_at(
+    provider: &S3FileSystemProvider,
+    partial: &Location,
+    offset: usize,
+    rest: &[u8],
+) -> Result<(), VfsError> {
+    let mut writer = provider
+        .open_write_at(partial, offset as u64, CancellationToken::new())
+        .await?;
+    writer.write_all(rest).await.expect("write");
+    writer.shutdown().await.map_err(|error| VfsError::Io {
+        message: error.to_string(),
+    })
+}
+
+#[tokio::test]
+async fn an_interrupted_upload_is_resumed_from_its_committed_parts() {
+    let (_fixture, provider) = multipart_provider().await;
+    let temporary = temporary();
+    let data = patterned(5 * MIB + 8 * MIB + 3 * MIB);
+    // 5 MiB (part 1) + 8 MiB (part 2) are committed; the 3 MiB tail never was.
+    interrupt_upload(&provider, &temporary, &data[..5 * MIB + 8 * MIB + 1000]).await;
+
+    let partial = provider
+        .inspect(&entry(temporary.clone()), CancellationToken::new())
+        .await
+        .expect("the committed parts are visible as a partial");
+    assert_eq!(partial.size, Some(13 * MIB as u64));
+    assert_eq!(
+        read_all(&provider, &entry(temporary.clone())).await,
+        data[..13 * MIB]
+    );
+
+    finish_upload_at(&provider, &temporary, 13 * MIB, &data[13 * MIB..])
+        .await
+        .expect("resumed upload");
+    assert_eq!(read_all(&provider, &entry(temporary.clone())).await, data);
+    // The marker is gone, so nothing refers to a finished upload.
+    assert!(
+        provider
+            .inspect(&entry(temporary), CancellationToken::new())
+            .await
+            .is_ok()
+    );
+}
+
+#[tokio::test]
+async fn resuming_at_the_wrong_offset_is_refused() {
+    let (_fixture, provider) = multipart_provider().await;
+    let temporary = temporary();
+    let data = patterned(5 * MIB + 8 * MIB);
+    interrupt_upload(&provider, &temporary, &data[..5 * MIB + 8 * MIB]).await;
+
+    let error = finish_upload_at(&provider, &temporary, 5 * MIB, b"x")
+        .await
+        .expect_err("a shorter offset would corrupt the object");
+    assert!(matches!(error, VfsError::Io { .. }), "{error:?}");
+}
+
+#[tokio::test]
+async fn discarding_a_partial_aborts_its_upload() {
+    let (_fixture, provider) = multipart_provider().await;
+    let temporary = temporary();
+    interrupt_upload(&provider, &temporary, &patterned(5 * MIB + 8 * MIB)).await;
+
+    provider
+        .discard_copy(&temporary, CancellationToken::new())
+        .await
+        .expect("discard");
+    assert!(matches!(
+        provider
+            .inspect(&entry(temporary), CancellationToken::new())
+            .await,
+        Err(VfsError::NotFound { .. })
+    ));
+}
+
+#[tokio::test]
+async fn a_marker_for_an_upload_that_no_longer_exists_is_dropped() {
+    let (_fixture, provider) = multipart_provider().await;
+    let temporary = temporary();
+    let marker = root()
+        .join(&format!(
+            "{}.fm-upload",
+            temporary.name().expect("temporary name")
+        ))
+        .expect("marker location");
+    write_all(&provider, &marker, b"upload-that-expired", true).await;
+
+    assert!(matches!(
+        provider
+            .inspect(&entry(temporary), CancellationToken::new())
+            .await,
+        Err(VfsError::NotFound { .. })
+    ));
+    assert!(matches!(
+        provider
+            .open_read(&entry(marker), CancellationToken::new())
+            .await,
+        Err(VfsError::NotFound { .. })
+    ));
+}
+
+#[tokio::test]
+async fn only_private_temporaries_resume() {
+    let (_fixture, provider) = multipart_provider().await;
+    let ordinary = root().join("ordinary.bin").expect("location");
+    write_all(&provider, &ordinary, b"data", true).await;
+    assert!(matches!(
+        provider
+            .open_write_at(&ordinary, 4, CancellationToken::new())
+            .await,
+        Err(VfsError::UnsupportedCapability { .. })
+    ));
 }

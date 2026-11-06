@@ -229,7 +229,7 @@ async fn serve(stream: TcpStream, files: Files, directories: Directories) {
                     None => write.write_all(b"550 not found\r\n").await,
                 }
             }
-            "STOR" => {
+            "STOR" | "APPE" => {
                 if write.write_all(b"150 opening data\r\n").await.is_err() {
                     return;
                 }
@@ -239,7 +239,12 @@ async fn serve(stream: TcpStream, files: Files, directories: Directories) {
                 if let Ok((mut data, _)) = listener.accept().await {
                     let mut body = Vec::new();
                     if data.read_to_end(&mut body).await.is_ok() {
-                        files.lock().await.insert(argument.to_owned(), body);
+                        let mut files = files.lock().await;
+                        if command.eq_ignore_ascii_case("APPE") {
+                            files.entry(argument.to_owned()).or_default().extend(body);
+                        } else {
+                            files.insert(argument.to_owned(), body);
+                        }
                     }
                 }
                 write.write_all(b"226 transfer complete\r\n").await

@@ -141,6 +141,48 @@ impl FtpFileSystemProvider {
         }
         Client::connect(&resolved).await
     }
+    /// Starts the background `STOR` (or `APPE`, when `append`) behind a writer. The writer's
+    /// `shutdown` waits for the server's verdict, so a refused or truncated upload fails the
+    /// copy instead of being noticed only when the temporary is published.
+    async fn spawn_upload(
+        &self,
+        p: Parsed,
+        append: bool,
+        cancellation: CancellationToken,
+    ) -> Result<ProviderWriteStream, VfsError> {
+        let mut client = self.client(&p).await?;
+        let (writer, mut rx, completion) = fm_vfs::upload_pipe(65536);
+        tokio::spawn(async move {
+            macro_rules! upload {
+                ($ftp:expr) => {{
+                    let opened = if append {
+                        $ftp.append_with_stream(&p.path).await
+                    } else {
+                        $ftp.put_with_stream(&p.path).await
+                    };
+                    match opened {
+                        Err(error) => Err(map_ftp(error)),
+                        Ok(mut data) => {
+                            let copied = tokio::select! {
+                                r = tokio::io::copy(&mut rx, &mut data) => r.map(|_| ()).map_err(|error| VfsError::Io { message: error.to_string() }),
+                                () = cancellation.cancelled() => Err(VfsError::Cancelled),
+                            };
+                            // The data connection must be closed and the final reply read
+                            // whatever happened, or the control connection is left desynchronised.
+                            let finalized = $ftp.finalize_put_stream(data).await.map_err(map_ftp);
+                            copied.and(finalized)
+                        }
+                    }
+                }};
+            }
+            let result = match &mut client {
+                Client::Plain(ftp) => upload!(ftp),
+                Client::Secure(ftp) => upload!(ftp),
+            };
+            completion.finish(result);
+        });
+        Ok(writer)
+    }
 }
 #[async_trait]
 impl FileSystemProvider for FtpFileSystemProvider {
@@ -181,7 +223,8 @@ impl FileSystemProvider for FtpFileSystemProvider {
             resumable_upload: false,
             resumable_download: false,
             random_read: false,
-            random_write: false,
+            // `APPE` continues a proven partial (task 0317); reads restart from the start.
+            random_write: true,
         })
     }
     /// FTP/FTPS has no native change-notification mechanism (task 0106
@@ -361,25 +404,31 @@ impl FileSystemProvider for FtpFileSystemProvider {
             });
         }
         let p = Parsed::parse(d)?;
-        let mut client = self.client(&p).await?;
-        let (tx, mut rx) = tokio::io::duplex(65536);
-        tokio::spawn(async move {
-            match &mut client {
-                Client::Plain(v) => {
-                    if let Ok(mut data) = v.put_with_stream(p.path).await {
-                        let _ = tokio::select! {r=tokio::io::copy(&mut rx,&mut data)=>r,_=c.cancelled()=>Ok(0)};
-                        let _ = v.finalize_put_stream(data).await;
-                    }
-                }
-                Client::Secure(v) => {
-                    if let Ok(mut data) = v.put_with_stream(p.path).await {
-                        let _ = tokio::select! {r=tokio::io::copy(&mut rx,&mut data)=>r,_=c.cancelled()=>Ok(0)};
-                        let _ = v.finalize_put_stream(data).await;
-                    }
-                }
-            }
-        });
-        Ok(Box::pin(tx))
+        self.spawn_upload(p, false, c).await
+    }
+    /// Continues an interrupted upload with `APPE` (task 0317). The partial must already hold
+    /// exactly `offset` bytes (a shorter one leaves a hole, a longer one a stale tail); the
+    /// caller has proven those bytes against the source.
+    async fn open_write_at(
+        &self,
+        partial: &Location,
+        offset: u64,
+        c: CancellationToken,
+    ) -> Result<ProviderWriteStream, VfsError> {
+        cancelled(&c)?;
+        let summary = self
+            .inspect(&entry(partial.clone()), CancellationToken::new())
+            .await?;
+        if summary.size != Some(offset) {
+            return Err(VfsError::Io {
+                message: format!(
+                    "the partial upload holds {:?} bytes, not the {offset} to resume from",
+                    summary.size
+                ),
+            });
+        }
+        let p = Parsed::parse(partial)?;
+        self.spawn_upload(p, true, c).await
     }
     async fn commit_copy(
         &self,

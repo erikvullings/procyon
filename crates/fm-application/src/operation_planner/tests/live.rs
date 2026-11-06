@@ -347,15 +347,15 @@ async fn live_sftp_resumes_downloads_and_uploads() {
 
 #[tokio::test]
 #[ignore = "needs the podman S3 server"]
-async fn live_s3_resumes_downloads_and_never_claims_upload_resume() {
+async fn live_s3_resumes_downloads_and_multipart_uploads() {
     let provider: Arc<dyn FileSystemProvider> = Arc::new(
         S3FileSystemProvider::with_multipart_threshold(Arc::new(S3Resolver), 5 * 1024 * 1024),
     );
     download_resume(provider.clone(), "", "s3").await;
 
-    // Uploading to S3: a partial object cannot be appended to, so a hint must fall back to a
-    // full copy that still produces the right object.
-    let data = payload();
+    // Upload resume (task 0315): a multipart upload interrupted after its first part continues
+    // from the parts the server already holds.
+    let data: Vec<u8> = payload().repeat(4);
     let name = unique("live-s3-up");
     let (directory, _) = local_dir();
     let source_path = directory.join(&name);
@@ -364,18 +364,34 @@ async fn live_s3_resumes_downloads_and_never_claims_upload_resume() {
     let remote =
         |file: &str| Location::parse(&format!("s3://{CONNECTION}/{file}")).expect("location");
     let partial = remote(&format!(".fm-copy-{name}"));
-    put_partial(provider.as_ref(), &partial, &data[..PREFIX]).await;
+    let mut writer = provider
+        .open_write(&partial, WriteOptions::default(), CancellationToken::new())
+        .await
+        .expect("open partial");
+    // 6 MiB: the first 5 MiB become part 1; the writer then dies without finishing.
+    writer
+        .write_all(&data[..6 * 1024 * 1024])
+        .await
+        .expect("write prefix");
+    drop(writer);
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
     let local: Arc<dyn FileSystemProvider> = Arc::new(fm_vfs_local::LocalFileSystemProvider::new());
     let (result, reporter) =
         run_resume(local, provider.clone(), &source, &remote(""), &partial).await;
-    result.unwrap_or_else(|error| panic!("s3: upload with a stale hint failed: {error:?}"));
+    result.unwrap_or_else(|error| panic!("s3: resumed upload failed: {error:?}"));
     assert_eq!(
         reporter.resumes.lock().unwrap().clone(),
-        vec![fm_operations::ResumeOutcome::FellBack(
-            fm_operations::ResumeFallback::Unverifiable
-        )]
+        vec![fm_operations::ResumeOutcome::Resumed {
+            bytes: 5 * 1024 * 1024
+        }],
+        "s3: the upload continued from the committed part"
     );
     assert_eq!(read_all(provider.as_ref(), &remote(&name)).await, data);
+    assert_eq!(
+        reporter.verifications.lock().unwrap().clone(),
+        vec![fm_operations::VerificationOutcome::Verified]
+    );
     let _ = provider
         .remove(
             &entry(&remote(&name)),
@@ -383,12 +399,12 @@ async fn live_s3_resumes_downloads_and_never_claims_upload_resume() {
             CancellationToken::new(),
         )
         .await;
-    println!("s3: upload falls back to a full copy as designed");
+    println!("s3: multipart upload resume OK (5 MiB not sent again)");
 }
 
 #[tokio::test]
 #[ignore = "needs the podman WebDAV server"]
-async fn live_webdav_resumes_downloads_and_never_claims_upload_resume() {
+async fn live_webdav_resumes_ranged_downloads_and_restarts_uploads() {
     let provider: Arc<dyn FileSystemProvider> =
         Arc::new(WebDavFileSystemProvider::new(Arc::new(DavResolver)));
     download_resume(provider.clone(), "", "webdav").await;

@@ -1,6 +1,6 @@
 # 0163 Durable transfer recovery
 
-Status: blocked
+Status: done
 Priority: high
 Subsystem: backend, operations, remote
 Depends on: 0035, 0047, 0108
@@ -41,3 +41,4 @@ unexplained restart or leave ambiguous partial files.
   and S3 transfers and should preserve the operation engine as the sole mutation authority.
 - 2026-11-05 claude: Too large for one change (no journal, retry, verification or non-OneDrive resume exists). Split into 0299 journal, 0300 recovery classification, 0301 retry/backoff, 0302 verification, 0303 provider resume. This task is the umbrella: mark done when 0299-0303 are done.
 - 2026-11-06 claude: 0299-0303 are done. 0303 delivered the shared resume machinery and SFTP only; S3 multipart resume (0315) and WebDAV resume (0316) are split out. This umbrella closes when those are done.
+- 2026-11-06 claude: DONE. 0299-0303 delivered the journal, classification, retry, verification and the shared resume machinery with SFTP; 0315 added S3 multipart upload resume (seal + `UploadPartCopy`), 0316 WebDAV ranged reads (upload keeps restarting, reported), 0317 FTP completion reporting and `APPE` resume. Live-verified against OpenSSH, SeaweedFS and `hacdias/webdav` (podman, removed afterwards); FTP is fixture-tested only. Remaining known limits are in the Agent Notes of 0303, 0315, 0316 and 0317.
