@@ -738,6 +738,7 @@ impl SearchComparisonCoordinator {
                     completed_at: None,
                     undo: None,
                     undo_of: None,
+                    verification: None,
                 },
             },
         );

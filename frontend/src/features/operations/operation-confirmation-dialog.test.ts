@@ -71,13 +71,17 @@ describe('OperationConfirmationDialog', () => {
         ?.textContent,
     ).toBe('target folder');
     expect(document.activeElement?.textContent?.trim()).toBe('Copy');
-    document.activeElement?.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
-    );
+    const tab = (): void => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+      );
+    };
+    // The "verify copied files" checkbox (task 0302) sits in the cycle between the two buttons.
+    tab();
+    expect(document.activeElement?.matches('.fm-operation-confirmation-verify input')).toBe(true);
+    tab();
     expect(document.activeElement?.textContent?.trim()).toBe('Cancel');
-    document.activeElement?.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
-    );
+    tab();
     expect(document.activeElement?.textContent?.trim()).toBe('Copy');
     document.activeElement?.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),

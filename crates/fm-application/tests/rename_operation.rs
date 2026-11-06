@@ -58,6 +58,7 @@ async fn rename(
                 permanent_delete_confirmed: false,
                 override_read_only: false,
                 link: None,
+                verify_transfer: false,
             },
             None,
         )
@@ -92,6 +93,7 @@ async fn rename_batch(
                 permanent_delete_confirmed: false,
                 override_read_only: false,
                 link: None,
+                verify_transfer: false,
             },
             None,
         )

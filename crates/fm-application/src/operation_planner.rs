@@ -580,6 +580,7 @@ impl OperationPlanner {
                 permanent_delete_confirmed: false,
                 override_read_only: false,
                 link: None,
+                verify_transfer: false,
             };
             let inner = self.plan(OperationKindDto::Move, &request)?;
             return Ok(Arc::new(GuardedUndoExecutor { guard, inner }));
@@ -2993,9 +2994,15 @@ impl CopyExecutor {
                 .map(|_| ExecutionOutcome::Completed)
                 .map_err(ExecutionError::from)
         } else if planned.kind == EntryKind::Symlink {
-            self.destination_provider
+            let copied = self
+                .destination_provider
                 .copy_symlink(&item.entry, &planned.destination, cancellation.clone())
-                .await
+                .await;
+            if copied.is_ok() && operation.verify_transfer {
+                // A link has no content of its own to compare (task 0302).
+                progress.note_verification(fm_operations::VerificationOutcome::Skipped);
+            }
+            copied
                 .map(|_| ExecutionOutcome::Completed)
                 .map_err(ExecutionError::from)
         } else {
@@ -3003,7 +3010,10 @@ impl CopyExecutor {
             self.copy_file(
                 &source_item,
                 &planned.destination,
-                effective_resolution(operation.conflict_policy, resolution),
+                CopyFileOptions {
+                    effective: effective_resolution(operation.conflict_policy, resolution),
+                    verify: operation.verify_transfer,
+                },
                 progress,
                 pause,
                 cancellation,
@@ -3100,11 +3110,12 @@ impl CopyExecutor {
         &self,
         item: &PlanItem,
         final_destination: &Location,
-        effective: Option<ConflictResolution>,
+        options: CopyFileOptions,
         progress: &dyn OperationProgressReporter,
         pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
+        let CopyFileOptions { effective, verify } = options;
         let destination_directory = final_destination
             .parent()
             .map_err(|error| ExecutionError::Failed(error.to_string()))?
@@ -3251,6 +3262,61 @@ impl CopyExecutor {
         if cancellation.is_cancelled() {
             return Err(fm_vfs::VfsError::Cancelled.into());
         }
+        let mut verified_outcome = None;
+        if verify {
+            // Task 0302: compare the finished private copy with its source BEFORE it can be
+            // published, so a mismatching file never appears at the destination.
+            let copy = EntryRef {
+                id: EntryId::new(),
+                location: temporary.clone(),
+            };
+            match compare_copy(
+                self.source_provider.as_ref(),
+                &item.entry,
+                self.destination_provider.as_ref(),
+                &copy,
+                pause,
+                cancellation,
+            )
+            .await?
+            {
+                // Counted once the copy is published, so a retry after a failed publish does
+                // not count the same file twice.
+                CopyComparison::Identical => {
+                    verified_outcome = Some(fm_operations::VerificationOutcome::Verified);
+                }
+                CopyComparison::Unreadable => {
+                    verified_outcome = Some(fm_operations::VerificationOutcome::NotVerified);
+                }
+                CopyComparison::Different {
+                    source_size,
+                    copy_size,
+                    offset,
+                } => {
+                    progress.note_verification(fm_operations::VerificationOutcome::Mismatch);
+                    let discarded = self
+                        .destination_provider
+                        .discard_copy(&temporary, CancellationToken::new())
+                        .await;
+                    *self.temporary.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                    discarded?;
+                    let name = final_destination.name().unwrap_or_default();
+                    return Err(ExecutionError::warning(
+                        fm_operations::OperationEntryError::new(
+                            item.entry.clone(),
+                            format!(
+                                "The copy of {name} did not match its source ({source_size} vs {copy_size} bytes, first difference at byte {offset}) and was not saved."
+                            ),
+                        )
+                        .with_code(fm_operations::codes::entry_error::VERIFICATION_MISMATCH)
+                        .with_param("name", name)
+                        .with_param("sourceSize", source_size)
+                        .with_param("copySize", copy_size)
+                        .with_param("offset", offset),
+                    ));
+                }
+            }
+        }
 
         let overwrite = effective == Some(ConflictResolution::Overwrite);
         let mut destination = final_destination.clone();
@@ -3321,6 +3387,9 @@ impl CopyExecutor {
             }
         }
         *self.temporary.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        if let Some(outcome) = verified_outcome {
+            progress.note_verification(outcome);
+        }
         Ok(ExecutionOutcome::Completed)
     }
 }
@@ -3644,6 +3713,148 @@ fn conflict_entry(entry: &fm_domain::EntrySummary) -> fm_operations::ConflictEnt
     }
 }
 
+/// How one file copy resolves conflicts and whether its result is verified (task 0302).
+#[derive(Debug, Clone, Copy)]
+struct CopyFileOptions {
+    effective: Option<ConflictResolution>,
+    verify: bool,
+}
+
+/// What comparing a finished private copy with its source found (task 0302).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CopyComparison {
+    /// Same length, same bytes.
+    Identical,
+    /// The copy differs; `offset` is the first byte where they part ways.
+    Different {
+        source_size: u64,
+        copy_size: u64,
+        offset: u64,
+    },
+    /// A provider cannot read one side back, so nothing could be compared.
+    Unreadable,
+}
+
+/// Reads until `buffer` is full or the stream ends, returning how many bytes arrived.
+async fn read_full<R: tokio::io::AsyncRead + Unpin>(
+    reader: &mut R,
+    buffer: &mut [u8],
+) -> Result<usize, ExecutionError> {
+    let mut filled = 0;
+    while filled < buffer.len() {
+        let read = reader
+            .read(&mut buffer[filled..])
+            .await
+            .map_err(copy_stream_error)?;
+        if read == 0 {
+            break;
+        }
+        filled += read;
+    }
+    Ok(filled)
+}
+
+/// Streams both sides in bounded chunks and reports the first difference. Constant memory,
+/// cancellable between chunks, and it honours pause like the copy itself.
+async fn compare_copy(
+    source_provider: &dyn FileSystemProvider,
+    source: &EntryRef,
+    copy_provider: &dyn FileSystemProvider,
+    copy: &EntryRef,
+    pause: &PauseToken,
+    cancellation: &CancellationToken,
+) -> Result<CopyComparison, ExecutionError> {
+    // A side that cannot be read back (no read capability, or access to the just-written
+    // temporary is refused or gone) is reported as not verified, never as a failed copy.
+    let unreadable = |error: &fm_vfs::VfsError| {
+        matches!(
+            error,
+            fm_vfs::VfsError::UnsupportedCapability { .. }
+                | fm_vfs::VfsError::PermissionDenied { .. }
+                | fm_vfs::VfsError::NotFound { .. }
+        )
+    };
+    let mut left = match source_provider
+        .open_read(source, cancellation.clone())
+        .await
+    {
+        Ok(reader) => reader,
+        Err(error) if unreadable(&error) => return Ok(CopyComparison::Unreadable),
+        Err(error) => return Err(error.into()),
+    };
+    let mut right = match copy_provider.open_read(copy, cancellation.clone()).await {
+        Ok(reader) => reader,
+        Err(error) if unreadable(&error) => return Ok(CopyComparison::Unreadable),
+        Err(error) => return Err(error.into()),
+    };
+    let mut left_chunk = vec![0_u8; 128 * 1024];
+    let mut right_chunk = vec![0_u8; 128 * 1024];
+    let mut offset = 0_u64;
+    loop {
+        pause.checkpoint().await;
+        if cancellation.is_cancelled() {
+            return Err(fm_vfs::VfsError::Cancelled.into());
+        }
+        let (left_read, right_read) = tokio::select! {
+            () = cancellation.cancelled() => return Err(fm_vfs::VfsError::Cancelled.into()),
+            reads = async {
+                let left_read = read_full(&mut left, &mut left_chunk).await?;
+                let right_read = read_full(&mut right, &mut right_chunk).await?;
+                Ok::<_, ExecutionError>((left_read, right_read))
+            } => reads?,
+        };
+        let common = left_read.min(right_read);
+        if let Some(index) = left_chunk[..common]
+            .iter()
+            .zip(&right_chunk[..common])
+            .position(|(a, b)| a != b)
+        {
+            let at = offset + index as u64;
+            return Ok(different(at, offset, left_read, right_read, &mut left, &mut right).await);
+        }
+        if left_read != right_read {
+            let at = offset + common as u64;
+            return Ok(different(at, offset, left_read, right_read, &mut left, &mut right).await);
+        }
+        if left_read == 0 {
+            return Ok(CopyComparison::Identical);
+        }
+        offset += left_read as u64;
+    }
+}
+
+/// Builds the mismatch report, counting the remaining bytes of both streams so the evidence
+/// carries the true sizes (best effort: an unreadable remainder just stops the count).
+async fn different<L, R>(
+    at: u64,
+    chunk_start: u64,
+    left_read: usize,
+    right_read: usize,
+    left: &mut L,
+    right: &mut R,
+) -> CopyComparison
+where
+    L: tokio::io::AsyncRead + Unpin,
+    R: tokio::io::AsyncRead + Unpin,
+{
+    async fn drain<S: tokio::io::AsyncRead + Unpin>(stream: &mut S) -> u64 {
+        let mut total = 0_u64;
+        let mut chunk = vec![0_u8; 128 * 1024];
+        while let Ok(read) = stream.read(&mut chunk).await {
+            if read == 0 {
+                break;
+            }
+            total += read as u64;
+        }
+        total
+    }
+    CopyComparison::Different {
+        source_size: chunk_start + left_read as u64 + drain(left).await,
+        copy_size: chunk_start + right_read as u64 + drain(right).await,
+        offset: at,
+    }
+}
+
 fn copy_stream_error(error: std::io::Error) -> ExecutionError {
     fm_vfs::VfsError::Io {
         message: error.to_string(),
@@ -3747,6 +3958,7 @@ mod tests {
             geo_transform: None,
             override_read_only: false,
             link: None,
+            verify_transfer: false,
             permanent_delete_confirmed: false,
             destinations: Vec::new(),
         }
@@ -4957,6 +5169,165 @@ mod tests {
         }
     }
 
+    /// Source provider whose first read serves the real bytes (the copy) and whose later
+    /// reads (the verification) serve something else, so a verified copy can be made to
+    /// mismatch. Task 0302.
+    struct ChangingSourceProvider {
+        opens: std::sync::atomic::AtomicUsize,
+        later_reads: LaterReads,
+    }
+
+    #[derive(Clone, Copy)]
+    enum LaterReads {
+        FlippedLastByte,
+        Unsupported,
+    }
+
+    #[async_trait]
+    impl FileSystemProvider for ChangingSourceProvider {
+        fn id(&self) -> ProviderId {
+            ProviderId::new("changing-source-test-double")
+        }
+
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities::READ
+        }
+
+        async fn list(
+            &self,
+            _location: &Location,
+            _options: ListOptions,
+            _cancellation: CancellationToken,
+        ) -> Result<fm_vfs::DirectoryPage, fm_vfs::VfsError> {
+            unreachable!("this test copies a single file, never lists")
+        }
+
+        async fn metadata(
+            &self,
+            _entry: &EntryRef,
+            _cancellation: CancellationToken,
+        ) -> Result<fm_domain::EntryMetadata, fm_vfs::VfsError> {
+            unreachable!("this test never reads extended metadata")
+        }
+
+        async fn inspect(
+            &self,
+            entry: &EntryRef,
+            _cancellation: CancellationToken,
+        ) -> Result<fm_domain::EntrySummary, fm_vfs::VfsError> {
+            let path = entry.location.to_native_path().expect("native path");
+            let metadata =
+                tokio::fs::metadata(&path)
+                    .await
+                    .map_err(|error| fm_vfs::VfsError::Io {
+                        message: error.to_string(),
+                    })?;
+            Ok(fm_domain::EntrySummary {
+                id: entry.id,
+                location: entry.location.clone(),
+                name: entry.location.name().unwrap_or_default(),
+                kind: EntryKind::File,
+                size: Some(metadata.len()),
+                modified_at: None,
+                created_at: None,
+                hidden: false,
+                read_only: false,
+                extension: None,
+                mime_type: None,
+                icon_key: None,
+                metadata_revision: 0,
+                git_status: None,
+            })
+        }
+
+        async fn file_size(
+            &self,
+            entry: &EntryRef,
+            _cancellation: CancellationToken,
+        ) -> Result<u64, fm_vfs::VfsError> {
+            let path = entry.location.to_native_path().expect("native path");
+            let metadata =
+                tokio::fs::metadata(&path)
+                    .await
+                    .map_err(|error| fm_vfs::VfsError::Io {
+                        message: error.to_string(),
+                    })?;
+            Ok(metadata.len())
+        }
+
+        async fn create_directory(
+            &self,
+            _location: &Location,
+            _name: &str,
+            _cancellation: CancellationToken,
+        ) -> Result<EntryRef, fm_vfs::VfsError> {
+            unreachable!("this test never creates a directory on the source")
+        }
+
+        async fn rename(
+            &self,
+            _source: &EntryRef,
+            _destination: &Location,
+            _cancellation: CancellationToken,
+        ) -> Result<EntryRef, fm_vfs::VfsError> {
+            unreachable!("this test never renames the source")
+        }
+
+        async fn remove(
+            &self,
+            _entry: &EntryRef,
+            _options: RemoveOptions,
+            _cancellation: CancellationToken,
+        ) -> Result<(), fm_vfs::VfsError> {
+            unreachable!("this test never removes the source")
+        }
+
+        async fn open_read(
+            &self,
+            entry: &EntryRef,
+            _cancellation: CancellationToken,
+        ) -> Result<fm_vfs::ProviderReadStream, fm_vfs::VfsError> {
+            let path = entry.location.to_native_path().expect("native path");
+            let mut bytes = tokio::fs::read(&path)
+                .await
+                .map_err(|error| fm_vfs::VfsError::Io {
+                    message: error.to_string(),
+                })?;
+            if self.opens.fetch_add(1, Ordering::SeqCst) > 0 {
+                match self.later_reads {
+                    LaterReads::FlippedLastByte => {
+                        if let Some(last) = bytes.last_mut() {
+                            *last ^= 0xFF;
+                        }
+                    }
+                    LaterReads::Unsupported => {
+                        return Err(fm_vfs::VfsError::UnsupportedCapability {
+                            capability: ProviderCapabilities::READ,
+                        });
+                    }
+                }
+            }
+            Ok(Box::pin(std::io::Cursor::new(bytes)))
+        }
+
+        async fn open_write(
+            &self,
+            _destination: &Location,
+            _options: WriteOptions,
+            _cancellation: CancellationToken,
+        ) -> Result<fm_vfs::ProviderWriteStream, fm_vfs::VfsError> {
+            unreachable!("this provider is only ever used as a copy source")
+        }
+
+        async fn watch(
+            &self,
+            _location: &Location,
+            _cancellation: CancellationToken,
+        ) -> Result<fm_vfs::ProviderChangeStream, fm_vfs::VfsError> {
+            unreachable!("this test never watches the source")
+        }
+    }
+
     /// Source provider identical to [`CountingSourceProvider`] except it
     /// never overrides `file_size` at all, inheriting
     /// `FileSystemProvider::file_size`'s default
@@ -5200,6 +5571,230 @@ mod tests {
         }
     }
 
+    async fn verified_copy(
+        source_provider: Arc<dyn FileSystemProvider>,
+        content: &[u8],
+        reporter: &JournalingReporter,
+    ) -> (Result<ExecutionOutcome, ExecutionError>, std::path::PathBuf) {
+        let root = tempfile::tempdir().expect("temp root").keep();
+        let source_path = root.join("source.bin");
+        std::fs::write(&source_path, content).expect("write source");
+        let destination_path = root.join("destination");
+        std::fs::create_dir(&destination_path).expect("create destination dir");
+        let source_location = Location::from_native_path(&source_path).expect("source location");
+        let destination =
+            Location::from_native_path(&destination_path).expect("destination location");
+        let executor = copy_only_executor(
+            source_provider,
+            Arc::new(fm_vfs_local::LocalFileSystemProvider::new()),
+            source_location,
+            destination.clone(),
+            false,
+        );
+        let operation = Operation::new(
+            fm_operations::OperationKind::Copy,
+            Vec::new(),
+            Some(destination),
+            fm_operations::ConflictPolicy::Ask,
+        )
+        .with_verification(true);
+        let cancellation = CancellationToken::new();
+        let plan = executor
+            .plan(&operation, &cancellation)
+            .await
+            .expect("plan succeeds");
+        let item = plan.items.first().cloned().expect("one planned item");
+        let result = executor
+            .execute(
+                &operation,
+                &item,
+                None,
+                reporter,
+                &PauseToken::default(),
+                &cancellation,
+            )
+            .await;
+        (result, destination_path)
+    }
+
+    fn leftover_partials(directory: &std::path::Path) -> usize {
+        std::fs::read_dir(directory)
+            .expect("list destination")
+            .flatten()
+            .filter(|entry| entry.file_name().to_string_lossy().starts_with(".fm-copy-"))
+            .count()
+    }
+
+    /// Task 0302: a copy that matches its source is published and counted as verified.
+    #[tokio::test]
+    async fn verified_copy_publishes_an_identical_copy_and_counts_it() {
+        let reporter = JournalingReporter::default();
+        let (result, destination) = verified_copy(
+            Arc::new(fm_vfs_local::LocalFileSystemProvider::new()),
+            b"verified content",
+            &reporter,
+        )
+        .await;
+        result.expect("copy succeeds");
+        assert_eq!(
+            *reporter.verifications.lock().unwrap(),
+            vec![fm_operations::VerificationOutcome::Verified]
+        );
+        assert_eq!(
+            std::fs::read(destination.join("source.bin")).expect("published"),
+            b"verified content"
+        );
+        assert_eq!(leftover_partials(&destination), 0);
+    }
+
+    /// Task 0302: a copy that differs from its source fails the item, is never published, keeps
+    /// its evidence in the entry error and leaves no private partial behind.
+    #[tokio::test]
+    async fn verified_copy_that_differs_is_not_published_and_reports_evidence() {
+        let reporter = JournalingReporter::default();
+        let source = Arc::new(ChangingSourceProvider {
+            opens: std::sync::atomic::AtomicUsize::new(0),
+            later_reads: LaterReads::FlippedLastByte,
+        });
+        let (result, destination) = verified_copy(source, b"abcdefghij", &reporter).await;
+        let error = result.expect_err("a mismatch fails the item");
+        let ExecutionError::Warning { error } = error else {
+            panic!("a mismatch is an entry-scoped warning, got {error:?}");
+        };
+        assert_eq!(error.code.as_deref(), Some("verificationMismatch"));
+        assert_eq!(
+            error.params.get("sourceSize").map(String::as_str),
+            Some("10")
+        );
+        assert_eq!(error.params.get("copySize").map(String::as_str), Some("10"));
+        assert_eq!(error.params.get("offset").map(String::as_str), Some("9"));
+        assert_eq!(
+            *reporter.verifications.lock().unwrap(),
+            vec![fm_operations::VerificationOutcome::Mismatch]
+        );
+        assert!(
+            !destination.join("source.bin").exists(),
+            "a copy that failed verification must never look complete"
+        );
+        assert_eq!(leftover_partials(&destination), 0);
+    }
+
+    /// Task 0302: when a provider cannot be read back, the copy is still published but honestly
+    /// counted as not verified.
+    #[tokio::test]
+    async fn verified_copy_of_an_unreadable_source_is_published_but_not_verified() {
+        let reporter = JournalingReporter::default();
+        let source = Arc::new(ChangingSourceProvider {
+            opens: std::sync::atomic::AtomicUsize::new(0),
+            later_reads: LaterReads::Unsupported,
+        });
+        let (result, destination) = verified_copy(source, b"payload", &reporter).await;
+        result.expect("copy succeeds");
+        assert_eq!(
+            *reporter.verifications.lock().unwrap(),
+            vec![fm_operations::VerificationOutcome::NotVerified]
+        );
+        assert!(destination.join("source.bin").exists());
+    }
+
+    async fn compare_files(left: &[u8], right: &[u8]) -> CopyComparison {
+        let root = tempfile::tempdir().expect("temp root");
+        let left_path = root.path().join("left.bin");
+        let right_path = root.path().join("right.bin");
+        std::fs::write(&left_path, left).expect("write left");
+        std::fs::write(&right_path, right).expect("write right");
+        let provider = fm_vfs_local::LocalFileSystemProvider::new();
+        let entry = |path: &std::path::Path| EntryRef {
+            id: EntryId::new(),
+            location: Location::from_native_path(path).expect("location"),
+        };
+        compare_copy(
+            &provider,
+            &entry(&left_path),
+            &provider,
+            &entry(&right_path),
+            &PauseToken::default(),
+            &CancellationToken::new(),
+        )
+        .await
+        .expect("comparison runs")
+    }
+
+    #[tokio::test]
+    async fn comparison_finds_the_first_difference_across_chunk_boundaries() {
+        let left: Vec<u8> = (0..300_000_u32).map(|n| (n % 251) as u8).collect();
+        assert_eq!(compare_files(&left, &left).await, CopyComparison::Identical);
+        let mut late = left.clone();
+        late[200_001] ^= 1;
+        late[299_999] ^= 1;
+        assert_eq!(
+            compare_files(&left, &late).await,
+            CopyComparison::Different {
+                source_size: 300_000,
+                copy_size: 300_000,
+                offset: 200_001,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn comparison_reports_a_truncated_or_extended_copy_with_both_sizes() {
+        let full = vec![7_u8; 200_000];
+        assert_eq!(
+            compare_files(&full, &full[..131_072]).await,
+            CopyComparison::Different {
+                source_size: 200_000,
+                copy_size: 131_072,
+                offset: 131_072,
+            },
+            "a copy cut exactly on a chunk boundary is still caught"
+        );
+        assert_eq!(
+            compare_files(&full[..10], &full).await,
+            CopyComparison::Different {
+                source_size: 10,
+                copy_size: 200_000,
+                offset: 10,
+            }
+        );
+        assert_eq!(compare_files(b"", b"").await, CopyComparison::Identical);
+        assert_eq!(
+            compare_files(b"", b"x").await,
+            CopyComparison::Different {
+                source_size: 0,
+                copy_size: 1,
+                offset: 0,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn a_cancelled_comparison_stops_with_a_cancellation_error() {
+        let root = tempfile::tempdir().expect("temp root");
+        let path = root.path().join("file.bin");
+        std::fs::write(&path, vec![1_u8; 1024]).expect("write");
+        let provider = fm_vfs_local::LocalFileSystemProvider::new();
+        let entry = EntryRef {
+            id: EntryId::new(),
+            location: Location::from_native_path(&path).expect("location"),
+        };
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+        let result = compare_copy(
+            &provider,
+            &entry,
+            &provider,
+            &entry,
+            &PauseToken::default(),
+            &cancellation,
+        )
+        .await;
+        assert!(matches!(
+            result,
+            Err(ExecutionError::Provider(fm_vfs::VfsError::Cancelled))
+        ));
+    }
+
     fn copy_only_executor(
         source_provider: Arc<dyn FileSystemProvider>,
         destination_provider: Arc<dyn FileSystemProvider>,
@@ -5239,9 +5834,14 @@ mod tests {
         enabled: bool,
         partials: Mutex<Vec<(Location, Location, Location)>>,
         revisions: Mutex<Vec<(Location, SourceRevision)>>,
+        verifications: Mutex<Vec<fm_operations::VerificationOutcome>>,
     }
 
     impl OperationProgressReporter for JournalingReporter {
+        fn note_verification(&self, outcome: fm_operations::VerificationOutcome) {
+            self.verifications.lock().unwrap().push(outcome);
+        }
+
         fn report_bytes(&self, _additional_bytes: u64) {}
 
         fn journaling(&self) -> bool {

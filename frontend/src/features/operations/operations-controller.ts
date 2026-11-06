@@ -11,6 +11,7 @@ import type {
   TransferConflicts,
 } from '../../models';
 import { perfMark } from '../../utilities/perf';
+import { readVerifyTransfers } from './verify-preference';
 
 export interface OperationsController {
   /** Copies `sources` into `destination`; `conflictPolicy` defaults to asking per conflict. */
@@ -305,7 +306,16 @@ export function createOperationsController(rawClient: OperationClient): Operatio
   };
   return {
     copy(sources, destination, signal, conflictPolicy = 'ask') {
-      return client.startOperation({ type: 'copy', sources, destination, conflictPolicy }, signal);
+      return client.startOperation(
+        {
+          type: 'copy',
+          sources,
+          destination,
+          conflictPolicy,
+          ...(readVerifyTransfers() ? { verifyTransfer: true } : {}),
+        },
+        signal,
+      );
     },
 
     move(sources, destination, signal, conflictPolicy = 'ask') {

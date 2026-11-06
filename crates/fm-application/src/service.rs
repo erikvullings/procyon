@@ -7704,6 +7704,7 @@ mod tests {
             permanent_delete_confirmed: false,
             override_read_only: false,
             link: None,
+            verify_transfer: false,
         }
     }
 
@@ -8330,6 +8331,7 @@ mod tests {
             permanent_delete_confirmed: false,
             override_read_only: false,
             link: None,
+            verify_transfer: false,
         })
         .expect("must serialize the operation request");
 

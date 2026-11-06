@@ -23,6 +23,23 @@ async fn copy(
     destination_directory: Location,
     conflict_policy: OperationConflictPolicyDto,
 ) -> fm_transport_dto::OperationDto {
+    copy_verified(
+        service,
+        source,
+        destination_directory,
+        conflict_policy,
+        false,
+    )
+    .await
+}
+
+async fn copy_verified(
+    service: &FileManagerService,
+    source: Location,
+    destination_directory: Location,
+    conflict_policy: OperationConflictPolicyDto,
+    verify_transfer: bool,
+) -> fm_transport_dto::OperationDto {
     let operation = service
         .start_operation(
             StartOperationRequestDto {
@@ -45,6 +62,7 @@ async fn copy(
                 permanent_delete_confirmed: false,
                 override_read_only: false,
                 link: None,
+                verify_transfer,
             },
             None,
         )
@@ -129,6 +147,7 @@ async fn copies_multiple_selected_sources_in_one_operation() {
                 permanent_delete_confirmed: false,
                 override_read_only: false,
                 link: None,
+                verify_transfer: false,
             },
             None,
         )
@@ -185,6 +204,7 @@ async fn skips_a_stale_source_and_copies_the_remaining_selection() {
                 permanent_delete_confirmed: false,
                 override_read_only: false,
                 link: None,
+                verify_transfer: false,
             },
             None,
         )
@@ -364,6 +384,7 @@ async fn pause_and_resume_large_copy_retains_planned_totals() {
                 permanent_delete_confirmed: false,
                 override_read_only: false,
                 link: None,
+                verify_transfer: false,
             },
             None,
         )
@@ -412,4 +433,48 @@ async fn pause_and_resume_large_copy_retains_planned_totals() {
         }
         tokio::time::sleep(Duration::from_millis(2)).await;
     }
+}
+
+#[tokio::test]
+async fn verified_copy_reports_how_many_files_matched_in_the_operation_history() {
+    let root = tempfile::tempdir().expect("temporary root");
+    let destination = root.path().join("destination");
+    fs::create_dir(&destination).unwrap();
+    fs::write(
+        root.path().join("photo.bin"),
+        vec![0x42; 3 * 1024 * 1024 + 17],
+    )
+    .unwrap();
+    let service = service(&root);
+
+    let verified = copy_verified(
+        &service,
+        Location::from_native_path(&root.path().join("photo.bin")).unwrap(),
+        Location::from_native_path(&destination).unwrap(),
+        OperationConflictPolicyDto::Ask,
+        true,
+    )
+    .await;
+
+    assert_eq!(verified.state, OperationStateDto::Completed);
+    let summary = verified.verification.expect("verification was requested");
+    assert_eq!(
+        (summary.verified, summary.mismatched, summary.not_verified),
+        (1, 0, 0)
+    );
+    assert_eq!(
+        fs::read(destination.join("photo.bin")).unwrap().len(),
+        3 * 1024 * 1024 + 17
+    );
+
+    // Not requested: nothing is reported, so history stays quiet for ordinary copies.
+    fs::write(root.path().join("plain.bin"), b"plain").unwrap();
+    let plain = copy(
+        &service,
+        Location::from_native_path(&root.path().join("plain.bin")).unwrap(),
+        Location::from_native_path(&destination).unwrap(),
+        OperationConflictPolicyDto::Ask,
+    )
+    .await;
+    assert!(plain.verification.is_none());
 }

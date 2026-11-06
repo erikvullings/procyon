@@ -119,6 +119,11 @@ impl OperationsCoordinator {
             sources,
             destination,
             conflict_policy(request.conflict_policy),
+        )
+        // Only copies and duplicates can be verified: their output is private until published.
+        .with_verification(
+            request.verify_transfer
+                && matches!(kind, OperationKind::Copy | OperationKind::Duplicate),
         );
         let id = self
             .scheduler
@@ -326,6 +331,7 @@ pub(crate) fn copy_request(
         permanent_delete_confirmed: false,
         override_read_only: false,
         link: None,
+        verify_transfer: false,
     })
 }
 
@@ -364,6 +370,7 @@ pub(crate) fn delete_request(
         permanent_delete_confirmed: true,
         override_read_only: false,
         link: None,
+        verify_transfer: false,
     })
 }
 
@@ -493,6 +500,7 @@ mod tests {
             permanent_delete_confirmed: false,
             override_read_only: false,
             link: None,
+            verify_transfer: false,
         };
 
         let error = coordinator(&directory)

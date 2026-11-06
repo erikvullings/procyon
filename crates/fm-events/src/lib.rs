@@ -739,6 +739,23 @@ pub struct OperationPayload {
     /// Original operation reversed by this undo job.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub undo_of: Option<OperationId>,
+    /// How verification of the copied files went, when it was requested (task 0302).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verification: Option<OperationVerificationPayload>,
+}
+
+/// Per-outcome counts of verified files in the frontend wire format (task 0302).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationVerificationPayload {
+    /// Files confirmed identical to their source.
+    pub verified: u64,
+    /// Files that differed and were not published.
+    pub mismatched: u64,
+    /// Files the providers could not read back.
+    pub not_verified: u64,
+    /// Entries with no content to compare.
+    pub skipped: u64,
 }
 
 /// Incremental directory changes in the frontend wire format.
@@ -1776,6 +1793,7 @@ mod tests {
                 completed_at: None,
                 undo: None,
                 undo_of: None,
+                verification: None,
             };
             let pane_id = PaneId::from_str(PANE_ID).expect("fixture pane id must be valid");
             let tab_id = TabId::from_str(TAB_ID).expect("fixture tab id must be valid");

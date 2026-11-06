@@ -19045,6 +19045,17 @@
             ],
             "format": "uuid",
             "description": "Original operation reversed by this undo job."
+          },
+          "verification": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OperationVerificationDto",
+                "description": "How verification of the copied files went; absent when it was not requested or nothing\nhas been checked yet (task 0302)."
+              }
+            ]
           }
         }
       },
@@ -19297,6 +19308,42 @@
               "null"
             ],
             "description": "Stable code for `reason` when the backend has one; clients fall back to `reason`."
+          }
+        }
+      },
+      "OperationVerificationDto": {
+        "type": "object",
+        "description": "Per-outcome counts of the files a transfer verified (task 0302).",
+        "required": [
+          "verified",
+          "mismatched",
+          "notVerified",
+          "skipped"
+        ],
+        "properties": {
+          "mismatched": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Files that differed and were not published.",
+            "minimum": 0
+          },
+          "notVerified": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Files the providers could not read back.",
+            "minimum": 0
+          },
+          "skipped": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Entries with no content to compare, such as symbolic links.",
+            "minimum": 0
+          },
+          "verified": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Files confirmed identical to their source.",
+            "minimum": 0
           }
         }
       },
@@ -26524,6 +26571,10 @@
           "type": {
             "$ref": "#/components/schemas/OperationKindDto",
             "description": "Semantic operation discriminator. `type` is the stable JSON field name."
+          },
+          "verifyTransfer": {
+            "type": "boolean",
+            "description": "Verify every copied file against its source before it is published (task 0302). Applies\nto `copy` and `duplicate`; other kinds ignore it."
           }
         }
       },

@@ -128,6 +128,7 @@ impl ChecksumCoordinator {
                     completed_at: None,
                     undo: None,
                     undo_of: None,
+                    verification: None,
                 },
             },
         );
@@ -386,6 +387,7 @@ impl ChecksumCoordinator {
                     completed_at: None,
                     undo: None,
                     undo_of: None,
+                    verification: None,
                 },
             },
         );

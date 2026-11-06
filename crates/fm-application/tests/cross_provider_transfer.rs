@@ -133,6 +133,7 @@ fn copy_request(source: Location, destination_directory: Location) -> StartOpera
         permanent_delete_confirmed: false,
         override_read_only: false,
         link: None,
+        verify_transfer: false,
     }
 }
 

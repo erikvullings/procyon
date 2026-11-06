@@ -599,6 +599,11 @@ export const nl = {
     interruptedActionFailed: 'Die actie kon niet worden voltooid. Probeer het opnieuw.',
     interruptedToast:
       'Procyon werd onderbroken tijdens het overdragen van bestanden. Open het paneel Bewerkingen om dit te bekijken.',
+    verifyOption: 'Gekopieerde bestanden verifiëren',
+    verifyOptionHint:
+      'Leest elke kopie terug en vergelijkt die met de bron voordat ze wordt opgeslagen. Trager, en niet voor elke locatie beschikbaar.',
+    verificationSummary:
+      'Verificatie: {verified} kwamen overeen, {mismatched} weken af en zijn niet opgeslagen, {notVerified} konden niet worden gecontroleerd.',
     failureRecoveryLinkCycle:
       'De koppeling zou naar zichzelf of naar de eigen bovenliggende map verwijzen. Kies een andere bestemming.',
     kindRename: 'Hernoemen',
@@ -2334,6 +2339,8 @@ export const nl = {
     clear: 'Filter wissen',
     scopeOff: 'alleen deze map',
     scopeOn: 'deze map + submappen',
+    modeFuzzy: 'Vagelijk',
+    modeContains: 'Bevat',
   },
   advancedFilter: {
     toggle: 'Geavanceerd filter',
@@ -2508,6 +2515,8 @@ export const nl = {
     sourceMissing: 'De bron bestaat niet meer; overgeslagen.',
     transferRetried:
       'Tijdelijk probleem (poging {attempt} van {max}); opnieuw proberen over {seconds} s: {cause}',
+    verificationMismatch:
+      'De kopie van {name} week af van de bron (eerste verschil op byte {offset}) en is niet opgeslagen.',
     diskSpaceCheckSkipped:
       'Controle op schijfruimte overgeslagen op uw verzoek: {required} nodig, {available} als vrij gemeld.',
     attributeNotPermitted:

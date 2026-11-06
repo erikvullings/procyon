@@ -88,6 +88,7 @@ fn request(
         permanent_delete_confirmed: false,
         override_read_only: false,
         link: None,
+        verify_transfer: false,
     }
 }
 

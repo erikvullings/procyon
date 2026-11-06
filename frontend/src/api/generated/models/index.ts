@@ -330,6 +330,7 @@ export * from './operationProgressDto.ts';
 export * from './operationQueueStatusDto.ts';
 export * from './operationStateDto.ts';
 export * from './operationUndoDto.ts';
+export * from './operationVerificationDto.ts';
 export * from './orphanLlmCredentialDispositionDto.ts';
 export * from './ownershipInfoDto.ts';
 export * from './paneStateDto.ts';

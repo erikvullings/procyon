@@ -599,6 +599,11 @@ export const pt = {
     interruptedActionFailed: 'Não foi possível concluir essa ação. Tente novamente.',
     interruptedToast:
       'O Procyon foi interrompido durante a transferência de ficheiros. Abra o painel de operações para rever.',
+    verifyOption: 'Verificar os ficheiros copiados',
+    verifyOptionHint:
+      'Lê novamente cada cópia e compara-a com a origem antes de a guardar. Mais lento e não disponível em todas as localizações.',
+    verificationSummary:
+      'Verificação: {verified} coincidiram, {mismatched} diferiam e não foram guardados, {notVerified} não puderam ser verificados.',
     failureRecoveryLinkCycle:
       'A ligação apontaria para si própria ou para a pasta ascendente. Escolha outro destino.',
     kindRename: 'Renomear',
@@ -2346,6 +2351,8 @@ export const pt = {
     clear: 'Limpar filtro',
     scopeOff: 'apenas esta pasta',
     scopeOn: 'esta pasta e subpastas',
+    modeFuzzy: 'Difuso',
+    modeContains: 'Contém',
   },
   advancedFilter: {
     toggle: 'Filtro avançado',
@@ -2519,6 +2526,8 @@ export const pt = {
     sourceMissing: 'A origem já não existe; ignorado.',
     transferRetried:
       'Problema temporário (tentativa {attempt} de {max}); nova tentativa em {seconds} s: {cause}',
+    verificationMismatch:
+      'A cópia de {name} diferia da origem (primeira diferença no byte {offset}) e não foi guardada.',
     diskSpaceCheckSkipped:
       'Verificação de espaço em disco ignorada a seu pedido: são necessários {required}, são comunicados {available} livres.',
     attributeNotPermitted:

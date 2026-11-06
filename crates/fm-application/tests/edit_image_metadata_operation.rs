@@ -73,6 +73,7 @@ async fn edit(
                 permanent_delete_confirmed: false,
                 override_read_only: false,
                 link: None,
+                verify_transfer: false,
             },
             None,
         )
@@ -244,6 +245,7 @@ async fn rejects_requests_without_an_edit_and_unknown_fields() {
             permanent_delete_confirmed: false,
             override_read_only: false,
             link: None,
+            verify_transfer: false,
         },
         None,
     );
@@ -273,6 +275,7 @@ async fn rejects_requests_without_an_edit_and_unknown_fields() {
             permanent_delete_confirmed: false,
             override_read_only: false,
             link: None,
+            verify_transfer: false,
         },
         None,
     );

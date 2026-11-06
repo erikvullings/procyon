@@ -179,6 +179,8 @@ pub trait OperationProgressReporter: Send + Sync {
     /// Records what `source` looked like before it was transferred, so a later
     /// resume can prove the source did not change (task 0299).
     fn note_source_revision(&self, _source: &Location, _revision: SourceRevision) {}
+    /// Reports what verifying one copied file concluded (task 0302).
+    fn note_verification(&self, _outcome: crate::VerificationOutcome) {}
     /// Whether the notes above are being kept. Executors check this before
     /// doing extra work (such as a source `stat`) that only the journal needs.
     fn journaling(&self) -> bool {
@@ -337,6 +339,11 @@ impl ItemProgressReporter<'_> {
 impl OperationProgressReporter for ItemProgressReporter<'_> {
     fn journaling(&self) -> bool {
         self.journal.is_some()
+    }
+
+    fn note_verification(&self, outcome: crate::VerificationOutcome) {
+        let mut state = self.job.lock();
+        state.operation.verification.record(outcome);
     }
 
     fn note_partial(&self, source: &Location, partial: &Location, destination: &Location) {
@@ -1395,6 +1402,14 @@ fn operation_payload(operation: &Operation) -> OperationPayload {
         completed_at: operation.completed_at,
         undo: Some(operation_undo_payload(operation)),
         undo_of: operation.undo_of,
+        verification: (!operation.verification.is_empty()).then_some(
+            fm_events::OperationVerificationPayload {
+                verified: operation.verification.verified,
+                mismatched: operation.verification.mismatched,
+                not_verified: operation.verification.not_verified,
+                skipped: operation.verification.skipped,
+            },
+        ),
     }
 }
 

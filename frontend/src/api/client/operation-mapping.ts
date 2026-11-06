@@ -49,5 +49,6 @@ export function operationFromDto(dto: OperationDto): Operation {
       ...(dto.undo.operationId == null ? {} : { operationId: dto.undo.operationId }),
     },
     ...(dto.undoOf == null ? {} : { undoOf: dto.undoOf }),
+    ...(dto.verification == null ? {} : { verification: dto.verification }),
   };
 }

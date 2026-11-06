@@ -7,6 +7,7 @@ import { parentLocation } from '../navigation/navigation';
 import { affectedItems } from './affected-items';
 import { createDialogFocusCycle } from './dialog-focus';
 import type { OperationConfirmationRequest } from './operations-controller';
+import { readVerifyTransfers, writeVerifyTransfers } from './verify-preference';
 
 export interface OperationConfirmationDialogAttrs {
   readonly request?: OperationConfirmationRequest;
@@ -136,6 +137,23 @@ function transferRows(
   ];
 }
 
+/** The "verify copied files" choice, remembered between copies (task 0302). */
+function verifyOption(): m.Vnode {
+  return m(
+    'label.fm-operation-confirmation-verify',
+    { title: t('operation', 'verifyOptionHint') },
+    [
+      m('input', {
+        type: 'checkbox',
+        checked: readVerifyTransfers(),
+        onchange: (event: Event) =>
+          writeVerifyTransfers((event.currentTarget as HTMLInputElement).checked),
+      }),
+      m('span', t('operation', 'verifyOption')),
+    ],
+  );
+}
+
 /** Confirmation before starting a routine copy, move, or Trash operation. */
 export const OperationConfirmationDialog: FactoryComponent<
   OperationConfirmationDialogAttrs
@@ -191,6 +209,7 @@ export const OperationConfirmationDialog: FactoryComponent<
                   rows,
                   conflicts === undefined ? undefined : conflictRows(conflicts),
                 ]),
+                kind === 'copy' ? verifyOption() : undefined,
               ),
         isOpen: request !== undefined,
         closeOnEsc: true,

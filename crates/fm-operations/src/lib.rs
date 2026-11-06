@@ -17,7 +17,8 @@ mod scheduler;
 pub use model::{
     ConflictEntry, ConflictPolicy, ConflictResolution, EntryFingerprint, Operation,
     OperationConflict, OperationEntryError, OperationKind, OperationProgress, OperationState,
-    OperationUndo, TransitionError, UndoAction, UndoPlan, UndoStatus,
+    OperationUndo, OperationVerification, TransitionError, UndoAction, UndoPlan, UndoStatus,
+    VerificationOutcome,
 };
 pub use naming::duplicate_name;
 pub use pause::PauseToken;

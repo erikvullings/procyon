@@ -47,6 +47,7 @@ async fn repeated_copy_reuses_active_job_and_move_of_same_source_is_rejected() {
         permanent_delete_confirmed: false,
         override_read_only: false,
         link: None,
+        verify_transfer: false,
     };
     let first = service.start_operation(request.clone(), None).unwrap();
     let second = service.start_operation(request.clone(), None).unwrap();
@@ -93,6 +94,7 @@ async fn copy_directory_with_policy(
                 permanent_delete_confirmed: false,
                 override_read_only: false,
                 link: None,
+                verify_transfer: false,
             },
             None,
         )
@@ -262,6 +264,7 @@ async fn cancellation_during_large_tree_copy_stops_remaining_entries() {
                 permanent_delete_confirmed: false,
                 override_read_only: false,
                 link: None,
+                verify_transfer: false,
             },
             None,
         )

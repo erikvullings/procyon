@@ -598,6 +598,11 @@ export const it = {
     interruptedActionFailed: "Impossibile completare l'azione. Riprova.",
     interruptedToast:
       'Procyon è stato interrotto durante il trasferimento di file. Apri il pannello Operazioni per controllare.',
+    verifyOption: 'Verifica i file copiati',
+    verifyOptionHint:
+      'Rilegge ogni copia e la confronta con l’originale prima di salvarla. Più lento e non disponibile per ogni posizione.',
+    verificationSummary:
+      'Verifica: {verified} corrispondenti, {mismatched} diversi e non salvati, {notVerified} non verificabili.',
     failureRecoveryLinkCycle:
       'Il collegamento punterebbe a se stesso o alla propria cartella superiore. Scegli un’altra destinazione.',
     kindRename: 'Rinomina',
@@ -2333,6 +2338,8 @@ export const it = {
     clear: 'Cancella filtro',
     scopeOff: 'solo questa cartella',
     scopeOn: 'questa cartella e sottocartelle',
+    modeFuzzy: 'Diffuso',
+    modeContains: 'Contiene',
   },
   advancedFilter: {
     toggle: 'Filtro avanzato',
@@ -2504,6 +2511,8 @@ export const it = {
     sourceMissing: 'L’origine non esiste più; saltato.',
     transferRetried:
       'Problema temporaneo (tentativo {attempt} di {max}); nuovo tentativo tra {seconds} s: {cause}',
+    verificationMismatch:
+      'La copia di {name} era diversa dall’originale (prima differenza al byte {offset}) e non è stata salvata.',
     diskSpaceCheckSkipped:
       'Controllo dello spazio su disco saltato su sua richiesta: servono {required}, ne risultano liberi {available}.',
     attributeNotPermitted:

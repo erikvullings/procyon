@@ -2605,9 +2605,15 @@ describe('AppShell', () => {
     await vi.waitFor(() => expect(document.activeElement?.textContent?.trim()).toBe('Copy'));
     window.dispatchEvent(new Event('focus'));
     expect(document.activeElement?.textContent?.trim()).toBe('Copy');
-    document.activeElement?.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
-    );
+    const tab = (): void => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+      );
+    };
+    // The "verify copied files" checkbox (task 0302) sits between the two buttons.
+    tab();
+    expect(document.activeElement?.matches('.fm-operation-confirmation-verify input')).toBe(true);
+    tab();
     expect(document.activeElement?.textContent?.trim()).toBe('Cancel');
     await confirmRoutineOperation('Copy');
     await vi.waitFor(() => expect(startOperation).toHaveBeenCalledOnce());

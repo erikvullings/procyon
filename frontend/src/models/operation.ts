@@ -115,6 +115,16 @@ export interface Operation {
   undo?: OperationUndo;
   /** Original operation reversed by an undo job. */
   undoOf?: OperationId;
+  /** How verification of the copied files went, when it was requested (task 0302). */
+  verification?: OperationVerification;
+}
+
+/** Per-outcome counts of the files a transfer verified against their source. */
+export interface OperationVerification {
+  verified: number;
+  mismatched: number;
+  notVerified: number;
+  skipped: number;
 }
 
 export interface OperationUndo {

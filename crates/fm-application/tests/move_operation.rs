@@ -123,6 +123,7 @@ fn start_move(
                 permanent_delete_confirmed: false,
                 override_read_only: false,
                 link: None,
+                verify_transfer: false,
             },
             None,
         )
@@ -165,6 +166,7 @@ async fn moves_a_unicode_directory_to_another_directory() {
                 permanent_delete_confirmed: false,
                 override_read_only: false,
                 link: None,
+                verify_transfer: false,
             },
             None,
         )
@@ -215,6 +217,7 @@ async fn forced_cross_volume_move_copies_then_deletes_the_source() {
                 permanent_delete_confirmed: false,
                 override_read_only: false,
                 link: None,
+                verify_transfer: false,
             },
             None,
         )

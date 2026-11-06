@@ -595,6 +595,11 @@ export const pl = {
     interruptedActionFailed: 'Nie udało się wykonać tej czynności. Spróbuj ponownie.',
     interruptedToast:
       'Procyon został przerwany podczas przesyłania plików. Otwórz panel operacji, aby to sprawdzić.',
+    verifyOption: 'Weryfikuj skopiowane pliki',
+    verifyOptionHint:
+      'Odczytuje każdą kopię i porównuje ją ze źródłem przed zapisaniem. Wolniejsze i niedostępne dla każdej lokalizacji.',
+    verificationSummary:
+      'Weryfikacja: {verified} zgodnych, {mismatched} różniło się i nie zapisano, {notVerified} nie dało się sprawdzić.',
     failureRecoveryLinkCycle:
       'Łącze wskazywałoby na siebie lub na własny folder nadrzędny. Wybierz inne miejsce docelowe.',
     kindRename: 'Zmień nazwę',
@@ -2335,6 +2340,8 @@ export const pl = {
     clear: 'Wyczyść filtr',
     scopeOff: 'tylko ten katalog',
     scopeOn: 'ten katalog i podkatalogi',
+    modeFuzzy: 'Przybliżenie',
+    modeContains: 'Zawiera',
   },
   advancedFilter: {
     toggle: 'Filtr zaawansowany',
@@ -2505,6 +2512,8 @@ export const pl = {
     sourceMissing: 'Źródło już nie istnieje; pominięto.',
     transferRetried:
       'Tymczasowy problem (próba {attempt} z {max}); ponowna próba za {seconds} s: {cause}',
+    verificationMismatch:
+      'Kopia pliku {name} różniła się od źródła (pierwsza różnica na bajcie {offset}) i nie została zapisana.',
     diskSpaceCheckSkipped:
       'Sprawdzanie miejsca na dysku pominięto na Twoje żądanie: potrzeba {required}, zgłoszono {available} wolnego miejsca.',
     attributeNotPermitted:

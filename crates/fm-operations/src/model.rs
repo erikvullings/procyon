@@ -37,6 +37,59 @@ pub struct Operation {
     /// Original operation reversed by this job, for audit/history linkage.
     #[serde(default)]
     pub undo_of: Option<OperationId>,
+    /// The user asked for every copied file to be verified against its source (task 0302).
+    #[serde(default)]
+    pub verify_transfer: bool,
+    /// How verification of the copied files went; all zero when it was not requested.
+    #[serde(default)]
+    pub verification: OperationVerification,
+}
+
+/// What verifying one copied file concluded (task 0302).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum VerificationOutcome {
+    /// The copy was read back and matches its source byte for byte.
+    Verified,
+    /// The copy differs from its source; it was not published.
+    Mismatch,
+    /// Verification was requested but the providers cannot read the file back.
+    NotVerified,
+    /// The entry has no content to compare, such as a symbolic link.
+    Skipped,
+}
+
+/// Per-outcome counts of the files a transfer verified (task 0302).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationVerification {
+    /// Files confirmed identical to their source.
+    pub verified: u64,
+    /// Files that differed and were not published.
+    pub mismatched: u64,
+    /// Files the providers could not read back.
+    pub not_verified: u64,
+    /// Entries with no content to compare.
+    pub skipped: u64,
+}
+
+impl OperationVerification {
+    /// Counts one more outcome.
+    pub fn record(&mut self, outcome: VerificationOutcome) {
+        let counter = match outcome {
+            VerificationOutcome::Verified => &mut self.verified,
+            VerificationOutcome::Mismatch => &mut self.mismatched,
+            VerificationOutcome::NotVerified => &mut self.not_verified,
+            VerificationOutcome::Skipped => &mut self.skipped,
+        };
+        *counter = counter.saturating_add(1);
+    }
+
+    /// Whether any file was checked or skipped, so there is something to report.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.verified == 0 && self.mismatched == 0 && self.not_verified == 0 && self.skipped == 0
+    }
 }
 
 impl Operation {
@@ -62,7 +115,16 @@ impl Operation {
             errors: Vec::new(),
             undo: OperationUndo::default(),
             undo_of: None,
+            verify_transfer: false,
+            verification: OperationVerification::default(),
         }
+    }
+
+    /// Requests that every copied file be verified against its source (task 0302).
+    #[must_use]
+    pub const fn with_verification(mut self, verify: bool) -> Self {
+        self.verify_transfer = verify;
+        self
     }
 
     /// Applies a legal lifecycle transition and timestamps lifecycle edges.

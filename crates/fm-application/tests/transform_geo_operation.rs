@@ -79,6 +79,7 @@ async fn transform(
                 permanent_delete_confirmed: false,
                 override_read_only: false,
                 link: None,
+                verify_transfer: false,
             },
             None,
         )
@@ -308,6 +309,7 @@ async fn minify(
             permanent_delete_confirmed: false,
             override_read_only: false,
             link: None,
+            verify_transfer: false,
         },
         None,
     )?;
@@ -440,6 +442,7 @@ async fn in_place_without_a_backup_cannot_be_undone_and_invalid_combinations_are
             permanent_delete_confirmed: false,
             override_read_only: false,
             link: None,
+            verify_transfer: false,
         },
         None,
     );

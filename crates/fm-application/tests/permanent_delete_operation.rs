@@ -35,6 +35,7 @@ fn request(
         permanent_delete_confirmed: confirmed,
         override_read_only,
         link: None,
+        verify_transfer: false,
     }
 }
 

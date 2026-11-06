@@ -11,6 +11,7 @@ import type { OperationKindDto } from './operationKindDto.ts';
 import type { OperationProgressDto } from './operationProgressDto.ts';
 import type { OperationStateDto } from './operationStateDto.ts';
 import type { OperationUndoDto } from './operationUndoDto.ts';
+import type { OperationVerificationDto } from './operationVerificationDto.ts';
 
 /**
  * Complete transport snapshot of an operation.
@@ -68,4 +69,5 @@ export interface OperationDto {
      * @nullable
      */
   undoOf?: string | null;
+  verification?: null | OperationVerificationDto;
 }

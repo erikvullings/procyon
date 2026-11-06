@@ -65,4 +65,9 @@ export interface StartOperationRequestDto {
   symlinkPolicy?: SymlinkPolicyDto;
   /** Semantic operation discriminator. `type` is the stable JSON field name. */
   type: OperationKindDto;
+  /**
+     * Verify every copied file against its source before it is published (task 0302). Applies
+     * to `copy` and `duplicate`; other kinds ignore it.
+     */
+  verifyTransfer?: boolean;
 }

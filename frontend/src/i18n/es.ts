@@ -596,6 +596,11 @@ export const es = {
     interruptedActionFailed: 'No se pudo completar esa acción. Inténtelo de nuevo.',
     interruptedToast:
       'Procyon se interrumpió mientras transfería archivos. Abra el panel de operaciones para revisarlo.',
+    verifyOption: 'Verificar los archivos copiados',
+    verifyOptionHint:
+      'Vuelve a leer cada copia y la compara con su origen antes de guardarla. Es más lento y no está disponible en todas las ubicaciones.',
+    verificationSummary:
+      'Verificación: {verified} coincidieron, {mismatched} diferían y no se guardaron, {notVerified} no se pudieron comprobar.',
     failureRecoveryLinkCycle:
       'El enlace apuntaría a sí mismo o a su carpeta superior. Elija otro destino.',
     kindRename: 'Renombrar',
@@ -2339,6 +2344,8 @@ export const es = {
     clear: 'Borrar filtro',
     scopeOff: 'solo esta carpeta',
     scopeOn: 'esta carpeta y subcarpetas',
+    modeFuzzy: 'Difuso',
+    modeContains: 'Contiene',
   },
   advancedFilter: {
     toggle: 'Filtro avanzado',
@@ -2511,6 +2518,8 @@ export const es = {
     sourceMissing: 'El origen ya no existe; omitido.',
     transferRetried:
       'Problema temporal (intento {attempt} de {max}); se reintentará en {seconds} s: {cause}',
+    verificationMismatch:
+      'La copia de {name} difería de su origen (primera diferencia en el byte {offset}) y no se guardó.',
     diskSpaceCheckSkipped:
       'Comprobación de espacio en disco omitida a petición suya: se necesitan {required}, se informan {available} libres.',
     attributeNotPermitted:

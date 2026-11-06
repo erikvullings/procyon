@@ -53,6 +53,7 @@ async fn run(
                 permanent_delete_confirmed: true,
                 override_read_only: false,
                 link: None,
+                verify_transfer: false,
             },
             None,
         )
@@ -251,6 +252,7 @@ async fn archive_creation_validates_format_and_compression_options() {
             permanent_delete_confirmed: false,
             override_read_only: false,
             link: None,
+            verify_transfer: false,
         },
         None,
     );
@@ -285,6 +287,7 @@ async fn archive_creation_validates_format_and_compression_options() {
             permanent_delete_confirmed: false,
             override_read_only: false,
             link: None,
+            verify_transfer: false,
         },
         None,
     );

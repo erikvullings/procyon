@@ -411,6 +411,26 @@ export const OperationCentre: Component<OperationCentreAttrs> = {
                       ? m('.fm-operation-result', cancelledResult(operation, formatSettings))
                       : undefined
                     : undefined,
+                  operation.verification === undefined ||
+                  operation.verification.verified +
+                    operation.verification.mismatched +
+                    operation.verification.notVerified ===
+                    0
+                    ? undefined
+                    : m(
+                        'p.fm-operation-verification',
+                        {
+                          class:
+                            operation.verification.mismatched > 0
+                              ? 'fm-operation-verification-mismatch'
+                              : undefined,
+                        },
+                        t('operation', 'verificationSummary', {
+                          verified: operation.verification.verified,
+                          mismatched: operation.verification.mismatched,
+                          notVerified: operation.verification.notVerified,
+                        }),
+                      ),
                   operation.state !== 'completedWithWarnings' || warnings.length === 0
                     ? undefined
                     : m('.fm-operation-warning', [

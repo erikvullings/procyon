@@ -168,6 +168,8 @@ export interface StartOperationRequest {
   overrideReadOnly?: boolean;
   /** Link kind and target style for a `createLink` operation (task 0168). */
   link?: LinkRequest;
+  /** Verify each copied file against its source before it is saved (task 0302). */
+  verifyTransfer?: boolean;
 }
 
 /** Submits the user's decision for a queued conflict (spec §17). */

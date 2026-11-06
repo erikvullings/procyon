@@ -41,6 +41,8 @@ pub mod entry_error {
     pub const ERRORS_OMITTED: &str = "errorsOmitted";
     /// A transfer hit a temporary failure and is being retried after a backoff (task 0301).
     pub const TRANSFER_RETRIED: &str = "transferRetried";
+    /// A verified copy differed from its source and was not published (task 0302).
+    pub const VERIFICATION_MISMATCH: &str = "verificationMismatch";
 }
 
 /// Codes of an operation's terminal result summary.

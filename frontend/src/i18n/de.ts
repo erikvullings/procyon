@@ -606,6 +606,11 @@ export const de = {
       'Diese Aktion konnte nicht abgeschlossen werden. Versuchen Sie es erneut.',
     interruptedToast:
       'Procyon wurde beim Übertragen von Dateien unterbrochen. Öffnen Sie das Vorgangsfenster, um dies zu prüfen.',
+    verifyOption: 'Kopierte Dateien überprüfen',
+    verifyOptionHint:
+      'Liest jede Kopie zurück und vergleicht sie vor dem Speichern mit der Quelle. Langsamer und nicht für jeden Ort verfügbar.',
+    verificationSummary:
+      'Überprüfung: {verified} stimmten überein, {mismatched} wichen ab und wurden nicht gespeichert, {notVerified} konnten nicht geprüft werden.',
     failureRecoveryLinkCycle:
       'Die Verknüpfung würde auf sich selbst oder ihr eigenes übergeordnetes Verzeichnis zeigen. Wählen Sie ein anderes Ziel.',
     kindRename: 'Umbenennen',
@@ -2357,6 +2362,8 @@ export const de = {
     clear: 'Filter löschen',
     scopeOff: 'nur dieser Ordner',
     scopeOn: 'dieser Ordner + Unterordner',
+    modeFuzzy: 'Fuzzy',
+    modeContains: 'Enthält',
   },
   advancedFilter: {
     toggle: 'Erweiterter Filter',
@@ -2535,6 +2542,8 @@ export const de = {
     sourceMissing: 'Die Quelle existiert nicht mehr; übersprungen.',
     transferRetried:
       'Vorübergehendes Problem (Versuch {attempt} von {max}); neuer Versuch in {seconds} s: {cause}',
+    verificationMismatch:
+      'Die Kopie von {name} wich von der Quelle ab (erster Unterschied bei Byte {offset}) und wurde nicht gespeichert.',
     diskSpaceCheckSkipped:
       'Speicherplatzprüfung auf Ihren Wunsch übersprungen: {required} erforderlich, {available} als frei gemeldet.',
     attributeNotPermitted:

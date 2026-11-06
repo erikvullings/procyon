@@ -58,6 +58,7 @@ async fn duplicates_files_and_directory_trees_with_collision_safe_names() {
                 permanent_delete_confirmed: false,
                 override_read_only: false,
                 link: None,
+                verify_transfer: false,
             },
             None,
         )

@@ -8,7 +8,7 @@ describe('transferRetried entry text', () => {
   const entry = {
     code: 'transferRetried',
     message: 'fallback',
-    params: { attempt: 2, max: 4, seconds: 1, cause: 'connection reset' },
+    params: { attempt: '2', max: '4', seconds: '1', cause: 'connection reset' },
   };
 
   it('names the attempt, the wait and the cause', () => {

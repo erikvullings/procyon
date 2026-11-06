@@ -597,6 +597,7 @@ fn restart_request(assessed: &Assessed) -> Result<StartOperationRequestDto, Appl
         permanent_delete_confirmed: false,
         override_read_only: false,
         link: None,
+        verify_transfer: false,
     })
 }
 

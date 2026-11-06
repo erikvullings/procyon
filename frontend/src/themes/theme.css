@@ -2673,6 +2673,23 @@ input[type="text"].fm-shortcuts-help-capture-input {
   color: var(--fm-text-muted);
 }
 
+.fm-operation-verification {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--fm-text-muted);
+}
+
+.fm-operation-verification-mismatch {
+  color: var(--fm-error);
+}
+
+.fm-operation-confirmation-verify {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
 .fm-operation-failure pre {
   margin: 0.25rem 0 0;
   white-space: pre-wrap;

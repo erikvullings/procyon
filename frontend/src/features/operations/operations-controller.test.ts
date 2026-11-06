@@ -33,6 +33,32 @@ describe('OperationsController', () => {
     );
   });
 
+  it('copy asks for verification only when the user turned it on', async () => {
+    window.localStorage.setItem('fm.verifyCopiedFiles', 'true');
+    try {
+      await controller.copy([src], dest);
+      await controller.move([src], dest);
+    } finally {
+      window.localStorage.removeItem('fm.verifyCopiedFiles');
+    }
+    expect(client.startOperation).toHaveBeenNthCalledWith(
+      1,
+      {
+        type: 'copy',
+        sources: [src],
+        destination: dest,
+        conflictPolicy: 'ask',
+        verifyTransfer: true,
+      },
+      undefined,
+    );
+    expect(client.startOperation).toHaveBeenNthCalledWith(
+      2,
+      { type: 'move', sources: [src], destination: dest, conflictPolicy: 'ask' },
+      undefined,
+    );
+  });
+
   it('move calls startOperation with type move', async () => {
     await controller.move([src, src2], dest);
     expect(client.startOperation).toHaveBeenCalledWith(

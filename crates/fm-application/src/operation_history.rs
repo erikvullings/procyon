@@ -19,6 +19,7 @@ use fm_operations::{Operation, OperationSnapshotObserver, OperationState, UndoPl
 use fm_transport_dto::{
     EntryRefDto, OperationConflictPolicyDto, OperationDto, OperationEntryErrorDto,
     OperationKindDto, OperationProgressDto, OperationStateDto, OperationUndoDto,
+    OperationVerificationDto,
 };
 
 use crate::DirectoryService;
@@ -597,6 +598,12 @@ pub(crate) fn operation_dto(mut operation: Operation, queue_position: Option<u64
             .unwrap_or_default(),
         undo,
         undo_of: operation.undo_of.map(Into::into),
+        verification: (!operation.verification.is_empty()).then_some(OperationVerificationDto {
+            verified: operation.verification.verified,
+            mismatched: operation.verification.mismatched,
+            not_verified: operation.verification.not_verified,
+            skipped: operation.verification.skipped,
+        }),
     }
 }
 

@@ -591,6 +591,11 @@ export const en = {
     interruptedActionFailed: 'That action could not be completed. Try again.',
     interruptedToast:
       'Procyon was interrupted while transferring files. Open the Operations panel to review.',
+    verifyOption: 'Verify copied files',
+    verifyOptionHint:
+      'Reads every copy back and compares it with its source before saving it. Slower, and not available for every location.',
+    verificationSummary:
+      'Verification: {verified} matched, {mismatched} differed and were not saved, {notVerified} could not be checked.',
     failureRecoveryLinkCycle:
       'The link would point at itself or its own parent. Choose another destination.',
     kindRename: 'Rename',
@@ -2297,6 +2302,8 @@ export const en = {
     clear: 'Clear filter',
     scopeOff: 'this folder only',
     scopeOn: 'this folder + subfolders',
+    modeFuzzy: 'Fuzzy',
+    modeContains: 'Contains',
   },
   advancedFilter: {
     toggle: 'Advanced filter',
@@ -2465,6 +2472,8 @@ export const en = {
     sourceMissing: 'The source no longer exists; skipped.',
     transferRetried:
       'Temporary problem (attempt {attempt} of {max}); trying again in {seconds} s: {cause}',
+    verificationMismatch:
+      'The copy of {name} differed from its source (first difference at byte {offset}) and was not saved.',
     diskSpaceCheckSkipped:
       'Disk-space check skipped at your request: {required} needed, {available} reported free.',
     attributeNotPermitted:

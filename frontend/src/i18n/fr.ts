@@ -601,6 +601,11 @@ export const fr = {
     interruptedActionFailed: "Cette action n'a pas pu être terminée. Réessayez.",
     interruptedToast:
       'Procyon a été interrompu pendant un transfert de fichiers. Ouvrez le panneau des opérations pour le consulter.',
+    verifyOption: 'Vérifier les fichiers copiés',
+    verifyOptionHint:
+      'Relit chaque copie et la compare à sa source avant de l’enregistrer. Plus lent, et indisponible pour certains emplacements.',
+    verificationSummary:
+      'Vérification : {verified} conformes, {mismatched} différents et non enregistrés, {notVerified} non vérifiables.',
     failureRecoveryLinkCycle:
       'Le lien pointerait vers lui-même ou vers son dossier parent. Choisissez une autre destination.',
     kindRename: 'Renommer',
@@ -2350,6 +2355,8 @@ export const fr = {
     clear: 'Effacer le filtre',
     scopeOff: 'ce dossier uniquement',
     scopeOn: 'ce dossier et ses sous-dossiers',
+    modeFuzzy: 'Flou',
+    modeContains: 'Contient',
   },
   advancedFilter: {
     toggle: 'Filtre avancé',
@@ -2522,6 +2529,8 @@ export const fr = {
     sourceMissing: 'La source n’existe plus ; ignoré.',
     transferRetried:
       'Problème temporaire (tentative {attempt} sur {max}) ; nouvel essai dans {seconds} s : {cause}',
+    verificationMismatch:
+      'La copie de {name} différait de sa source (première différence à l’octet {offset}) et n’a pas été enregistrée.',
     diskSpaceCheckSkipped:
       'Vérification de l’espace disque ignorée à votre demande : {required} nécessaires, {available} signalés libres.',
     attributeNotPermitted:

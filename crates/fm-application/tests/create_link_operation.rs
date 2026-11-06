@@ -62,6 +62,7 @@ fn request(
             kind: LinkKindDto::SymbolicLink,
             target_style,
         }),
+        verify_transfer: false,
     }
 }
 

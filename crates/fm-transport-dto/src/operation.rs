@@ -71,6 +71,10 @@ pub struct StartOperationRequestDto {
     /// Link kind and target form for a `createLink` operation (task 0168).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<LinkRequestDto>,
+    /// Verify every copied file against its source before it is published (task 0302). Applies
+    /// to `copy` and `duplicate`; other kinds ignore it.
+    #[serde(default)]
+    pub verify_transfer: bool,
 }
 
 /// Filesystem link or shell shortcut requested by `createLink`.
@@ -333,6 +337,24 @@ pub struct OperationDto {
     /// Original operation reversed by this undo job.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub undo_of: Option<Uuid>,
+    /// How verification of the copied files went; absent when it was not requested or nothing
+    /// has been checked yet (task 0302).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification: Option<OperationVerificationDto>,
+}
+
+/// Per-outcome counts of the files a transfer verified (task 0302).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationVerificationDto {
+    /// Files confirmed identical to their source.
+    pub verified: u64,
+    /// Files that differed and were not published.
+    pub mismatched: u64,
+    /// Files the providers could not read back.
+    pub not_verified: u64,
+    /// Entries with no content to compare, such as symbolic links.
+    pub skipped: u64,
 }
 
 /// User-facing undo availability for an operation history row.
