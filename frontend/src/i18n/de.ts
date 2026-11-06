@@ -594,6 +594,9 @@ export const de = {
       'Ein Speicherort war nicht erreichbar, um die Übertragung zu prüfen.',
     interruptedReasonJournalDamaged:
       'Der Übertragungseintrag ist beschädigt, daher ist unbekannt, wie weit sie kam.',
+    interruptedResume: 'Fortsetzen',
+    interruptedResumeHint:
+      'Setzt beim bereits kopierten Teil fort, nachdem geprüft wurde, dass er mit der Quelle übereinstimmt.',
     interruptedRunAgain: 'Erneut ausführen',
     interruptedRunAgainAnyway: 'Trotzdem erneut ausführen',
     interruptedDiscard: 'Verwerfen',
@@ -2362,7 +2365,7 @@ export const de = {
     clear: 'Filter löschen',
     scopeOff: 'nur dieser Ordner',
     scopeOn: 'dieser Ordner + Unterordner',
-    modeFuzzy: 'Fuzzy',
+    modeFuzzy: 'Unschärfe',
     modeContains: 'Enthält',
   },
   advancedFilter: {
@@ -2544,6 +2547,16 @@ export const de = {
       'Vorübergehendes Problem (Versuch {attempt} von {max}); neuer Versuch in {seconds} s: {cause}',
     verificationMismatch:
       'Die Kopie von {name} wich von der Quelle ab (erster Unterschied bei Byte {offset}) und wurde nicht gespeichert.',
+    transferResumed:
+      '{name} wurde dort fortgesetzt, wo es stehen geblieben war; {bytes} Bytes mussten nicht erneut gesendet werden.',
+    resumeFallbackPartialGone:
+      '{name} wurde von Anfang an erneut kopiert, weil die unfertige Kopie fehlte.',
+    resumeFallbackSourceChanged:
+      '{name} wurde von Anfang an erneut kopiert, weil sich die Quelle geändert hat.',
+    resumeFallbackPartialMismatch:
+      '{name} wurde von Anfang an erneut kopiert, weil die unfertige Kopie nicht mit der Quelle übereinstimmte.',
+    resumeFallbackUnverifiable:
+      '{name} wurde von Anfang an erneut kopiert, weil die unfertige Kopie nicht geprüft werden konnte.',
     diskSpaceCheckSkipped:
       'Speicherplatzprüfung auf Ihren Wunsch übersprungen: {required} erforderlich, {available} als frei gemeldet.',
     attributeNotPermitted:

@@ -62,6 +62,14 @@ export function fuzzyMatches(query: string, name: string): boolean {
   return fuzzyScore(query, name) !== undefined;
 }
 
+/** True when `query` appears as a contiguous, case/diacritic-insensitive substring of `name` —
+ * the pre-0310 "contains" behaviour, used by the quick filter's `contains` match mode. */
+export function substringMatches(query: string, name: string): boolean {
+  const q = foldCase(query);
+  if (q.length === 0) return true;
+  return foldCase(name).includes(q);
+}
+
 /**
  * The single best fuzzy match for `query` among `items`, or `undefined` if none match. Ties keep
  * the earliest item (stable), so type-to-select is deterministic.

@@ -332,6 +332,8 @@ function attrs(input: FlatAttrsInput = {}): PaneAttrs {
       onFilterQueryChange: input.onFilterQueryChange ?? vi.fn(),
       onFilterCommit: input.onFilterCommit ?? vi.fn(),
       onFilterClose: input.onFilterClose ?? vi.fn(),
+      matchMode: 'fuzzy',
+      onToggleMatchMode: vi.fn(),
     },
     navigation: {
       onNavigate: input.onNavigate ?? vi.fn(),

@@ -1,5 +1,6 @@
 import type { EntryId, EntrySummary } from '../../models';
-import { rankFuzzyMatches } from '../../utilities/fuzzy-match';
+import { rankFuzzyMatches, substringMatches } from '../../utilities/fuzzy-match';
+import type { QuickFilterMatchMode } from '../quick-filter/quick-filter';
 import { reduceTypeahead, type TypeaheadState } from '../selection/keybindings';
 import type { SelectionAction } from '../selection/selection';
 
@@ -49,7 +50,10 @@ export interface TypeaheadController {
  *
  * @param onRedraw - Invoked after the error-flash timer clears so the caller can trigger a redraw.
  */
-export function createTypeaheadController(onRedraw: () => void): TypeaheadController {
+export function createTypeaheadController(
+  onRedraw: () => void,
+  getMode: () => QuickFilterMatchMode = () => 'fuzzy',
+): TypeaheadController {
   let _state: TypeaheadState | undefined;
   let _timer: ReturnType<typeof setTimeout> | undefined;
   let _hasError = false;
@@ -85,7 +89,14 @@ export function createTypeaheadController(onRedraw: () => void): TypeaheadContro
     },
     clearTimer,
     handleChar(char, entries, now, extend) {
-      const result = reduceTypeahead(_state, char, entries, now, Number.POSITIVE_INFINITY);
+      const result = reduceTypeahead(
+        _state,
+        char,
+        entries,
+        now,
+        Number.POSITIVE_INFINITY,
+        getMode(),
+      );
       _state = result.state;
       if (result.matchedEntryId !== undefined) {
         clearTimer();
@@ -108,7 +119,11 @@ export function createTypeaheadController(onRedraw: () => void): TypeaheadContro
     moveWithinMatches(entries, cursorEntry, offset, edge, extend) {
       if (_state === undefined) return false;
       const prefix = _state.prefix;
-      const matches = rankFuzzyMatches(prefix, entries, (entry) => entry.name);
+      const mode = getMode();
+      const matches =
+        mode === 'contains'
+          ? entries.filter((entry) => substringMatches(prefix, entry.name))
+          : rankFuzzyMatches(prefix, entries, (entry) => entry.name);
       if (matches.length === 0) return undefined;
       const currentMatchIndex = matches.findIndex((e) => e.id === cursorEntry?.id);
       const targetIndex =

@@ -1,12 +1,19 @@
 import type { EntryId, EntrySummary } from '../../models';
-import { foldCase, fuzzyMatches } from '../../utilities/fuzzy-match';
+import { fuzzyMatches, substringMatches } from '../../utilities/fuzzy-match';
 
 /**
  * How one `;`-separated quick-filter mask matches (spec §24). The mode is auto-detected per mask:
  * a mask containing `*` or `?` is a case-insensitive glob anchored to the whole name, anything
- * else is a case-insensitive substring. Regex matching is not implemented.
+ * else is matched per the active {@link QuickFilterMatchMode} (fuzzy subsequence by default, or a
+ * strict substring in `contains` mode — task 0314). Regex matching is not implemented.
  */
 export type QuickFilterMode = 'plainText' | 'glob';
+
+/** Task 0314: fuzzy (0310 default, forgiving) vs contains (old substring, exact). Global, not
+ * per-tab. */
+export type QuickFilterMatchMode = 'fuzzy' | 'contains';
+
+export const DEFAULT_QUICK_FILTER_MATCH_MODE: QuickFilterMatchMode = 'fuzzy';
 
 /**
  * Marks a text input whose Cmd/Ctrl+C and Cmd/Ctrl+X, pressed with no text selected, should reach
@@ -40,9 +47,15 @@ export function matchesGlobMask(name: string, pattern: string): boolean {
 
 /**
  * Compiles a quick-filter query into a name predicate, or `undefined` when the query has no
- * non-blank masks. Masks are split on `;`, trimmed, and OR-ed together.
+ * non-blank masks. Masks are split on `;`, trimmed, and OR-ed together. `mode` (task 0314)
+ * selects fuzzy-subsequence vs strict-substring for plain-text masks; it defaults to `fuzzy` so
+ * existing callers keep the 0310 behaviour unless they explicitly pass the global mode.
  */
-export function compileQuickFilter(query: string): ((name: string) => boolean) | undefined {
+export function compileQuickFilter(
+  query: string,
+  mode: QuickFilterMatchMode = DEFAULT_QUICK_FILTER_MATCH_MODE,
+): ((name: string) => boolean) | undefined {
+  const matchMode = mode === 'contains' ? substringMatches : fuzzyMatches;
   const matchers = query
     .split(QUICK_FILTER_MASK_SEPARATOR)
     .map((mask) => mask.trim())
@@ -52,25 +65,31 @@ export function compileQuickFilter(query: string): ((name: string) => boolean) |
         const pattern = globMaskRegExp(mask);
         return (name) => pattern.test(name);
       }
-      const needle = foldCase(mask);
-      return (name) => fuzzyMatches(needle, name);
+      return (name) => matchMode(mask, name);
     });
   if (matchers.length === 0) return undefined;
   if (matchers.length === 1) return matchers[0];
   return (name) => matchers.some((matches) => matches(name));
 }
 
-/** True when the entry's display name matches the quick-filter query (blank matches everything). */
-export function matchesQuickFilter(entry: EntrySummary, query: string): boolean {
-  return compileQuickFilter(query)?.(entry.name) ?? true;
+/** True when the entry's display name matches the quick-filter query (blank matches everything),
+ * under match `mode` (task 0314, default fuzzy). */
+export function matchesQuickFilter(
+  entry: EntrySummary,
+  query: string,
+  mode: QuickFilterMatchMode = DEFAULT_QUICK_FILTER_MATCH_MODE,
+): boolean {
+  return compileQuickFilter(query, mode)?.(entry.name) ?? true;
 }
 
-/** Filters entries by a quick-filter query; a blank query returns the input reference unchanged. */
+/** Filters entries by a quick-filter query; a blank query returns the input reference unchanged.
+ * `mode` (task 0314) is threaded to {@link compileQuickFilter} and defaults to fuzzy. */
 export function filterEntries(
   entries: readonly EntrySummary[],
   query: string,
+  mode: QuickFilterMatchMode = DEFAULT_QUICK_FILTER_MATCH_MODE,
 ): readonly EntrySummary[] {
-  const matches = compileQuickFilter(query);
+  const matches = compileQuickFilter(query, mode);
   if (matches === undefined) return entries;
   return entries.filter((entry) => matches(entry.name));
 }

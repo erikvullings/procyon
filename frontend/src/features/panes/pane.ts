@@ -91,7 +91,7 @@ import type { EntryFormatSettings } from '../entry-formatting/entry-formatting';
 import { isRestorableRecentLocation, truncateLocationForDisplay } from '../favourites/favourites';
 import { activeCriteriaIds } from '../quick-filter/advanced-filter';
 import { type AdvancedFilterAttrs, AdvancedFilterBar } from '../quick-filter/advanced-filter-bar';
-import { matchesGlobMask } from '../quick-filter/quick-filter';
+import { matchesGlobMask, type QuickFilterMatchMode } from '../quick-filter/quick-filter';
 import { QuickFilterInput } from '../quick-filter/quick-filter-input';
 import type { SearchPresentation } from '../search/search-presentation';
 import { exportSemanticEvaluationCases, recordSemanticFeedback } from '../search/semantic-feedback';
@@ -160,6 +160,10 @@ export interface FilterAttrs {
     readonly recursive: boolean;
     readonly onToggle: () => void;
   };
+  /** App-wide fuzzy/contains match mode (task 0314). */
+  readonly matchMode: QuickFilterMatchMode;
+  /** Task 0314: flips the global match mode. */
+  readonly onToggleMatchMode: () => void;
 }
 
 /** Backend-reported directory totals used by the status bar. */
@@ -746,7 +750,14 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
    * `onCursorChange` can call `.focus()` itself instead of relying on incidental browser behaviour. */
   let sectionElement: HTMLElement | undefined;
 
-  const typeaheadCtrl = createTypeaheadController(() => m.redraw());
+  /** Latest quick-filter match mode, captured from attrs in the view (the controller is created
+   * once at body scope, so it can't read `attrs` directly — task 0314). */
+  let currentMatchMode: QuickFilterMatchMode = 'fuzzy';
+
+  const typeaheadCtrl = createTypeaheadController(
+    () => m.redraw(),
+    () => currentMatchMode,
+  );
 
   function moveVisibleSearchCursor(
     attrs: PaneAttrs,
@@ -932,6 +943,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
       typeaheadCtrl.clearTimer();
     },
     view: ({ attrs }) => {
+      currentMatchMode = attrs.filter.matchMode;
       if (!renameRequestSeen) {
         renameRequestSeen = true;
         handledRenameRevision = attrs.renameRequest?.revision;
@@ -1720,6 +1732,8 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                         },
                       }),
                   ...(attrs.filter.scope === undefined ? {} : { scope: attrs.filter.scope }),
+                  matchMode: attrs.filter.matchMode,
+                  onToggleMatchMode: attrs.filter.onToggleMatchMode,
                 })
               : attrs.breadcrumbLabel !== undefined
                 ? m(

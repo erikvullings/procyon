@@ -67,6 +67,7 @@ import {
   advancedFilterNotices,
 } from '../quick-filter/advanced-filter';
 import type { AdvancedFilterStore } from '../quick-filter/advanced-filter-store';
+import type { QuickFilterMatchMode } from '../quick-filter/quick-filter';
 import { hiddenSelectedEntryCount } from '../quick-filter/quick-filter';
 import { saveSearch } from '../search/saved-searches';
 import type { SelectionPlatform } from '../selection/keybindings';
@@ -228,6 +229,10 @@ export interface PaneContentContext {
   toggleQuickFilterScope(key: string): void;
   /** Task 0310: (re)run the bounded recursive walk for this tab's query over its loaded entries. */
   runRecursiveQuickFilter(key: string, query: string, baseEntries: readonly EntrySummary[]): void;
+  /** Task 0314: the app-wide quick-filter match mode (fuzzy | contains). */
+  quickFilterMatchMode(): QuickFilterMatchMode;
+  /** Task 0314: flip the app-wide quick-filter match mode. */
+  toggleQuickFilterMatchMode(): void;
   contentSearchInitialQuery(locationUri: string, entry: EntrySummary): InitialSearch | undefined;
   searchQueryForLocationUri(locationUri: string): SearchQuery | undefined;
   searchFavouriteNameForLocationUri(locationUri: string): string | undefined;
@@ -598,6 +603,9 @@ export function createPaneContentBuilder(
               onToggle: () => context.toggleQuickFilterScope(key),
             },
           }),
+      // Task 0314: global fuzzy/contains match-mode toggle, exposed to the filter box.
+      quickFilterMatchMode: context.quickFilterMatchMode(),
+      toggleQuickFilterMatchMode: () => context.toggleQuickFilterMatchMode(),
       formatSettings: entryFormatSettings,
       ...(nativeIconLoader === undefined ? {} : { nativeIconLoader }),
       ...(thumbnailLoader === undefined ? {} : { thumbnailLoader }),

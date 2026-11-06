@@ -44,6 +44,7 @@ import type {
 } from '../panes/pane';
 import { Pane, type PaneRenameRequest } from '../panes/pane';
 import type { AdvancedFilterAttrs } from '../quick-filter/advanced-filter-bar';
+import type { QuickFilterMatchMode } from '../quick-filter/quick-filter';
 import type { SearchPresentation } from '../search/search-presentation';
 import type { SelectionPlatform } from '../selection/keybindings';
 import type { SelectionAction } from '../selection/selection';
@@ -77,6 +78,10 @@ export interface WorkspacePaneContent {
     readonly recursive: boolean;
     readonly onToggle: () => void;
   };
+  /** App-wide quick-filter match mode (task 0314): 'fuzzy' (default) or 'contains'. */
+  readonly quickFilterMatchMode: QuickFilterMatchMode;
+  /** Task 0314: flips the global match mode. */
+  readonly toggleQuickFilterMatchMode: () => void;
   readonly formatSettings?: EntryFormatSettings;
   readonly pluginColumns?: readonly DirectoryColumnDescriptor[];
   /** Restricts non-mandatory columns to this set; see `DirectoryTableAttrs.visibleColumnIds`. */
@@ -697,6 +702,8 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
             onFilterCommit: content.onFilterCommit,
             onFilterClose: content.onFilterClose,
             ...(content.quickFilterScope === undefined ? {} : { scope: content.quickFilterScope }),
+            matchMode: content.quickFilterMatchMode,
+            onToggleMatchMode: content.toggleQuickFilterMatchMode,
           } satisfies FilterAttrs,
           navigation: {
             onNavigate: content.onNavigate,

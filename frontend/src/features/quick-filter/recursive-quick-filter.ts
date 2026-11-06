@@ -1,5 +1,5 @@
 import type { EntrySummary, Location } from '../../models';
-import { compileQuickFilter } from './quick-filter';
+import { compileQuickFilter, type QuickFilterMatchMode } from './quick-filter';
 
 /** Upper bound on how many sub-directories a single recursive quick-filter walk will list before
  * giving up (task 0310) — keeps an accidental "filter the whole disk" toggle from blocking the UI. */
@@ -10,6 +10,8 @@ export const RECURSIVE_FILTER_MAX_MATCHES = 2000;
 export interface RecursiveWalkOptions {
   readonly maxDirectories?: number;
   readonly maxMatches?: number;
+  /** Task 0314: match mode for plain-text masks (default fuzzy, same as the quick filter). */
+  readonly matchMode?: QuickFilterMatchMode;
   /** Aborts a still-running walk; checked between directories. */
   readonly signal?: AbortSignal;
 }
@@ -34,9 +36,10 @@ export async function collectRecursiveQuickFilterEntries(
   const {
     maxDirectories = RECURSIVE_FILTER_MAX_DIRECTORIES,
     maxMatches = RECURSIVE_FILTER_MAX_MATCHES,
+    matchMode,
     signal,
   } = options;
-  const matcher = compileQuickFilter(query) ?? (() => true);
+  const matcher = compileQuickFilter(query, matchMode ?? 'fuzzy') ?? (() => true);
   const walkSignal = signal ?? new AbortController().signal;
   const matches: EntrySummary[] = [];
   const seenDirectories = new Set<string>();

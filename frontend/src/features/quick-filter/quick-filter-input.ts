@@ -5,9 +5,11 @@ import {
   closeIcon,
   directoryTreeIcon,
   filterIcon,
+  searchIcon,
+  sparklesIcon,
 } from '../../components/tabler-icons';
 import { t } from '../../i18n';
-import { FILE_CLIPBOARD_PASSTHROUGH_ATTRIBUTE } from './quick-filter';
+import { FILE_CLIPBOARD_PASSTHROUGH_ATTRIBUTE, type QuickFilterMatchMode } from './quick-filter';
 import './quick-filter.css';
 
 /** Inputs for the inline quick-filter text box. */
@@ -29,6 +31,10 @@ export interface QuickFilterInputAttrs {
     readonly recursive: boolean;
     readonly onToggle: () => void;
   };
+  /** App-wide fuzzy/contains match mode (task 0314); absent where the host offers no such mode. */
+  readonly matchMode?: QuickFilterMatchMode;
+  /** Task 0314: flips the global match mode. */
+  readonly onToggleMatchMode?: () => void;
 }
 
 function hasTextSelection(input: HTMLInputElement): boolean {
@@ -137,6 +143,24 @@ export const QuickFilterInput: FactoryComponent<QuickFilterInputAttrs> = () => {
                 onclick: () => attrs.scope?.onToggle(),
               },
               directoryTreeIcon({ size: 14 }),
+            ),
+        attrs.matchMode === undefined || attrs.onToggleMatchMode === undefined
+          ? undefined
+          : m(
+              'button.fm-quick-filter-match-mode',
+              {
+                type: 'button',
+                'aria-label': t(
+                  'quickFilter',
+                  attrs.matchMode === 'fuzzy' ? 'modeFuzzy' : 'modeContains',
+                ),
+                'aria-pressed': String(attrs.matchMode === 'fuzzy'),
+                title: t('quickFilter', attrs.matchMode === 'fuzzy' ? 'modeFuzzy' : 'modeContains'),
+                // Keep the text input's blur from committing before the toggle flips.
+                onmousedown: (event: MouseEvent) => event.preventDefault(),
+                onclick: () => attrs.onToggleMatchMode?.(),
+              },
+              attrs.matchMode === 'fuzzy' ? sparklesIcon({ size: 14 }) : searchIcon({ size: 14 }),
             ),
         m(
           'button.fm-quick-filter-clear',

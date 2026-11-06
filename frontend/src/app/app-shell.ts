@@ -122,7 +122,7 @@ import { createPlayerController } from '../features/player/player-controller';
 import type { PlayerState } from '../features/player/player-state';
 import { SavePlaylistDialog } from '../features/playlist/save-playlist-dialog';
 import { filterEntriesAdvanced } from '../features/quick-filter/advanced-filter';
-import { filterEntries } from '../features/quick-filter/quick-filter';
+import { filterEntries, type QuickFilterMatchMode } from '../features/quick-filter/quick-filter';
 import { collectRecursiveQuickFilterEntries } from '../features/quick-filter/recursive-quick-filter';
 import {
   createFindFilesController,
@@ -695,7 +695,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     if (cached?.input === source && cached.query === query && cached.criteria === criteria) {
       return cached.entries;
     }
-    const filtered = filterEntriesAdvanced(filterEntries(source, query), criteria);
+    const filtered = filterEntriesAdvanced(
+      filterEntries(source, query, shellState.quickFilterMatchMode),
+      criteria,
+    );
     shellState.filteredEntries.set(key, { input: source, query, criteria, entries: filtered });
     return filtered;
   }
@@ -758,7 +761,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       baseEntries,
       query,
       (location, signal) => vnode.attrs.client.listDirectoryChildren(location, showHidden, signal),
-      { signal: controller.signal },
+      { signal: controller.signal, matchMode: shellState.quickFilterMatchMode },
     )
       .then((results) => {
         if (controller.signal.aborted) return;
@@ -780,6 +783,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       state?.controller?.abort();
       if (state) state.results = undefined;
     }
+    m.redraw();
+  }
+
+  /** Task 0314: the app-wide quick-filter match mode (fuzzy | contains). */
+  function quickFilterMatchMode(): QuickFilterMatchMode {
+    return shellState.quickFilterMatchMode;
+  }
+
+  /** Task 0314: flip the global match mode; every open tab re-filters on the next redraw. */
+  function toggleQuickFilterMatchMode(): void {
+    shellState.quickFilterMatchMode =
+      shellState.quickFilterMatchMode === 'fuzzy' ? 'contains' : 'fuzzy';
     m.redraw();
   }
 
@@ -2363,6 +2378,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     quickFilterRecursiveFor,
     toggleQuickFilterScope,
     runRecursiveQuickFilter,
+    quickFilterMatchMode,
+    toggleQuickFilterMatchMode,
     advancedFilters: shellState.advancedFilters,
     contentSearchInitialQuery,
     searchQueryForLocationUri: (locationUri) =>

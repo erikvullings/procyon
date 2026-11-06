@@ -1,5 +1,6 @@
 import type { ActionId, EntryId, EntrySummary } from '../../models';
-import { bestFuzzyMatch } from '../../utilities/fuzzy-match';
+import { bestFuzzyMatch, substringMatches } from '../../utilities/fuzzy-match';
+import type { QuickFilterMatchMode } from '../quick-filter/quick-filter';
 
 /** Action identifiers reserved for selection before the configurable action registry lands. */
 export const CORE_SELECTION_ACTION_IDS = {
@@ -119,13 +120,17 @@ export function reduceTypeahead(
   entries: readonly EntrySummary[],
   now: number,
   timeoutMs = TYPEAHEAD_TIMEOUT_MS,
+  mode: QuickFilterMatchMode = 'fuzzy',
 ): TypeaheadResult {
   const normalizedInput = input.toLocaleLowerCase();
   const prefix =
     state === undefined || now - state.lastInputAt > timeoutMs
       ? normalizedInput
       : state.prefix + normalizedInput;
-  const match = bestFuzzyMatch(prefix, entries, (entry) => entry.name);
+  const match =
+    mode === 'contains'
+      ? entries.find((entry) => substringMatches(prefix, entry.name))
+      : bestFuzzyMatch(prefix, entries, (entry) => entry.name);
   return {
     state: { prefix, lastInputAt: now },
     ...(match === undefined ? {} : { matchedEntryId: match.id }),
