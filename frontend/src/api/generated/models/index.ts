@@ -372,6 +372,7 @@ export * from './previewRagRequestDto.ts';
 export * from './previewSemanticEnrolmentRequestDto.ts';
 export * from './querySqliteViewRequestDto.ts';
 export * from './querySqliteViewResponseDto.ts';
+export * from './quickFilterMatchModeDto.ts';
 export * from './quickFilterPatchDto.ts';
 export * from './ragAnswerDto.ts';
 export * from './ragAnswerEventDto.ts';

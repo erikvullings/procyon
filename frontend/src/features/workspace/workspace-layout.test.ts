@@ -166,6 +166,8 @@ function attrs(overrides: Partial<WorkspaceLayoutViewAttrs> = {}): WorkspaceLayo
       onFilterQueryChange: vi.fn(),
       onFilterCommit: vi.fn(),
       onFilterClose: vi.fn(),
+      quickFilterMatchMode: 'fuzzy',
+      toggleQuickFilterMatchMode: vi.fn(),
     }),
     onActivatePane: vi.fn(),
     onUpdateLayout: vi.fn(),

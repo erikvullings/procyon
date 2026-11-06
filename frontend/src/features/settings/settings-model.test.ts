@@ -14,6 +14,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
   return {
     semanticMaxSourceMib: 64,
     semanticThemeRootIds: [],
+    quickFilterMatchMode: 'fuzzy',
     schemaVersion: 2,
     theme: 'auto',
     language: 'en',

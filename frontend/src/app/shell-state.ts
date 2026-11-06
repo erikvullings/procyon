@@ -74,7 +74,6 @@ import type {
 } from '../features/preview/file-viewer-controller';
 import type { AdvancedFilterCriteria } from '../features/quick-filter/advanced-filter';
 import { AdvancedFilterStore } from '../features/quick-filter/advanced-filter-store';
-import { DEFAULT_QUICK_FILTER_MATCH_MODE } from '../features/quick-filter/quick-filter';
 import type { FindFilesController } from '../features/search/find-files-controller';
 import type { FindFilesSearchParams } from '../features/search/find-files-dialog';
 import type { SearchPresentation } from '../features/search/search-presentation';
@@ -390,9 +389,6 @@ export function createShellState(client: FileManagerClient) {
         base: readonly EntrySummary[];
       }
     >(),
-    /** App-wide quick-filter match mode (task 0314): fuzzy (0310 default) or strict substring.
-     * Global — one value for every tab — not per-tab, and in-memory (persistence deferred). */
-    quickFilterMatchMode: DEFAULT_QUICK_FILTER_MATCH_MODE,
     /** Structured (advanced) filter criteria and panel state per tab (task 0169). */
     advancedFilters: new AdvancedFilterStore(),
     filteredEntries: new Map<

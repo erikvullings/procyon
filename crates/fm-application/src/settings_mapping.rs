@@ -7,15 +7,15 @@ use crate::sync_profile_mapping::{sync_profile_from_dto, sync_profile_to_dto};
 use fm_settings::{
     ConflictPolicy, DateFormat, DefaultPaneLayout, FilterCriteria, FilterKind, FilterPreset,
     FilterToggle, Language, MapBasemap, MapSettings, MultiRenameCaseTransform, MultiRenamePreset,
-    MultiRenameRules, MultiRenameSequence, Settings, SizeFormat, Theme,
+    MultiRenameRules, MultiRenameSequence, QuickFilterMatchMode, Settings, SizeFormat, Theme,
 };
 use fm_transport_dto::{
     ConceptHierarchyScopeDto, ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto,
     FilterCriteriaDto, FilterKindDto, FilterPresetDto, FilterToggleDto, LanguageDto,
     MapBasemapKindDto, MapSettingsDto, MultiRenameCaseTransformDto, MultiRenamePresetDto,
-    MultiRenameRulesDto, MultiRenameSequenceDto, SavedSearchDto, SearchConceptPredicateDto,
-    SearchContentPredicateDto, SearchEntryKindDto, SearchGitStatusDto, SearchModeDto,
-    SearchNameModeDto, SearchNamePredicateDto, SearchQueryDto, SearchScopeDto,
+    MultiRenameRulesDto, MultiRenameSequenceDto, QuickFilterMatchModeDto, SavedSearchDto,
+    SearchConceptPredicateDto, SearchContentPredicateDto, SearchEntryKindDto, SearchGitStatusDto,
+    SearchModeDto, SearchNameModeDto, SearchNamePredicateDto, SearchQueryDto, SearchScopeDto,
     SearchSemanticPredicateDto, SemanticSearchScopeDto, SettingsDto, SizeFormatDto, ThemeDto,
 };
 
@@ -162,6 +162,10 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
         map: map_settings_to_dto(&settings.map),
         semantic_max_source_mib: settings.semantic_max_source_mib,
         semantic_theme_root_ids: settings.semantic_theme_root_ids,
+        quick_filter_match_mode: match settings.quick_filter_match_mode {
+            QuickFilterMatchMode::Fuzzy => QuickFilterMatchModeDto::Fuzzy,
+            QuickFilterMatchMode::Contains => QuickFilterMatchModeDto::Contains,
+        },
     }
 }
 
@@ -309,6 +313,10 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
         map: map_settings_from_dto(settings.map),
         semantic_max_source_mib: settings.semantic_max_source_mib,
         semantic_theme_root_ids: settings.semantic_theme_root_ids,
+        quick_filter_match_mode: match settings.quick_filter_match_mode {
+            QuickFilterMatchModeDto::Fuzzy => QuickFilterMatchMode::Fuzzy,
+            QuickFilterMatchModeDto::Contains => QuickFilterMatchMode::Contains,
+        },
     }
 }
 

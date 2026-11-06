@@ -235,9 +235,9 @@ pub use settings::{
     ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto, FavouriteLocationDto,
     FilterCriteriaDto, FilterKindDto, FilterPresetDto, FilterToggleDto, LanguageDto,
     MapBasemapKindDto, MapSettingsDto, MultiRenameCaseTransformDto, MultiRenamePresetDto,
-    MultiRenameRulesDto, MultiRenameSequenceDto, SavedSearchDto, SettingsDto, SizeFormatDto,
-    SyncProfileDto, SyncRunOutcomeDto, SyncRunSummaryDto, SyncRunTriggerDto,
-    SyncScheduleConfirmationDto, SyncScheduleDto, ThemeDto,
+    MultiRenameRulesDto, MultiRenameSequenceDto, QuickFilterMatchModeDto, SavedSearchDto,
+    SettingsDto, SizeFormatDto, SyncProfileDto, SyncRunOutcomeDto, SyncRunSummaryDto,
+    SyncRunTriggerDto, SyncScheduleConfirmationDto, SyncScheduleDto, ThemeDto,
 };
 pub use snapshot::{DirectorySnapshotDto, LoadingStateDto, VolumeCapacityDto};
 pub use snapshots::{

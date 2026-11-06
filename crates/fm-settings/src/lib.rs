@@ -123,6 +123,18 @@ pub enum SizeFormat {
     Bytes,
 }
 
+/// How the quick filter and keyboard type-to-select match entry names (tasks 0310, 0314). Stored
+/// globally so a single choice applies to every tab.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum QuickFilterMatchMode {
+    /// Fuzzy subsequence match (0310 default): forgiving, matches abbreviations.
+    #[default]
+    Fuzzy,
+    /// Strict substring match: exact, no surprises when the keyword is known.
+    Contains,
+}
+
 /// Reserved `icon_theme` value selecting the built-in generic glyphs, rather than a distributable
 /// icon theme plugin's id (task 0095).
 pub const GENERIC_ICON_THEME: &str = "generic";
@@ -441,6 +453,8 @@ pub struct Settings {
     /// Indexed roots the corpus-themes view analyses, remembered across sessions (task 0298).
     /// Empty means the whole library. Only one semantic library is active, so this is global.
     pub semantic_theme_root_ids: Vec<String>,
+    /// Quick-filter (and type-to-select) match mode; global for every tab (task 0314).
+    pub quick_filter_match_mode: QuickFilterMatchMode,
 }
 
 impl Settings {
@@ -531,6 +545,7 @@ impl Default for Settings {
             map: MapSettings::default(),
             semantic_max_source_mib: DEFAULT_SEMANTIC_MAX_SOURCE_MIB,
             semantic_theme_root_ids: Vec::new(),
+            quick_filter_match_mode: QuickFilterMatchMode::default(),
         }
     }
 }

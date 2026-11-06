@@ -20404,6 +20404,14 @@
           }
         }
       },
+      "QuickFilterMatchModeDto": {
+        "type": "string",
+        "description": "Quick-filter (and type-to-select) matching strategy, global for every tab (task 0314).",
+        "enum": [
+          "fuzzy",
+          "contains"
+        ]
+      },
       "QuickFilterPatchDto": {
         "oneOf": [
           {
@@ -25331,6 +25339,10 @@
           "pluginSettings": {
             "type": "object",
             "description": "Non-secret plugin settings keyed by plugin identifier."
+          },
+          "quickFilterMatchMode": {
+            "$ref": "#/components/schemas/QuickFilterMatchModeDto",
+            "description": "Quick-filter (and type-to-select) match mode; global for every tab (task 0314)."
           },
           "recentLocationsByWorkspace": {
             "type": "object",

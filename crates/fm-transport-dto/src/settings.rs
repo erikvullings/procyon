@@ -90,6 +90,20 @@ pub enum DefaultPaneLayoutDto {
     Single,
 }
 
+/// Quick-filter (and type-to-select) matching strategy, global for every tab (task 0314).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum QuickFilterMatchModeDto {
+    /// Fuzzy subsequence match (0310 default): forgiving, matches abbreviations.
+    Fuzzy,
+    /// Strict substring match: exact, no surprises when the keyword is known.
+    Contains,
+}
+
+fn quick_filter_match_mode_default() -> QuickFilterMatchModeDto {
+    QuickFilterMatchModeDto::Fuzzy
+}
+
 /// A named, provider-neutral location saved by the user.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -405,6 +419,9 @@ pub struct SettingsDto {
     /// Indexed roots the corpus-themes view analyses; empty means the whole library (task 0298).
     #[serde(default)]
     pub semantic_theme_root_ids: Vec<String>,
+    /// Quick-filter (and type-to-select) match mode; global for every tab (task 0314).
+    #[serde(default = "quick_filter_match_mode_default")]
+    pub quick_filter_match_mode: QuickFilterMatchModeDto,
 }
 
 const fn default_semantic_max_source_mib() -> u32 {

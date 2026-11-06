@@ -1,4 +1,5 @@
 import type { EntryId, EntrySummary } from '../../models';
+import { DEFAULT_QUICK_FILTER_MATCH_MODE, type QuickFilterMatchMode } from '../../models/settings';
 import { fuzzyMatches, substringMatches } from '../../utilities/fuzzy-match';
 
 /**
@@ -9,11 +10,11 @@ import { fuzzyMatches, substringMatches } from '../../utilities/fuzzy-match';
  */
 export type QuickFilterMode = 'plainText' | 'glob';
 
-/** Task 0314: fuzzy (0310 default, forgiving) vs contains (old substring, exact). Global, not
- * per-tab. */
-export type QuickFilterMatchMode = 'fuzzy' | 'contains';
-
-export const DEFAULT_QUICK_FILTER_MATCH_MODE: QuickFilterMatchMode = 'fuzzy';
+/** Task 0314: fuzzy (0310 default, forgiving) vs contains (old substring, exact). The type and
+ * default are declared once in `models/settings.ts` (where the persisted `Settings` lives) and
+ * re-exported here for the quick-filter callers. */
+export type { QuickFilterMatchMode } from '../../models/settings';
+export { DEFAULT_QUICK_FILTER_MATCH_MODE } from '../../models/settings';
 
 /**
  * Marks a text input whose Cmd/Ctrl+C and Cmd/Ctrl+X, pressed with no text selected, should reach

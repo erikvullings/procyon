@@ -1,6 +1,7 @@
 import { DEFAULT_MAP_SETTINGS } from '../../features/map/map-settings';
 import type { Location as FileLocation, SearchQuery, Settings } from '../../models';
 import type { FilterCriteria, SyncProfile } from '../../models/settings';
+import { DEFAULT_QUICK_FILTER_MATCH_MODE } from '../../models/settings';
 import type { FilterCriteriaDto } from '../generated/models/filterCriteriaDto';
 import type { SettingsDto } from '../generated/models/settingsDto';
 import type { SyncProfileDto } from '../generated/models/syncProfileDto';
@@ -44,6 +45,7 @@ export function settingsFromDto(settings: SettingsDto): Settings {
     editorCommand: settings.editorCommand ?? null,
     rememberFolderViews: settings.rememberFolderViews ?? true,
     checkForBetaUpdates: settings.checkForBetaUpdates ?? false,
+    quickFilterMatchMode: settings.quickFilterMatchMode ?? DEFAULT_QUICK_FILTER_MATCH_MODE,
     map: settings.map ?? DEFAULT_MAP_SETTINGS,
   };
 }

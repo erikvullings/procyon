@@ -10,6 +10,7 @@ import type { FilterPresetDto } from './filterPresetDto.ts';
 import type { LanguageDto } from './languageDto.ts';
 import type { MapSettingsDto } from './mapSettingsDto.ts';
 import type { MultiRenamePresetDto } from './multiRenamePresetDto.ts';
+import type { QuickFilterMatchModeDto } from './quickFilterMatchModeDto.ts';
 import type { SavedSearchDto } from './savedSearchDto.ts';
 import type { SettingsDtoColumnWidths } from './settingsDtoColumnWidths.ts';
 import type { SettingsDtoKeybindings } from './settingsDtoKeybindings.ts';
@@ -76,6 +77,8 @@ export interface SettingsDto {
   operationConcurrency: number;
   /** Non-secret plugin settings keyed by plugin identifier. */
   pluginSettings: SettingsDtoPluginSettings;
+  /** Quick-filter (and type-to-select) match mode; global for every tab (task 0314). */
+  quickFilterMatchMode?: QuickFilterMatchModeDto;
   /** Recently visited locations per workspace, newest first. */
   recentLocationsByWorkspace: SettingsDtoRecentLocationsByWorkspace;
   /**

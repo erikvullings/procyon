@@ -228,6 +228,7 @@ export class MockContext {
     viewerInSeparateWindow: false,
     semanticMaxSourceMib: 64,
     semanticThemeRootIds: [],
+    quickFilterMatchMode: 'fuzzy',
     rememberFolderViews: true,
     map: DEFAULT_MAP_SETTINGS,
   };

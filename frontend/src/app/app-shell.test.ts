@@ -5839,6 +5839,7 @@ describe('AppShell', () => {
     vi.spyOn(client, 'getSettings').mockResolvedValue({
       semanticMaxSourceMib: 64,
       semanticThemeRootIds: [],
+      quickFilterMatchMode: 'fuzzy',
       schemaVersion: 2,
       theme: 'auto',
       language: 'en',

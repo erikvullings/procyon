@@ -53,6 +53,12 @@ export interface FilterPreset {
 }
 
 /** Whether a scheduled synchronization run needs a human before anything changes (task 0161). */
+/** How the quick filter and keyboard type-to-select match entry names (task 0314). Global, so one
+ * choice applies to every tab. */
+export type QuickFilterMatchMode = 'fuzzy' | 'contains';
+
+export const DEFAULT_QUICK_FILTER_MATCH_MODE: QuickFilterMatchMode = 'fuzzy';
+
 export type SyncScheduleConfirmation = 'required' | 'autoApplyAdditions';
 
 /** Opt-in schedule; fires only while the app is running. */
@@ -138,6 +144,8 @@ export interface Settings {
   readonly semanticMaxSourceMib: number;
   /** Indexed roots the themes view analyses; empty means the whole library (task 0298). */
   readonly semanticThemeRootIds: string[];
+  /** Quick-filter (and type-to-select) match mode; global for every tab (task 0314). */
+  readonly quickFilterMatchMode: QuickFilterMatchMode;
   /** Remembers and restores the view (sort, columns, mode) chosen for each folder (task 0270). */
   readonly rememberFolderViews: boolean;
   /** Basemap of the shared map component (task 0275). */
