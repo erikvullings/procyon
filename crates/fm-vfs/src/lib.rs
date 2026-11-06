@@ -15,6 +15,7 @@ mod provider;
 mod registry;
 mod transfer;
 mod types;
+mod upload;
 
 pub use attributes::{AttributeChange, AttributeSnapshot, AttributeSupport, EDITABLE_MODE_MASK};
 pub use capabilities::ProviderCapabilities;
@@ -33,3 +34,4 @@ pub use types::{
     ProviderReadStream, ProviderWriteStream, RemoveFailure, RemoveFailureKind, RemoveOptions,
     RemoveReport, WriteOptions,
 };
+pub use upload::{UploadCompletion, upload_pipe};

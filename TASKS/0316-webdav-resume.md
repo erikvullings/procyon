@@ -29,3 +29,5 @@ servers implement SabreDAV's `X-Update-Range` or Nextcloud chunked uploads, each
 
 ## Agent Notes
 - 2026-11-06 claude: Split from 0303, which delivered the shared machinery and SFTP only.
+- 2026-11-06 claude: Live check against `x/net/webdav` (podman): the server answers ranged GETs with 206 and `Accept-Ranges: bytes`, but this provider has NO `read_range` (it reports `UnsupportedCapability`), so a download resume currently reads and drops the already-fetched prefix. Implementing `read_range` with a `Range` request (+ `If-Range`) is the cheap first step here. Upload resume is unchanged: a WebDAV PUT cannot be appended to. Also fixed the writer race this exposed (see 0303): the WebDAV writer now waits for the PUT result in `shutdown`, so a refused PUT fails the copy.
+

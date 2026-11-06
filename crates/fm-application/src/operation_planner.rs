@@ -3123,6 +3123,19 @@ impl CopyExecutor {
         unreachable!("u32 suffix iterator is non-empty")
     }
 
+    /// Removes the partial hinted for `item` when this copy is not going to use it.
+    async fn discard_unused_hint(&self, item: &PlanItem) {
+        if let Some(partial) = self.resume_hints.get(&item.entry.location)
+            && let Err(error) = self
+                .destination_provider
+                .discard_copy(partial, CancellationToken::new())
+                .await
+            && !matches!(error, fm_vfs::VfsError::NotFound { .. })
+        {
+            tracing::warn!(%error, "an unused resume partial could not be removed");
+        }
+    }
+
     /// Tries to continue an interrupted upload from the private partial a previous run left for
     /// this source (task 0303). `Ok(None)` means copy from the start: there was no hint, or the
     /// hint could not be proven (the partial is then discarded and the reason recorded).
@@ -3323,6 +3336,9 @@ impl CopyExecutor {
         let resumed = if self.transfer.strategy == TransferStrategy::DirectStream {
             self.try_resume(item, progress, pause, cancellation).await?
         } else {
+            // A hinted partial this copy will never continue (a provider-native copy streams
+            // nothing) would otherwise stay behind with nothing referring to it.
+            self.discard_unused_hint(item).await;
             None
         };
         // A resumed file is verified whatever the user chose: the prefix was proven against the
@@ -6016,7 +6032,10 @@ mod tests {
     async fn a_provider_without_offset_writes_never_resumes() {
         let reporter = JournalingReporter::default();
         let run = resume_copy(
-            Arc::new(fm_vfs_local::LocalFileSystemProvider::new()),
+            Arc::new(
+                crate::appendable_test_provider::AppendableProvider::new("no-append")
+                    .without_offset_writes(),
+            ),
             Some(b"01234"),
             b"0123456789",
             false,
@@ -6655,4 +6674,6 @@ mod tests {
             "a failed file_size lookup must fall back to the unknown-size open_write"
         );
     }
+
+    mod live;
 }

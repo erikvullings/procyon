@@ -16,6 +16,8 @@ pub(crate) struct AppendableProvider {
     inner: fm_vfs_local::LocalFileSystemProvider,
     /// Inspecting a private `.fm-copy-*` partial fails like a dropped connection.
     flaky_partial_inspect: bool,
+    /// Advertise no offset writes, like a provider that cannot append (task 0303).
+    cannot_append: bool,
 }
 
 impl AppendableProvider {
@@ -24,7 +26,14 @@ impl AppendableProvider {
             id,
             inner: fm_vfs_local::LocalFileSystemProvider::new(),
             flaky_partial_inspect: false,
+            cannot_append: false,
         }
+    }
+
+    /// A provider that does not advertise offset writes.
+    pub(crate) fn without_offset_writes(mut self) -> Self {
+        self.cannot_append = true;
+        self
     }
 
     /// A provider whose link drops whenever a partial is inspected.
@@ -54,16 +63,21 @@ impl FileSystemProvider for AppendableProvider {
 
     fn transfer_capabilities(
         &self,
-        _location: &Location,
+        location: &Location,
     ) -> Result<TransferCapabilities, fm_vfs::VfsError> {
+        // Private partials live on the "remote" backend; everything else on "local", so a test
+        // can stream between two distinct endpoints through one provider.
+        let remote = location
+            .name()
+            .is_ok_and(|name| name.starts_with(".fm-copy-"));
         Ok(TransferCapabilities {
-            endpoint: TransferEndpoint::new("appendable-test"),
+            endpoint: TransferEndpoint::new(if remote { "appendable-test" } else { "local" }),
             server_side_copy: false,
             server_side_move: false,
             resumable_upload: true,
             resumable_download: false,
             random_read: false,
-            random_write: true,
+            random_write: !self.cannot_append,
         })
     }
 

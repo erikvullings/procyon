@@ -745,7 +745,8 @@ impl FileSystemProvider for WebDavFileSystemProvider {
             .get(&parameters.base_url)
             .cloned();
         let client = self.client.clone();
-        let (writer, reader) = tokio::io::duplex(65536);
+        let (writer, reader, completion) = fm_vfs::upload_pipe(65536);
+        let destination_uri = destination.uri.clone();
         tokio::spawn(async move {
             let body = reqwest::Body::wrap_stream(ReaderStream::new(reader));
             let mut builder = client.request(Method::PUT, url);
@@ -769,9 +770,18 @@ impl FileSystemProvider for WebDavFileSystemProvider {
                     }
                 }
             }
-            let _ = builder.body(body).send().await;
+            // `shutdown` waits for this verdict: a server that refuses the PUT fails the copy
+            // here, and the temporary is only published once the server has finished it.
+            let verdict = match builder.body(body).send().await {
+                Ok(response) if response.status().is_success() => Ok(()),
+                Ok(response) => Err(map_status(response.status(), &destination_uri)),
+                Err(error) => Err(VfsError::Io {
+                    message: error.to_string(),
+                }),
+            };
+            completion.finish(verdict);
         });
-        Ok(Box::pin(writer))
+        Ok(writer)
     }
 
     async fn server_side_copy(

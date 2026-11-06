@@ -333,13 +333,22 @@ fn resume_possible(
     else {
         return false;
     };
+    let endpoint = |location: &Location| {
+        providers
+            .resolve(location)
+            .and_then(|provider| provider.transfer_capabilities(location))
+            .ok()
+    };
+    let (Some(destination), Some(origin)) = (endpoint(location), endpoint(&item.source)) else {
+        return false;
+    };
+    // Both sides on one backend are copied provider-natively, never streamed, so a partial
+    // there cannot be continued; a resume only applies when bytes really cross between backends.
     source == SourceState::Unchanged
         && partial_size > 0
         && partial_size <= source_size
-        && providers
-            .resolve(location)
-            .and_then(|provider| provider.transfer_capabilities(location))
-            .is_ok_and(|capabilities| capabilities.random_write)
+        && destination.random_write
+        && destination.endpoint != origin.endpoint
 }
 
 /// An interrupted job together with its freshly computed verdict.

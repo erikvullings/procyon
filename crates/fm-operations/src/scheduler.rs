@@ -855,8 +855,9 @@ impl Scheduler {
             }
             // Terminal either way: the history entry carries the outcome, so the
             // journal record (which only exists to recover interrupted jobs) goes.
+            // Queued, not awaited: waiting here would keep the scheduler alive past the service.
             if let Some(journal) = scheduler.journal_for(kind) {
-                journal.finish(id).await;
+                journal.discard(id);
             }
             job.completed.notify_waiters();
         });

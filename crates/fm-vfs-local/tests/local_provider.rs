@@ -639,9 +639,9 @@ async fn transfer_capabilities_report_one_shared_local_endpoint() {
     assert_eq!(first.endpoint, TransferEndpoint::new("local"));
     assert!(first.server_side_copy);
     assert!(first.server_side_move);
-    // `read_range` is implemented; offset writes and resumption are not.
+    // `read_range` and `open_write_at` are implemented (task 0303); sized upload sessions are not.
     assert!(first.random_read);
-    assert!(!first.random_write);
+    assert!(first.random_write);
     assert!(!first.resumable_upload);
     assert!(!first.resumable_download);
 }
@@ -972,4 +972,51 @@ async fn macos_application_bundles_are_listed_as_files_not_directories() {
         "a .app directory without a Contents subfolder is not a real bundle"
     );
     assert_eq!(by_name("Plain").kind, EntryKind::Directory);
+}
+
+/// Task 0303: a download from a remote source continues an interrupted private partial, so the
+/// local provider writes at an offset without truncating what is already there.
+#[tokio::test]
+async fn open_write_at_continues_a_partial_and_refuses_a_wrong_length_or_missing_partial() {
+    let root = tempdir().expect("temp root");
+    let provider = LocalFileSystemProvider::new();
+    let location = |name: &str| Location::from_native_path(&root.path().join(name)).unwrap();
+
+    let capabilities = provider
+        .transfer_capabilities(&location("x"))
+        .expect("capabilities");
+    assert!(capabilities.random_write);
+
+    fs::write(root.path().join(".fm-copy-1"), b"ABCDE").unwrap();
+    let mut writer = provider
+        .open_write_at(&location(".fm-copy-1"), 5, CancellationToken::new())
+        .await
+        .expect("open at the end of the partial");
+    writer.write_all(b"FGHIJ").await.unwrap();
+    writer.shutdown().await.unwrap();
+    drop(writer);
+    assert_eq!(
+        fs::read(root.path().join(".fm-copy-1")).unwrap(),
+        b"ABCDEFGHIJ"
+    );
+
+    assert!(matches!(
+        provider
+            .open_write_at(&location(".fm-copy-missing"), 0, CancellationToken::new())
+            .await,
+        Err(VfsError::NotFound { .. })
+    ));
+    assert!(!root.path().join(".fm-copy-missing").exists());
+
+    for (offset, len) in [(10, 3), (2, 10)] {
+        fs::write(root.path().join(".fm-copy-2"), vec![b'x'; len]).unwrap();
+        let result = provider
+            .open_write_at(&location(".fm-copy-2"), offset, CancellationToken::new())
+            .await;
+        assert!(
+            matches!(result, Err(VfsError::Io { .. })),
+            "offset {offset} against a {len}-byte partial must be refused"
+        );
+        assert_eq!(fs::read(root.path().join(".fm-copy-2")).unwrap().len(), len);
+    }
 }

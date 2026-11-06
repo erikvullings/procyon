@@ -192,6 +192,15 @@ pub trait OperationJournal: Send + Sync + 'static {
 
     /// Removes a terminal job's record. Resolves once it is gone.
     async fn finish(&self, operation: OperationId);
+
+    /// Queues the removal of a terminal job's record without waiting for it.
+    ///
+    /// The scheduler uses this at the end of every job: awaiting the removal would keep the
+    /// scheduler (and with it the history writer) alive after the service is dropped, so a quick
+    /// restart could read a history file that is missing the job's terminal snapshot. If the
+    /// process stops before the writer gets to it, the record stays and is treated as an
+    /// interrupted job on the next start, which is the conservative reading.
+    fn discard(&self, operation: OperationId);
 }
 
 /// Damage found while replaying one journal file.
@@ -376,6 +385,15 @@ impl OperationJournal for FileOperationJournal {
             .is_ok()
         {
             let _ = done.await;
+        }
+    }
+
+    fn discard(&self, operation: OperationId) {
+        if let Err(error) = self.send(Command::Finish {
+            operation,
+            ack: None,
+        }) {
+            tracing::warn!(%operation, %error, "transfer journal record could not be removed");
         }
     }
 }

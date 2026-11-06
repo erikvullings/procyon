@@ -481,7 +481,7 @@ impl FileSystemProvider for S3FileSystemProvider {
         let key = parsed.key;
         let threshold = self.multipart_threshold;
 
-        let (writer, mut reader) = tokio::io::duplex(64 * 1024);
+        let (writer, mut reader, completion) = fm_vfs::upload_pipe(64 * 1024);
         tokio::spawn(async move {
             let client = ReqwestMultipartUploadClient {
                 http: &http,
@@ -493,16 +493,11 @@ impl FileSystemProvider for S3FileSystemProvider {
                 result = drive_upload(&client, threshold, &mut reader) => result,
                 () = cancellation.cancelled() => Err(VfsError::Cancelled),
             };
-            // A failed upload has no caller left to report to by this point
-            // (the returned `AsyncWrite` has already been dropped once
-            // `shutdown` returns): matches `fm-vfs-ftp`'s `open_write`, which
-            // has the same limitation for the same reason - the duplex-pipe
-            // pattern can only signal local flush completion, not remote
-            // durability. A later reader of the destination will observe it
-            // as missing or short rather than silently "succeeding".
-            let _ = upload;
+            // The writer's `shutdown` waits for this verdict, so a refused or failed upload
+            // fails the copy instead of being noticed only when the temporary is published.
+            completion.finish(upload);
         });
-        Ok(Box::pin(writer))
+        Ok(writer)
     }
 
     /// Attempts a real `CopyObject` into `temporary`. Only possible within

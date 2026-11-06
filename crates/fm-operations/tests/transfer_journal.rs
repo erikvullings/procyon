@@ -69,6 +69,10 @@ impl OperationJournal for RecordingJournal {
     async fn finish(&self, _operation: OperationId) {
         self.seen.lock().expect("seen").push(Seen::Finish);
     }
+
+    fn discard(&self, _operation: OperationId) {
+        self.seen.lock().expect("seen").push(Seen::Finish);
+    }
 }
 
 /// Transfers each source like a copy would: announces a revision and a private

@@ -37,7 +37,7 @@ use fm_vfs::{
     AttributeChange, AttributeSnapshot, AttributeSupport, CopyCommitOptions, DirectoryPage,
     EntryRef, FileSystemProvider, ListOptions, ProviderCapabilities, ProviderChange,
     ProviderChangeStream, ProviderReadStream, ProviderWriteStream, RemoveOptions, RemoveReport,
-    VfsError, WriteOptions,
+    TransferCapabilities, TransferEndpoint, VfsError, WriteOptions,
 };
 use futures::stream;
 use notify::{Event, RecursiveMode, Watcher};
@@ -440,6 +440,52 @@ impl FileSystemProvider for LocalFileSystemProvider {
             Some(length) => Box::pin(file.take(length)),
             None => Box::pin(file),
         })
+    }
+
+    /// The local filesystem can write at an offset, so a download from a remote source with
+    /// `read_range` can continue an interrupted private partial (task 0303).
+    fn transfer_capabilities(&self, location: &Location) -> Result<TransferCapabilities, VfsError> {
+        let mut capabilities = TransferCapabilities::from_provider_capabilities(
+            TransferEndpoint::new(self.id().to_string()),
+            self.capabilities_for(location)?,
+        );
+        capabilities.random_write = true;
+        Ok(capabilities)
+    }
+
+    async fn open_write_at(
+        &self,
+        partial: &Location,
+        offset: u64,
+        cancellation: CancellationToken,
+    ) -> Result<ProviderWriteStream, VfsError> {
+        if cancellation.is_cancelled() {
+            return Err(VfsError::Cancelled);
+        }
+        let path = partial
+            .to_native_path()
+            .map_err(|_| invalid_location(partial))?;
+        // No CREATE and no TRUNCATE: a missing partial is NotFound and what is there survives.
+        let mut file = tokio::fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .await
+            .map_err(|error| map_io_error(error, &partial.uri))?;
+        let existing = file
+            .metadata()
+            .await
+            .map_err(|error| map_io_error(error, &partial.uri))?
+            .len();
+        if existing != offset {
+            // Shorter would leave a hole, longer a stale tail: not what the caller proved.
+            return Err(VfsError::Io {
+                message: format!("partial is {existing} bytes, not the resume offset {offset}"),
+            });
+        }
+        file.seek(std::io::SeekFrom::Start(offset))
+            .await
+            .map_err(|error| map_io_error(error, &partial.uri))?;
+        Ok(Box::pin(file))
     }
 
     async fn open_write(

@@ -31,3 +31,5 @@ and nothing is visible at the destination until `CompleteMultipartUpload`.
 
 ## Agent Notes
 - 2026-11-06 claude: Split from 0303, which delivered the shared machinery and SFTP only.
+- 2026-11-06 claude: Live check against SeaweedFS (podman): ranged `GetObject` works, so S3 DOWNLOAD resume already works through the 0303 machinery; upload still restarts from the beginning, as designed here. Also fixed the writer race this exposed (see 0303): an S3 upload writer now reports the upload's verdict from `shutdown`.
+
