@@ -1715,6 +1715,13 @@ impl OperationExecutor for TrashExecutor {
 
 #[async_trait]
 impl OperationExecutor for CopyGroupExecutor {
+    /// Task 0301: a failed copy item only ever wrote a private `.fm-copy-*` partial, which
+    /// `cleanup_partial` discards, and nothing is published until the final rename, so running
+    /// the item again after a transient failure is safe.
+    fn retry_safe(&self, _operation: &Operation) -> bool {
+        true
+    }
+
     async fn plan(
         &self,
         operation: &Operation,
@@ -1983,6 +1990,13 @@ impl OperationExecutor for MoveGroupExecutor {
 
 #[async_trait]
 impl OperationExecutor for DuplicateExecutor {
+    /// Task 0301: a failed copy item only ever wrote a private `.fm-copy-*` partial, which
+    /// `cleanup_partial` discards, and nothing is published until the final rename, so running
+    /// the item again after a transient failure is safe.
+    fn retry_safe(&self, _operation: &Operation) -> bool {
+        true
+    }
+
     async fn plan(
         &self,
         operation: &Operation,
@@ -2399,6 +2413,13 @@ impl OperationExecutor for MoveExecutor {
 
 #[async_trait]
 impl OperationExecutor for CopyExecutor {
+    /// Task 0301: a failed copy item only ever wrote a private `.fm-copy-*` partial, which
+    /// `cleanup_partial` discards, and nothing is published until the final rename, so running
+    /// the item again after a transient failure is safe.
+    fn retry_safe(&self, _operation: &Operation) -> bool {
+        true
+    }
+
     async fn plan(
         &self,
         operation: &Operation,

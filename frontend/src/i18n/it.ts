@@ -2502,6 +2502,8 @@ export const it = {
     unknownProvider: 'Provider di posizione sconosciuto.',
     platformFailed: 'L’operazione di sistema non è riuscita: {detail}',
     sourceMissing: 'L’origine non esiste più; saltato.',
+    transferRetried:
+      'Problema temporaneo (tentativo {attempt} di {max}); nuovo tentativo tra {seconds} s: {cause}',
     diskSpaceCheckSkipped:
       'Controllo dello spazio su disco saltato su sua richiesta: servono {required}, ne risultano liberi {available}.',
     attributeNotPermitted:

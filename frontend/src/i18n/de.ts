@@ -2533,6 +2533,8 @@ export const de = {
     unknownProvider: 'Unbekannter Speicherort-Anbieter.',
     platformFailed: 'Der Systemvorgang ist fehlgeschlagen: {detail}',
     sourceMissing: 'Die Quelle existiert nicht mehr; übersprungen.',
+    transferRetried:
+      'Vorübergehendes Problem (Versuch {attempt} von {max}); neuer Versuch in {seconds} s: {cause}',
     diskSpaceCheckSkipped:
       'Speicherplatzprüfung auf Ihren Wunsch übersprungen: {required} erforderlich, {available} als frei gemeldet.',
     attributeNotPermitted:

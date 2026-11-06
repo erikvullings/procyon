@@ -525,7 +525,7 @@ previous pass stopped where it did.
   frontend, medium — scope clusters to chosen folders; global remembered choice; export model + 3 renderers)*
 - [x] 0299 Durable transfer journal *(parent 0163; needs 0035, 0047; commits group-flushed every 250 ms, see Agent Notes)*
 - [x] 0300 Transfer recovery classification on restart *(parent 0163; needs 0299; no resumable verdict until 0303)*
-- [ ] 0301 Bounded retry with exponential backoff for transfers *(parent 0163; needs 0035)*
+- [x] 0301 Bounded retry with exponential backoff for transfers *(parent 0163; needs 0035; copies/duplicates only)*
 - [ ] 0302 Optional post-transfer verification *(parent 0163; needs 0035, 0047)*
 - [ ] 0303 Provider byte-range and multipart resume *(parent 0163; needs 0299, 0300, 0301)*
 

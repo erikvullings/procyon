@@ -2520,6 +2520,8 @@ export const fr = {
     unknownProvider: 'Fournisseur d’emplacement inconnu.',
     platformFailed: 'L’opération système a échoué : {detail}',
     sourceMissing: 'La source n’existe plus ; ignoré.',
+    transferRetried:
+      'Problème temporaire (tentative {attempt} sur {max}) ; nouvel essai dans {seconds} s : {cause}',
     diskSpaceCheckSkipped:
       'Vérification de l’espace disque ignorée à votre demande : {required} nécessaires, {available} signalés libres.',
     attributeNotPermitted:

@@ -17,6 +17,7 @@ use tokio::sync::{Notify, Semaphore};
 use tokio_util::sync::CancellationToken;
 
 use crate::journal::{JournalEvent, JournalIntent, JournalItem, SharedJournal, SourceRevision};
+use crate::retry::{JitterSource, RandomJitter, RetryPolicy, Sleeper, TokioSleeper};
 use crate::{
     ConflictResolution, Operation, OperationConflict, OperationProgress, OperationState,
     OperationUndo, PauseToken, ProgressPublisher, TransitionError,
@@ -136,6 +137,13 @@ impl From<CodedFailure> for ExecutionError {
 }
 
 impl ExecutionError {
+    /// Whether the same item may succeed if tried again later (task 0301). Only provider I/O
+    /// failures qualify; conflicts, authentication, permission and cancellation never do.
+    #[must_use]
+    pub fn is_transient(&self) -> bool {
+        matches!(self, Self::Provider(error) if error.is_transient())
+    }
+
     /// A per-entry failure the engine records and continues past.
     #[must_use]
     pub fn warning(error: crate::OperationEntryError) -> Self {
@@ -244,6 +252,14 @@ pub trait OperationExecutor: Send + Sync + 'static {
 
     /// Whether execution must wait for explicit user confirmation after planning.
     fn requires_confirmation(&self) -> bool {
+        false
+    }
+
+    /// Whether a failed plan item may be run again automatically after a transient failure
+    /// (task 0301). Only when re-running is idempotent: the item's partial output is private
+    /// and `cleanup_partial` removes it, and nothing was published or deleted yet. The default
+    /// is `false`, so an executor opts in explicitly.
+    fn retry_safe(&self, _operation: &Operation) -> bool {
         false
     }
 }
@@ -599,6 +615,9 @@ pub struct Scheduler {
     events: EventBus,
     observer: Option<Arc<dyn OperationSnapshotObserver>>,
     journal: Option<SharedJournal>,
+    retry: RetryPolicy,
+    sleeper: Arc<dyn Sleeper>,
+    jitter: Arc<dyn JitterSource>,
 }
 
 impl Scheduler {
@@ -611,7 +630,31 @@ impl Scheduler {
             events,
             observer: None,
             journal: None,
+            retry: RetryPolicy::default(),
+            sleeper: Arc::new(TokioSleeper),
+            jitter: Arc::new(RandomJitter),
         }
+    }
+
+    /// Sets how transient transfer failures are retried (task 0301).
+    #[must_use]
+    pub fn with_retry(mut self, policy: RetryPolicy) -> Self {
+        self.retry = policy;
+        self
+    }
+
+    /// Replaces the clock and randomness behind retries; for deterministic tests.
+    #[must_use]
+    pub fn with_retry_environment(
+        mut self,
+        policy: RetryPolicy,
+        sleeper: Arc<dyn Sleeper>,
+        jitter: Arc<dyn JitterSource>,
+    ) -> Self {
+        self.retry = policy;
+        self.sleeper = sleeper;
+        self.jitter = jitter;
+        self
     }
 
     /// Adds a synchronous snapshot observer used by durable history stores.
@@ -619,6 +662,84 @@ impl Scheduler {
     pub fn with_observer(mut self, observer: Arc<dyn OperationSnapshotObserver>) -> Self {
         self.observer = Some(observer);
         self
+    }
+
+    /// Runs one plan item, retrying transient failures with bounded exponential backoff.
+    ///
+    /// Each retry rolls back the bytes the failed attempt reported, discards the item's private
+    /// partial output, waits (cancellably) and records the attempt as a warning on the operation
+    /// so it shows in progress and history. A non-transient failure, an executor that is not
+    /// retry-safe, an exhausted budget and a cancellation all return the error unchanged.
+    async fn execute_with_retry(
+        &self,
+        job: &Job,
+        executor: &dyn OperationExecutor,
+        item: &PlanItem,
+        resolution: Option<ConflictResolution>,
+        reporter: &ItemProgressReporter<'_>,
+    ) -> Result<ExecutionOutcome, ExecutionError> {
+        let mut attempt = 1_u32;
+        loop {
+            let snapshot = job.snapshot();
+            let result = executor
+                .execute(
+                    &snapshot,
+                    item,
+                    resolution,
+                    reporter,
+                    &job.pause,
+                    &job.cancellation,
+                )
+                .await;
+            let Err(error) = &result else {
+                return result;
+            };
+            if !error.is_transient()
+                || !executor.retry_safe(&snapshot)
+                || !self.retry.allows_retry_after(attempt)
+                || job.is_cancelled()
+            {
+                return result;
+            }
+            reporter.rollback();
+            if let Err(cleanup) = executor.cleanup_partial(&snapshot).await {
+                // A partial that cannot be removed must not be built on; surface the failure.
+                tracing::warn!(%cleanup, "retry abandoned: the failed attempt's partial could not be removed");
+                return result;
+            }
+            let delay = self.retry.delay_for(attempt, self.jitter.unit());
+            let cause = error.to_string();
+            // Rounded up so a 500 ms wait reads "1 s", never "0 s".
+            let delay_seconds = delay.as_secs_f64().ceil();
+            tracing::warn!(attempt, max = self.retry.max_attempts, %cause, "transient transfer failure; retrying");
+            {
+                let mut state = job.lock();
+                state.operation.errors.push(
+                    crate::OperationEntryError::new(
+                        item.entry.clone(),
+                        format!(
+                            "Temporary failure (attempt {attempt} of {}), retrying in {delay_seconds} s: {cause}",
+                            self.retry.max_attempts
+                        ),
+                    )
+                    .with_code(crate::codes::entry_error::TRANSFER_RETRIED)
+                    .with_param("attempt", attempt)
+                    .with_param("max", self.retry.max_attempts)
+                    .with_param("seconds", delay_seconds)
+                    .with_param("cause", &cause),
+                );
+                self.publish_progress(&state.operation);
+            }
+            if !self.sleeper.sleep(delay, &job.cancellation).await {
+                return result;
+            }
+            // A pause requested during the backoff holds the next attempt back.
+            self.wait_while_blocked(job).await;
+            if job.is_cancelled() {
+                return result;
+            }
+            attempt += 1;
+        }
     }
 
     /// Journals transfer jobs so a restart can tell what was interrupted (task 0299).
@@ -882,7 +1003,6 @@ impl Scheduler {
                     self.finish_cancelled(&job, executor.as_ref()).await?;
                     return Ok(());
                 }
-                let snapshot = job.snapshot();
                 let resolution = job.lock().apply_to_all;
                 let reporter = ItemProgressReporter {
                     scheduler: self,
@@ -892,15 +1012,8 @@ impl Scheduler {
                     reported_bytes: AtomicU64::new(0),
                     journal: journal.as_ref(),
                 };
-                let execution = executor
-                    .execute(
-                        &snapshot,
-                        &item,
-                        resolution,
-                        &reporter,
-                        &job.pause,
-                        &job.cancellation,
-                    )
+                let execution = self
+                    .execute_with_retry(&job, executor.as_ref(), &item, resolution, &reporter)
                     .await;
                 let expand = matches!(&execution, Ok(ExecutionOutcome::Completed));
                 let bulk = matches!(&execution, Ok(ExecutionOutcome::BulkCompleted(_)));

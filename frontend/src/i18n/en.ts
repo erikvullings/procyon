@@ -2463,6 +2463,8 @@ export const en = {
     unknownProvider: 'Unknown location provider.',
     platformFailed: 'The system operation failed: {detail}',
     sourceMissing: 'The source no longer exists; skipped.',
+    transferRetried:
+      'Temporary problem (attempt {attempt} of {max}); trying again in {seconds} s: {cause}',
     diskSpaceCheckSkipped:
       'Disk-space check skipped at your request: {required} needed, {available} reported free.',
     attributeNotPermitted:

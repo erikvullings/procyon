@@ -2517,6 +2517,8 @@ export const pt = {
     unknownProvider: 'Fornecedor de localização desconhecido.',
     platformFailed: 'A operação do sistema falhou: {detail}',
     sourceMissing: 'A origem já não existe; ignorado.',
+    transferRetried:
+      'Problema temporário (tentativa {attempt} de {max}); nova tentativa em {seconds} s: {cause}',
     diskSpaceCheckSkipped:
       'Verificação de espaço em disco ignorada a seu pedido: são necessários {required}, são comunicados {available} livres.',
     attributeNotPermitted:

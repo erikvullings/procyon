@@ -2506,6 +2506,8 @@ export const nl = {
     unknownProvider: 'Onbekende locatieprovider.',
     platformFailed: 'De systeembewerking is mislukt: {detail}',
     sourceMissing: 'De bron bestaat niet meer; overgeslagen.',
+    transferRetried:
+      'Tijdelijk probleem (poging {attempt} van {max}); opnieuw proberen over {seconds} s: {cause}',
     diskSpaceCheckSkipped:
       'Controle op schijfruimte overgeslagen op uw verzoek: {required} nodig, {available} als vrij gemeld.',
     attributeNotPermitted:

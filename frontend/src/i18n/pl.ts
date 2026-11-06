@@ -2503,6 +2503,8 @@ export const pl = {
     unknownProvider: 'Nieznany dostawca lokalizacji.',
     platformFailed: 'Operacja systemowa nie powiodła się: {detail}',
     sourceMissing: 'Źródło już nie istnieje; pominięto.',
+    transferRetried:
+      'Tymczasowy problem (próba {attempt} z {max}); ponowna próba za {seconds} s: {cause}',
     diskSpaceCheckSkipped:
       'Sprawdzanie miejsca na dysku pominięto na Twoje żądanie: potrzeba {required}, zgłoszono {available} wolnego miejsca.',
     attributeNotPermitted:

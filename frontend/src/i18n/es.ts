@@ -2509,6 +2509,8 @@ export const es = {
     unknownProvider: 'Proveedor de ubicación desconocido.',
     platformFailed: 'Falló la operación del sistema: {detail}',
     sourceMissing: 'El origen ya no existe; omitido.',
+    transferRetried:
+      'Problema temporal (intento {attempt} de {max}); se reintentará en {seconds} s: {cause}',
     diskSpaceCheckSkipped:
       'Comprobación de espacio en disco omitida a petición suya: se necesitan {required}, se informan {available} libres.',
     attributeNotPermitted:

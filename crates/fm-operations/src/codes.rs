@@ -39,6 +39,8 @@ pub mod entry_error {
     pub const JOINED_FILE_MISMATCH: &str = "joinedFileMismatch";
     /// Summary entry replacing failures dropped from saved history (`count`).
     pub const ERRORS_OMITTED: &str = "errorsOmitted";
+    /// A transfer hit a temporary failure and is being retried after a backoff (task 0301).
+    pub const TRANSFER_RETRIED: &str = "transferRetried";
 }
 
 /// Codes of an operation's terminal result summary.

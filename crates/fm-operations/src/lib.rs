@@ -10,6 +10,7 @@ mod model;
 mod naming;
 mod pause;
 mod progress;
+pub mod retry;
 mod safety;
 mod scheduler;
 

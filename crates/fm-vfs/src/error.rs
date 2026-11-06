@@ -130,6 +130,52 @@ pub enum VfsError {
 }
 
 impl VfsError {
+    /// Whether retrying the same request later can plausibly succeed (task 0301).
+    ///
+    /// Only provider I/O failures that name a network-shaped cause (dropped or reset
+    /// connection, timeout, throttling, a temporarily unavailable server) qualify; an
+    /// unclassified I/O error (a bad sector, a read-only filesystem, a name that is too long)
+    /// is not retried. Every other variant is a decision, a missing precondition or a security
+    /// boundary, and must surface: authentication and credential failures, permission and
+    /// privilege errors, conflicts, missing entries, space shortage and cancellation. A host-key
+    /// problem reaches this layer as an I/O failure naming the host key, so those are held back
+    /// explicitly even when their text also mentions a connection.
+    #[must_use]
+    pub fn is_transient(&self) -> bool {
+        const TRANSIENT: [&str; 12] = [
+            "connection reset",
+            "connection closed",
+            "connection aborted",
+            "connection refused",
+            "broken pipe",
+            "timed out",
+            "timeout",
+            "temporarily",
+            "too many requests",
+            "service unavailable",
+            "unexpected eof",
+            "network",
+        ];
+        const BLOCKED: [&str; 8] = [
+            "host key",
+            "hostkey",
+            "authenticat",
+            "permission denied",
+            "access denied",
+            "unauthorized",
+            "forbidden",
+            "not permitted",
+        ];
+        match self {
+            Self::Io { message } => {
+                let message = message.to_ascii_lowercase();
+                TRANSIENT.iter().any(|needle| message.contains(needle))
+                    && !BLOCKED.iter().any(|needle| message.contains(needle))
+            }
+            _ => false,
+        }
+    }
+
     /// Returns the stable machine-readable code used by transport adapters.
     #[must_use]
     pub const fn code(&self) -> &'static str {
