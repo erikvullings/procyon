@@ -1194,6 +1194,7 @@ test('package-manager generator creates a Homebrew cask and Chocolatey installer
   assert.match(nuspec, /<version>1\.2\.3<\/version>/);
   assert.match(nuspec, /<authors>Erik Vullings<\/authors>/);
   assert.match(nuspec, /<owners>Erik Vullings<\/owners>/);
+  assert.match(nuspec, /<copyright>Copyright \(c\) 2026 Erik Vullings<\/copyright>/);
   assert.match(nuspec, /<projectUrl>https:\/\/erikvullings\.github\.io\/procyon\/<\/projectUrl>/);
   assert.match(nuspec, /<projectSourceUrl>https:\/\/github\.com\/example\/fm<\/projectSourceUrl>/);
   assert.match(

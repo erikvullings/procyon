@@ -106,6 +106,7 @@ function generateChocolatey() {
     <title>Procyon</title>
     <authors>Erik Vullings</authors>
     <owners>Erik Vullings</owners>
+    <copyright>Copyright (c) 2026 Erik Vullings</copyright>
 
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
 
