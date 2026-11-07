@@ -9,3 +9,7 @@
 
 [env]
 MACOSX_DEPLOYMENT_TARGET = "26.0"
+
+# Incremental artifacts bloated target/ to 500+ GB; a clean rebuild is cheaper than the disk.
+[build]
+incremental = false
