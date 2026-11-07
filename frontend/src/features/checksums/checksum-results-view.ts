@@ -9,6 +9,7 @@ import {
   type VerificationReport,
   type VerificationStatus,
 } from '../../models';
+import { findDigestMatches } from './checksum-state';
 
 export interface ChecksumResultsViewAttrs {
   readonly algorithms: readonly ChecksumAlgorithm[];
@@ -63,6 +64,25 @@ function progressLabel(attrs: ChecksumResultsViewAttrs): string {
   });
 }
 
+function comparisonResult(attrs: ChecksumResultsViewAttrs, pasted: string): m.Children {
+  const matches = findDigestMatches(attrs.entries, attrs.algorithms, pasted);
+  return matches.length === 0
+    ? m('p.checksum-results__compare--none', t('checksums', 'digestNoMatch'))
+    : m(
+        'ul',
+        matches.map((match) =>
+          m(
+            'li.checksum-results__compare--match',
+            { key: `${match.relativePath}:${match.algorithm}` },
+            t('checksums', 'digestMatchLine', {
+              path: match.relativePath,
+              algorithm: checksumAlgorithmLabel(match.algorithm),
+            }),
+          ),
+        ),
+      );
+}
+
 /**
  * Presents a checksum job's per-entry results with copy, save-to-file and
  * verify-against-file affordances (spec §18, task 0077).
@@ -74,6 +94,7 @@ function progressLabel(attrs: ChecksumResultsViewAttrs): string {
 export const ChecksumResultsView: FactoryComponent<ChecksumResultsViewAttrs> = () => {
   let selectedAlgorithm: ChecksumAlgorithm | undefined;
   let verifyText = '';
+  let pastedDigest = '';
   // The save form is inline rather than a native dialog: saving goes through
   // the backend's provider WRITE path, so the destination is a name inside the
   // pane's current directory, not an arbitrary OS path (task 0077).
@@ -231,6 +252,27 @@ export const ChecksumResultsView: FactoryComponent<ChecksumResultsViewAttrs> = (
               ]),
             ),
           ),
+        ]),
+
+        m('div.checksum-results__compare', [
+          m('h3', t('checksums', 'compareWithDigest')),
+          m('input.checksum-results__compare-input', {
+            type: 'text',
+            spellcheck: false,
+            'aria-label': t('checksums', 'digestToCompare'),
+            placeholder: t('checksums', 'digestPlaceholder'),
+            value: pastedDigest,
+            oninput: (event: Event) => {
+              pastedDigest = (event.target as HTMLInputElement).value;
+            },
+          }),
+          pastedDigest.trim() !== '' &&
+            attrs.entries.length > 0 &&
+            m(
+              'div.checksum-results__compare-result',
+              { role: 'status' },
+              comparisonResult(attrs, pastedDigest),
+            ),
         ]),
 
         m('div.checksum-results__verify', [

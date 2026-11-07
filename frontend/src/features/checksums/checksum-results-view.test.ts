@@ -167,4 +167,24 @@ describe('ChecksumResultsView', () => {
       '1 matched, 0 mismatched, 1 missing',
     );
   });
+
+  it('reports whether a pasted digest matches a hashed file', () => {
+    const root = render();
+    const input = root.querySelector<HTMLInputElement>('.checksum-results__compare-input');
+    if (input === null) throw new Error('the compare input is missing');
+    const paste = (value: string): void => {
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+      m.redraw.sync();
+    };
+    expect(root.querySelector('.checksum-results__compare-result')).toBeNull();
+    paste(` ${(ENTRY.checksums.sha256 ?? '').toUpperCase()} `);
+    expect(root.querySelector('.checksum-results__compare--match')?.textContent).toBe(
+      'a.txt: matches SHA-256',
+    );
+    paste('deadbeef');
+    expect(root.querySelector('.checksum-results__compare--none')?.textContent).toBe(
+      'No file matches this value',
+    );
+  });
 });

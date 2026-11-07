@@ -1,6 +1,6 @@
 # 0309 Quick hash panel
 
-Status: open
+Status: done
 Priority: low
 Subsystem: frontend, backend
 Depends on: none
@@ -23,4 +23,12 @@ files" tool — a daily need for verifying downloads, content-addressing, and in
 - BLAKE3 only if the Rust dependency is already available; otherwise SHA-256/MD5/SHA-1 suffice.
 
 ## Agent Notes
-- (none yet)
+- 2026-11-07 claude: most of this already existed from 0077 (job over the VFS, progress, cancel, copy,
+  save, verify against a checksum file). Added what was missing: the shortcut action now computes
+  every algorithm (SHA-256, BLAKE3, CRC-32, MD5) in one read pass, so the panel's algorithm picker
+  and per-algorithm Copy are usable; and "Compare with a digest" (paste a value, matched
+  case/whitespace-insensitively against every computed algorithm and file, pure
+  `findDigestMatches` in `checksum-state.ts`). i18n in all 8 locales. SHA-1 is not offered (no
+  backend support; spec lists it optional). Verified: 4 state tests + 1 view test, checksum/app
+  vitest, tsc, biome. Limits: hashing four algorithms is somewhat slower than SHA-256 alone on very
+  fast disks; not checked visually in a browser.

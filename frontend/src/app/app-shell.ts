@@ -205,6 +205,7 @@ import type {
   WorkspaceLayout,
   WorkspaceProjection,
 } from '../models';
+import { CHECKSUM_ALGORITHMS } from '../models';
 import {
   applyAppPatches,
   cacheContentMatchesPatch,
@@ -2067,7 +2068,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       void shellState.client.quit?.();
     },
     startComparison: () => shellState.comparisonController.startComparison('sizeAndTimestamp'),
-    calculateChecksums: () => shellState.checksumController.calculateChecksums(['sha256']),
+    calculateChecksums: () => shellState.checksumController.calculateChecksums(CHECKSUM_ALGORITHMS),
     findDuplicates: () => shellState.checksumController.findDuplicates(),
     openDiskUsage: opsWiring.openDiskUsage,
     invokeClientAction: dialogWiring.invokeClientAction,
@@ -2266,7 +2267,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     openFinderTagsDialog: (request) => shellState.dialogs.openFinderTagsDialog(request),
     openSpotlightCommentDialog: (request) => shellState.dialogs.openSpotlightCommentDialog(request),
     setArchiveCreateRequest: (request) => shellState.dialogs.openArchiveCreate(request),
-    calculateChecksums: () => shellState.checksumController.calculateChecksums(['sha256']),
+    calculateChecksums: () => shellState.checksumController.calculateChecksums(CHECKSUM_ALGORITHMS),
     findDuplicates: () => shellState.checksumController.findDuplicates(),
     openDiskUsage: opsWiring.openDiskUsage,
     invokeClientAction: dialogWiring.invokeClientAction,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ChecksumEntry, DuplicateGroup, Location } from '../../models';
 import {
+  findDigestMatches,
   initialChecksumState,
   initialDuplicateState,
   selectedLocations,
@@ -230,5 +231,33 @@ describe('duplicate state', () => {
     const state = initialDuplicateState();
     expect(state.groups).toEqual([]);
     expect(state.selectedUris.size).toBe(0);
+  });
+});
+
+describe('findDigestMatches', () => {
+  const a: ChecksumEntry = { ...entry('a.txt', 'AAAA'), checksums: { sha256: 'aaaa', md5: 'm1' } };
+  const b: ChecksumEntry = { ...entry('b.txt', 'bbbb'), checksums: { sha256: 'bbbb', md5: 'm2' } };
+  const broken: ChecksumEntry = { ...entry('c.txt', 'aaaa'), error: 'unreadable' };
+
+  it('ignores case and whitespace, and picks the right file out of several', () => {
+    expect(findDigestMatches([b, a], ['sha256', 'md5'], '  BB BB\n')).toEqual([
+      { relativePath: 'b.txt', algorithm: 'sha256' },
+    ]);
+  });
+
+  it('matches any computed algorithm', () => {
+    expect(findDigestMatches([a, b], ['sha256', 'md5'], 'M2')).toEqual([
+      { relativePath: 'b.txt', algorithm: 'md5' },
+    ]);
+  });
+
+  it('never matches an empty value or a file that failed to hash', () => {
+    expect(findDigestMatches([a], ['sha256'], '   ')).toEqual([]);
+    expect(findDigestMatches([broken], ['sha256'], 'aaaa')).toEqual([]);
+  });
+
+  it('reports every file sharing the digest', () => {
+    const twin: ChecksumEntry = { ...a, relativePath: 'copy/a.txt' };
+    expect(findDigestMatches([a, twin], ['sha256'], 'aaaa')).toHaveLength(2);
   });
 });

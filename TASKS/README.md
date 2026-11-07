@@ -544,7 +544,7 @@ subtask block (0299–0303) and the earlier corpus-themes follow-ups.
   file arrivals; composes VFS watching + operation engine, designed as a subset of future 0167 recipes)*
 - [ ] 0308 Disk-cleanup report *(frontend + backend, medium — actionable by-type/largest/oldest/junk
   lists over already-loaded entries, reusing disk-usage totals)*
-- [ ] 0309 Quick hash panel *(frontend + backend, low — instant SHA-256/MD5/etc. for a selection via
+- [x] 0309 Quick hash panel *(frontend + backend, low — instant SHA-256/MD5/etc. for a selection via
   the existing checksum capability)*
 - [x] 0310 Fuzzy quick-filter (and type-to-select) *(frontend, medium — fzf-style subsequence matching
   shared by the quick filter and keyboard type-to-select; opt-in recursive scope; done — see Agent Notes)*

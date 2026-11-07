@@ -208,3 +208,33 @@ export function wouldDeleteEveryCopy(state: DuplicateState, uri: string): boolea
   ).length;
   return distinctSurviving + clustersSurviving === 0;
 }
+
+/** One file whose computed digest equals a value the user pasted. */
+export interface DigestMatch {
+  readonly relativePath: string;
+  readonly algorithm: ChecksumAlgorithm;
+}
+
+/**
+ * Finds the files whose digest equals `pasted`, trying every computed algorithm (a 64-digit
+ * value is SHA-256 or BLAKE3, so the width alone cannot pick one). Whitespace and letter case
+ * are ignored, as digests are routinely pasted from web pages with either.
+ */
+export function findDigestMatches(
+  entries: readonly ChecksumEntry[],
+  algorithms: readonly ChecksumAlgorithm[],
+  pasted: string,
+): readonly DigestMatch[] {
+  const wanted = pasted.replace(/\s+/g, '').toLowerCase();
+  if (wanted === '') return [];
+  const matches: DigestMatch[] = [];
+  for (const entry of entries) {
+    if (entry.error !== undefined) continue;
+    for (const algorithm of algorithms) {
+      if (entry.checksums[algorithm]?.toLowerCase() === wanted) {
+        matches.push({ relativePath: entry.relativePath, algorithm });
+      }
+    }
+  }
+  return matches;
+}
