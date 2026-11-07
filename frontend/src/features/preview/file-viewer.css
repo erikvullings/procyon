@@ -1843,3 +1843,34 @@ textarea.fm-sqlite-sql.browser-default {
   border-color: var(--fm-accent);
   color: var(--fm-accent);
 }
+
+/* Rendered/source toggle for markdown and HTML (the viewer's text body). */
+.fm-file-viewer-text-mode {
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px;
+  flex: 0 0 auto;
+}
+
+.fm-file-viewer-text-mode-button {
+  padding: 2px 10px;
+  border: 1px solid var(--fm-border, currentColor);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.fm-file-viewer-text-mode-button[aria-pressed="true"] {
+  background: color-mix(in srgb, currentColor 15%, transparent);
+  font-weight: 600;
+}
+
+/* Sandboxed HTML preview: a page of its own, so it keeps a light canvas in dark themes. */
+.fm-file-viewer-html {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: white;
+}

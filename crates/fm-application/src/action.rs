@@ -644,6 +644,13 @@ fn core_actions(capabilities: PlatformCapabilities) -> Vec<ActionDescriptor> {
             capability_gated_none(open_terminal_available),
         ),
         core_action(
+            "core.openTerminalWith",
+            "Open Terminal With...",
+            "tools",
+            Vec::new(),
+            capability_gated_none(open_terminal_available),
+        ),
+        core_action(
             "core.copyName",
             "Copy Filename",
             "clipboard",
@@ -1084,6 +1091,7 @@ mod tests {
             "core.previousTab",
             "core.reopenClosedTab",
             "core.openTerminal",
+            "core.openTerminalWith",
             "core.copyName",
             "core.copyPath",
             "core.copyRelativePath",

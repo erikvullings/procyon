@@ -6110,3 +6110,29 @@ button.fm-activity-count {
 .fm-themes-field input[type="url"] {
   min-width: 16rem;
 }
+
+/* "Open Terminal With..." picker (task 0127). */
+.fm-terminal-picker {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fm-terminal-picker__item {
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: 1px solid var(--fm-border, currentColor);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.fm-terminal-picker__item:hover,
+.fm-terminal-picker__item:focus-visible {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}

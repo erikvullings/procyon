@@ -70,6 +70,14 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
         plugin_settings: serde_json::to_value(settings.plugin_settings)
             .unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::new())),
         terminal_command: settings.terminal_command,
+        terminal_apps: settings
+            .terminal_apps
+            .into_iter()
+            .map(|app| fm_transport_dto::TerminalAppDto {
+                name: app.name,
+                command: app.command,
+            })
+            .collect(),
         editor_command: settings.editor_command,
         default_start_locations: settings.default_start_locations,
         favourite_locations: settings
@@ -219,6 +227,14 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
         enabled_plugins: settings.enabled_plugins,
         plugin_settings: serde_json::from_value(settings.plugin_settings).unwrap_or_default(),
         terminal_command: settings.terminal_command,
+        terminal_apps: settings
+            .terminal_apps
+            .into_iter()
+            .map(|app| fm_settings::TerminalApp {
+                name: app.name,
+                command: app.command,
+            })
+            .collect(),
         editor_command: settings.editor_command,
         default_start_locations: settings.default_start_locations,
         favourite_locations: settings

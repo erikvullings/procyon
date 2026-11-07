@@ -28,6 +28,12 @@ export interface SpotlightCommentDialogRequest {
   readonly comment: string;
 }
 
+/** Backs "Open Terminal With..." (task 0127): the directory the chosen terminal opens at. */
+export interface TerminalPickerDialogRequest {
+  readonly directoryUri: string;
+  readonly context: import('../../models').ActionInvocationContext;
+}
+
 export interface DocumentSummaryDialogRequest {
   readonly workspaceId: string;
   readonly entry: EntrySummary;
@@ -59,6 +65,7 @@ export interface DialogUIState {
   pendingCreatedLocation: string | undefined;
   finderTagsDialog: FinderTagsDialogRequest | undefined;
   spotlightCommentDialog: SpotlightCommentDialogRequest | undefined;
+  terminalPickerDialog: TerminalPickerDialogRequest | undefined;
   documentSummaryDialog: DocumentSummaryDialogRequest | undefined;
   applicationUninstallDialog: ApplicationUninstallDialogRequest | undefined;
 }
@@ -104,6 +111,8 @@ export interface DialogUIController {
   cancelFinderTagsDialog(): void;
   openSpotlightCommentDialog(request: SpotlightCommentDialogRequest): void;
   cancelSpotlightCommentDialog(): void;
+  openTerminalPickerDialog(request: TerminalPickerDialogRequest): void;
+  cancelTerminalPickerDialog(): void;
   openDocumentSummaryDialog(request: DocumentSummaryDialogRequest): void;
   cancelDocumentSummaryDialog(): void;
   openApplicationUninstallDialog(request: ApplicationUninstallDialogRequest): void;
@@ -129,6 +138,7 @@ export function createDialogUIController(): DialogUIController {
     pendingCreatedLocation: undefined,
     finderTagsDialog: undefined,
     spotlightCommentDialog: undefined,
+    terminalPickerDialog: undefined,
     documentSummaryDialog: undefined,
     applicationUninstallDialog: undefined,
   };
@@ -257,6 +267,14 @@ export function createDialogUIController(): DialogUIController {
 
     cancelSpotlightCommentDialog(): void {
       state.spotlightCommentDialog = undefined;
+    },
+
+    openTerminalPickerDialog(request): void {
+      state.terminalPickerDialog = request;
+    },
+
+    cancelTerminalPickerDialog(): void {
+      state.terminalPickerDialog = undefined;
     },
 
     openDocumentSummaryDialog(request): void {

@@ -302,6 +302,7 @@ export const nl = {
     quickLook: 'Quick Look',
     revealInSystemFileManager: 'Tonen in bestandsbeheer',
     openTerminal: 'Terminal hier openen',
+    openTerminalWith: 'Terminal openen met…',
     copyName: 'Bestandsnaam kopiëren',
     copyPath: 'Volledig pad kopiëren',
     copyRelativePath: 'Relatief pad kopiëren',
@@ -384,6 +385,9 @@ export const nl = {
     defaultStartLocations: 'Standaard startlocaties (komma-gescheiden)',
     terminal: 'Terminal',
     terminalCommand: 'Terminalcommando',
+    terminalApps: 'Externe terminals',
+    terminalAppsHelp:
+      'Eén per regel: Naam = commando (een toepassingsnaam op macOS, een uitvoerbaar bestand op Windows). Aangeboden door “Terminal openen met…”.',
     editor: 'Bewerker',
     editorCommand: 'Bewerkercommando',
     systemDefault: 'Systeemstandaard',
@@ -644,6 +648,10 @@ export const nl = {
     itemsCompleted: '{count} items voltooid ({bytes}).',
   },
   viewer: {
+    textModeLabel: 'Tekstweergave',
+    textModePreview: 'Voorbeeld',
+    textModeSource: 'Bron',
+    htmlPreviewTitle: 'HTML-voorbeeld',
     closeViewer: 'Viewer sluiten',
     copyText: 'Tekst kopiëren',
     copyImage: 'Afbeelding kopiëren',
@@ -1536,6 +1544,10 @@ export const nl = {
   },
   photoGrouping: {
     unknownDate: 'Onbekende datum',
+  },
+  terminalPicker: {
+    title: 'Terminal openen met…',
+    empty: 'Er zijn geen terminaltoepassingen ingesteld. Voeg ze toe via Instellingen → Terminal.',
   },
   entryMetadata: {
     tagsTitle: 'Labels: {name}',

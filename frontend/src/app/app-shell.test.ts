@@ -5859,6 +5859,7 @@ describe('AppShell', () => {
       enabledPlugins: ['mock.archive'],
       pluginSettings: {},
       terminalCommand: null,
+      terminalApps: [],
       editorCommand: null,
       defaultStartLocations: [],
       favouriteLocations: [],

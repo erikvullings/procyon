@@ -1,6 +1,6 @@
 # 0127 External terminal application choice
 
-Status: open
+Status: done
 Priority: low
 Subsystem: frontend
 Depends on: none
@@ -49,3 +49,17 @@ location a pane can navigate to.
 - Split out of 0105 on 2026-08-12: the user asked for this as a "second, easier feature" alongside
   SSH remote terminal support, but it's unrelated to SSH/remote connections and was easier to scope
   as its own task.
+- 2026-11-07 claude: implemented. `Settings.terminal_apps: Vec<TerminalApp {name, command}>`
+  (fm-settings; per-platform defaults: Terminal/iTerm/Ghostty/Warp on macOS, wt/PowerShell/cmd on
+  Windows, none elsewhere; sanitised on load/save: trimmed, blank/duplicate names dropped, max 20),
+  `TerminalAppDto` + mapping + regenerated OpenAPI/Orval client, action `core.openTerminalWith`
+  (platform action; the client sends the configured app's *name* and the backend resolves the
+  command from settings, so a client can never supply a command; unknown name -> InvalidRequest;
+  gated like `core.openTerminal`; reuses `PlatformAdapter::open_terminal`). macOS error for a
+  missing app now reads "<app> could not be opened - is it installed?". Frontend: "Open Terminal
+  With..." in the background context menu and palette opens a picker dialog; Settings -> Terminal
+  has a `Name = command` list editor; i18n in all 8 locales. `core.openTerminal` unchanged.
+  Verified: settings tests (default/sanitise), application test (configured launches; unknown
+  name and missing parameter rejected), picker dialog + editor-text tests, full vitest, tsc, biome.
+  Not verified: launching real terminals per platform (manual check pending, same standard as
+  0061); no native-menu entry was added.

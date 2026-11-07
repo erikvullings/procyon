@@ -4,8 +4,10 @@ import { DEFAULT_MAP_SETTINGS } from '../map/map-settings';
 import {
   cloneSettings,
   formatListInput,
+  formatTerminalApps,
   isSettingsEqual,
   parseListInput,
+  parseTerminalApps,
   setKeybindingOverride,
   validateSettingsDraft,
 } from './settings-model';
@@ -34,6 +36,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     enabledPlugins: ['example.plugin'],
     pluginSettings: { 'example.plugin': { flag: true } },
     terminalCommand: null,
+    terminalApps: [],
     editorCommand: null,
     defaultStartLocations: ['file:///home'],
     favouriteLocations: [],
@@ -171,5 +174,21 @@ describe('setKeybindingOverride', () => {
 
   it('clears an override when the shortcut text is empty', () => {
     expect(setKeybindingOverride({ 'core.rename': 'F2' }, 'core.rename', '   ')).toEqual({});
+  });
+});
+
+describe('terminal apps editor text', () => {
+  it('round-trips one Name = command per line and keeps = inside a command', () => {
+    const apps = [
+      { name: 'Ghostty', command: 'Ghostty' },
+      { name: 'Custom', command: 'env FOO=1 term' },
+    ];
+    expect(parseTerminalApps(formatTerminalApps(apps))).toEqual(apps);
+  });
+
+  it('skips half-typed or blank lines', () => {
+    expect(parseTerminalApps('Warp = Warp\nno separator\n = x\nName =\n\n')).toEqual([
+      { name: 'Warp', command: 'Warp' },
+    ]);
   });
 });

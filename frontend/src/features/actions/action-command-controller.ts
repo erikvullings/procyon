@@ -103,6 +103,9 @@ export interface ActionCommandControllerContext {
   openFinderTagsDialog(
     request: import('../dialogs/dialog-ui-controller').FinderTagsDialogRequest,
   ): void;
+  openTerminalPickerDialog(
+    request: import('../dialogs/dialog-ui-controller').TerminalPickerDialogRequest,
+  ): void;
   openSpotlightCommentDialog(
     request: import('../dialogs/dialog-ui-controller').SpotlightCommentDialogRequest,
   ): void;
@@ -284,7 +287,7 @@ export function createActionCommandController(
       const entry = selectedEntries[0];
       return entry === undefined ? undefined : { uri: entry.location.uri };
     }
-    if (actionId === 'core.openTerminal') {
+    if (actionId === 'core.openTerminal' || actionId === 'core.openTerminalWith') {
       return directoryLocation === undefined ? undefined : { uri: directoryLocation.uri };
     }
     return undefined;
@@ -334,6 +337,13 @@ export function createActionCommandController(
         context.getCommandPaletteRecency().set(actionId, Date.now());
         context.redraw();
       }
+      return;
+    }
+    if (actionId === 'core.openTerminalWith') {
+      // The terminal is picked per invocation: the dialog invokes the action with a `terminal`.
+      const uri = (parameters as { uri?: unknown } | undefined)?.uri;
+      if (typeof uri === 'string')
+        context.openTerminalPickerDialog({ directoryUri: uri, context: actionContext });
       return;
     }
     void context

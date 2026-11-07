@@ -145,6 +145,33 @@ impl ActionInvoker {
                     .clone();
                 self.platform.open_terminal(&path, command.as_deref())
             }
+            PlatformActionKind::OpenTerminalWith => {
+                let name = parameters
+                    .as_ref()
+                    .and_then(|value| value.get("terminal"))
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or_else(|| {
+                        ApplicationError::InvalidRequest(format!(
+                            "action {action_id:?} requires a `terminal` string parameter"
+                        ))
+                    })?;
+                // Only a configured entry can be launched: the client names one, it never
+                // supplies the command.
+                let command = self
+                    .settings
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner())
+                    .terminal_apps
+                    .iter()
+                    .find(|app| app.name == name)
+                    .map(|app| app.command.clone())
+                    .ok_or_else(|| {
+                        ApplicationError::InvalidRequest(format!(
+                            "`terminal` {name:?} is not one of the configured terminal applications"
+                        ))
+                    })?;
+                self.platform.open_terminal(&path, Some(&command))
+            }
         };
         result.map_err(|error| map_platform_error(action_id, error))?;
         Ok(ActionResultDto {

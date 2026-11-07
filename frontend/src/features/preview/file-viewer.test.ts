@@ -274,6 +274,68 @@ describe('FileViewer', () => {
     expect(root.querySelector('.fm-file-viewer-text-pagination')).toBeNull();
   });
 
+  function textState(name: string, extension: string, text: string): FileViewerState {
+    return {
+      status: 'ready',
+      entry: entry({ name, extension }),
+      content: {
+        kind: 'text',
+        windowOffset: 0,
+        windowEnd: text.length,
+        text,
+        atStart: true,
+        atEnd: true,
+        loadingMore: false,
+      },
+    };
+  }
+
+  function clickMode(label: string): void {
+    const button = [
+      ...root.querySelectorAll<HTMLButtonElement>('.fm-file-viewer-text-mode-button'),
+    ].find((candidate) => candidate.textContent === label);
+    if (button === undefined) throw new Error(`no ${label} button`);
+    button.click();
+    m.redraw.sync();
+  }
+
+  it('previews HTML in a sandboxed iframe and toggles to highlighted, wrapped source', () => {
+    mount(baseAttrs(textState('page.html', 'html', '<h1>Hi</h1><script>alert(1)</script>')));
+
+    const frame = root.querySelector<HTMLIFrameElement>('.fm-file-viewer-html');
+    expect(frame).not.toBeNull();
+    expect(frame?.getAttribute('sandbox')).toBe('');
+    expect(frame?.getAttribute('srcdoc')).toContain('<h1>Hi</h1>');
+    expect(frame?.getAttribute('srcdoc')).toContain("default-src 'none'");
+    expect(root.querySelector('.cm-editor')).toBeNull();
+
+    clickMode('Source');
+    expect(root.querySelector('.fm-file-viewer-html')).toBeNull();
+    expect(root.querySelector('.cm-editor')).not.toBeNull();
+    expect(root.querySelector('.cm-lineWrapping')).not.toBeNull();
+
+    clickMode('Preview');
+    expect(root.querySelector('.fm-file-viewer-html')).not.toBeNull();
+  });
+
+  it('lets rendered Markdown switch to its raw source and back', () => {
+    mount(baseAttrs(textState('README.md', 'md', '# Title')));
+    expect(root.querySelector('.fm-file-viewer-markdown h1')?.textContent).toBe('Title');
+
+    clickMode('Source');
+    expect(root.querySelector('.fm-file-viewer-markdown')).toBeNull();
+    expect(root.querySelector('.cm-content')?.textContent).toContain('# Title');
+
+    clickMode('Preview');
+    expect(root.querySelector('.fm-file-viewer-markdown h1')).not.toBeNull();
+  });
+
+  it('offers no preview toggle for other text files, which wrap long lines', () => {
+    mount(baseAttrs(textState('notes.txt', 'txt', 'plain')));
+    expect(root.querySelector('.fm-file-viewer-text-mode')).toBeNull();
+    expect(root.querySelector('.cm-lineWrapping')).not.toBeNull();
+  });
+
   it('renders Markdown for F3 instead of showing its source', () => {
     mount(
       baseAttrs({

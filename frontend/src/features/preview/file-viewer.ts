@@ -1,3 +1,4 @@
+import { EditorView } from '@codemirror/view';
 import m, { type FactoryComponent } from 'mithril';
 import { FlatButton, ModalPanel, PaginationControls, Select, Skeleton } from 'mithril-materialized';
 import {
@@ -11,7 +12,11 @@ import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { CsvGeoOptions, GitLogEntry, GpsPosition } from '../../models';
 import { calculateVisibleWindow } from '../directory-table/windowing';
-import { editableLanguageForExtension, languageExtension } from '../editor/editor-language';
+import {
+  type EditableLanguage,
+  editableLanguageForExtension,
+  languageExtension,
+} from '../editor/editor-language';
 import type { EditorLinkHandlers } from '../editor/link-actions';
 import { LinkAwareEditor } from '../editor/link-aware-editor';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
@@ -24,6 +29,7 @@ import { isCsvEntry } from '../geo/geo-document';
 import { GeoView, type GeoViewAttrs } from '../geo/geo-view';
 import { PlaylistView, type PlaylistViewAttrs } from '../playlist/playlist-view';
 import { copyText } from './clipboard';
+import { previewExtension } from './content-preview';
 import { copyWithToast } from './copy-with-toast';
 import type { FileViewerMetadata } from './file-metadata';
 import type {
@@ -38,6 +44,7 @@ import {
   TEXT_WINDOW_BYTES,
 } from './file-viewer-controller';
 import { formatHexDump } from './hex-preview';
+import { isHtmlPreviewExtension, sandboxedHtmlDocument } from './html-preview';
 import { searchHtml } from './html-search-highlight';
 import { ImageMetadataView } from './image-metadata-view';
 import { renderMarkdownWithHighlight } from './markdown-search-highlight';
@@ -529,6 +536,91 @@ function disableSearchInputCorrections(input: HTMLInputElement): void {
   input.setAttribute('spellcheck', 'false');
 }
 
+interface TextContentAttrs {
+  readonly viewerAttrs: FileViewerAttrs;
+  readonly entryUri: string;
+  readonly language: EditableLanguage;
+  /** The entry is an HTML page, which has a rendered preview (the language is plain XML). */
+  readonly isHtml: boolean;
+  readonly text: string;
+  readonly highlightOffset: number | undefined;
+  readonly highlightLength: number | undefined;
+  readonly onFindShortcut: () => void;
+}
+
+/** Markdown and HTML open rendered, with a toggle to the raw text (syntax highlighted and
+ * word-wrapped, read-only CodeMirror). Every other text file is the raw source only. The mode
+ * is per opened file: it resets when the viewer moves to another entry. */
+const TextContent: FactoryComponent<TextContentAttrs> = () => {
+  let showSource = false;
+  let shownUri: string | undefined;
+  return {
+    view: ({ attrs }) => {
+      if (shownUri !== attrs.entryUri) {
+        shownUri = attrs.entryUri;
+        showSource = false;
+      }
+      const rendered =
+        attrs.language === 'markdown' ? 'markdown' : attrs.isHtml ? 'html' : undefined;
+      const source = () =>
+        m(LinkAwareEditor, {
+          content: attrs.text,
+          readOnly: true,
+          ...(attrs.viewerAttrs.links === undefined ? {} : { links: attrs.viewerAttrs.links }),
+          language: languageExtension(attrs.language),
+          extensions: [EditorView.lineWrapping],
+          // The viewer only ever holds a lazily-loaded window of a large file in memory (see
+          // `TEXT_WINDOW_BYTES`), so CodeMirror's own find panel - which only searches that
+          // window - is disabled in favor of the toolbar search above, backed by a whole-file
+          // backend scan. Mod-F still does something useful: it focuses that search box.
+          enableBuiltInSearch: false,
+          onFindShortcut: attrs.onFindShortcut,
+          ...(attrs.highlightOffset === undefined || attrs.highlightLength === undefined
+            ? {}
+            : {
+                selection: {
+                  from: attrs.highlightOffset,
+                  to: attrs.highlightOffset + attrs.highlightLength,
+                },
+              }),
+        });
+      if (rendered === undefined) return source();
+      return [
+        m(
+          '.fm-file-viewer-text-mode',
+          { role: 'group', 'aria-label': t('viewer', 'textModeLabel') },
+          (['preview', 'source'] as const).map((mode) =>
+            m(
+              'button.fm-file-viewer-text-mode-button',
+              {
+                type: 'button',
+                'aria-pressed': String((mode === 'source') === showSource),
+                onclick: () => {
+                  showSource = mode === 'source';
+                },
+              },
+              t('viewer', mode === 'preview' ? 'textModePreview' : 'textModeSource'),
+            ),
+          ),
+        ),
+        showSource
+          ? source()
+          : rendered === 'markdown'
+            ? m(MarkdownPreview, {
+                text: attrs.text,
+                highlightOffset: attrs.highlightOffset,
+                highlightLength: attrs.highlightLength,
+              })
+            : m('iframe.fm-file-viewer-html', {
+                sandbox: '',
+                title: t('viewer', 'htmlPreviewTitle'),
+                srcdoc: sandboxedHtmlDocument(attrs.text),
+              }),
+      ];
+    },
+  };
+};
+
 function renderTextBody(
   attrs: FileViewerAttrs,
   state: Extract<FileViewerState, { status: 'ready' }>,
@@ -543,32 +635,16 @@ function renderTextBody(
   const totalBytes = Math.max(knownOrMinimumBytes, content.windowEnd);
   const currentPage = Math.floor(content.windowOffset / TEXT_WINDOW_BYTES);
   return m('.fm-file-viewer-body.fm-file-viewer-body-text', {}, [
-    editableLanguage === 'markdown'
-      ? m(MarkdownPreview, {
-          text: content.text,
-          highlightOffset: content.highlightOffset,
-          highlightLength: content.highlightLength,
-        })
-      : m(LinkAwareEditor, {
-          content: content.text,
-          readOnly: true,
-          ...(attrs.links === undefined ? {} : { links: attrs.links }),
-          language: languageExtension(editableLanguage),
-          // The viewer only ever holds a lazily-loaded window of a large file in memory (see
-          // `TEXT_WINDOW_BYTES`), so CodeMirror's own find panel - which only searches that
-          // window - is disabled in favor of the toolbar search above, backed by a whole-file
-          // backend scan. Mod-F still does something useful: it focuses that search box.
-          enableBuiltInSearch: false,
-          onFindShortcut,
-          ...(content.highlightOffset === undefined || content.highlightLength === undefined
-            ? {}
-            : {
-                selection: {
-                  from: content.highlightOffset,
-                  to: content.highlightOffset + content.highlightLength,
-                },
-              }),
-        }),
+    m(TextContent, {
+      viewerAttrs: attrs,
+      entryUri: state.entry.location.uri,
+      language: editableLanguage,
+      isHtml: isHtmlPreviewExtension(previewExtension(state.entry)),
+      text: content.text,
+      highlightOffset: content.highlightOffset,
+      highlightLength: content.highlightLength,
+      onFindShortcut,
+    }),
     content.loadingMore ? m('.fm-file-viewer-loading-more', t('viewer', 'loadingMore')) : undefined,
     paginated
       ? m(

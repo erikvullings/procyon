@@ -720,7 +720,7 @@ impl PlatformAdapter for MacosPlatformAdapter {
             Ok(())
         } else {
             Err(PlatformError::Io {
-                message: format!("{app} launch exited with {status}"),
+                message: format!("{app} could not be opened - is it installed? ({status})"),
             })
         }
     }

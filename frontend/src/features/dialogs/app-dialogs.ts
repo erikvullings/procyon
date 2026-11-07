@@ -1,4 +1,5 @@
 import m from 'mithril';
+import { toast } from 'mithril-materialized';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { t } from '../../i18n';
 import type {
@@ -75,6 +76,7 @@ import { FindFilesDialog } from '../search/find-files-dialog';
 import { deleteSavedSearch, saveSearch, toggleSavedSearchPin } from '../search/saved-searches';
 import { DocumentSummaryDialog } from '../semantic/document-summary-dialog';
 import { pathFromUri } from '../workspace/workspace-layout';
+import { TerminalPickerDialog } from './terminal-picker-dialog';
 
 export interface AppDialogsContext {
   getOperationCentreVisible(): boolean;
@@ -632,6 +634,25 @@ export function renderAppDialogs(
             ctx.getFinderTagsLoader()?.setCached(request.entry.location.uri, persisted);
           })
           .catch(() => undefined);
+      },
+    }),
+    m(TerminalPickerDialog, {
+      open: ds.terminalPickerDialog !== undefined,
+      apps: ctx.getSettings()?.terminalApps ?? [],
+      onCancel: () => dialogs.cancelTerminalPickerDialog(),
+      onChoose: (app) => {
+        const request = ds.terminalPickerDialog;
+        dialogs.cancelTerminalPickerDialog();
+        if (request === undefined) return;
+        void client
+          .invokeAction({
+            actionId: 'core.openTerminalWith',
+            parameters: { uri: request.directoryUri, terminal: app.name },
+            context: request.context,
+          })
+          .catch((error: unknown) =>
+            toast({ html: error instanceof Error ? error.message : t('action', 'unableToRun') }),
+          );
       },
     }),
     m(SpotlightCommentDialog, {

@@ -214,6 +214,7 @@ export class MockContext {
     enabledPlugins: [],
     pluginSettings: {},
     terminalCommand: null,
+    terminalApps: [{ name: 'Terminal', command: 'Terminal' }],
     editorCommand: null,
     defaultStartLocations: [],
     favouriteLocations: [],

@@ -300,6 +300,7 @@ export const it = {
     quickLook: 'Quick Look',
     revealInSystemFileManager: 'Mostra nel gestore file di sistema',
     openTerminal: 'Apri terminale qui',
+    openTerminalWith: 'Apri terminale con…',
     copyName: 'Copia nome file',
     copyPath: 'Copia percorso completo',
     copyRelativePath: 'Copia percorso relativo',
@@ -386,6 +387,9 @@ export const it = {
     defaultStartLocations: 'Posizioni di avvio predefinite (separate da virgole)',
     terminal: 'Terminale',
     terminalCommand: 'Comando del terminale',
+    terminalApps: 'Terminali esterni',
+    terminalAppsHelp:
+      'Uno per riga: Nome = comando (un nome di applicazione su macOS, un eseguibile su Windows). Proposti da «Apri terminale con…».',
     editor: 'Editor',
     editorCommand: "Comando dell'editor",
     systemDefault: 'Predefinito di sistema',
@@ -643,6 +647,10 @@ export const it = {
     itemsCompleted: 'Completati {count} elementi ({bytes}).',
   },
   viewer: {
+    textModeLabel: 'Vista del testo',
+    textModePreview: 'Anteprima',
+    textModeSource: 'Sorgente',
+    htmlPreviewTitle: 'Anteprima HTML',
     closeViewer: 'Chiudi visualizzatore',
     copyText: 'Copia testo',
     copyImage: 'Copia immagine',
@@ -1139,6 +1147,10 @@ export const it = {
   },
   photoGrouping: {
     unknownDate: 'Data sconosciuta',
+  },
+  terminalPicker: {
+    title: 'Apri terminale con…',
+    empty: 'Nessuna applicazione terminale configurata. Aggiungile in Impostazioni → Terminale.',
   },
   entryMetadata: {
     tagsTitle: 'Etichette: {name}',

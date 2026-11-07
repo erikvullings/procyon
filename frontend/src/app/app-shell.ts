@@ -2266,6 +2266,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     openCreateDirectory: (location) => shellState.dialogs.openCreateDirectory(location),
     openFinderTagsDialog: (request) => shellState.dialogs.openFinderTagsDialog(request),
     openSpotlightCommentDialog: (request) => shellState.dialogs.openSpotlightCommentDialog(request),
+    openTerminalPickerDialog: (request) => shellState.dialogs.openTerminalPickerDialog(request),
     setArchiveCreateRequest: (request) => shellState.dialogs.openArchiveCreate(request),
     calculateChecksums: () => shellState.checksumController.calculateChecksums(CHECKSUM_ALGORITHMS),
     findDuplicates: () => shellState.checksumController.findDuplicates(),

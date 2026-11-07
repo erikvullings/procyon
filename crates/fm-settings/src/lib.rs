@@ -316,6 +316,74 @@ pub struct FilterPreset {
     pub criteria: FilterCriteria,
 }
 
+/// Most external terminal applications kept in the "Open Terminal With..." list (task 0127).
+pub const MAX_TERMINAL_APPS: usize = 20;
+/// Longest accepted terminal application name or launch command.
+const MAX_TERMINAL_APP_TEXT_CHARS: usize = 200;
+
+/// An external terminal application offered by "Open Terminal With..." (task 0127).
+///
+/// `command` is handed to the platform adapter exactly like [`Settings::terminal_command`]
+/// (an application name on macOS, an executable on Windows), never interpolated into a shell.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalApp {
+    /// Unique user-visible name.
+    pub name: String,
+    /// Application or executable the platform adapter launches.
+    pub command: String,
+}
+
+/// The terminals offered until the user edits the list, per platform.
+#[must_use]
+pub fn default_terminal_apps() -> Vec<TerminalApp> {
+    let app = |name: &str, command: &str| TerminalApp {
+        name: name.to_owned(),
+        command: command.to_owned(),
+    };
+    if cfg!(target_os = "macos") {
+        vec![
+            app("Terminal", "Terminal"),
+            app("iTerm", "iTerm"),
+            app("Ghostty", "Ghostty"),
+            app("Warp", "Warp"),
+        ]
+    } else if cfg!(target_os = "windows") {
+        vec![
+            app("Windows Terminal", "wt.exe"),
+            app("PowerShell", "powershell.exe"),
+            app("Command Prompt", "cmd.exe"),
+        ]
+    } else {
+        Vec::new()
+    }
+}
+
+/// Trims text, drops entries with a blank name or command or a duplicate (case-insensitive)
+/// name, and bounds the list.
+fn sanitize_terminal_apps(apps: &mut Vec<TerminalApp>) {
+    let clean = |text: &str| -> String {
+        text.trim()
+            .chars()
+            .take(MAX_TERMINAL_APP_TEXT_CHARS)
+            .collect::<String>()
+            .trim()
+            .to_owned()
+    };
+    let mut seen: Vec<String> = Vec::new();
+    apps.retain_mut(|app| {
+        app.name = clean(&app.name);
+        app.command = clean(&app.command);
+        let folded = app.name.to_lowercase();
+        if app.name.is_empty() || app.command.is_empty() || seen.contains(&folded) {
+            return false;
+        }
+        seen.push(folded);
+        true
+    });
+    apps.truncate(MAX_TERMINAL_APPS);
+}
+
 /// Trims names, drops blank or duplicate (case-insensitive) presets, and bounds the list.
 fn sanitize_filter_presets(presets: &mut Vec<FilterPreset>) {
     let mut seen: Vec<String> = Vec::new();
@@ -410,6 +478,9 @@ pub struct Settings {
     pub plugin_settings: BTreeMap<String, Value>,
     /// Optional terminal executable or command.
     pub terminal_command: Option<String>,
+    /// External terminals offered by "Open Terminal With..." (task 0127); independent of
+    /// `terminal_command`, which stays the single default for "Open Terminal Here".
+    pub terminal_apps: Vec<TerminalApp>,
     /// Optional text-editor executable or command for `core.edit` (task 0086); `None` falls back
     /// to the platform adapter's default text-editor association.
     pub editor_command: Option<String>,
@@ -528,6 +599,7 @@ impl Default for Settings {
             enabled_plugins: DEFAULT_ENABLED_PLUGINS.map(str::to_owned).to_vec(),
             plugin_settings: BTreeMap::new(),
             terminal_command: None,
+            terminal_apps: default_terminal_apps(),
             editor_command: None,
             default_start_locations: Vec::new(),
             favourite_locations: Vec::new(),
@@ -631,6 +703,7 @@ impl SettingsStore {
             Ok(mut settings) => {
                 settings.normalise_folder_views();
                 sanitize_filter_presets(&mut settings.filter_presets);
+                sanitize_terminal_apps(&mut settings.terminal_apps);
                 sync_profile::sanitize_sync_profiles(&mut settings.sync_profiles);
                 Ok(LoadOutcome {
                     settings,
@@ -683,6 +756,7 @@ impl SettingsStore {
         }
         current.normalise_folder_views();
         sanitize_filter_presets(&mut current.filter_presets);
+        sanitize_terminal_apps(&mut current.terminal_apps);
         sync_profile::sanitize_sync_profiles(&mut current.sync_profiles);
         let bytes = serde_json::to_vec_pretty(&current)?;
         atomic_write(&self.directory, SETTINGS_FILE_NAME, &bytes)?;
@@ -1046,6 +1120,10 @@ mod tests {
             enabled_plugins: vec!["archive".into()],
             plugin_settings: [("archive".into(), serde_json::json!({"level": 3}))].into(),
             terminal_command: Some("alacritty".into()),
+            terminal_apps: vec![TerminalApp {
+                name: "Alacritty".into(),
+                command: "alacritty".into(),
+            }],
             editor_command: Some("code --wait".into()),
             default_start_locations: vec!["file:///tmp".into()],
             favourite_locations: vec![FavouriteLocation {
@@ -1228,6 +1306,55 @@ mod tests {
 
         assert_eq!(loaded.settings.schema_version, CURRENT_SCHEMA_VERSION);
         assert_eq!(loaded.settings.language, Settings::default().language);
+    }
+
+    #[test]
+    fn terminal_apps_default_per_platform_and_survive_a_file_without_them() {
+        let directory = tempdir().expect("temp directory");
+        fs::write(
+            directory.path().join(SETTINGS_FILE_NAME),
+            r#"{ "schemaVersion": 9, "theme": "dark" }"#,
+        )
+        .expect("write fixture without terminalApps");
+        let loaded = SettingsStore::new(directory.path()).load().expect("load");
+        assert_eq!(loaded.settings.terminal_apps, default_terminal_apps());
+    }
+
+    #[test]
+    fn terminal_apps_are_sanitized_on_load_and_save() {
+        let directory = tempdir().expect("temp directory");
+        let store = SettingsStore::new(directory.path());
+        let app = |name: &str, command: &str| TerminalApp {
+            name: name.into(),
+            command: command.into(),
+        };
+        store
+            .save(&Settings {
+                terminal_apps: vec![
+                    app("  Ghostty ", " ghostty "),
+                    app("ghostty", "other"),
+                    app("", "x"),
+                    app("No command", "   "),
+                    app("Warp", "Warp"),
+                ],
+                ..Settings::default()
+            })
+            .expect("save");
+        let loaded = store.load().expect("reload").settings.terminal_apps;
+        assert_eq!(loaded, vec![app("Ghostty", "ghostty"), app("Warp", "Warp")]);
+
+        store
+            .save(&Settings {
+                terminal_apps: (0..MAX_TERMINAL_APPS + 5)
+                    .map(|index| app(&format!("t{index}"), "cmd"))
+                    .collect(),
+                ..Settings::default()
+            })
+            .expect("save many");
+        assert_eq!(
+            store.load().expect("reload").settings.terminal_apps.len(),
+            MAX_TERMINAL_APPS
+        );
     }
 
     #[test]

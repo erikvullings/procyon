@@ -18,6 +18,7 @@ import type { SettingsDtoPluginSettings } from './settingsDtoPluginSettings.ts';
 import type { SettingsDtoRecentLocationsByWorkspace } from './settingsDtoRecentLocationsByWorkspace.ts';
 import type { SizeFormatDto } from './sizeFormatDto.ts';
 import type { SyncProfileDto } from './syncProfileDto.ts';
+import type { TerminalAppDto } from './terminalAppDto.ts';
 import type { ThemeDto } from './themeDto.ts';
 
 /**
@@ -112,6 +113,8 @@ export interface SettingsDto {
   sizeFormat: SizeFormatDto;
   /** Saved synchronization profiles. */
   syncProfiles?: SyncProfileDto[];
+  /** External terminals offered by "Open Terminal With...". */
+  terminalApps?: TerminalAppDto[];
   /**
      * Optional terminal command.
      * @nullable

@@ -114,6 +114,16 @@ pub struct FavouriteLocationDto {
     pub location: LocationDto,
 }
 
+/// An external terminal application offered by "Open Terminal With...".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalAppDto {
+    /// Unique user-visible name.
+    pub name: String,
+    /// Application or executable the host launches; never run through a shell.
+    pub command: String,
+}
+
 /// How a multi-rename rule cases the composed filename.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -378,6 +388,9 @@ pub struct SettingsDto {
     pub plugin_settings: Value,
     /// Optional terminal command.
     pub terminal_command: Option<String>,
+    /// External terminals offered by "Open Terminal With...".
+    #[serde(default)]
+    pub terminal_apps: Vec<TerminalAppDto>,
     /// Optional text-editor command for `core.edit`; `None` uses the platform default.
     pub editor_command: Option<String>,
     /// Locations inherited by new panes.

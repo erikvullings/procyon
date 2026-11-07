@@ -7524,6 +7524,44 @@ mod tests {
     }
 
     #[test]
+    fn invoke_action_open_terminal_with_launches_only_a_configured_terminal() {
+        let (dir, service, adapter) = service_with_recording_adapter();
+        let mut settings = service.get_settings();
+        settings.terminal_apps = vec![fm_transport_dto::TerminalAppDto {
+            name: "Ghostty".to_owned(),
+            command: "Ghostty".to_owned(),
+        }];
+        service
+            .update_settings(settings)
+            .expect("settings update must succeed");
+        let uri = Location::from_native_path(dir.path())
+            .expect("path must convert to a location")
+            .uri;
+        let invoke = |parameters: serde_json::Value| {
+            service.invoke_action(
+                "core.openTerminalWith".to_owned(),
+                InvokeActionRequestDto {
+                    parameters: Some(parameters),
+                    context: fm_transport_dto::ActionInvocationContextDto::default(),
+                },
+                None,
+            )
+        };
+
+        invoke(serde_json::json!({ "uri": uri, "terminal": "Ghostty" }))
+            .expect("a configured terminal must launch");
+        assert_eq!(
+            adapter.terminals.lock().unwrap().as_slice(),
+            [(dir.path().to_path_buf(), Some("Ghostty".to_owned()))]
+        );
+
+        // The client names a terminal; it can never supply the command itself.
+        assert!(invoke(serde_json::json!({ "uri": uri, "terminal": "rm -rf /" })).is_err());
+        assert!(invoke(serde_json::json!({ "uri": uri })).is_err());
+        assert_eq!(adapter.terminals.lock().unwrap().len(), 1);
+    }
+
+    #[test]
     fn invoke_action_views_the_uri_parameters_path_with_the_default_application() {
         // core.view (task 0087) is a documented stopgap that dispatches
         // exactly like core.open until a real in-app viewer (task 0088) exists.

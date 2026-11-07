@@ -44,6 +44,8 @@ pub(crate) enum PlatformActionKind {
     QuickLook,
     Reveal,
     OpenTerminal,
+    /// Opens one of the configured external terminal applications (task 0127).
+    OpenTerminalWith,
     EditInTextEditor,
 }
 
@@ -57,6 +59,7 @@ pub(crate) fn platform_action_kind(id: &ActionId) -> Option<PlatformActionKind> 
         "core.edit" => Some(PlatformActionKind::EditInTextEditor),
         "core.revealInSystemFileManager" => Some(PlatformActionKind::Reveal),
         "core.openTerminal" => Some(PlatformActionKind::OpenTerminal),
+        "core.openTerminalWith" => Some(PlatformActionKind::OpenTerminalWith),
         _ => None,
     }
 }

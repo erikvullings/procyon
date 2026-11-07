@@ -1,5 +1,5 @@
 import { t } from '../../i18n';
-import type { Settings } from '../../models';
+import type { Settings, TerminalApp } from '../../models';
 import { validateMapSettings } from '../map/map-settings';
 
 /** Deep-clones a settings document so drafts never alias the saved copy. */
@@ -16,6 +16,7 @@ export function cloneSettings(settings: Settings): Settings {
     enabledPlugins: [...settings.enabledPlugins],
     pluginSettings: { ...settings.pluginSettings },
     defaultStartLocations: [...settings.defaultStartLocations],
+    terminalApps: settings.terminalApps.map((app) => ({ ...app })),
     favouriteLocations: settings.favouriteLocations.map((favourite) => ({
       ...favourite,
       location: { ...favourite.location },
@@ -57,6 +58,25 @@ export function parseListInput(value: string): readonly string[] {
     .split(',')
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+}
+
+/**
+ * Parses the terminal-apps editor text: one `Name = command` per line. Lines without a name, a
+ * command or the `=` are skipped, so a half-typed line never reaches the backend.
+ */
+export function parseTerminalApps(value: string): readonly TerminalApp[] {
+  return value.split('\n').flatMap((line) => {
+    const separator = line.indexOf('=');
+    if (separator < 0) return [];
+    const name = line.slice(0, separator).trim();
+    const command = line.slice(separator + 1).trim();
+    return name === '' || command === '' ? [] : [{ name, command }];
+  });
+}
+
+/** Formats terminal apps back into the `Name = command` lines the editor displays. */
+export function formatTerminalApps(apps: readonly TerminalApp[]): string {
+  return apps.map((app) => `${app.name} = ${app.command}`).join('\n');
 }
 
 /** Formats an array back into the comma-separated text a list editor field displays. */

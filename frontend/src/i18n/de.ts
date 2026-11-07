@@ -307,6 +307,7 @@ export const de = {
     quickLook: 'Quick Look',
     revealInSystemFileManager: 'Im Dateimanager anzeigen',
     openTerminal: 'Terminal hier öffnen',
+    openTerminalWith: 'Terminal öffnen mit…',
     copyName: 'Dateiname kopieren',
     copyPath: 'Vollständigen Pfad kopieren',
     copyRelativePath: 'Relativen Pfad kopieren',
@@ -393,6 +394,9 @@ export const de = {
     defaultStartLocations: 'Standard-Startorte (kommagetrennt)',
     terminal: 'Terminal',
     terminalCommand: 'Terminalbefehl',
+    terminalApps: 'Externe Terminals',
+    terminalAppsHelp:
+      'Eine pro Zeile: Name = Befehl (unter macOS ein Anwendungsname, unter Windows eine ausführbare Datei). Angeboten von „Terminal öffnen mit…“.',
     editor: 'Editor',
     editorCommand: 'Editorbefehl',
     systemDefault: 'Systemstandard',
@@ -651,6 +655,10 @@ export const de = {
     itemsCompleted: '{count} Elemente abgeschlossen ({bytes}).',
   },
   viewer: {
+    textModeLabel: 'Textansicht',
+    textModePreview: 'Vorschau',
+    textModeSource: 'Quelltext',
+    htmlPreviewTitle: 'HTML-Vorschau',
     closeViewer: 'Betrachter schließen',
     copyText: 'Text kopieren',
     copyImage: 'Bild kopieren',
@@ -1158,6 +1166,11 @@ export const de = {
   },
   photoGrouping: {
     unknownDate: 'Unbekanntes Datum',
+  },
+  terminalPicker: {
+    title: 'Terminal öffnen mit…',
+    empty:
+      'Es sind keine Terminalanwendungen konfiguriert. Fügen Sie sie unter Einstellungen → Terminal hinzu.',
   },
   entryMetadata: {
     tagsTitle: 'Tags: {name}',

@@ -394,7 +394,7 @@ behavior.
   verifying 0060; blocked the Windows pre-commit hook)*
 - [ ] 0133 Populate native menu bar content (macOS + Windows) *(in_progress — macOS manually
   verified; manual Windows visual verification remains)*
-- [ ] 0127 External terminal application choice *(pick a specific app, e.g. ghostty/Warp, from the
+- [x] 0127 External terminal application choice *(pick a specific app, e.g. ghostty/Warp, from the
   context menu)*
 - [ ] 0131 Windows native menu bar *(in_progress — HWND hook point and HMENU attachment are
   implemented; manual Windows verification remains)*
@@ -531,6 +531,7 @@ previous pass stopped where it did.
 - [x] 0315 S3 multipart upload resume *(parent 0163; needs 0303; seal + UploadPartCopy)*
 - [x] 0316 WebDAV transfer resume *(parent 0163; needs 0303; ranged reads only, uploads restart)*
 - [x] 0317 FTP upload completion and resume *(parent 0163; needs 0303; APPE)*
+- [x] 0318 F3 viewer: HTML preview and raw-source toggle *(frontend, low)*
 
 ## Proposed features (new backlog)
 

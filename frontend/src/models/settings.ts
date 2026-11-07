@@ -103,6 +103,12 @@ export interface SyncProfile {
   readonly lastRun: SyncRunSummary | null;
 }
 
+/** An external terminal application: a display name and the command the host launches. */
+export interface TerminalApp {
+  readonly name: string;
+  readonly command: string;
+}
+
 /** Versioned application-wide settings returned by both backend transports. */
 export interface Settings {
   readonly schemaVersion: number;
@@ -126,6 +132,8 @@ export interface Settings {
   readonly enabledPlugins: readonly string[];
   readonly pluginSettings: Readonly<Record<string, unknown>>;
   readonly terminalCommand: string | null;
+  /** External terminals offered by "Open Terminal With..." (task 0127). */
+  readonly terminalApps: readonly TerminalApp[];
   readonly editorCommand: string | null;
   readonly defaultStartLocations: readonly string[];
   readonly favouriteLocations: readonly FavouriteLocation[];

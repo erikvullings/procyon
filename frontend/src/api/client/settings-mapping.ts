@@ -42,6 +42,10 @@ export function settingsFromDto(settings: SettingsDto): Settings {
       ]),
     ),
     terminalCommand: settings.terminalCommand ?? null,
+    terminalApps: (settings.terminalApps ?? []).map((app) => ({
+      name: app.name,
+      command: app.command,
+    })),
     editorCommand: settings.editorCommand ?? null,
     rememberFolderViews: settings.rememberFolderViews ?? true,
     checkForBetaUpdates: settings.checkForBetaUpdates ?? false,
@@ -126,6 +130,7 @@ export function settingsToDto(settings: Settings): SettingsDto {
     ...settings,
     defaultColumns: [...settings.defaultColumns],
     defaultStartLocations: [...settings.defaultStartLocations],
+    terminalApps: settings.terminalApps.map((app) => ({ ...app })),
     enabledPlugins: [...settings.enabledPlugins],
     multiRenamePresets: settings.multiRenamePresets.map((preset) => ({
       ...preset,

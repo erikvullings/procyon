@@ -603,6 +603,7 @@ export * from './syncScheduleDto.ts';
 export * from './systemLocationDto.ts';
 export * from './systemLocationKindDto.ts';
 export * from './tabStateDto.ts';
+export * from './terminalAppDto.ts';
 export * from './themeConceptDto.ts';
 export * from './themeDto.ts';
 export * from './themeExportLabelDto.ts';

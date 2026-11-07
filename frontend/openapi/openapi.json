@@ -25408,6 +25408,13 @@
             },
             "description": "Saved synchronization profiles."
           },
+          "terminalApps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TerminalAppDto"
+            },
+            "description": "External terminals offered by \"Open Terminal With...\"."
+          },
           "terminalCommand": {
             "type": [
               "string",
@@ -27535,6 +27542,24 @@
           "view": {
             "$ref": "#/components/schemas/DirectoryViewConfigurationDto",
             "description": "Persisted view configuration (sort, columns, filters) for this tab."
+          }
+        }
+      },
+      "TerminalAppDto": {
+        "type": "object",
+        "description": "An external terminal application offered by \"Open Terminal With...\".",
+        "required": [
+          "name",
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "Application or executable the host launches; never run through a shell."
+          },
+          "name": {
+            "type": "string",
+            "description": "Unique user-visible name."
           }
         }
       },

@@ -237,7 +237,7 @@ pub use settings::{
     MapBasemapKindDto, MapSettingsDto, MultiRenameCaseTransformDto, MultiRenamePresetDto,
     MultiRenameRulesDto, MultiRenameSequenceDto, QuickFilterMatchModeDto, SavedSearchDto,
     SettingsDto, SizeFormatDto, SyncProfileDto, SyncRunOutcomeDto, SyncRunSummaryDto,
-    SyncRunTriggerDto, SyncScheduleConfirmationDto, SyncScheduleDto, ThemeDto,
+    SyncRunTriggerDto, SyncScheduleConfirmationDto, SyncScheduleDto, TerminalAppDto, ThemeDto,
 };
 pub use snapshot::{DirectorySnapshotDto, LoadingStateDto, VolumeCapacityDto};
 pub use snapshots::{

@@ -53,6 +53,7 @@ const LOCATION_ACTION_IDS = new Set([
   'core.paste',
   'core.refresh',
   'core.openTerminal',
+  'core.openTerminalWith',
 ]);
 
 const SELECTION_ACTION_IDS = new Set([
@@ -201,7 +202,10 @@ export function evaluateActionAvailability(
   ) {
     return unavailable(action, t('availability', 'selectArchive'));
   }
-  if (action.id === 'core.openTerminal' && !context.openTerminalSupported) {
+  if (
+    (action.id === 'core.openTerminal' || action.id === 'core.openTerminalWith') &&
+    !context.openTerminalSupported
+  ) {
     return unavailable(action, t('availability', 'terminalUnsupported'));
   }
   if (

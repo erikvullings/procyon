@@ -80,6 +80,7 @@ function fakeContext(
     setArchiveCreateRequest: () => {},
     openFinderTagsDialog: () => {},
     openSpotlightCommentDialog: () => {},
+    openTerminalPickerDialog: () => {},
     calculateChecksums: () => {},
     findDuplicates: () => {},
     openDiskUsage: () => {},

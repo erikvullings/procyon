@@ -300,6 +300,7 @@ export const pl = {
     quickLook: 'Quick Look',
     revealInSystemFileManager: 'Pokaż w systemowym menedżerze plików',
     openTerminal: 'Otwórz terminal tutaj',
+    openTerminalWith: 'Otwórz terminal za pomocą…',
     copyName: 'Kopiuj nazwę pliku',
     copyPath: 'Kopiuj pełną ścieżkę',
     copyRelativePath: 'Kopiuj ścieżkę względną',
@@ -386,6 +387,9 @@ export const pl = {
     defaultStartLocations: 'Domyślne lokalizacje początkowe (oddzielone przecinkami)',
     terminal: 'Terminal',
     terminalCommand: 'Polecenie terminala',
+    terminalApps: 'Zewnętrzne terminale',
+    terminalAppsHelp:
+      'Po jednym w wierszu: Nazwa = polecenie (nazwa aplikacji w macOS, plik wykonywalny w Windows). Oferowane przez „Otwórz terminal za pomocą…”.',
     editor: 'Edytor',
     editorCommand: 'Polecenie edytora',
     systemDefault: 'Domyślne systemowe',
@@ -640,6 +644,10 @@ export const pl = {
     itemsCompleted: 'Ukończono {count} elementów ({bytes}).',
   },
   viewer: {
+    textModeLabel: 'Widok tekstu',
+    textModePreview: 'Podgląd',
+    textModeSource: 'Źródło',
+    htmlPreviewTitle: 'Podgląd HTML',
     closeViewer: 'Zamknij podgląd',
     copyText: 'Kopiuj tekst',
     copyImage: 'Kopiuj obraz',
@@ -1140,6 +1148,10 @@ export const pl = {
   },
   photoGrouping: {
     unknownDate: 'Nieznana data',
+  },
+  terminalPicker: {
+    title: 'Otwórz terminal za pomocą…',
+    empty: 'Nie skonfigurowano aplikacji terminala. Dodaj je w Ustawienia → Terminal.',
   },
   entryMetadata: {
     tagsTitle: 'Etykiety: {name}',

@@ -37,7 +37,9 @@ import { SemanticVocabularyManagement } from './semantic-vocabulary-management';
 import {
   cloneSettings,
   formatListInput,
+  formatTerminalApps,
   parseListInput,
+  parseTerminalApps,
   setKeybindingOverride,
   validateSettingsDraft,
 } from './settings-model';
@@ -119,6 +121,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
   // own vnode argument, since only the former is guaranteed to carry attrs.
   let draft: Settings | undefined;
   let startLocationsText = '';
+  let terminalAppsText = '';
   let saving = false;
   let saveError: string | undefined;
   let activeSection: SettingsSection = 'appearance';
@@ -130,6 +133,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
   function resetDraft(current: SettingsEditorAttrs): void {
     draft = cloneSettings(current.settings);
     startLocationsText = formatListInput(draft.defaultStartLocations);
+    terminalAppsText = formatTerminalApps(draft.terminalApps);
     saveError = undefined;
   }
 
@@ -527,6 +531,26 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                             terminalCommand: value.trim().length === 0 ? null : value,
                           }),
                       }),
+                    ]),
+
+                    m('.row', [
+                      m('.col.s12.fm-settings-terminal-apps', [
+                        m(
+                          'label',
+                          { for: 'settings-terminal-apps' },
+                          t('settings', 'terminalApps'),
+                        ),
+                        m('textarea#settings-terminal-apps.browser-default', {
+                          rows: 5,
+                          spellcheck: false,
+                          value: terminalAppsText,
+                          oninput: (event: InputEvent) => {
+                            terminalAppsText = (event.currentTarget as HTMLTextAreaElement).value;
+                            update(current, { terminalApps: parseTerminalApps(terminalAppsText) });
+                          },
+                        }),
+                        m('p.helper-text', t('settings', 'terminalAppsHelp')),
+                      ]),
                     ]),
 
                     m('.row', m('h4.fm-settings-section-heading.col.s12', t('settings', 'editor'))),
