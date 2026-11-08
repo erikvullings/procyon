@@ -138,3 +138,19 @@ Cluster **chunk embeddings directly** for theme discovery; also keep a **documen
   SKOS concepts shown only when present. Still document-granularity theme-filtered search (chunk filter
   would need chunk ids through the knowledge request). Guide: docs/try-themes-on-a-real-corpus.md.
   Not verified: real model/browser run.
+- 2026-11-08 claude: closed the SKOS gap. `visit_corpus_chunks` now names a chunk by its strongest
+  concept from the ACTIVE labelling generation of any vocabulary (`concept_annotations` joined to a
+  `complete` `concept_annotation_generations`, ties on URI), falling back to the legacy
+  `records.concept_id`; superseded/staging generations never count. The theme revision now includes
+  each vocabulary's active generation (`active_concept_generations`), so relabelling makes a cached
+  analysis stale (UI shows the stale banner) and the rerun recomputes `concepts`. The UI already
+  rendered `concepts` (readable tail of the URI). Verified: 3 new worker tests (concepts named from
+  active labels only/strongest label, superseded labels ignored, relabelling invalidates the
+  cache), all 28 `corpus_` worker tests. Limits: the chip shows the URI's last segment, not the
+  vocabulary's `skos:prefLabel` (needs a vocabulary label lookup in the application layer).
+  Deliberately NOT done: chunk-granular theme filtering. It needs chunk ids through the knowledge
+  request, the worker retrieval filters and the protobuf protocol (large, multi-layer); filtering
+  hits client-side after retrieval would shrink recall. Document granularity stays. Still unverified:
+  a run against a real embedding model (EmbeddingGemma) and canvas/hover/click in a real browser;
+  both need a manual session (docs/try-themes-on-a-real-corpus.md).
+

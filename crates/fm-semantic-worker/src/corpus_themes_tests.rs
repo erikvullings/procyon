@@ -3,7 +3,8 @@ use tempfile::tempdir;
 use super::*;
 use crate::embedding::EmbeddingCacheKey;
 use crate::semantic_storage::{
-    DistanceMetric, LibraryIndexManifest, Occurrence, StagedGeneration, StagedRecord,
+    ConceptAnnotation, ConceptAnnotationGeneration, DistanceMetric, LibraryIndexManifest,
+    Occurrence, StagedGeneration, StagedRecord,
 };
 
 const DIMENSIONS: usize = 8;
@@ -910,4 +911,134 @@ fn an_index_without_the_library_reports_that_it_is_not_built_yet() {
         crate::corpus_theme_ipc::failure_of(error).unwrap(),
         crate::corpus_theme_ipc::ThemeFailure::IndexNotBuilt
     );
+}
+
+fn annotate(catalog: &SemanticCatalog, generation: u64, labels: &[(&str, &str, f32)]) {
+    catalog
+        .stage_concept_annotations(&ConceptAnnotationGeneration {
+            tenant_id: TENANT.into(),
+            library_id: LIBRARY.into(),
+            vocabulary_id: "topics".into(),
+            generation,
+            annotations: labels
+                .iter()
+                .map(|(record_id, concept_uri, confidence)| ConceptAnnotation {
+                    record_id: (*record_id).into(),
+                    concept_uri: (*concept_uri).into(),
+                    confidence: *confidence,
+                    supporting_chunk_ids: vec![(*record_id).into()],
+                })
+                .collect(),
+        })
+        .unwrap();
+    catalog
+        .publish_concept_annotations(TENANT, LIBRARY, "topics", generation)
+        .unwrap();
+}
+
+#[test]
+fn themes_report_the_active_skos_concepts_of_their_chunks() {
+    let catalog = open_catalog();
+    stage_corpus(&catalog, &ALL_DOCS);
+    // doc-a is all harbour; doc-b is all mortgage. The harbour chunks carry two concepts, the
+    // strongest of which names the chunk; the mortgage ones carry one.
+    let harbour = "https://example.test/concepts/harbour";
+    let port = "https://example.test/concepts/port";
+    let finance = "https://example.test/concepts/finance";
+    let mut labels = Vec::new();
+    for position in 0..4 {
+        labels.push((format!("doc-a-g1-c{position}"), harbour, 0.9));
+        labels.push((format!("doc-a-g1-c{position}"), port, 0.4));
+        labels.push((format!("doc-b-g1-c{position}"), finance, 0.8));
+    }
+    let labels = labels
+        .iter()
+        .map(|(record, concept, confidence)| (record.as_str(), *concept, *confidence))
+        .collect::<Vec<_>>();
+    annotate(&catalog, 1, &labels);
+
+    let service = CorpusThemeService::new(catalog, identity());
+    let themes = analyze(&service, &scope_of(&ALL_DOCS));
+
+    let concepts_of = |word: &str| {
+        themes
+            .themes
+            .iter()
+            .find(|theme| theme.id == theme_for(&themes, word))
+            .unwrap()
+            .concepts
+            .clone()
+    };
+    let harbour_concepts = concepts_of("harbour");
+    assert_eq!(
+        harbour_concepts.first().map(|c| c.concept_id.as_str()),
+        Some(harbour)
+    );
+    assert!(
+        harbour_concepts.iter().all(|c| c.concept_id != port),
+        "only the strongest label"
+    );
+    assert_eq!(concepts_of("mortgage")[0].concept_id, finance);
+    assert!(concepts_of("volcano").is_empty());
+}
+
+#[test]
+fn superseded_concept_labels_no_longer_name_chunks() {
+    let catalog = open_catalog();
+    stage_corpus(&catalog, &ALL_DOCS);
+    let old = "https://example.test/concepts/old";
+    let new = "https://example.test/concepts/new";
+    let records = (0..4)
+        .map(|position| format!("doc-a-g1-c{position}"))
+        .collect::<Vec<_>>();
+    let with = |concept: &'static str| {
+        records
+            .iter()
+            .map(|record| (record.as_str(), concept, 0.9))
+            .collect::<Vec<_>>()
+    };
+    annotate(&catalog, 1, &with(old));
+    annotate(&catalog, 2, &with(new));
+
+    let service = CorpusThemeService::new(catalog, identity());
+    let themes = analyze(&service, &scope_of(&ALL_DOCS));
+    let harbour = themes
+        .themes
+        .iter()
+        .find(|theme| theme.id == theme_for(&themes, "harbour"))
+        .unwrap();
+    assert_eq!(harbour.concepts.len(), 1);
+    assert_eq!(harbour.concepts[0].concept_id, new);
+}
+
+#[test]
+fn relabelling_makes_a_cached_analysis_stale_and_recomputes_the_concepts() {
+    let catalog = open_catalog();
+    stage_corpus(&catalog, &ALL_DOCS);
+    let service = CorpusThemeService::new(catalog.clone(), identity());
+    let scope = scope_of(&ALL_DOCS);
+    let before = analyze(&service, &scope);
+    assert!(before.themes.iter().all(|theme| theme.concepts.is_empty()));
+
+    let concept = "https://example.test/concepts/harbour";
+    let records = (0..4)
+        .map(|position| format!("doc-a-g1-c{position}"))
+        .collect::<Vec<_>>();
+    let labels = records
+        .iter()
+        .map(|record| (record.as_str(), concept, 0.9))
+        .collect::<Vec<_>>();
+    annotate(&catalog, 1, &labels);
+
+    assert_ne!(
+        service.index_revision(&scope).unwrap(),
+        before.index_revision
+    );
+    let after = analyze(&service, &scope);
+    let harbour = after
+        .themes
+        .iter()
+        .find(|theme| theme.id == theme_for(&after, "harbour"))
+        .unwrap();
+    assert_eq!(harbour.concepts[0].concept_id, concept);
 }

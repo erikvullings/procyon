@@ -152,6 +152,38 @@ impl SemanticCatalog {
             .transpose()
     }
 
+    /// The active SKOS labelling generation of every vocabulary attached to a library, so a
+    /// relabelling changes the theme revision even though no document changed.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed validation or database error.
+    pub fn active_concept_generations(
+        &self,
+        tenant_id: &str,
+        library_id: &str,
+    ) -> Result<Vec<(String, u64)>, StorageError> {
+        validate_identifier(tenant_id, "tenant_id")?;
+        validate_identifier(library_id, "library_id")?;
+        let connection = self.connection()?;
+        let mut statement = connection.prepare(
+            "SELECT vocabulary_id, generation FROM concept_annotation_generations
+             WHERE tenant_id = ?1 AND library_id = ?2 AND state = 'complete'
+             ORDER BY vocabulary_id",
+        )?;
+        let rows = statement.query_map(params![tenant_id, library_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })?;
+        rows.map(|row| {
+            let (vocabulary, generation) = row?;
+            Ok((
+                vocabulary,
+                u64::try_from(generation).map_err(|_| StorageError::CorruptCatalog)?,
+            ))
+        })
+        .collect()
+    }
+
     /// Lists visible, available documents of a scope with their chunk counts.
     ///
     /// # Errors
@@ -222,7 +254,8 @@ impl SemanticCatalog {
         let mut statement = connection.prepare(&format!(
             "SELECT r.record_id, r.document_id, o.source_id, r.generation, d.content_hash,
                     substr(r.content, 1, {MAX_CHUNK_TEXT_CHARS}), v.vector,
-                    r.source_position, r.section_path_json, r.provenance, r.concept_id
+                    r.source_position, r.section_path_json, r.provenance,
+                    COALESCE({ACTIVE_CONCEPT}, r.concept_id)
              {CORPUS_FROM}
              ORDER BY r.document_id, r.source_position, r.record_id"
         ))?;
@@ -425,6 +458,20 @@ impl SemanticCatalog {
 /// Shared `FROM`/`WHERE` for every eligible chunk of one scope.
 ///
 /// Parameters: `?1` tenant, `?2` library, `?3` JSON array of source ids.
+/// The strongest concept an active SKOS labelling generation (task 0242) assigned to the chunk,
+/// across vocabularies. Superseded and staging generations never count; ties break on the URI so
+/// a rerun names chunks identically.
+const ACTIVE_CONCEPT: &str = "(SELECT a.concept_uri
+       FROM concept_annotations a
+       JOIN concept_annotation_generations ag
+         ON ag.tenant_id = a.tenant_id AND ag.library_id = a.library_id
+        AND ag.vocabulary_id = a.vocabulary_id
+        AND ag.generation = a.label_generation AND ag.state = 'complete'
+      WHERE a.record_id = r.record_id AND a.tenant_id = r.tenant_id
+        AND a.library_id = r.library_id
+      ORDER BY a.confidence DESC, a.concept_uri
+      LIMIT 1)";
+
 const CORPUS_FROM: &str = "FROM records r
      JOIN generations g
        ON g.tenant_id = r.tenant_id AND g.library_id = r.library_id

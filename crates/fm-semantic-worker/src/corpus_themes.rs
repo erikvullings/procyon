@@ -423,7 +423,7 @@ impl CorpusThemeService {
     pub fn status(&self, scope: &CorpusScope) -> Result<CorpusThemeStatus, CorpusThemeError> {
         let documents = self.catalog.corpus_documents(scope)?;
         Ok(CorpusThemeStatus {
-            index_revision: revision_of(&documents),
+            index_revision: self.revision_of(scope, &documents)?,
             document_count: u32::try_from(documents.len()).unwrap_or(u32::MAX),
             chunk_count: documents
                 .iter()
@@ -446,7 +446,20 @@ impl CorpusThemeService {
     ///
     /// Returns storage failures.
     pub fn index_revision(&self, scope: &CorpusScope) -> Result<String, CorpusThemeError> {
-        Ok(revision_of(&self.catalog.corpus_documents(scope)?))
+        self.revision_of(scope, &self.catalog.corpus_documents(scope)?)
+    }
+
+    /// The scope's revision: its visible documents plus the active concept labelling, since
+    /// labels name themes (task 0242) and so a relabelling makes a cached analysis stale.
+    fn revision_of(
+        &self,
+        scope: &CorpusScope,
+        documents: &[CorpusDocument],
+    ) -> Result<String, CorpusThemeError> {
+        let labelling = self
+            .catalog
+            .active_concept_generations(&scope.tenant_id, &scope.library_id)?;
+        Ok(revision_of(documents, &labelling))
     }
 
     /// Reads one document centroid only when it matches the active profile.
@@ -505,7 +518,7 @@ impl CorpusThemeService {
                 chunks: total_chunks,
             });
         }
-        let index_revision = revision_of(&documents);
+        let index_revision = self.revision_of(scope, &documents)?;
         let fingerprint = self.fingerprint(scope, config, &index_revision);
         let fit_key = self.fit_key(scope, config);
         let previous = self
@@ -746,7 +759,7 @@ impl CorpusThemeService {
             .filter(|(stored, _)| stored == fingerprint)
             .and_then(|(_, json)| serde_json::from_str::<StoredThemeRun>(&json).ok())
             .ok_or(CorpusThemeError::ThemesStale)?;
-        let current = revision_of(&self.catalog.corpus_documents(scope)?);
+        let current = self.revision_of(scope, &self.catalog.corpus_documents(scope)?)?;
         if current != run.themes.index_revision {
             return Err(CorpusThemeError::ThemesStale);
         }
@@ -856,8 +869,14 @@ fn model_tag(identity: &EmbeddingModelIdentity) -> String {
     )
 }
 
-fn revision_of(documents: &[CorpusDocument]) -> String {
+fn revision_of(documents: &[CorpusDocument], labelling: &[(String, u64)]) -> String {
     let mut digest = Sha256::new();
+    for (vocabulary, generation) in labelling {
+        digest.update(b"label\0");
+        digest.update(vocabulary.as_bytes());
+        digest.update([0]);
+        digest.update(generation.to_le_bytes());
+    }
     for document in documents {
         digest.update(document.document_id.as_bytes());
         digest.update([0]);
