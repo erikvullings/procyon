@@ -318,6 +318,9 @@ describe('navigation controller', () => {
     await navigation;
 
     expect(context.views.at(-1)?.entries[0]?.name).toBe('Projects');
+    // The dropped refresh is replayed once the navigation lands: the backend won't re-announce a
+    // change it already folded into its state, so the navigation snapshot may be stale.
+    await vi.waitFor(() => expect(context.client.listDirectory).toHaveBeenCalledOnce());
   });
 
   it('lets a background refresh proceed normally when no explicit navigation is in flight', async () => {

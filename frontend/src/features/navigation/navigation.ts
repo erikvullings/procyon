@@ -253,6 +253,10 @@ export function createNavigationController(
   // via `begin()` and restarting from scratch — otherwise a fast scroll can cancel-and-restart
   // the fetch forever, so it never completes.
   const pendingNextPage = new Map<string, Promise<void>>();
+  // Tabs whose background refresh (or pushed snapshot) was dropped because a navigation was in
+  // flight. The backend already folded that change into its own state and will not announce it
+  // again, so the navigation's possibly older snapshot must be revalidated once it has landed.
+  const deferredReloads = new Set<string>();
   // Consecutive background-load failures per tab, and any pending silent-retry timer for it.
   // Cleared on success or on `dispose()`; see `BACKGROUND_RETRY_THRESHOLD`.
   const backgroundFailureCounts = new Map<string, number>();
@@ -387,7 +391,10 @@ export function createNavigationController(
       return false;
     }
     const inFlight = activeRequests.get(key);
-    if (inFlight?.kind === 'navigate') return false;
+    if (inFlight?.kind === 'navigate') {
+      deferredReloads.add(key);
+      return false;
+    }
     inFlight?.controller.abort();
     activeRequests.delete(key);
     pendingNextPage.delete(key);
@@ -544,6 +551,7 @@ export function createNavigationController(
         inFlight.kind === 'navigate' &&
         !inFlight.controller.signal.aborted
       ) {
+        deferredReloads.add(tabKey(paneId, tab.id));
         return;
       }
     }
@@ -809,7 +817,11 @@ export function createNavigationController(
         });
       }
     } finally {
+      const landed = isCurrent(paneId, tab.id, request);
       finish(paneId, tab.id, request);
+      if (landed && deferredReloads.delete(tabKey(paneId, tab.id))) {
+        void load(paneId, { background: true });
+      }
     }
   }
 
@@ -953,6 +965,7 @@ export function createNavigationController(
       }
       backgroundRetryTimers.clear();
       backgroundFailureCounts.clear();
+      deferredReloads.clear();
     },
   };
 }

@@ -505,4 +505,19 @@ describe('getSelectedEntryLocations', () => {
     const expected = getSelectedEntries(selection, entries).map((e) => e.location);
     expect(locations).toEqual(expected);
   });
+
+  it('Shift+Down over already-selected rows deselects them and Shift+Up restores them', () => {
+    const ordered = ids('a', 'b', 'c', 'd');
+    let state: SelectionState = {
+      selectedEntryIds: ['a', 'b', 'c'],
+      cursorEntryId: 'a',
+      anchorEntryId: 'a',
+    };
+    state = reduceSelection(state, { type: 'extendRange', offset: 1 }, ordered);
+    expect(state.selectedEntryIds).toEqual(['b', 'c']);
+    state = reduceSelection(state, { type: 'extendRange', offset: 1 }, ordered);
+    expect(state.selectedEntryIds).toEqual(['c']);
+    state = reduceSelection(state, { type: 'extendRange', offset: -1 }, ordered);
+    expect(state.selectedEntryIds).toEqual(['b', 'c']);
+  });
 });

@@ -40,7 +40,12 @@ import type { FinderTagsLoader } from '../directory-table/finder-tags-loader';
 import type { NativeIconLoader } from '../directory-table/native-icon-loader';
 import type { ThumbnailLoader } from '../directory-table/thumbnail-loader';
 import { DiskUsageView, type DiskUsageViewState } from '../disk-usage/disk-usage-view';
-import { operationForDrop, resolveDropTarget, validateDropTarget } from '../drag-drop/drag-drop';
+import {
+  dropTargetWritable,
+  operationForDrop,
+  resolveDropTarget,
+  validateDropTarget,
+} from '../drag-drop/drag-drop';
 import { FileEditor } from '../editor/file-editor';
 import type { FileEditorController, FileEditorState } from '../editor/file-editor-controller';
 import type { EditorLinkHandlers } from '../editor/link-actions';
@@ -989,7 +994,7 @@ export function createPaneContentBuilder(
         const validation = validateDropTarget(
           context.getDraggedLocations(),
           target,
-          directory.writable === true,
+          dropTargetWritable(directory.writable === true, entry),
         );
         if (!validation.ok) return false;
         if (event.dataTransfer != null) {
@@ -1003,7 +1008,7 @@ export function createPaneContentBuilder(
         const validation = validateDropTarget(
           context.getDraggedLocations(),
           target,
-          directory.writable === true,
+          dropTargetWritable(directory.writable === true, entry),
         );
         if (!validation.ok) {
           if (!validation.noOp) context.setClipboardMessage(validation.message);

@@ -420,6 +420,37 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
         if cancellation.is_cancelled() {
             return Err(VfsError::Cancelled);
         }
+        let parsed = ParsedArchiveLocation::parse(&entry.location)?;
+        if parsed.inner.is_empty() {
+            // The archive root has no parent listing to find itself in. Describe it directly so
+            // callers (e.g. the pane's writability check) see a real directory instead of an error.
+            let archive_path = parsed.archive_path;
+            let name = archive_path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .ok_or_else(|| invalid(&entry.location))?;
+            let writable = tokio::task::spawn_blocking(move || {
+                detect_format(&archive_path).map(|format| format == ArchiveFormat::Zip)
+            })
+            .await
+            .map_err(join_error)??;
+            return Ok(EntrySummary {
+                id: stable_id(&entry.location),
+                location: entry.location.clone(),
+                name,
+                kind: EntryKind::Directory,
+                size: None,
+                modified_at: None,
+                created_at: None,
+                hidden: false,
+                read_only: !writable,
+                extension: None,
+                mime_type: None,
+                icon_key: None,
+                metadata_revision: 0,
+                git_status: None,
+            });
+        }
         let parent = entry
             .location
             .parent()

@@ -982,3 +982,31 @@ async fn ranges_of_tar_entries_and_encrypted_zip_entries_follow_the_normal_rules
         b"bytes"
     );
 }
+
+#[tokio::test]
+async fn inspecting_a_zip_root_reports_a_writable_directory() {
+    let root = tempdir().expect("temporary root");
+    let archive_path = root.path().join("sample.zip");
+    let file = std::fs::File::create(&archive_path).expect("create ZIP");
+    let mut writer = ZipWriter::new(file);
+    writer
+        .start_file("a.txt", SimpleFileOptions::default())
+        .expect("start entry");
+    writer.write_all(b"a").expect("write entry");
+    writer.finish().expect("finish ZIP");
+
+    let location = zip_location(&archive_path);
+    let entry = ArchiveFileSystemProvider::new()
+        .inspect(
+            &fm_vfs::EntryRef {
+                id: fm_domain::EntryId::new(),
+                location,
+            },
+            CancellationToken::new(),
+        )
+        .await
+        .expect("inspect archive root");
+
+    assert_eq!(entry.kind, EntryKind::Directory);
+    assert!(!entry.read_only, "a ZIP root must accept drops");
+}

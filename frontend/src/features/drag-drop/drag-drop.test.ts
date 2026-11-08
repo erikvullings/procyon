@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { EntrySummary, Location } from '../../models';
 import { withParentEntry } from '../panes/parent-entry';
-import { operationForDrop, resolveDropTarget, validateDropTarget } from './drag-drop';
+import {
+  dropTargetWritable,
+  operationForDrop,
+  resolveDropTarget,
+  validateDropTarget,
+} from './drag-drop';
 
 const pane: Location = { providerId: 'file', uri: 'file:///home/user/Documents' };
 
@@ -93,5 +98,20 @@ describe('drag and drop targets', () => {
     expect(operationForDrop('windows', { altKey: false, ctrlKey: true, metaKey: false })).toBe(
       'copy',
     );
+  });
+
+  it('lets a file leave an archive root through the parent row even when the pane is read-only', () => {
+    const archiveRoot: Location = { providerId: 'archive', uri: 'archive:///home/erik/a.zip!/' };
+    const parentRow = withParentEntry('/home/erik/a.zip!/', [])[0];
+    const target = resolveDropTarget(archiveRoot, parentRow);
+    expect(target).toEqual({ providerId: 'local', uri: 'file:///home/erik' });
+    const dragged: Location = {
+      providerId: 'archive',
+      uri: 'archive:///home/erik/a.zip!/note.txt',
+    };
+    expect(validateDropTarget([dragged], target, dropTargetWritable(false, parentRow))).toEqual({
+      ok: true,
+    });
+    expect(dropTargetWritable(false, entry('directory', 'file:///x/y'))).toBe(false);
   });
 });

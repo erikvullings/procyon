@@ -212,12 +212,25 @@ export function reduceSelection(
                 resolvedAnchorIndex + 1,
               )
             : orderedEntryIds.slice(resolvedAnchorIndex, resolvedAnchorIndex + 1);
-      const base = state.baseSelectedEntryIds;
+      // No range in progress (anchor is the cursor) over a multi-row selection: those marks become
+      // the base, so a new range neither drops them nor can fail to deselect them.
+      const rangeInProgress =
+        state.anchorEntryId !== undefined && state.anchorEntryId !== state.cursorEntryId;
+      const base =
+        state.baseSelectedEntryIds ??
+        (!rangeInProgress && state.selectedEntryIds.some((id) => id !== anchorEntryId)
+          ? state.selectedEntryIds
+          : undefined);
       const baseSet = base !== undefined ? new Set(base) : undefined;
+      // Extending from an already-selected row deselects the rows it sweeps over.
+      const deselecting = anchorEntryId !== undefined && baseSet?.has(anchorEntryId) === true;
+      const rangeSet = new Set(rangeIds);
       const merged =
-        baseSet !== undefined
-          ? orderedEntryIds.filter((id) => baseSet.has(id) || rangeIds.includes(id))
-          : rangeIds;
+        baseSet === undefined
+          ? rangeIds
+          : deselecting
+            ? orderedEntryIds.filter((id) => baseSet.has(id) && !rangeSet.has(id))
+            : orderedEntryIds.filter((id) => baseSet.has(id) || rangeSet.has(id));
       return {
         selectedEntryIds: merged,
         ...(orderedEntryIds[nextIndex] === undefined

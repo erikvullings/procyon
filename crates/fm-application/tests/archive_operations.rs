@@ -357,3 +357,32 @@ async fn archive_creation_never_overwrites_an_existing_archive() {
         b"existing archive bytes"
     );
 }
+
+#[tokio::test]
+async fn moving_a_zip_entry_to_the_folder_holding_the_zip_extracts_and_removes_it() {
+    let root = tempfile::tempdir().expect("temporary root");
+    let archive_path = root.path().join("sample.zip");
+    let file = fs::File::create(&archive_path).expect("create ZIP");
+    let mut writer = ZipWriter::new(file);
+    writer
+        .start_file("note.txt", SimpleFileOptions::default())
+        .expect("start entry");
+    writer.write_all(b"note").expect("write entry");
+    writer.finish().expect("finish ZIP");
+    let service = service(&root);
+    let archive = archive_root(&archive_path);
+
+    let moved = run(
+        &service,
+        OperationKindDto::Move,
+        vec![archive.join("note.txt").expect("archive entry")],
+        Some(Location::from_native_path(root.path()).expect("parent folder")),
+    )
+    .await;
+
+    assert_eq!(moved.state, OperationStateDto::Completed, "{moved:?}");
+    assert_eq!(
+        fs::read(root.path().join("note.txt")).expect("extracted file"),
+        b"note"
+    );
+}

@@ -23,6 +23,15 @@ export function resolveDropTarget(paneLocation: Location, row: EntrySummary | un
   return row?.kind === 'directory' ? row.location : paneLocation;
 }
 
+/**
+ * The `..` row drops into the parent folder, which is not the pane's own directory, so the pane's
+ * writability says nothing about it (a read-only archive pane still has a writable parent folder).
+ * The backend rejects a genuinely unwritable parent when the operation runs.
+ */
+export function dropTargetWritable(paneWritable: boolean, row: EntrySummary | undefined): boolean {
+  return isParentEntry(row?.id) || paneWritable;
+}
+
 function isSameOrDescendant(source: Location, destination: Location): boolean {
   if (source.providerId !== destination.providerId) return false;
   try {
