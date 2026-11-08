@@ -14,6 +14,7 @@ fm-events.workspace = true
 fm-search-acceleration.workspace = true
 fm-vfs = { path = "../fm-vfs" }
 ignore.workspace = true
+lopdf.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["fs", "io-util", "rt", "time"] }
 tokio-util.workspace = true

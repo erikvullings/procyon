@@ -19,6 +19,8 @@ const MAX_SCAN_BYTES: u64 = 10 * 1024 * 1024; // 10 MiB
 const MAX_SCAN_DURATION: Duration = Duration::from_millis(200);
 /// Bytes to read for binary sniff.
 const SNIFF_BYTES: usize = 8192;
+/// Time allowed to extract the text of one PDF before it is skipped.
+const MAX_PDF_EXTRACT_DURATION: Duration = Duration::from_secs(5);
 
 /// Outcome of scanning one file's content.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +44,9 @@ pub enum FileScanError {
     /// The scan was cancelled before completion.
     #[error("scan cancelled")]
     Cancelled,
+    /// The file used up its per-file time budget; only this file is skipped.
+    #[error("scan timed out")]
+    TimedOut,
 }
 
 /// Scans a single local file's contents for `query`, bounded by
@@ -70,6 +75,9 @@ pub async fn scan_file(
             matches: Vec::new(),
         });
     }
+    if sniff.starts_with(b"%PDF-") {
+        return scan_pdf(path, query, cancellation).await;
+    }
     if looks_like_binary(sniff) {
         return Err(FileScanError::BinaryFile);
     }
@@ -81,12 +89,104 @@ pub async fn scan_file(
         search_content(file, query, 500, cancellation),
     )
     .await
-    .map_err(|_| FileScanError::Cancelled)?
+    .map_err(|_| FileScanError::TimedOut)?
     .map_err(|_| FileScanError::Io(io::Error::other("vfs error")))?;
 
     Ok(FileScanResult {
         matches: scan_result.matches,
     })
+}
+
+/// Extracts the text layer of PDF `bytes` (one text line per line). `None` for a PDF without a
+/// readable text layer (scanned images, encrypted, malformed) or one that takes too long.
+pub(crate) async fn pdf_text(
+    bytes: Vec<u8>,
+    cancellation: &CancellationToken,
+) -> Result<Option<String>, FileScanError> {
+    let extraction = tokio::task::spawn_blocking(move || {
+        let document = lopdf::Document::load_mem(&bytes).ok()?;
+        let pages: Vec<u32> = document.get_pages().keys().copied().collect();
+        document.extract_text(&pages).ok()
+    });
+    tokio::select! {
+        () = cancellation.cancelled() => Err(FileScanError::Cancelled),
+        outcome = tokio::time::timeout(MAX_PDF_EXTRACT_DURATION, extraction) => match outcome {
+            Ok(Ok(Some(text))) if !text.trim().is_empty() => Ok(Some(text)),
+            Ok(_) => Ok(None),
+            Err(_) => Err(FileScanError::TimedOut),
+        },
+    }
+}
+
+/// Scans extracted PDF `text` for `query`.
+pub(crate) async fn scan_text(
+    text: &str,
+    query: &ContentQuery,
+    cancellation: &CancellationToken,
+) -> Result<FileScanResult, FileScanError> {
+    let scan_result = tokio::time::timeout(
+        MAX_SCAN_DURATION,
+        search_content(text.as_bytes(), query, 500, cancellation),
+    )
+    .await
+    .map_err(|_| FileScanError::TimedOut)?
+    .map_err(|_| FileScanError::Io(io::Error::other("vfs error")))?;
+    Ok(FileScanResult {
+        matches: scan_result.matches,
+    })
+}
+
+/// Scans a local PDF's text layer like a text file. A PDF without one is skipped like any other
+/// unreadable binary ([`FileScanError::BinaryFile`]).
+async fn scan_pdf(
+    path: &Path,
+    query: &ContentQuery,
+    cancellation: &CancellationToken,
+) -> Result<FileScanResult, FileScanError> {
+    let bytes = tokio::fs::read(path).await?;
+    match pdf_text(bytes, cancellation).await? {
+        Some(text) => scan_text(&text, query, cancellation).await,
+        None => Err(FileScanError::BinaryFile),
+    }
+}
+
+/// Writes a one-page PDF whose text layer is `text` (test fixture shared with the engine tests).
+#[cfg(test)]
+pub(crate) fn write_text_pdf(path: &Path, text: &str) {
+    use lopdf::content::{Content, Operation};
+    use lopdf::{Document, Object, Stream, dictionary};
+
+    let mut document = Document::with_version("1.5");
+    let pages_id = document.new_object_id();
+    let font_id = document.add_object(dictionary! {
+        "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
+    });
+    let resources_id = document.add_object(dictionary! {
+        "Font" => dictionary! { "F1" => font_id },
+    });
+    let content = Content {
+        operations: vec![
+            Operation::new("BT", vec![]),
+            Operation::new("Tf", vec!["F1".into(), 12.into()]),
+            Operation::new("Td", vec![50.into(), 700.into()]),
+            Operation::new("Tj", vec![Object::string_literal(text)]),
+            Operation::new("ET", vec![]),
+        ],
+    };
+    let content_id = document.add_object(Stream::new(dictionary! {}, content.encode().unwrap()));
+    let page_id = document.add_object(dictionary! {
+        "Type" => "Page", "Parent" => pages_id, "Contents" => content_id,
+        "Resources" => resources_id, "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
+    });
+    document.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages", "Kids" => vec![page_id.into()], "Count" => 1,
+        }),
+    );
+    let catalog_id = document.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    document.trailer.set("Root", catalog_id);
+    document.save(path).unwrap();
 }
 
 #[cfg(test)]
@@ -172,6 +272,25 @@ mod tests {
         .await
         .unwrap();
 
+        assert!(result.matches.is_empty());
+    }
+
+    #[tokio::test]
+    async fn finds_text_inside_a_pdf_instead_of_skipping_it_as_binary() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("report.pdf");
+        write_text_pdf(&path, "Staal in the report");
+
+        let query = ContentQuery::new("staal", false, false, false).unwrap();
+        let result = scan_file(&path, &query, &CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(result.matches.len(), 1);
+
+        let none = ContentQuery::new("absent", false, false, false).unwrap();
+        let result = scan_file(&path, &none, &CancellationToken::new())
+            .await
+            .unwrap();
         assert!(result.matches.is_empty());
     }
 

@@ -3313,6 +3313,7 @@ dependencies = [
  "fm-search-acceleration",
  "fm-vfs",
  "ignore",
+ "lopdf 0.44.0",
  "tempfile",
  "thiserror 2.0.20",
  "tokio",

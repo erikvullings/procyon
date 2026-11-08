@@ -40,7 +40,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::matcher::{detect_match_mode, matches_name};
-use crate::scanner::{FileScanError, scan_file};
+use crate::scanner::{FileScanError, pdf_text, scan_file, scan_text};
 use crate::store::SearchResultsStore;
 
 /// Maximum number of matches buffered before a batch is flushed.
@@ -1315,6 +1315,30 @@ async fn scan_vfs_file(
         return Ok(Vec::new());
     }
     let sniff = &sniff_buf[..sniffed];
+    if sniff.starts_with(b"%PDF-") {
+        // Search the text layer, like a local PDF.
+        let reader = provider
+            .open_read(entry, cancellation.clone())
+            .await
+            .map_err(|_| VfsScanError::Io)?;
+        let mut bytes = Vec::new();
+        reader
+            .take(VFS_MAX_SCAN_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .await
+            .map_err(|_| VfsScanError::Io)?;
+        if bytes.len() as u64 > VFS_MAX_SCAN_BYTES {
+            return Err(VfsScanError::FileTooLarge);
+        }
+        let text = pdf_text(bytes, cancellation)
+            .await
+            .map_err(|_| VfsScanError::Io)?
+            .ok_or(VfsScanError::Binary)?;
+        return scan_text(&text, query, cancellation)
+            .await
+            .map(|result| result.matches)
+            .map_err(|_| VfsScanError::Io);
+    }
     if looks_like_binary(sniff) {
         return Err(VfsScanError::Binary);
     }
@@ -2530,6 +2554,40 @@ mod tests {
             .expect("c.txt must have content matches");
         assert_eq!(a_matches[0].line_number, 2);
         assert_eq!(c_matches[0].line_number, 1);
+    }
+
+    #[tokio::test]
+    async fn content_search_finds_text_inside_pdfs() {
+        let root = tempdir().unwrap();
+        crate::scanner::write_text_pdf(&root.path().join("letter.pdf"), "Staal in the letter");
+        crate::scanner::write_text_pdf(&root.path().join("other.pdf"), "nothing relevant");
+
+        let store = Arc::new(SearchResultsStore::new());
+        let events = EventBus::new(16);
+        let engine = SearchEngine::new(Arc::clone(&store), events.clone(), ProviderRegistry::new());
+        let subscription = subscribe(&events);
+        let _ = engine
+            .start(
+                Uuid::new_v4(),
+                vec![Location::from_native_path(root.path()).unwrap()],
+                SearchOptions {
+                    filename_query: String::new(),
+                    content_query: Some(ContentQuery::new("staal", false, false, false).unwrap()),
+                    recurse: true,
+                    show_hidden: true,
+                    operation_id: None,
+                    ..base_options("")
+                },
+                EventAudience::Global,
+            )
+            .unwrap();
+
+        let batches = collect_batches(subscription).await;
+        let names: Vec<_> = batches
+            .iter()
+            .flat_map(|(entries, _, _)| entries.iter().map(|entry| entry.name.clone()))
+            .collect();
+        assert_eq!(names, vec!["letter.pdf".to_owned()]);
     }
 
     #[tokio::test]
