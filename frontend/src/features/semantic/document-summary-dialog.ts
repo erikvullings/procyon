@@ -1,6 +1,5 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel, Skeleton } from 'mithril-materialized';
-
 import type { SemanticClient } from '../../api/client/semantic-client.ts';
 import { t } from '../../i18n';
 import type {
@@ -12,6 +11,11 @@ import type {
   SummaryAttribution,
   WorkspaceId,
 } from '../../models';
+import {
+  checkProfileModel,
+  type ProfileModelStatus,
+  profileModelNotice,
+} from './profile-model-check';
 
 export interface DocumentSummaryDialogAttrs {
   readonly open: boolean;
@@ -129,6 +133,8 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
   let error: string | undefined;
   let profiles: readonly LlmProfile[] = [];
   let selectedProfileId: string | undefined;
+  /** Whether the profile's model exists on its AI service (checked when the dialog loads). */
+  let profileModelStatus: ProfileModelStatus | undefined;
   let includeImages = false;
   let preview: DocumentSummaryPreview | undefined;
   let summary: DocumentSummary | null = null;
@@ -142,6 +148,13 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
       profiles = await attrs.client.listLlmProfiles();
       selectedProfileId = profiles[0]?.id;
       const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId);
+      profileModelStatus = undefined;
+      if (selectedProfile !== undefined) {
+        void checkProfileModel(attrs.client, selectedProfile).then((status) => {
+          if (selectedProfileId === selectedProfile.id) profileModelStatus = status;
+          m.redraw();
+        });
+      }
       const [loadedPreview, loadedSummary] = await Promise.all([
         attrs.client.previewDocumentSummary({
           target: requestTarget,
@@ -257,6 +270,14 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
           !busy && profiles.length === 0
             ? m('p', t('documentSummary', 'profileRequired'))
             : undefined,
+          profiles[0] === undefined ||
+          profileModelNotice(profiles[0], profileModelStatus) === undefined
+            ? undefined
+            : m(
+                'p.fm-document-summary-error',
+                { role: 'alert' },
+                profileModelNotice(profiles[0], profileModelStatus),
+              ),
           preview?.imageInputAvailable !== true
             ? undefined
             : m('label.fm-document-summary-image-mode', [
@@ -341,7 +362,7 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
                     summary === null
                       ? t('documentSummary', 'generate')
                       : t('documentSummary', 'regenerate'),
-                  disabled: busy,
+                  disabled: busy || profileModelStatus === 'missing',
                   onclick: () => void generate(attrs),
                 },
               ]),

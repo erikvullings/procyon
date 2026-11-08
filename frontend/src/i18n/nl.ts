@@ -2108,6 +2108,11 @@ export const nl = {
     delete: 'Woordenlijst verwijderen',
     confirmDelete: 'Verwijderen en mappen loskoppelen bevestigen',
   },
+  llmProfileCheck: {
+    modelMissing:
+      'Het model "{model}" van AI-profiel "{name}" is niet beschikbaar bij de AI-dienst. Installeer het (bij Ollama: ollama pull {model}) of kies een ander model in het AI-profiel.',
+    unreachable: 'De AI-dienst van profiel "{name}" is niet bereikbaar.',
+  },
   llmProfiles: {
     title: 'AI-samenvattingen en antwoorden',
     description:
@@ -2647,7 +2652,10 @@ export const nl = {
     llmProfileInvalid: 'De instellingen van het AI-profiel zijn niet geldig.',
     cloudConsentRequired:
       'Je toestemming is vereist voordat de cloudservice {host} wordt gebruikt.',
-    llmModelUnavailable: 'Het ingestelde AI-model is niet beschikbaar.',
+    llmModelUnavailable:
+      'Het ingestelde AI-model is niet beschikbaar. Controleer of het geïnstalleerd is (bij Ollama: "ollama pull <model>") of kies een ander model in het AI-profiel.',
+    llmAuthentication:
+      'De AI-dienst weigerde de inloggegevens. Controleer de API-sleutel in het AI-profiel.',
     llmTimeout: 'Het AI-verzoek is verlopen.',
     llmTls: 'De beveiligde verbinding met de AI-service is geweigerd.',
     llmMalformedResponse: 'De AI-service stuurde een antwoord dat niet kon worden gelezen.',

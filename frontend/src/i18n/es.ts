@@ -1716,6 +1716,11 @@ export const es = {
     delete: 'Eliminar vocabulario',
     confirmDelete: 'Confirmar eliminación y desvincular carpetas',
   },
+  llmProfileCheck: {
+    modelMissing:
+      'El modelo «{model}» del perfil de IA «{name}» no está disponible en el servicio de IA. Instálelo (en Ollama: ollama pull {model}) o elija otro modelo en el perfil de IA.',
+    unreachable: 'No se pudo contactar con el servicio de IA del perfil «{name}».',
+  },
   llmProfiles: {
     title: 'Resúmenes y respuestas con IA',
     description:
@@ -2646,7 +2651,10 @@ export const es = {
     llmProfileInvalid: 'La configuración del perfil de IA no es válida.',
     cloudConsentRequired:
       'Se necesita su consentimiento antes de usar el servicio en la nube {host}.',
-    llmModelUnavailable: 'El modelo de IA configurado no está disponible.',
+    llmModelUnavailable:
+      'El modelo de IA configurado no está disponible. Compruebe que esté instalado (en Ollama: «ollama pull <modelo>») o elija otro modelo en el perfil de IA.',
+    llmAuthentication:
+      'El servicio de IA rechazó las credenciales. Compruebe la clave de API en el perfil de IA.',
     llmTimeout: 'La solicitud de IA agotó el tiempo de espera.',
     llmTls: 'Se rechazó la conexión segura con el servicio de IA.',
     llmMalformedResponse: 'El servicio de IA envió una respuesta que no se pudo leer.',

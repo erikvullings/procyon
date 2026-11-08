@@ -201,6 +201,24 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(button('Ask').disabled).toBe(false);
   });
 
+  it('warns when the profile model is not offered by its AI service and blocks Ask', async () => {
+    const client = new MockFileManagerClient();
+    await configureProfile(client, { capabilities: ['chatCompletions', 'modelDiscovery'] });
+    vi.spyOn(client, 'discoverLlmProfileModels').mockResolvedValue(['some-other-model']);
+    mount({ client, initialSubject: 'retrieval' });
+    await answersReady();
+    await askBarReady();
+    await search();
+    openAsk();
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-knowledge-answer-profile-notice')?.textContent).toContain(
+        'is not available on the AI service',
+      ),
+    );
+    expect(button('Ask').disabled).toBe(true);
+  });
+
   it('asks with Enter and keeps Shift+Enter for a new line', async () => {
     const client = new MockFileManagerClient();
     await configureProfile(client);
@@ -2739,7 +2757,11 @@ describe('KnowledgeSearchDialog capability independence (task 0206)', () => {
 /** Saves one generation profile so the mock host can answer (task 0207). */
 async function configureProfile(
   client: MockFileManagerClient,
-  options: { readonly name?: string; readonly baseUrl?: string } = {},
+  options: {
+    readonly name?: string;
+    readonly baseUrl?: string;
+    readonly capabilities?: readonly ('chatCompletions' | 'modelDiscovery')[];
+  } = {},
 ): Promise<{ readonly id: string; readonly name: string }> {
   const profile = await client.createLlmProfile({
     name: options.name ?? 'Local profile',
@@ -2757,7 +2779,7 @@ async function configureProfile(
       tlsPolicy: 'requireValidCertificate',
       customHeaders: {},
     },
-    capabilities: ['chatCompletions'],
+    capabilities: [...(options.capabilities ?? ['chatCompletions'])],
     redactFilenames: false,
   });
   return { id: profile.id, name: profile.name };

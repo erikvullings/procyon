@@ -42,6 +42,7 @@ import { lastPathSegment } from '../navigation/navigation';
 import { copyText } from '../preview/clipboard';
 import { SemanticFolderEnrolmentPrompt } from '../settings/semantic-library-management';
 import { pathFromUri } from '../workspace/workspace-layout';
+import { generationErrorText } from './generation-error';
 import { numberKnowledgeAnswer } from './knowledge-answer-references';
 import { knowledgeAnswerBody, knowledgeAskBar } from './knowledge-answer-view';
 import {
@@ -77,6 +78,11 @@ import {
   scopeSelectorText,
   splitSubjects,
 } from './knowledge-scope';
+import {
+  checkProfileModel,
+  type ProfileModelStatus,
+  profileModelNotice,
+} from './profile-model-check';
 
 /** Everything the shell knows about the default scope when the dialog opens. */
 export interface KnowledgeSearchDialogAttrs {
@@ -163,6 +169,8 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
    * `answerGeneration` is on screen, and it never influences retrieval.
    */
   let answerProfiles: readonly LlmProfile[] = [];
+  /** Whether each profile's model exists on its AI service; checked whenever profiles load. */
+  const modelStatuses = new Map<string, ProfileModelStatus>();
   let answerProfilesFailed = false;
   let loadedProfileRevision = 0;
   let answerCopied = false;
@@ -480,6 +488,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         capabilities = reportedCapabilities;
         answerProfiles = profileResult.profiles;
         answerProfilesFailed = profileResult.failed;
+        void verifyAnswerProfiles(attrs, loadGeneration);
       }
       roots = availableRoots;
       selectedRootIds = new Set(availableRoots.map((root) => root.rootId));
@@ -684,11 +693,31 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       capabilities = reported;
       answerProfiles = profiles;
       answerProfilesFailed = false;
+      void verifyAnswerProfiles(attrs, requestedGeneration);
     } catch {
       if (generation !== requestedGeneration || loadedProfileRevision !== requestedRevision) return;
       answerProfiles = [];
       answerProfilesFailed = true;
     }
+    m.redraw();
+  }
+
+  /**
+   * Checks that every generation profile's model exists on its AI service, so a missing model is
+   * reported up front instead of as a failed answer.
+   */
+  async function verifyAnswerProfiles(
+    attrs: KnowledgeSearchDialogAttrs,
+    forGeneration: number,
+  ): Promise<void> {
+    const checked = await Promise.all(
+      answerProfiles.map(
+        async (profile) => [profile.id, await checkProfileModel(attrs.client, profile)] as const,
+      ),
+    );
+    if (generation !== forGeneration) return;
+    modelStatuses.clear();
+    for (const [id, status] of checked) modelStatuses.set(id, status);
     m.redraw();
   }
 
@@ -701,7 +730,8 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       !generatingAnswer &&
       busy === undefined &&
       (result !== undefined || canSearchForQuestion(attrs)) &&
-      answerProfile() !== undefined
+      answerProfile() !== undefined &&
+      modelStatuses.get(answerProfile()?.id ?? '') !== 'missing'
     );
   }
 
@@ -803,7 +833,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         // did not ask to spend; they are told to press Search instead.
         answerError = t('knowledgeSearch', 'answerRefreshRequired');
       } else {
-        answerError = t('knowledgeSearch', 'answerFailed');
+        answerError = generationErrorText(cause, t('knowledgeSearch', 'answerFailed'));
       }
     } finally {
       if (sequence === answerSequence && startGeneration === generation) {
@@ -1066,6 +1096,14 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         'aria-busy': generatingAnswer ? 'true' : 'false',
       },
       [
+        profile === undefined ||
+        profileModelNotice(profile, modelStatuses.get(profile.id)) === undefined
+          ? undefined
+          : m(
+              '.fm-field-error.fm-knowledge-answer-profile-notice',
+              { role: 'alert' },
+              profileModelNotice(profile, modelStatuses.get(profile.id)),
+            ),
         m('.fm-knowledge-answer-output', { class: hasOutput ? undefined : 'is-empty' }, [
           m('.fm-knowledge-answer-output-heading', [
             m('h3', t('knowledgeSearch', 'answerHeading')),

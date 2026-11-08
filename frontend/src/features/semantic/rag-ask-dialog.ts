@@ -1,6 +1,5 @@
 import m, { type FactoryComponent } from 'mithril';
 import { IconButton, ModalPanel } from 'mithril-materialized';
-
 import { technicalTextInputAttrs } from '../../a11y/technical-text-input';
 import type { SemanticClient } from '../../api/client/semantic-client.ts';
 import { copyIcon, plusIcon } from '../../components/tabler-icons';
@@ -22,6 +21,12 @@ import { escapeRegExp } from '../../utilities/regex';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
 import { copyText } from '../preview/clipboard';
 import { decodeEvidenceTitle } from './evidence-title';
+import { generationErrorText } from './generation-error';
+import {
+  checkProfileModel,
+  type ProfileModelStatus,
+  profileModelNotice,
+} from './profile-model-check';
 
 export interface RagAskDialogAttrs {
   readonly open: boolean;
@@ -209,6 +214,8 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
   let currentFolderIncluded = false;
   let currentFolderStatusError = false;
   let selectedProfileId = '';
+  /** Whether the profile's model exists on its AI service (checked when the dialog loads). */
+  let profileModelStatus: ProfileModelStatus | undefined;
   let selectedScope: RagScopeKind = 'entireLibrary';
   let question = '';
   let allowModelKnowledge = false;
@@ -233,6 +240,14 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
       ]);
       profiles = availableProfiles;
       selectedProfileId = profiles[0]?.id ?? '';
+      profileModelStatus = undefined;
+      const firstProfile = profiles[0];
+      if (firstProfile !== undefined) {
+        void checkProfileModel(attrs.client, firstProfile).then((status) => {
+          if (profiles[0]?.id === firstProfile.id) profileModelStatus = status;
+          m.redraw();
+        });
+      }
       roots = library.roots.filter((root) => root.workspaceReferences.includes(attrs.workspaceId));
       saved = conversations;
       if (attrs.currentFolder !== undefined) {
@@ -344,7 +359,7 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
       }
     } catch (cause) {
       if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
-        error = t('ragAsk', 'generationFailed');
+        error = generationErrorText(cause, t('ragAsk', 'generationFailed'));
       }
     } finally {
       busy = undefined;
@@ -355,6 +370,7 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
 
   async function submit(attrs: RagAskDialogAttrs): Promise<void> {
     if (busy !== undefined || selectedProfileId === '' || question.trim() === '') return;
+    if (profileModelStatus === 'missing') return;
     if (preview === undefined && (await retrieve(attrs)) === undefined) return;
     await generate(attrs);
   }
@@ -760,6 +776,14 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                             : t('llmProfiles', 'cloud')
                         }`,
                       ]),
+                  profiles[0] === undefined ||
+                  profileModelNotice(profiles[0], profileModelStatus) === undefined
+                    ? undefined
+                    : m(
+                        '.fm-field-error',
+                        { role: 'alert' },
+                        profileModelNotice(profiles[0], profileModelStatus),
+                      ),
                   m('label', [
                     m('span', t('ragAsk', 'scope')),
                     m(
@@ -825,7 +849,10 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                   label:
                     busy === 'retrieving' ? t('ragAsk', 'retrieving') : t('ragAsk', 'retrieve'),
                   disabled:
-                    busy !== undefined || selectedProfileId === '' || question.trim() === '',
+                    busy !== undefined ||
+                    selectedProfileId === '' ||
+                    profileModelStatus === 'missing' ||
+                    question.trim() === '',
                   onclick: () => void retrieve(attrs),
                 },
               ]

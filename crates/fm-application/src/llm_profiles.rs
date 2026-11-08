@@ -199,6 +199,41 @@ pub enum LlmTestErrorCategory {
     Transport,
 }
 
+impl LlmTestErrorCategory {
+    /// The provider failure this category stands for, for callers that keep only the content-free
+    /// category (e.g. a `Copy` answer error) but must still report the reason to the user.
+    #[must_use]
+    pub(crate) const fn into_error(self) -> LlmProfileError {
+        match self {
+            Self::InvalidConfiguration => LlmProfileError::InvalidConfiguration,
+            Self::PolicyDenied => LlmProfileError::PolicyDenied,
+            Self::Authentication => LlmProfileError::Authentication,
+            Self::ModelUnavailable => LlmProfileError::ModelUnavailable,
+            Self::Timeout => LlmProfileError::Timeout,
+            Self::Tls => LlmProfileError::Tls,
+            Self::MalformedResponse => LlmProfileError::MalformedResponse,
+            Self::Cancelled => LlmProfileError::Cancelled,
+            Self::ConsentRequired | Self::Transport => LlmProfileError::Transport,
+        }
+    }
+}
+
+impl LlmTestErrorCategory {
+    /// The user-facing error for a failed generation. Differs from `ApplicationError::from` only
+    /// for rejected credentials, which must not read as a wrong archive password.
+    #[must_use]
+    pub(crate) fn into_application_error(self) -> crate::ApplicationError {
+        match self {
+            Self::Authentication => crate::rejection::Rejection::new(
+                crate::rejection::reason::LLM_AUTHENTICATION,
+                "the AI service rejected the credentials",
+            )
+            .into_platform(),
+            other => other.into_error().into(),
+        }
+    }
+}
+
 /// Content-free profile test outcome.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1086,9 +1121,21 @@ impl LlmProfileService {
                 .clamp(0.0, profile.advanced.temperature),
             ..generation
         };
-        self.transport
+        let first = self
+            .transport
             .generate_chat(&request, &bounded, cancellation)
-            .await
+            .await;
+        match first {
+            // A model that is not loaded yet (local servers load it on first use, which can take
+            // longer than the request timeout) is usually ready by now; one more attempt spares the
+            // user from pressing the button twice.
+            Err(LlmProfileError::Timeout) if !cancellation.is_cancelled() => {
+                self.transport
+                    .generate_chat(&request, &bounded, cancellation)
+                    .await
+            }
+            other => other,
+        }
     }
 
     pub(crate) async fn model_capabilities(
@@ -1912,6 +1959,9 @@ mod tests {
         response: LlmProbeResponse,
         captured: Mutex<Vec<LlmProbeRequest>>,
         limits: Mutex<LlmModelLimits>,
+        /// Failures `generate_chat` returns, front first, before it starts succeeding.
+        generate_failures: Mutex<std::collections::VecDeque<LlmProfileError>>,
+        generate_calls: std::sync::atomic::AtomicUsize,
     }
 
     #[async_trait]
@@ -1955,6 +2005,11 @@ mod tests {
             if cancellation.is_cancelled() {
                 return Err(LlmProfileError::Cancelled);
             }
+            self.generate_calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if let Some(failure) = self.generate_failures.lock().unwrap().pop_front() {
+                return Err(failure);
+            }
             self.captured.lock().unwrap().push(request.clone());
             parse_streaming_chat(&self.response.body)
         }
@@ -1980,6 +2035,8 @@ mod tests {
                 context_window: Some(128_000),
                 maximum_answer_tokens: Some(32_000),
             }),
+            generate_failures: Mutex::new(std::collections::VecDeque::new()),
+            generate_calls: std::sync::atomic::AtomicUsize::new(0),
         });
         (
             LlmProfileService::new(
@@ -2732,6 +2789,86 @@ mod tests {
                 .await
                 .unwrap(),
             "OK"
+        );
+    }
+
+    fn tiny_generation() -> LlmChatGeneration {
+        LlmChatGeneration {
+            system_prompt: "Answer.".into(),
+            user_prompt: "Question".into(),
+            images: Vec::new(),
+            maximum_tokens: 16,
+            context_window: None,
+            temperature: 0.0,
+        }
+    }
+
+    #[tokio::test]
+    async fn a_timeout_while_the_model_loads_is_retried_once() {
+        let (service, _, transport) = service(LlmHostPolicy::desktop());
+        let profile = service
+            .create(draft(LlmPreset::OpenAiCompatible, "http://127.0.0.1:8000"))
+            .await
+            .unwrap();
+        transport
+            .generate_failures
+            .lock()
+            .unwrap()
+            .push_back(LlmProfileError::Timeout);
+
+        let answer = service
+            .generate(profile.id, tiny_generation(), &CancellationToken::new())
+            .await
+            .unwrap();
+
+        assert_eq!(answer, "OK");
+        assert_eq!(
+            transport
+                .generate_calls
+                .load(std::sync::atomic::Ordering::SeqCst),
+            2
+        );
+    }
+
+    #[tokio::test]
+    async fn timeouts_are_retried_only_once_and_other_failures_not_at_all() {
+        let (service, _, transport) = service(LlmHostPolicy::desktop());
+        let profile = service
+            .create(draft(LlmPreset::OpenAiCompatible, "http://127.0.0.1:8000"))
+            .await
+            .unwrap();
+        {
+            let mut failures = transport.generate_failures.lock().unwrap();
+            failures.push_back(LlmProfileError::Timeout);
+            failures.push_back(LlmProfileError::Timeout);
+        }
+        let error = service
+            .generate(profile.id, tiny_generation(), &CancellationToken::new())
+            .await
+            .unwrap_err();
+        assert!(matches!(error, LlmProfileError::Timeout));
+        assert_eq!(
+            transport
+                .generate_calls
+                .load(std::sync::atomic::Ordering::SeqCst),
+            2
+        );
+
+        transport
+            .generate_failures
+            .lock()
+            .unwrap()
+            .push_back(LlmProfileError::ModelUnavailable);
+        let error = service
+            .generate(profile.id, tiny_generation(), &CancellationToken::new())
+            .await
+            .unwrap_err();
+        assert!(matches!(error, LlmProfileError::ModelUnavailable));
+        assert_eq!(
+            transport
+                .generate_calls
+                .load(std::sync::atomic::Ordering::SeqCst),
+            3
         );
     }
 }

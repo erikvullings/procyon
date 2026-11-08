@@ -697,5 +697,7 @@ pub(crate) fn answer_error_to_application(error: KnowledgeAnswerError) -> Applic
         }
         KnowledgeAnswerError::Cancelled => ApplicationError::OperationCancelled,
         KnowledgeAnswerError::GenerationFailed => ApplicationError::Internal,
+        // Keeps the reason (model missing, unreachable, timeout) so the UI can say what to fix.
+        KnowledgeAnswerError::Provider(category) => category.into_application_error(),
     }
 }

@@ -35,7 +35,7 @@ use crate::knowledge_search::{
     KnowledgeSearchError, RegistrationGuard,
 };
 use crate::llm_profiles::{
-    EndpointLocality, LlmChatGeneration, LlmProfileError, LlmProfileService,
+    EndpointLocality, LlmChatGeneration, LlmProfileError, LlmProfileService, LlmTestErrorCategory,
     normalize_endpoint_locality,
 };
 use crate::rag::{grounded_system_prompt, normalize_citation_references, parse_generated_answer};
@@ -80,6 +80,10 @@ pub(crate) enum KnowledgeAnswerError {
     /// Generation failed for a sanitized reason.
     #[error("knowledge answer generation failed")]
     GenerationFailed,
+    /// The model provider failed in a way the user can act on (model not installed, endpoint
+    /// unreachable, timeout, ...).
+    #[error("knowledge answer generation failed at the model provider")]
+    Provider(LlmTestErrorCategory),
     /// The answer was cancelled by the caller.
     #[error("knowledge answer generation was cancelled")]
     Cancelled,
@@ -511,7 +515,7 @@ fn map_profile_error(error: LlmProfileError) -> KnowledgeAnswerError {
         LlmProfileError::NotFound => KnowledgeAnswerError::ProfileUnavailable,
         LlmProfileError::ConsentRequired(_) => KnowledgeAnswerError::ConsentRequired,
         LlmProfileError::Cancelled => KnowledgeAnswerError::Cancelled,
-        _ => KnowledgeAnswerError::GenerationFailed,
+        other => KnowledgeAnswerError::Provider(other.category()),
     }
 }
 
@@ -1096,12 +1100,42 @@ mod tests {
             .await
             .expect_err("a transport failure must not surface provider detail");
 
-        assert_eq!(error, KnowledgeAnswerError::GenerationFailed);
+        assert_eq!(
+            error,
+            KnowledgeAnswerError::Provider(LlmTestErrorCategory::Transport)
+        );
         assert!(!error.to_string().contains("transport"));
         assert_eq!(
             map_profile_error(LlmProfileError::ConsentRequired("example.com".to_owned())),
             KnowledgeAnswerError::ConsentRequired
         );
+    }
+
+    #[test]
+    fn a_missing_model_is_reported_as_a_localisable_reason_not_a_generic_failure() {
+        use crate::ApplicationError;
+        use crate::rejection::reason;
+
+        let error = crate::knowledge_mapping::answer_error_to_application(map_profile_error(
+            LlmProfileError::ModelUnavailable,
+        ));
+        let ApplicationError::Rejected(rejection) = error else {
+            panic!("a missing model must be a rejection, got {error:?}");
+        };
+        assert_eq!(rejection.reason, reason::LLM_MODEL_UNAVAILABLE);
+
+        for (failure, expected) in [
+            (LlmProfileError::Timeout, reason::LLM_TIMEOUT),
+            (LlmProfileError::Transport, reason::LLM_TRANSPORT),
+            (LlmProfileError::Authentication, reason::LLM_AUTHENTICATION),
+        ] {
+            let ApplicationError::PlatformFailed(rejection) =
+                crate::knowledge_mapping::answer_error_to_application(map_profile_error(failure))
+            else {
+                panic!("expected a platform rejection for {expected}");
+            };
+            assert_eq!(rejection.reason, expected);
+        }
     }
 
     #[tokio::test]

@@ -2076,6 +2076,11 @@ export const en = {
     delete: 'Delete vocabulary',
     confirmDelete: 'Confirm deletion and detach folders',
   },
+  llmProfileCheck: {
+    modelMissing:
+      'The model "{model}" of AI profile "{name}" is not available on the AI service. Install it (for Ollama: ollama pull {model}) or choose another model in the AI profile.',
+    unreachable: 'The AI service of profile "{name}" could not be reached.',
+  },
   llmProfiles: {
     title: 'AI summaries and answers',
     description:
@@ -2594,7 +2599,10 @@ export const en = {
     connectionFailed: 'Connecting failed: {detail}',
     llmProfileInvalid: 'The AI profile settings are not valid.',
     cloudConsentRequired: 'Your consent is required before using the cloud service {host}.',
-    llmModelUnavailable: 'The configured AI model is not available.',
+    llmModelUnavailable:
+      'The configured AI model is not available. Check that it is installed (for Ollama: run "ollama pull <model>") or choose another model in the AI profile.',
+    llmAuthentication:
+      'The AI service rejected the credentials. Check the API key in the AI profile.',
     llmTimeout: 'The AI request timed out.',
     llmTls: 'The secure connection to the AI service was rejected.',
     llmMalformedResponse: 'The AI service sent a response that could not be read.',

@@ -86,6 +86,8 @@ pub mod reason {
     pub const LLM_MALFORMED_RESPONSE: &str = "llmMalformedResponse";
     /// The LLM transport failed.
     pub const LLM_TRANSPORT: &str = "llmTransport";
+    /// The LLM service rejected the profile's credentials.
+    pub const LLM_AUTHENTICATION: &str = "llmAuthentication";
     /// The platform does not support the capability.
     pub const PLATFORM_UNSUPPORTED: &str = "platformUnsupported";
     /// A platform call could not find the path (`path`).

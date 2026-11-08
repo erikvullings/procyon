@@ -1420,7 +1420,7 @@ fn map_profile_error(error: LlmProfileError) -> RagError {
         LlmProfileError::NotFound => RagError::ProfileUnavailable,
         LlmProfileError::ConsentRequired(_) => RagError::ConsentRequired,
         LlmProfileError::Cancelled => RagError::Cancelled,
-        _ => RagError::GenerationFailed,
+        other => RagError::Provider(other.category()),
     }
 }
 
@@ -1448,6 +1448,10 @@ pub enum RagError {
     /// Generation failed.
     #[error("grounded Ask generation failed")]
     GenerationFailed,
+    /// The model provider failed in a way the user can act on (model not installed, endpoint
+    /// unreachable, timeout, ...).
+    #[error("grounded Ask generation failed at the model provider")]
+    Provider(crate::llm_profiles::LlmTestErrorCategory),
     /// Operation was cancelled.
     #[error("grounded Ask was cancelled")]
     Cancelled,
@@ -1638,6 +1642,7 @@ pub(crate) fn rag_error_to_application(error: RagError) -> ApplicationError {
         }
         RagError::Cancelled => ApplicationError::OperationCancelled,
         RagError::ConsentRequired => ApplicationError::PermissionDenied,
+        RagError::Provider(category) => category.into_application_error(),
         RagError::RetrievalFailed
         | RagError::GenerationFailed
         | RagError::Persistence

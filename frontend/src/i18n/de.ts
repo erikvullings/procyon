@@ -1736,6 +1736,11 @@ export const de = {
     delete: 'Vokabular löschen',
     confirmDelete: 'Löschen bestätigen und Ordner trennen',
   },
+  llmProfileCheck: {
+    modelMissing:
+      'Das Modell „{model}“ des KI-Profils „{name}“ ist beim KI-Dienst nicht verfügbar. Installieren Sie es (bei Ollama: ollama pull {model}) oder wählen Sie im KI-Profil ein anderes Modell.',
+    unreachable: 'Der KI-Dienst des Profils „{name}“ ist nicht erreichbar.',
+  },
   llmProfiles: {
     title: 'KI-Zusammenfassungen und -Antworten',
     description:
@@ -2677,7 +2682,10 @@ export const de = {
     llmProfileInvalid: 'Die Einstellungen des KI-Profils sind ungültig.',
     cloudConsentRequired:
       'Vor der Nutzung des Cloud-Dienstes {host} ist Ihre Zustimmung erforderlich.',
-    llmModelUnavailable: 'Das konfigurierte KI-Modell ist nicht verfügbar.',
+    llmModelUnavailable:
+      'Das konfigurierte KI-Modell ist nicht verfügbar. Prüfen Sie, ob es installiert ist (bei Ollama: „ollama pull <Modell>“), oder wählen Sie im KI-Profil ein anderes Modell.',
+    llmAuthentication:
+      'Der KI-Dienst hat die Zugangsdaten abgelehnt. Prüfen Sie den API-Schlüssel im KI-Profil.',
     llmTimeout: 'Die KI-Anfrage hat das Zeitlimit überschritten.',
     llmTls: 'Die sichere Verbindung zum KI-Dienst wurde abgelehnt.',
     llmMalformedResponse:
