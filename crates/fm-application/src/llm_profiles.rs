@@ -51,6 +51,51 @@ pub enum LlmPreset {
     AzureOpenAi,
 }
 
+/// How a local OpenAI-compatible server is asked not to emit reasoning (thinking) tokens. The
+/// working variant differs per server and model, so the service learns it and remembers it on the
+/// profile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ReasoningSwitch {
+    /// `chat_template_kwargs.enable_thinking=false` and `reasoning_effort="none"`.
+    Both,
+    /// `chat_template_kwargs.enable_thinking=false` (vLLM, SGLang, oMLX; Qwen-style templates).
+    TemplateKwargs,
+    /// `reasoning_effort="none"` (LM Studio, gpt-oss style).
+    EffortNone,
+    /// No switch: the server rejects or ignores them.
+    Plain,
+}
+
+impl ReasoningSwitch {
+    /// Variants to try, most capable first, until the server accepts one.
+    const LADDER: [Self; 4] = [
+        Self::Both,
+        Self::TemplateKwargs,
+        Self::EffortNone,
+        Self::Plain,
+    ];
+
+    /// The variant to use after this one was accepted but the model reasoned anyway.
+    const fn after_ineffective(self) -> Self {
+        match self {
+            Self::TemplateKwargs => Self::EffortNone,
+            Self::Both | Self::EffortNone | Self::Plain => Self::Plain,
+        }
+    }
+}
+
+const fn supports_reasoning_switch(preset: LlmPreset) -> bool {
+    matches!(
+        preset,
+        LlmPreset::LmStudio
+            | LlmPreset::Vllm
+            | LlmPreset::Sglang
+            | LlmPreset::Omlx
+            | LlmPreset::MlxServe
+    )
+}
+
 /// Protocol capability advertised by a profile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -119,6 +164,9 @@ pub struct LlmProfile {
     /// Historical field name; stores the exact normalized endpoint in schema 4.
     pub consented_host: Option<String>,
     pub redact_filenames: bool,
+    /// The thinking-off variant this server and model accepted last time (learned, not user-set).
+    #[serde(default)]
+    pub reasoning_switch: Option<ReasoningSwitch>,
 }
 
 /// User-editable profile values and an optional write-only API key.
@@ -249,6 +297,9 @@ pub struct LlmProbeRequest {
     pub api_key_header: &'static str,
     pub headers: BTreeMap<String, String>,
     pub timeout: Duration,
+    /// How to ask the server not to emit reasoning tokens; `Plain` for everything but the local
+    /// OpenAI-compatible presets (strict cloud APIs reject unknown parameters).
+    pub reasoning_switch: ReasoningSwitch,
 }
 
 impl std::fmt::Debug for LlmProbeRequest {
@@ -307,6 +358,18 @@ pub struct LlmChatGeneration {
     pub temperature: f32,
 }
 
+/// Result of one generation attempt that may carry a thinking-off switch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChatOutcome {
+    Generated {
+        text: String,
+        /// The model produced reasoning tokens although a switch was sent.
+        reasoning_seen: bool,
+    },
+    /// The server rejected the request because of the thinking-off parameters.
+    Rejected,
+}
+
 #[async_trait]
 pub trait LlmProbeTransport: Send + Sync {
     async fn discover_model_limits(
@@ -344,6 +407,23 @@ pub trait LlmProbeTransport: Send + Sync {
         generation: &LlmChatGeneration,
         cancellation: &CancellationToken,
     ) -> Result<String, LlmProfileError>;
+
+    /// Like [`Self::generate_chat`], but honours `request.reasoning_switch` and reports whether the
+    /// server rejected it or the model reasoned anyway. Transports without such a switch need not
+    /// override this.
+    async fn generate_chat_adaptive(
+        &self,
+        request: &LlmProbeRequest,
+        generation: &LlmChatGeneration,
+        cancellation: &CancellationToken,
+    ) -> Result<ChatOutcome, LlmProfileError> {
+        self.generate_chat(request, generation, cancellation)
+            .await
+            .map(|text| ChatOutcome::Generated {
+                text,
+                reasoning_seen: false,
+            })
+    }
 }
 
 /// Reqwest implementation used by real hosts.
@@ -526,25 +606,51 @@ impl LlmProbeTransport for ReqwestLlmProbeTransport {
         if !generation.images.is_empty() {
             return Err(LlmProfileError::InvalidConfiguration);
         }
-        let body = json!({
-            "model": request.model,
-            "messages": [
-                {"role": "system", "content": generation.system_prompt},
-                {"role": "user", "content": generation.user_prompt}
-            ],
-            "stream": true,
-            "max_tokens": generation.maximum_tokens,
-            "temperature": generation.temperature,
-        });
+        match self
+            .generate_chat_adaptive(request, generation, cancellation)
+            .await?
+        {
+            ChatOutcome::Generated { text, .. } => Ok(text),
+            ChatOutcome::Rejected => Err(LlmProfileError::Transport),
+        }
+    }
+
+    async fn generate_chat_adaptive(
+        &self,
+        request: &LlmProbeRequest,
+        generation: &LlmChatGeneration,
+        cancellation: &CancellationToken,
+    ) -> Result<ChatOutcome, LlmProfileError> {
+        if request.ollama_generation_url.is_some() {
+            return self
+                .generate_chat(request, generation, cancellation)
+                .await
+                .map(|text| ChatOutcome::Generated {
+                    text,
+                    reasoning_seen: false,
+                });
+        }
+        if !generation.images.is_empty() {
+            return Err(LlmProfileError::InvalidConfiguration);
+        }
+        let body = openai_generation_body(request, generation, request.reasoning_switch);
         let response = tokio::select! {
             () = cancellation.cancelled() => return Err(LlmProfileError::Cancelled),
             response = self.request(reqwest::Method::POST, request, &request.url).json(&body).send() => {
                 response.map_err(map_reqwest)?
             }
         };
-        classify_http_status(response.status().as_u16())?;
+        let status = response.status().as_u16();
+        if request.reasoning_switch != ReasoningSwitch::Plain && matches!(status, 400 | 422) {
+            return Ok(ChatOutcome::Rejected);
+        }
+        classify_http_status(status)?;
         let bytes = read_bounded_body(response, cancellation).await?;
-        parse_streaming_chat(&bytes)
+        let (text, reasoning_seen) = parse_streaming_chat_detailed(&bytes)?;
+        Ok(ChatOutcome::Generated {
+            text,
+            reasoning_seen,
+        })
     }
 }
 
@@ -791,6 +897,12 @@ impl LlmProfileService {
         profile.consented_host = (old_endpoint == new_endpoint)
             .then_some(old.consented_host)
             .flatten();
+        if old_endpoint == new_endpoint
+            && old.preset == profile.preset
+            && old.model == profile.model
+        {
+            profile.reasoning_switch = old.reasoning_switch;
+        }
         validate_profile(&profile)?;
         let replacement_ref = match api_key {
             Some(api_key) => Some(
@@ -1105,21 +1217,83 @@ impl LlmProfileService {
                 .clamp(0.0, profile.advanced.temperature),
             ..generation
         };
-        let first = self
-            .transport
-            .generate_chat(&request, &bounded, cancellation)
-            .await;
-        match first {
-            // A model that is not loaded yet (local servers load it on first use, which can take
-            // longer than the request timeout) is usually ready by now; one more attempt spares the
-            // user from pressing the button twice.
-            Err(LlmProfileError::Timeout) if !cancellation.is_cancelled() => {
-                self.transport
-                    .generate_chat(&request, &bounded, cancellation)
-                    .await
-            }
-            other => other,
+        let capable = supports_reasoning_switch(profile.preset);
+        let mut candidates = Vec::new();
+        if capable {
+            // The variant that worked last time goes first; the rest only matter if the server
+            // changed its mind.
+            candidates.extend(profile.reasoning_switch);
+            candidates.extend(
+                ReasoningSwitch::LADDER
+                    .into_iter()
+                    .filter(|switch| Some(*switch) != profile.reasoning_switch),
+            );
+        } else {
+            candidates.push(ReasoningSwitch::Plain);
         }
+        for switch in candidates {
+            let attempt = LlmProbeRequest {
+                reasoning_switch: switch,
+                ..request.clone()
+            };
+            let outcome = match self
+                .transport
+                .generate_chat_adaptive(&attempt, &bounded, cancellation)
+                .await
+            {
+                // A model that is not loaded yet (local servers load it on first use, which can take
+                // longer than the request timeout) is usually ready by now; one more attempt spares
+                // the user from pressing the button twice.
+                Err(LlmProfileError::Timeout) if !cancellation.is_cancelled() => {
+                    self.transport
+                        .generate_chat_adaptive(&attempt, &bounded, cancellation)
+                        .await?
+                }
+                other => other?,
+            };
+            let ChatOutcome::Generated {
+                text,
+                reasoning_seen,
+            } = outcome
+            else {
+                continue;
+            };
+            if capable {
+                let learned = if reasoning_seen {
+                    switch.after_ineffective()
+                } else {
+                    switch
+                };
+                self.remember_reasoning_switch(id, learned);
+            }
+            let answer = strip_reasoning(&text);
+            return if answer.is_empty() {
+                Err(LlmProfileError::MalformedResponse)
+            } else {
+                Ok(answer)
+            };
+        }
+        Err(LlmProfileError::Transport)
+    }
+
+    /// Stores the thinking-off variant a server accepted so the next generation starts with it.
+    /// Best effort: a failed save only costs a retry next time.
+    fn remember_reasoning_switch(&self, id: Uuid, switch: ReasoningSwitch) {
+        let Ok(mut document) = self.lock() else {
+            return;
+        };
+        let Some(stored) = document
+            .profiles
+            .iter_mut()
+            .find(|profile| profile.id == id)
+        else {
+            return;
+        };
+        if stored.reasoning_switch == Some(switch) {
+            return;
+        }
+        stored.reasoning_switch = Some(switch);
+        let _ = self.persist(&document);
     }
 
     pub(crate) async fn model_capabilities(
@@ -1247,6 +1421,7 @@ impl LlmProfileService {
             },
             headers: profile.advanced.custom_headers.clone(),
             timeout: Duration::from_secs(profile.advanced.timeout_seconds),
+            reasoning_switch: ReasoningSwitch::Plain,
         })
     }
 
@@ -1313,6 +1488,7 @@ fn profile_from_draft(
         capabilities: draft.capabilities,
         consented_host: None,
         redact_filenames: draft.redact_filenames,
+        reasoning_switch: None,
     }
 }
 
@@ -1423,6 +1599,59 @@ fn models_url(chat_url: &str) -> Option<String> {
     chat_url
         .strip_suffix("/chat/completions")
         .map(|base| format!("{base}/models"))
+}
+
+/// Removes the chain-of-thought a reasoning model may put inline in its answer
+/// (`<think>…</think>`, as emitted by Qwen, DeepSeek-R1, oMLX and LM Studio). A block that is never
+/// closed means the model ran out of tokens while thinking, so nothing after it is an answer.
+pub(crate) fn strip_reasoning(text: &str) -> String {
+    const OPEN: &str = "<think>";
+    const CLOSE: &str = "</think>";
+    let mut rest = text;
+    let mut answer = String::with_capacity(text.len());
+    while let Some(start) = rest.find(OPEN) {
+        answer.push_str(&rest[..start]);
+        let after = &rest[start + OPEN.len()..];
+        match after.find(CLOSE) {
+            Some(end) => rest = &after[end + CLOSE.len()..],
+            None => return answer.trim().to_owned(),
+        }
+    }
+    answer.push_str(rest);
+    // Some templates open the block in the prompt, so only the closing tag appears in the output.
+    let answer = answer
+        .rsplit_once(CLOSE)
+        .map_or(answer.as_str(), |(_, tail)| tail);
+    answer.trim().to_owned()
+}
+
+/// Body of an OpenAI-compatible streaming chat request, carrying the thinking-off parameters the
+/// given [`ReasoningSwitch`] stands for.
+fn openai_generation_body(
+    request: &LlmProbeRequest,
+    generation: &LlmChatGeneration,
+    switch: ReasoningSwitch,
+) -> Value {
+    let mut body = json!({
+        "model": request.model,
+        "messages": [
+            {"role": "system", "content": generation.system_prompt},
+            {"role": "user", "content": generation.user_prompt}
+        ],
+        "stream": true,
+        "max_tokens": generation.maximum_tokens,
+        "temperature": generation.temperature,
+    });
+    if matches!(
+        switch,
+        ReasoningSwitch::Both | ReasoningSwitch::TemplateKwargs
+    ) {
+        body["chat_template_kwargs"] = json!({"enable_thinking": false});
+    }
+    if matches!(switch, ReasoningSwitch::Both | ReasoningSwitch::EffortNone) {
+        body["reasoning_effort"] = json!("none");
+    }
+    body
 }
 
 fn ollama_chat_url(endpoint: &NormalizedEndpoint) -> String {
@@ -1551,11 +1780,18 @@ fn validate_streaming_chat(bytes: &[u8]) -> Result<(), LlmProfileError> {
 }
 
 fn parse_streaming_chat(bytes: &[u8]) -> Result<String, LlmProfileError> {
+    parse_streaming_chat_detailed(bytes).map(|(text, _)| text)
+}
+
+/// Parses a streamed completion into its content and whether the model also streamed reasoning
+/// (`reasoning_content`/`reasoning` deltas, or inline `<think>` tags).
+fn parse_streaming_chat_detailed(bytes: &[u8]) -> Result<(String, bool), LlmProfileError> {
     let text = std::str::from_utf8(bytes).map_err(|_| LlmProfileError::MalformedResponse)?;
     let mut valid_event = false;
     let mut terminated = false;
     let mut truncated = false;
     let mut content = String::new();
+    let mut reasoning_seen = false;
     for line in text.lines() {
         let Some(data) = line.strip_prefix("data:") else {
             continue;
@@ -1573,6 +1809,13 @@ fn parse_streaming_chat(bytes: &[u8]) -> Result<String, LlmProfileError> {
             .ok_or(LlmProfileError::MalformedResponse)?;
         valid_event = true;
         for choice in choices {
+            reasoning_seen |= ["reasoning_content", "reasoning"].iter().any(|key| {
+                choice
+                    .get("delta")
+                    .and_then(|delta| delta.get(*key))
+                    .and_then(Value::as_str)
+                    .is_some_and(|text| !text.is_empty())
+            });
             if let Some(delta) = choice
                 .get("delta")
                 .and_then(|delta| delta.get("content"))
@@ -1595,7 +1838,8 @@ fn parse_streaming_chat(bytes: &[u8]) -> Result<String, LlmProfileError> {
         }
     }
     if valid_event && terminated && !truncated {
-        Ok(content)
+        reasoning_seen |= content.contains("<think>") || content.contains("</think>");
+        Ok((content, reasoning_seen))
     } else {
         Err(LlmProfileError::MalformedResponse)
     }
@@ -1934,6 +2178,49 @@ fn test_category_to_dto(value: LlmTestErrorCategory) -> LlmTestErrorCategoryDto 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn local_servers_are_asked_to_skip_thinking_only_when_enabled() {
+        let request = LlmProbeRequest {
+            url: "http://localhost:8000/v1/chat/completions".into(),
+            ollama_generation_url: None,
+            model: "m".into(),
+            api_key: None,
+            api_key_header: "authorization",
+            headers: BTreeMap::new(),
+            timeout: Duration::from_secs(30),
+            reasoning_switch: ReasoningSwitch::Both,
+        };
+        let generation = LlmChatGeneration {
+            system_prompt: "s".into(),
+            user_prompt: "u".into(),
+            images: Vec::new(),
+            maximum_tokens: 10,
+            context_window: None,
+            temperature: 0.0,
+        };
+        let off = openai_generation_body(&request, &generation, ReasoningSwitch::Both);
+        assert_eq!(off["chat_template_kwargs"]["enable_thinking"], false);
+        assert_eq!(off["reasoning_effort"], "none");
+        let plain = openai_generation_body(&request, &generation, ReasoningSwitch::Plain);
+        assert!(plain.get("chat_template_kwargs").is_none());
+        assert!(plain.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn reasoning_blocks_are_removed_from_generated_text() {
+        assert_eq!(strip_reasoning("<think>hmm</think>{\"a\":1}"), "{\"a\":1}");
+        assert_eq!(
+            strip_reasoning("x<think>a</think>y<think>b</think>z"),
+            "xyz"
+        );
+        assert_eq!(
+            strip_reasoning("reasoning only</think>\n{\"a\":1}"),
+            "{\"a\":1}"
+        );
+        assert_eq!(strip_reasoning("<think>never closed {\"a\":1}"), "");
+        assert_eq!(strip_reasoning("plain"), "plain");
+    }
+
     use super::*;
     use fm_credentials::InMemoryCredentialStore;
     use tempfile::tempdir;
@@ -2345,6 +2632,7 @@ mod tests {
             api_key_header: "authorization",
             headers: BTreeMap::new(),
             timeout: Duration::from_secs(30),
+            reasoning_switch: ReasoningSwitch::Plain,
         };
         let body = ollama_generation_body(
             &request,
@@ -2646,6 +2934,7 @@ mod tests {
             api_key_header: "authorization",
             headers: BTreeMap::new(),
             timeout: Duration::from_secs(30),
+            reasoning_switch: ReasoningSwitch::Plain,
         };
         let body = ollama_generation_body(
             &request,
@@ -2853,6 +3142,162 @@ mod tests {
                 .generate_calls
                 .load(std::sync::atomic::Ordering::SeqCst),
             3
+        );
+    }
+
+    /// Accepts only the listed switches (others are rejected like a strict server would) and says
+    /// whether the model reasoned anyway.
+    struct SwitchTransport {
+        accepted: Vec<ReasoningSwitch>,
+        reasons_anyway: bool,
+        attempts: Mutex<Vec<ReasoningSwitch>>,
+    }
+
+    #[async_trait]
+    impl LlmProbeTransport for SwitchTransport {
+        async fn discover_models(
+            &self,
+            _request: &LlmProbeRequest,
+            _cancellation: &CancellationToken,
+        ) -> Result<Option<Vec<String>>, LlmProfileError> {
+            Ok(None)
+        }
+
+        async fn stream_chat(
+            &self,
+            _request: &LlmProbeRequest,
+            _cancellation: &CancellationToken,
+        ) -> Result<LlmProbeResponse, LlmProfileError> {
+            Err(LlmProfileError::Transport)
+        }
+
+        async fn generate_chat(
+            &self,
+            _request: &LlmProbeRequest,
+            _generation: &LlmChatGeneration,
+            _cancellation: &CancellationToken,
+        ) -> Result<String, LlmProfileError> {
+            Err(LlmProfileError::Transport)
+        }
+
+        async fn generate_chat_adaptive(
+            &self,
+            request: &LlmProbeRequest,
+            _generation: &LlmChatGeneration,
+            _cancellation: &CancellationToken,
+        ) -> Result<ChatOutcome, LlmProfileError> {
+            self.attempts.lock().unwrap().push(request.reasoning_switch);
+            if self.accepted.contains(&request.reasoning_switch) {
+                Ok(ChatOutcome::Generated {
+                    text: "{}".into(),
+                    reasoning_seen: self.reasons_anyway
+                        && request.reasoning_switch != ReasoningSwitch::Plain,
+                })
+            } else {
+                Ok(ChatOutcome::Rejected)
+            }
+        }
+    }
+
+    fn switch_service(transport: Arc<SwitchTransport>) -> LlmProfileService {
+        LlmProfileService::new(
+            SettingsStore::new(tempdir().unwrap().keep()),
+            Arc::new(InMemoryCredentialStore::new()),
+            transport,
+            LlmHostPolicy::desktop(),
+        )
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn the_accepted_thinking_switch_is_learned_and_tried_first_next_time() {
+        let transport = Arc::new(SwitchTransport {
+            accepted: vec![ReasoningSwitch::EffortNone, ReasoningSwitch::Plain],
+            reasons_anyway: false,
+            attempts: Mutex::new(Vec::new()),
+        });
+        let service = switch_service(transport.clone());
+        let profile = service
+            .create(draft(LlmPreset::LmStudio, "http://127.0.0.1:1234"))
+            .await
+            .unwrap();
+        let cancel = CancellationToken::new();
+
+        service
+            .generate(profile.id, tiny_generation(), &cancel)
+            .await
+            .unwrap();
+        assert_eq!(
+            *transport.attempts.lock().unwrap(),
+            [
+                ReasoningSwitch::Both,
+                ReasoningSwitch::TemplateKwargs,
+                ReasoningSwitch::EffortNone
+            ]
+        );
+
+        transport.attempts.lock().unwrap().clear();
+        service
+            .generate(profile.id, tiny_generation(), &cancel)
+            .await
+            .unwrap();
+        assert_eq!(
+            *transport.attempts.lock().unwrap(),
+            [ReasoningSwitch::EffortNone]
+        );
+        assert_eq!(
+            service.profile(profile.id).unwrap().reasoning_switch,
+            Some(ReasoningSwitch::EffortNone)
+        );
+
+        // Changing the model forgets what was learned for the old one.
+        let mut changed = draft(LlmPreset::LmStudio, "http://127.0.0.1:1234");
+        changed.model = "other-model".into();
+        let updated = service.update(profile.id, changed).await.unwrap();
+        assert_eq!(updated.reasoning_switch, None);
+    }
+
+    #[tokio::test]
+    async fn a_switch_the_model_ignores_is_dropped_for_the_next_request() {
+        let transport = Arc::new(SwitchTransport {
+            accepted: ReasoningSwitch::LADDER.to_vec(),
+            reasons_anyway: true,
+            attempts: Mutex::new(Vec::new()),
+        });
+        let service = switch_service(transport.clone());
+        let profile = service
+            .create(draft(LlmPreset::Omlx, "http://127.0.0.1:8000"))
+            .await
+            .unwrap();
+        service
+            .generate(profile.id, tiny_generation(), &CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(
+            service.profile(profile.id).unwrap().reasoning_switch,
+            Some(ReasoningSwitch::Plain)
+        );
+    }
+
+    #[tokio::test]
+    async fn cloud_style_profiles_never_receive_thinking_parameters() {
+        let transport = Arc::new(SwitchTransport {
+            accepted: vec![ReasoningSwitch::Plain],
+            reasons_anyway: false,
+            attempts: Mutex::new(Vec::new()),
+        });
+        let service = switch_service(transport.clone());
+        let profile = service
+            .create(draft(LlmPreset::OpenAiCompatible, "http://127.0.0.1:8000"))
+            .await
+            .unwrap();
+        service
+            .generate(profile.id, tiny_generation(), &CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(
+            *transport.attempts.lock().unwrap(),
+            [ReasoningSwitch::Plain]
         );
     }
 }

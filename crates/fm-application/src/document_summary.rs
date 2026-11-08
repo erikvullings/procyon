@@ -25,7 +25,7 @@ use crate::error::ApplicationError;
 use crate::llm_profiles::locality_to_dto;
 use crate::llm_profiles::{
     EndpointLocality, LlmChatGeneration, LlmImageAttachment, LlmProfileError, LlmProfileService,
-    normalize_endpoint_locality,
+    LlmTestErrorCategory, normalize_endpoint_locality,
 };
 use crate::rejection::{Rejection, reason};
 use fm_transport_dto::document_summary::{SummaryAttributionDto, SummaryAttributionSourceDto};
@@ -251,6 +251,10 @@ pub enum DocumentSummaryError {
     /// The endpoint or local embedding operation failed.
     #[error("generation endpoint failed")]
     GenerationFailed,
+    /// The model provider failed in a way the user can act on (model not installed, endpoint
+    /// unreachable, timeout, unreadable response, ...).
+    #[error("generation failed at the model provider")]
+    Provider(LlmTestErrorCategory),
     /// The endpoint returned malformed or over-limit JSON.
     #[error("generation returned an invalid summary")]
     InvalidGeneration,
@@ -955,7 +959,7 @@ fn map_profile_error(error: LlmProfileError) -> DocumentSummaryError {
         LlmProfileError::ConsentRequired(_) => DocumentSummaryError::ConsentRequired,
         LlmProfileError::Cancelled => DocumentSummaryError::Cancelled,
         LlmProfileError::InvalidConfiguration => DocumentSummaryError::InvalidRequest,
-        _ => DocumentSummaryError::GenerationFailed,
+        other => DocumentSummaryError::Provider(other.category()),
     }
 }
 
@@ -1058,6 +1062,7 @@ pub(crate) fn summary_error_to_application(error: DocumentSummaryError) -> Appli
         DocumentSummaryError::Unavailable | DocumentSummaryError::GenerationFailed => {
             ApplicationError::ProviderUnavailable
         }
+        DocumentSummaryError::Provider(category) => category.into_error().into(),
         DocumentSummaryError::Storage => ApplicationError::Internal,
     }
 }
