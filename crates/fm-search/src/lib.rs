@@ -4,6 +4,8 @@
 //! a completed search as a `search://` virtual location so the existing panes
 //! can render it unchanged.
 
+mod archive_scan;
+mod document_text;
 mod engine;
 mod matcher;
 mod provider;

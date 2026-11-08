@@ -39,8 +39,9 @@ use tokio::io::{AsyncReadExt, BufReader};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::archive_scan::{is_searchable_archive, scan_zip};
 use crate::matcher::{detect_match_mode, matches_name};
-use crate::scanner::{FileScanError, pdf_text, scan_file, scan_text};
+use crate::scanner::{FileScanError, extract_text, is_extractable, scan_file, scan_text};
 use crate::store::SearchResultsStore;
 
 /// Maximum number of matches buffered before a batch is flushed.
@@ -860,6 +861,7 @@ fn run_search_native(
     // scanning: <file>" even while a long content scan finds nothing yet.
     let mut current_entry: Option<EntryRefPayload> = None;
 
+    let mut deferred_archives: Vec<PathBuf> = Vec::new();
     let max_depth = if options.recurse { None } else { Some(1) };
     'roots: for root in roots {
         let walker = ignore::WalkBuilder::new(&root)
@@ -894,6 +896,17 @@ fn run_search_native(
                         continue;
                     }
                     if has_content_query && kind != EntryKind::File {
+                        continue;
+                    }
+
+                    // Archives are searched last (decompressing members can take very long): note
+                    // them now, apply the filename filter to their members later.
+                    if has_content_query && kind == EntryKind::File && is_searchable_archive(path) {
+                        if let Some(summary) = build_entry_summary(path)
+                            && matches_summary(&summary, options)
+                        {
+                            deferred_archives.push(path.to_path_buf());
+                        }
                         continue;
                     }
 
@@ -994,6 +1007,66 @@ fn run_search_native(
                 );
                 last_flush = Instant::now();
             }
+        }
+    }
+    // Last phase: look inside the archives that were set aside, so plain files are never held up
+    // by slow decompression.
+    if let Some(content_query) = options.content_query.as_ref() {
+        let runtime = tokio::runtime::Handle::current();
+        for archive_path in deferred_archives {
+            if cancellation.is_cancelled() {
+                break;
+            }
+            if let Some(summary) = build_entry_summary(&archive_path) {
+                current_entry = Some(EntryRefPayload {
+                    id: summary.id,
+                    location: summary.location.clone().into(),
+                });
+            }
+            let accept = |name: &str| {
+                !has_filename_filter
+                    || matches_name(
+                        name,
+                        &options.filename_query,
+                        filename_mode,
+                        options.filename_case_sensitive,
+                    )
+            };
+            for member in scan_zip(
+                &archive_path,
+                content_query,
+                &accept,
+                cancellation,
+                &runtime,
+            ) {
+                let Some(summary) = archive_member_summary(&archive_path, &member) else {
+                    continue;
+                };
+                matches_found += 1;
+                ctx.execution.record_match();
+                buffer.push((
+                    summary,
+                    Some(
+                        member
+                            .matches
+                            .iter()
+                            .map(|m| ContentMatchSummary {
+                                line_number: m.line_number,
+                                offset: m.match_start,
+                                length: m.match_len,
+                            })
+                            .collect(),
+                    ),
+                ));
+            }
+            flush(
+                &ctx,
+                &mut buffer,
+                warnings_count,
+                false,
+                matches_found,
+                current_entry.clone(),
+            );
         }
     }
     let is_last = complete && completion.is_last();
@@ -1315,8 +1388,8 @@ async fn scan_vfs_file(
         return Ok(Vec::new());
     }
     let sniff = &sniff_buf[..sniffed];
-    if sniff.starts_with(b"%PDF-") {
-        // Search the text layer, like a local PDF.
+    if is_extractable(sniff) {
+        // Search the text of a PDF or document package, like a local one.
         let reader = provider
             .open_read(entry, cancellation.clone())
             .await
@@ -1330,7 +1403,7 @@ async fn scan_vfs_file(
         if bytes.len() as u64 > VFS_MAX_SCAN_BYTES {
             return Err(VfsScanError::FileTooLarge);
         }
-        let text = pdf_text(bytes, cancellation)
+        let text = extract_text(bytes, cancellation)
             .await
             .map_err(|_| VfsScanError::Io)?
             .ok_or(VfsScanError::Binary)?;
@@ -1436,6 +1509,46 @@ fn flush(
 /// file, not a synthetic search-space location: this is what lets "open
 /// this result" resolve to its containing directory for free via
 /// [`Location::parent`], with no dedicated result-resolution endpoint.
+/// Result entry for a member found inside a local ZIP archive.
+fn archive_member_summary(
+    archive_path: &Path,
+    member: &crate::archive_scan::MemberMatches,
+) -> Option<EntrySummary> {
+    let archive = Location::from_native_path(archive_path).ok()?;
+    let mut location = Location::parse(&format!(
+        "archive://{}!",
+        archive.uri.strip_prefix("file://")?
+    ))
+    .ok()?;
+    for segment in member.inner_path.split('/').filter(|part| !part.is_empty()) {
+        location = location.join(segment).ok()?;
+    }
+    let name = member.inner_path.rsplit('/').next()?.to_owned();
+    let extension = Path::new(&name)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_owned);
+    Some(EntrySummary {
+        id: EntryId::from(Uuid::new_v5(
+            &Uuid::NAMESPACE_URL,
+            format!("entry:{}", location.uri).as_bytes(),
+        )),
+        location,
+        hidden: is_hidden(&name),
+        name,
+        kind: EntryKind::File,
+        size: Some(member.size),
+        modified_at: None,
+        created_at: None,
+        read_only: true,
+        extension,
+        mime_type: None,
+        icon_key: None,
+        metadata_revision: 0,
+        git_status: None,
+    })
+}
+
 fn build_entry_summary(path: &Path) -> Option<EntrySummary> {
     let metadata = std::fs::symlink_metadata(path).ok()?;
     let location = Location::from_native_path(path).ok()?;
@@ -2588,6 +2701,66 @@ mod tests {
             .flat_map(|(entries, _, _)| entries.iter().map(|entry| entry.name.clone()))
             .collect();
         assert_eq!(names, vec!["letter.pdf".to_owned()]);
+    }
+
+    #[tokio::test]
+    async fn content_search_reads_documents_and_looks_inside_zips_last() {
+        use std::io::Write;
+        use zip::{ZipWriter, write::SimpleFileOptions};
+
+        let root = tempdir().unwrap();
+        // The name sorts before the plain files so a naive walk would reach it first.
+        let mut bundle =
+            ZipWriter::new(fs::File::create(root.path().join("a-bundle.zip")).unwrap());
+        bundle
+            .start_file("inside/notes.txt", SimpleFileOptions::default())
+            .unwrap();
+        bundle.write_all(b"Staal in a zip\n").unwrap();
+        bundle.finish().unwrap();
+        let mut docx = ZipWriter::new(fs::File::create(root.path().join("report.docx")).unwrap());
+        docx.start_file("word/document.xml", SimpleFileOptions::default())
+            .unwrap();
+        docx.write_all(b"<w:document><w:p><w:t>Staal in a docx</w:t></w:p></w:document>")
+            .unwrap();
+        docx.finish().unwrap();
+        fs::write(root.path().join("z-plain.txt"), b"Staal in text\n").unwrap();
+
+        let store = Arc::new(SearchResultsStore::new());
+        let events = EventBus::new(16);
+        let engine = SearchEngine::new(Arc::clone(&store), events.clone(), ProviderRegistry::new());
+        let subscription = subscribe(&events);
+        let _ = engine
+            .start(
+                Uuid::new_v4(),
+                vec![Location::from_native_path(root.path()).unwrap()],
+                SearchOptions {
+                    filename_query: String::new(),
+                    content_query: Some(ContentQuery::new("staal", false, false, false).unwrap()),
+                    recurse: true,
+                    show_hidden: true,
+                    operation_id: None,
+                    ..base_options("")
+                },
+                EventAudience::Global,
+            )
+            .unwrap();
+
+        let batches = collect_batches(subscription).await;
+        let entries: Vec<_> = batches
+            .iter()
+            .flat_map(|(entries, _, _)| entries.iter())
+            .collect();
+        let names: Vec<_> = entries.iter().map(|entry| entry.name.as_str()).collect();
+        assert_eq!(names.len(), 3, "{names:?}");
+        assert!(names.contains(&"report.docx") && names.contains(&"z-plain.txt"));
+        let last = entries.last().unwrap();
+        assert_eq!(last.name, "notes.txt", "zip members come last: {names:?}");
+        assert!(last.location.uri.starts_with("archive://"));
+        assert!(
+            last.location
+                .uri
+                .ends_with("a-bundle.zip!/inside/notes.txt")
+        );
     }
 
     #[tokio::test]

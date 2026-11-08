@@ -75,8 +75,8 @@ pub async fn scan_file(
             matches: Vec::new(),
         });
     }
-    if sniff.starts_with(b"%PDF-") {
-        return scan_pdf(path, query, cancellation).await;
+    if is_extractable(sniff) {
+        return scan_document(path, query, cancellation).await;
     }
     if looks_like_binary(sniff) {
         return Err(FileScanError::BinaryFile);
@@ -97,16 +97,21 @@ pub async fn scan_file(
     })
 }
 
-/// Extracts the text layer of PDF `bytes` (one text line per line). `None` for a PDF without a
-/// readable text layer (scanned images, encrypted, malformed) or one that takes too long.
-pub(crate) async fn pdf_text(
+/// Extracts the searchable text of a PDF or document package (docx/xlsx/pptx, OpenDocument,
+/// EPUB) held in `bytes`, one text line per line. `None` for content without readable text
+/// (scanned PDFs, encrypted or malformed files, ordinary ZIPs) or one that takes too long.
+pub(crate) async fn extract_text(
     bytes: Vec<u8>,
     cancellation: &CancellationToken,
 ) -> Result<Option<String>, FileScanError> {
     let extraction = tokio::task::spawn_blocking(move || {
-        let document = lopdf::Document::load_mem(&bytes).ok()?;
-        let pages: Vec<u32> = document.get_pages().keys().copied().collect();
-        document.extract_text(&pages).ok()
+        if bytes.starts_with(b"%PDF-") {
+            let document = lopdf::Document::load_mem(&bytes).ok()?;
+            let pages: Vec<u32> = document.get_pages().keys().copied().collect();
+            document.extract_text(&pages).ok()
+        } else {
+            crate::document_text::document_text(&bytes)
+        }
     });
     tokio::select! {
         () = cancellation.cancelled() => Err(FileScanError::Cancelled),
@@ -118,7 +123,12 @@ pub(crate) async fn pdf_text(
     }
 }
 
-/// Scans extracted PDF `text` for `query`.
+/// Whether the first bytes of a file are a PDF or a ZIP package that [`extract_text`] may read.
+pub(crate) fn is_extractable(sniff: &[u8]) -> bool {
+    sniff.starts_with(b"%PDF-") || crate::document_text::looks_like_zip(sniff)
+}
+
+/// Scans extracted document `text` for `query`.
 pub(crate) async fn scan_text(
     text: &str,
     query: &ContentQuery,
@@ -136,15 +146,15 @@ pub(crate) async fn scan_text(
     })
 }
 
-/// Scans a local PDF's text layer like a text file. A PDF without one is skipped like any other
-/// unreadable binary ([`FileScanError::BinaryFile`]).
-async fn scan_pdf(
+/// Scans a local PDF or document package's text like a text file. Content without text is skipped
+/// like any other unreadable binary ([`FileScanError::BinaryFile`]).
+async fn scan_document(
     path: &Path,
     query: &ContentQuery,
     cancellation: &CancellationToken,
 ) -> Result<FileScanResult, FileScanError> {
     let bytes = tokio::fs::read(path).await?;
-    match pdf_text(bytes, cancellation).await? {
+    match extract_text(bytes, cancellation).await? {
         Some(text) => scan_text(&text, query, cancellation).await,
         None => Err(FileScanError::BinaryFile),
     }

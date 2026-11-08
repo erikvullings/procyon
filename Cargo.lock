@@ -3319,6 +3319,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "uuid",
+ "zip 8.6.0",
 ]
 
 [[package]]
