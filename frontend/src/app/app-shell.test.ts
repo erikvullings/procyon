@@ -2344,6 +2344,7 @@ describe('AppShell', () => {
   it('opens the command palette with Ctrl+P, supports keyboard invocation, and restores focus', async () => {
     const client = new MockFileManagerClient();
     const invokeAction = vi.spyOn(client, 'invokeAction');
+    const calculateFolderSize = vi.spyOn(client, 'calculateFolderSize');
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
 
@@ -2359,11 +2360,10 @@ describe('AppShell', () => {
     const input = root.querySelector<HTMLInputElement>('.mm-command-palette-search input');
     expect(input).not.toBeNull();
     input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    await vi.waitFor(() => expect(invokeAction).toHaveBeenCalledOnce());
-    // The materialized palette initially focuses the first available ranked command.
-    expect(invokeAction).toHaveBeenCalledWith(
-      expect.objectContaining({ actionId: 'core.calculateFolderSize' }),
-    );
+    // The materialized palette initially focuses the first available ranked command; folder size
+    // runs client-side on the cursor folder instead of the (effect-less) backend invoke.
+    await vi.waitFor(() => expect(calculateFolderSize).toHaveBeenCalledOnce());
+    expect(invokeAction).not.toHaveBeenCalled();
 
     document.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, bubbles: true }),
@@ -2443,6 +2443,12 @@ describe('AppShell', () => {
     const input = document.querySelector<HTMLInputElement>('#create-directory-name');
     expect(document.activeElement).toBe(input);
     if (!input) throw new Error('create-directory input missing');
+    // The cursor entry's name is pre-filled and selected, so typing replaces it.
+    expect(input.value).toBe('Applications');
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe('Applications'.length);
+    input.value = '';
+    input.dispatchEvent(new InputEvent('input', { bubbles: true }));
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     expect(startOperation).not.toHaveBeenCalled();
     input.value = 'New folder';
@@ -2641,6 +2647,10 @@ describe('AppShell', () => {
     );
 
     await vi.waitFor(() => expect(root.textContent).toContain('Create archive'));
+    // Named after the packed item, and selected so typing replaces it.
+    await vi.waitFor(() =>
+      expect(document.querySelector<HTMLInputElement>('#archive-create-name')?.value).toBe('.env'),
+    );
     document
       .querySelector<HTMLInputElement>('#archive-create-name')
       ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -2648,7 +2658,7 @@ describe('AppShell', () => {
     expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
       type: 'createArchive',
       sources: [{ uri: 'mock:///.env' }],
-      destination: { uri: 'mock:///archive.zip' },
+      destination: { uri: 'mock:///.env.zip' },
     });
   });
 
@@ -2667,6 +2677,10 @@ describe('AppShell', () => {
     );
 
     await vi.waitFor(() => expect(root.textContent).toContain('Move to archive'));
+    // Named after the packed item, and selected so typing replaces it.
+    await vi.waitFor(() =>
+      expect(document.querySelector<HTMLInputElement>('#archive-create-name')?.value).toBe('.env'),
+    );
     document
       .querySelector<HTMLInputElement>('#archive-create-name')
       ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -2674,7 +2688,7 @@ describe('AppShell', () => {
     expect(startOperation.mock.calls[0]?.[0]).toMatchObject({
       type: 'moveToArchive',
       sources: [{ uri: 'mock:///.env' }],
-      destination: { uri: 'mock:///archive.zip' },
+      destination: { uri: 'mock:///.env.zip' },
     });
   });
 

@@ -3,6 +3,7 @@ import { ModalPanel } from 'mithril-materialized';
 import { t } from '../../i18n';
 import type { Location } from '../../models/location';
 import { validateEntryName } from '../operations/create-directory-dialog';
+import { focusAndSelect } from '../operations/focus-select';
 import {
   PLAYLIST_EXPORT_FORMATS,
   type PlaylistExportFormat,
@@ -72,7 +73,7 @@ export const SavePlaylistDialog: FactoryComponent<SavePlaylistDialogAttrs> = () 
         name = 'playlist';
         format = 'm3u8';
         pathStyle = 'relative';
-        document.getElementById('save-playlist-name')?.focus();
+        focusAndSelect('save-playlist-name', name);
       }
       wasOpen = open;
     },

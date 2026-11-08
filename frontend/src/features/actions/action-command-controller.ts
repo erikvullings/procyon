@@ -134,6 +134,8 @@ export interface ActionCommandControllerContext {
   /** Scans `entry`'s well-known related-file locations and opens the review checklist before
    * anything is deleted (task 0148's macOS application uninstaller). */
   uninstallApplication(paneId: PaneId, entry: EntrySummary): void;
+  /** Sums a folder's size recursively and shows it in the folder's Size cell. */
+  calculateFolderSize(paneId: PaneId, entry: EntrySummary): void;
   /** Starts the pane's F2 rename flow (inline, or multi-rename for several entries). */
   requestRename?(paneId: PaneId, entryIds: readonly EntryId[]): void;
   /** Opens the pane's breadcrumb path editor. */
@@ -552,6 +554,16 @@ export function createActionCommandController(
         context.uninstallApplication(paneId, bundle);
       return;
     }
+    // Like the keyboard shortcut, this acts on the folder under the cursor (or the single marked
+    // one); the generic backend invoke has no effect for it.
+    if (action.id === 'core.calculateFolderSize') {
+      const folder =
+        selectedEntries[0] ??
+        directory?.entries.find((entry) => entry.id === contextParam.cursorEntryId);
+      if (paneId !== undefined && folder?.kind === 'directory' && !isParentEntry(folder.id))
+        context.calculateFolderSize(paneId, folder);
+      return;
+    }
     const cursorEntry =
       selectedEntries.length > 0 || isParentEntry(contextParam.cursorEntryId)
         ? undefined
@@ -685,6 +697,12 @@ export function createActionCommandController(
     if (action.id === 'core.uninstallApplication') {
       const bundle = menu.entries[0];
       if (bundle !== undefined) context.uninstallApplication(menu.paneId, bundle);
+      return;
+    }
+    if (action.id === 'core.calculateFolderSize') {
+      const folder = menu.entries[0];
+      if (folder?.kind === 'directory' && !isParentEntry(folder.id))
+        context.calculateFolderSize(menu.paneId, folder);
       return;
     }
     // The menu's own entries, not an id lookup: the synthetic ".." entry isn't in the listing.

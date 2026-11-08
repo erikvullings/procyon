@@ -63,6 +63,7 @@ import type {
   OperationsController,
 } from '../operations/operations-controller';
 import { PermanentDeleteDialog } from '../operations/permanent-delete-dialog';
+import { suggestedArchiveName, suggestedFolderName } from '../operations/suggested-names';
 import { CloseLastTabDialog } from '../panes/close-last-tab-dialog';
 import type { TabController } from '../panes/tab-controller';
 import { PropertiesDialog } from '../properties/properties-dialog';
@@ -111,6 +112,10 @@ export interface AppDialogsContext {
   /** Opens "Change attributes…" for entries chosen in the Properties dialog (task 0258). */
   openChangeAttributes?(entries: readonly EntrySummary[]): void;
   getActiveDirectoryLocation(): Location | undefined;
+  /** The active pane's listed entries, to name an archive after what is being packed. */
+  getActiveEntries(): readonly EntrySummary[];
+  /** The entry under the active pane's cursor, to pre-fill the new-folder name. */
+  getCursorEntry(): EntrySummary | undefined;
   getActivePaneId(): PaneId | undefined;
   navigateActiveLocation(location: Location, preferredCursorName?: string): Promise<void>;
   getFocusPane(): ((paneId: PaneId) => void) | undefined;
@@ -261,6 +266,7 @@ export function renderAppDialogs(
       : undefined,
     m(CreateDirectoryDialog, {
       open: ds.createDirectoryOpen,
+      suggestedName: suggestedFolderName(ctx.getCursorEntry()),
       onCancel: () => dialogs.cancelCreateDirectory(),
       onConfirm: (name: string, createIntermediateDirectories: boolean) =>
         dialogs.confirmCreateDirectory(
@@ -306,6 +312,11 @@ export function renderAppDialogs(
       open: ds.archiveCreateRequest !== undefined,
       moveSources: ds.archiveCreateRequest?.moveSources ?? false,
       sources: ds.archiveCreateRequest?.sources ?? [],
+      suggestedName: suggestedArchiveName(
+        ds.archiveCreateRequest?.sources ?? [],
+        ctx.getActiveEntries(),
+        ds.archiveCreateRequest?.destinationDirectory,
+      ),
       onCancel: () => dialogs.cancelArchiveCreate(),
       onConfirm: (name: string, format: ArchiveFormat, compressionLevel?: number) => {
         const request = ds.archiveCreateRequest;

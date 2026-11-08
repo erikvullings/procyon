@@ -3,6 +3,7 @@ import { ModalPanel } from 'mithril-materialized';
 import { t } from '../../i18n';
 import type { Location } from '../../models';
 import { validateEntryName } from '../operations/create-directory-dialog';
+import { focusAndSelect } from '../operations/focus-select';
 import { snapshotFileName } from './snapshot-state';
 
 /** What the dialog is about to record, and where the snapshot file will go. */
@@ -57,6 +58,9 @@ export const SaveSnapshotDialog: FactoryComponent<SaveSnapshotDialogAttrs> = () 
       if (open && !wasOpen) {
         name = attrs.request?.defaultName ?? '';
         withChecksums = true;
+        const suggested = name;
+        // The input only becomes visible after this render, so focus once it has been painted.
+        requestAnimationFrame(() => focusAndSelect('save-snapshot-name', suggested));
       }
       wasOpen = open;
       return m(ModalPanel, {

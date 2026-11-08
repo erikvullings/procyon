@@ -1856,8 +1856,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     openViewer: (paneId, entry, initialSearch, openMetadata) =>
       previewWiring.openViewer(shellState.client, paneId, entry, initialSearch, openMetadata),
     openEditor: (paneId, entry) => previewWiring.openEditor(shellState.client, paneId, entry),
-    calculateFolderSize: (paneId, entry) => calculateFolderSize(shellState.client, paneId, entry),
     uninstallApplication: (paneId, entry) => uninstallApplication(shellState.client, paneId, entry),
+    calculateFolderSize: (paneId, entry) => calculateFolderSize(shellState.client, paneId, entry),
     actionContext: () => shellState.actionCommandController.actionContext(),
     commandAvailabilityContext: (selectedEntries, paneId) =>
       shellState.actionCommandController.commandAvailabilityContext(selectedEntries, paneId),
@@ -2287,6 +2287,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     openThemes: knowledgeWiring.openThemes,
     uninstallApplication: (paneId, entry) =>
       globalKeydownHandlerContext.uninstallApplication(paneId, entry),
+    calculateFolderSize: (paneId, entry) =>
+      globalKeydownHandlerContext.calculateFolderSize(paneId, entry),
     requestRename: (paneId, entryIds) => {
       const revision = (shellState.renameRequests.get(paneId)?.revision ?? 0) + 1;
       shellState.renameRequests.set(paneId, { revision, entryIds });
@@ -2710,6 +2712,19 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     getOpsController: () => shellState.rawOpsController,
     openChangeAttributes: dialogWiring.openChangeAttributes,
     getActiveDirectoryLocation: () => activeDirectory()?.location,
+    getActiveEntries: () => {
+      const active = activeDirectory();
+      return active === undefined
+        ? []
+        : (shellState.directories.get(activeTabKey(active.paneId))?.entries ?? []);
+    },
+    getCursorEntry: () => {
+      const active = activeDirectory();
+      if (active === undefined) return undefined;
+      const key = activeTabKey(active.paneId);
+      const cursorId = shellState.selections.get(key)?.cursorEntryId;
+      return shellState.directories.get(key)?.entries.find((entry) => entry.id === cursorId);
+    },
     getActivePaneId: () => activeDirectory()?.paneId,
     navigateActiveLocation: async (location, preferredCursorName) => {
       const paneId = activeDirectory()?.paneId;

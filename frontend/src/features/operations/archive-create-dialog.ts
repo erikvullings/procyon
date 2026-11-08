@@ -3,6 +3,7 @@ import { ModalPanel } from 'mithril-materialized';
 import { t } from '../../i18n';
 import type { Location } from '../../models';
 import { affectedItems } from './affected-items';
+import { focusAndSelect } from './focus-select';
 
 export type ArchiveFormat = 'zip' | 'sevenZip';
 
@@ -10,6 +11,8 @@ export interface ArchiveCreateDialogAttrs {
   readonly open: boolean;
   readonly moveSources: boolean;
   readonly sources?: readonly Location[];
+  /** Name pre-filled (and selected) each time the dialog opens. */
+  readonly suggestedName?: string;
   readonly onConfirm: (name: string, format: ArchiveFormat, compressionLevel?: number) => void;
   readonly onCancel: () => void;
 }
@@ -34,10 +37,11 @@ function blurActive(): void {
 
 /** Collects the archive filename, format, and ZIP compression level before packing. */
 export const ArchiveCreateDialog: FactoryComponent<ArchiveCreateDialogAttrs> = () => {
-  let name = 'archive';
+  let name = '';
   let format: ArchiveFormat = 'zip';
   let compressionLevel = 6;
   let wasOpen = false;
+  let focusPending = false;
 
   function confirm(attrs: ArchiveCreateDialogAttrs): void {
     const result = archiveFileName(name, format);
@@ -48,15 +52,21 @@ export const ArchiveCreateDialog: FactoryComponent<ArchiveCreateDialogAttrs> = (
 
   return {
     onupdate: ({ attrs }) => {
-      if (attrs.open && !wasOpen) {
-        name = 'archive';
-        format = 'zip';
-        compressionLevel = 6;
-        document.getElementById('archive-create-name')?.focus();
+      if (attrs.open && focusPending) {
+        focusPending = false;
+        focusAndSelect('archive-create-name', name);
       }
-      wasOpen = attrs.open;
     },
     view: ({ attrs }) => {
+      // Reset while rendering (not after) so the first frame, and an immediate Enter, already see
+      // the suggested name; ModalPanel keeps this component mounted while closed.
+      if (attrs.open && !wasOpen) {
+        name = attrs.suggestedName ?? 'archive';
+        format = 'zip';
+        compressionLevel = 6;
+        focusPending = true;
+      }
+      wasOpen = attrs.open;
       const nameResult = archiveFileName(name, format);
       const cancel = () => {
         blurActive();

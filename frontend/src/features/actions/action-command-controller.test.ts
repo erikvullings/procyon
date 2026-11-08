@@ -92,6 +92,7 @@ function fakeContext(
     openKnowledgeSearch: () => {},
     openThemes: () => {},
     uninstallApplication: () => {},
+    calculateFolderSize: () => {},
     toggleDirectoryTree: () => {},
     toggleOperationCentre: () => {},
     redraw: () => {},
@@ -417,6 +418,35 @@ describe('action-command-controller uninstallApplication wiring', () => {
     });
 
     expect(uninstallApplication).toHaveBeenCalledWith(paneId, bundle);
+  });
+
+  it('invokePaletteAction sizes the folder under the cursor instead of the no-op backend invoke', () => {
+    const paneId = 'pane-1' as PaneId;
+    const folder: EntrySummary = {
+      ...bundleEntry(),
+      id: 'folder-1' as EntrySummary['id'],
+      name: 'beelden',
+      kind: 'directory',
+    };
+    const directory: PaneDirectoryView = {
+      state: { type: 'loaded' },
+      entries: [folder],
+      hasMore: false,
+    };
+    const calculateFolderSize = vi.fn();
+    const action = { ...uninstallAction(), id: 'core.calculateFolderSize' };
+    const controller = createActionCommandController(
+      fakeContext({
+        getRegisteredActions: () => [action],
+        getDirectories: () => new Map([[paneId, directory]]),
+        getActiveTabKey: () => paneId,
+        calculateFolderSize,
+      }),
+    );
+
+    controller.invokePaletteAction(action, undefined, { paneId, cursorEntryId: folder.id });
+
+    expect(calculateFolderSize).toHaveBeenCalledWith(paneId, folder);
   });
 
   it('invokeContextMenuAction dispatches the real discovery flow for the right-click menu', () => {

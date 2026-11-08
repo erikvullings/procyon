@@ -1,9 +1,12 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
 import { t } from '../../i18n';
+import { focusAndSelect } from './focus-select';
 
 export interface CreateDirectoryDialogAttrs {
   readonly open: boolean;
+  /** Name pre-filled (and selected) each time the dialog opens. */
+  readonly suggestedName?: string;
   readonly onConfirm: (name: string, createIntermediateDirectories: boolean) => void;
   readonly onCancel: () => void;
 }
@@ -89,9 +92,10 @@ export const CreateDirectoryDialog: FactoryComponent<CreateDirectoryDialogAttrs>
       // once at app boot, before the dialog is ever shown. Focus explicitly on
       // the false->true transition instead.
       if (attrs.open && !wasOpen) {
-        name = '';
-        error = undefined;
-        document.getElementById('create-directory-name')?.focus();
+        name = attrs.suggestedName ?? '';
+        error = validateDirectoryName(name);
+        if (name === '') error = undefined;
+        focusAndSelect('create-directory-name', name);
       }
       wasOpen = attrs.open;
     },
