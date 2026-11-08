@@ -23,6 +23,7 @@ import { copyText } from '../preview/clipboard';
 import { decodeEvidenceTitle } from './evidence-title';
 import { generationErrorText } from './generation-error';
 import {
+  blocksGeneration,
   checkProfileModel,
   type ProfileModelStatus,
   profileModelNotice,
@@ -370,7 +371,7 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
 
   async function submit(attrs: RagAskDialogAttrs): Promise<void> {
     if (busy !== undefined || selectedProfileId === '' || question.trim() === '') return;
-    if (profileModelStatus === 'missing') return;
+    if (blocksGeneration(profileModelStatus)) return;
     if (preview === undefined && (await retrieve(attrs)) === undefined) return;
     await generate(attrs);
   }
@@ -851,7 +852,7 @@ export const RagAskDialog: FactoryComponent<RagAskDialogAttrs> = () => {
                   disabled:
                     busy !== undefined ||
                     selectedProfileId === '' ||
-                    profileModelStatus === 'missing' ||
+                    blocksGeneration(profileModelStatus) ||
                     question.trim() === '',
                   onclick: () => void retrieve(attrs),
                 },

@@ -1722,6 +1722,8 @@ export const fr = {
     confirmDelete: 'Confirmer la suppression et détacher les dossiers',
   },
   llmProfileCheck: {
+    authRequired:
+      'Le service d’IA du profil « {name} » exige une clé d’API valide. Saisissez-la ou corrigez-la dans le profil d’IA.',
     modelMissing:
       'Le modèle « {model} » du profil d’IA « {name} » n’est pas disponible sur le service d’IA. Installez-le (pour Ollama : ollama pull {model}) ou choisissez un autre modèle dans le profil d’IA.',
     unreachable: 'Le service d’IA du profil « {name} » est injoignable.',
@@ -2665,7 +2667,7 @@ export const fr = {
     llmModelUnavailable:
       'Le modèle d’IA configuré n’est pas disponible. Vérifiez qu’il est installé (pour Ollama : « ollama pull <modèle> ») ou choisissez un autre modèle dans le profil d’IA.',
     llmAuthentication:
-      'Le service d’IA a refusé les identifiants. Vérifiez la clé d’API dans le profil d’IA.',
+      'Le service d’IA exige une clé d’API valide. Saisissez-la ou corrigez-la dans le profil d’IA.',
     llmTimeout: 'La requête d’IA a expiré.',
     llmTls: 'La connexion sécurisée au service d’IA a été refusée.',
     llmMalformedResponse: 'Le service d’IA a envoyé une réponse illisible.',

@@ -1737,6 +1737,8 @@ export const de = {
     confirmDelete: 'Löschen bestätigen und Ordner trennen',
   },
   llmProfileCheck: {
+    authRequired:
+      'Der KI-Dienst des Profils „{name}“ benötigt einen gültigen API-Schlüssel. Geben Sie ihn im KI-Profil ein oder korrigieren Sie ihn.',
     modelMissing:
       'Das Modell „{model}“ des KI-Profils „{name}“ ist beim KI-Dienst nicht verfügbar. Installieren Sie es (bei Ollama: ollama pull {model}) oder wählen Sie im KI-Profil ein anderes Modell.',
     unreachable: 'Der KI-Dienst des Profils „{name}“ ist nicht erreichbar.',
@@ -2685,7 +2687,7 @@ export const de = {
     llmModelUnavailable:
       'Das konfigurierte KI-Modell ist nicht verfügbar. Prüfen Sie, ob es installiert ist (bei Ollama: „ollama pull <Modell>“), oder wählen Sie im KI-Profil ein anderes Modell.',
     llmAuthentication:
-      'Der KI-Dienst hat die Zugangsdaten abgelehnt. Prüfen Sie den API-Schlüssel im KI-Profil.',
+      'Der KI-Dienst benötigt einen gültigen API-Schlüssel. Geben Sie ihn im KI-Profil ein oder korrigieren Sie ihn.',
     llmTimeout: 'Die KI-Anfrage hat das Zeitlimit überschritten.',
     llmTls: 'Die sichere Verbindung zum KI-Dienst wurde abgelehnt.',
     llmMalformedResponse:

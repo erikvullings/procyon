@@ -1135,7 +1135,7 @@ export class MockSemanticClient implements SemanticClient {
           ...defaults,
           name: 'OMLX',
           preset: 'omlx',
-          baseUrl: 'http://127.0.0.1:8080',
+          baseUrl: 'http://127.0.0.1:8000',
           redactFilenames: false,
         },
         {

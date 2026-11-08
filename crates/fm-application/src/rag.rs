@@ -1642,7 +1642,7 @@ pub(crate) fn rag_error_to_application(error: RagError) -> ApplicationError {
         }
         RagError::Cancelled => ApplicationError::OperationCancelled,
         RagError::ConsentRequired => ApplicationError::PermissionDenied,
-        RagError::Provider(category) => category.into_application_error(),
+        RagError::Provider(category) => category.into_error().into(),
         RagError::RetrievalFailed
         | RagError::GenerationFailed
         | RagError::Persistence

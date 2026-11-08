@@ -315,7 +315,12 @@ impl From<LlmProfileError> for ApplicationError {
             )
             .with("host", host)
             .into(),
-            LlmProfileError::Authentication => Self::InvalidCredential,
+            // Not `InvalidCredential`, whose message talks about an archive password.
+            LlmProfileError::Authentication => Rejection::new(
+                reason::LLM_AUTHENTICATION,
+                "the AI service requires a valid API key",
+            )
+            .into_platform(),
             LlmProfileError::Cancelled => Self::OperationCancelled,
             LlmProfileError::Credential => Self::CredentialRequired,
             LlmProfileError::ModelUnavailable => Rejection::new(
@@ -469,6 +474,16 @@ mod tests {
             dto.message,
             "no default application is set for this file type"
         );
+    }
+
+    #[test]
+    fn an_llm_service_wanting_an_api_key_is_not_reported_as_an_archive_password() {
+        let ApplicationError::PlatformFailed(rejection) =
+            ApplicationError::from(LlmProfileError::Authentication)
+        else {
+            panic!("expected a localisable platform rejection");
+        };
+        assert_eq!(rejection.reason, reason::LLM_AUTHENTICATION);
     }
 
     #[test]

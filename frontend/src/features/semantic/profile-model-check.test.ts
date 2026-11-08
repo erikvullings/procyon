@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { LlmProfile } from '../../models';
-import { checkProfileModel, modelIsListed, profileModelNotice } from './profile-model-check';
+import {
+  blocksGeneration,
+  checkProfileModel,
+  modelIsListed,
+  profileModelNotice,
+} from './profile-model-check';
 
 function profile(overrides: Partial<LlmProfile> = {}): LlmProfile {
   return {
@@ -60,5 +65,25 @@ describe('profile model check', () => {
         profile(),
       ),
     ).toBe('unverified');
+  });
+
+  it('reports a service that wants an API key and blocks generation for it', async () => {
+    const rejection = {
+      code: 'platformOperationFailed',
+      message: 'x',
+      details: { reason: 'llmAuthentication' },
+    };
+    const status = await checkProfileModel(
+      { discoverLlmProfileModels: vi.fn().mockRejectedValue(rejection) },
+      profile({ name: 'OMLX', preset: 'omlx' }),
+    );
+    expect(status).toBe('authRequired');
+    expect(profileModelNotice(profile({ name: 'OMLX' }), status)).toContain(
+      'requires a valid API key',
+    );
+    expect(blocksGeneration(status)).toBe(true);
+    expect(blocksGeneration('missing')).toBe(true);
+    expect(blocksGeneration('unreachable')).toBe(false);
+    expect(blocksGeneration(undefined)).toBe(false);
   });
 });

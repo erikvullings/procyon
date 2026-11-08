@@ -12,6 +12,7 @@ import type {
   WorkspaceId,
 } from '../../models';
 import {
+  blocksGeneration,
   checkProfileModel,
   type ProfileModelStatus,
   profileModelNotice,
@@ -362,7 +363,7 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
                     summary === null
                       ? t('documentSummary', 'generate')
                       : t('documentSummary', 'regenerate'),
-                  disabled: busy || profileModelStatus === 'missing',
+                  disabled: busy || blocksGeneration(profileModelStatus),
                   onclick: () => void generate(attrs),
                 },
               ]),

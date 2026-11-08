@@ -1720,6 +1720,8 @@ export const pt = {
     confirmDelete: 'Confirmar eliminação e desassociar pastas',
   },
   llmProfileCheck: {
+    authRequired:
+      'O serviço de IA do perfil «{name}» requer uma chave de API válida. Introduza-a ou corrija-a no perfil de IA.',
     modelMissing:
       'O modelo «{model}» do perfil de IA «{name}» não está disponível no serviço de IA. Instale-o (no Ollama: ollama pull {model}) ou escolha outro modelo no perfil de IA.',
     unreachable: 'Não foi possível contactar o serviço de IA do perfil «{name}».',
@@ -2662,7 +2664,7 @@ export const pt = {
     llmModelUnavailable:
       'O modelo de IA configurado não está disponível. Verifique se está instalado (no Ollama: «ollama pull <modelo>») ou escolha outro modelo no perfil de IA.',
     llmAuthentication:
-      'O serviço de IA rejeitou as credenciais. Verifique a chave de API no perfil de IA.',
+      'O serviço de IA requer uma chave de API válida. Introduza-a ou corrija-a no perfil de IA.',
     llmTimeout: 'O pedido de IA excedeu o tempo limite.',
     llmTls: 'A ligação segura ao serviço de IA foi rejeitada.',
     llmMalformedResponse: 'O serviço de IA enviou uma resposta que não pôde ser lida.',

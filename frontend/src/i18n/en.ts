@@ -2077,6 +2077,8 @@ export const en = {
     confirmDelete: 'Confirm deletion and detach folders',
   },
   llmProfileCheck: {
+    authRequired:
+      'The AI service of profile "{name}" requires a valid API key. Enter or correct the key in the AI profile.',
     modelMissing:
       'The model "{model}" of AI profile "{name}" is not available on the AI service. Install it (for Ollama: ollama pull {model}) or choose another model in the AI profile.',
     unreachable: 'The AI service of profile "{name}" could not be reached.',
@@ -2602,7 +2604,7 @@ export const en = {
     llmModelUnavailable:
       'The configured AI model is not available. Check that it is installed (for Ollama: run "ollama pull <model>") or choose another model in the AI profile.',
     llmAuthentication:
-      'The AI service rejected the credentials. Check the API key in the AI profile.',
+      'The AI service requires a valid API key. Enter or correct the API key in the AI profile.',
     llmTimeout: 'The AI request timed out.',
     llmTls: 'The secure connection to the AI service was rejected.',
     llmMalformedResponse: 'The AI service sent a response that could not be read.',

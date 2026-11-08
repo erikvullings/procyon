@@ -1714,6 +1714,8 @@ export const pl = {
     confirmDelete: 'Potwierdź usunięcie i odłącz foldery',
   },
   llmProfileCheck: {
+    authRequired:
+      'Usługa AI profilu „{name}” wymaga prawidłowego klucza API. Wprowadź lub popraw go w profilu AI.',
     modelMissing:
       'Model „{model}” profilu AI „{name}” jest niedostępny w usłudze AI. Zainstaluj go (w Ollama: ollama pull {model}) lub wybierz inny model w profilu AI.',
     unreachable: 'Nie można połączyć się z usługą AI profilu „{name}”.',
@@ -2648,7 +2650,7 @@ export const pl = {
     llmModelUnavailable:
       'Skonfigurowany model AI jest niedostępny. Sprawdź, czy jest zainstalowany (w Ollama: „ollama pull <model>”), lub wybierz inny model w profilu AI.',
     llmAuthentication:
-      'Usługa AI odrzuciła dane uwierzytelniające. Sprawdź klucz API w profilu AI.',
+      'Usługa AI wymaga prawidłowego klucza API. Wprowadź lub popraw go w profilu AI.',
     llmTimeout: 'Żądanie AI przekroczyło limit czasu.',
     llmTls: 'Bezpieczne połączenie z usługą AI zostało odrzucone.',
     llmMalformedResponse: 'Usługa AI wysłała odpowiedź, której nie można odczytać.',

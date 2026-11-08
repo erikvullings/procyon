@@ -218,22 +218,6 @@ impl LlmTestErrorCategory {
     }
 }
 
-impl LlmTestErrorCategory {
-    /// The user-facing error for a failed generation. Differs from `ApplicationError::from` only
-    /// for rejected credentials, which must not read as a wrong archive password.
-    #[must_use]
-    pub(crate) fn into_application_error(self) -> crate::ApplicationError {
-        match self {
-            Self::Authentication => crate::rejection::Rejection::new(
-                crate::rejection::reason::LLM_AUTHENTICATION,
-                "the AI service rejected the credentials",
-            )
-            .into_platform(),
-            other => other.into_error().into(),
-        }
-    }
-}
-
 /// Content-free profile test outcome.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -727,7 +711,7 @@ impl LlmProfileService {
             (LlmPreset::LmStudio, "LM Studio", "http://127.0.0.1:1234"),
             (LlmPreset::Vllm, "vLLM", "http://127.0.0.1:8000"),
             (LlmPreset::Sglang, "SGLang", "http://127.0.0.1:30000"),
-            (LlmPreset::Omlx, "OMLX", "http://127.0.0.1:8080"),
+            (LlmPreset::Omlx, "OMLX", "http://127.0.0.1:8000"),
             (LlmPreset::MlxServe, "mlx-serve", "http://127.0.0.1:11234"),
             (
                 LlmPreset::OpenAiCompatible,
@@ -2065,7 +2049,7 @@ mod tests {
         assert_eq!(presets[1].base_url, "http://127.0.0.1:1234");
         assert_eq!(presets[2].base_url, "http://127.0.0.1:8000");
         assert_eq!(presets[3].base_url, "http://127.0.0.1:30000");
-        assert_eq!(presets[4].base_url, "http://127.0.0.1:8080");
+        assert_eq!(presets[4].base_url, "http://127.0.0.1:8000");
         assert_eq!(presets[5].preset, LlmPreset::MlxServe);
         assert_eq!(presets[5].base_url, "http://127.0.0.1:11234");
         assert!(

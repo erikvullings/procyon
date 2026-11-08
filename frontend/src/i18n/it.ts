@@ -1715,6 +1715,8 @@ export const it = {
     confirmDelete: "Conferma l'eliminazione e scollega le cartelle",
   },
   llmProfileCheck: {
+    authRequired:
+      'Il servizio di IA del profilo «{name}» richiede una chiave API valida. Inseriscila o correggila nel profilo IA.',
     modelMissing:
       'Il modello «{model}» del profilo IA «{name}» non è disponibile sul servizio di IA. Installalo (con Ollama: ollama pull {model}) oppure scegli un altro modello nel profilo IA.',
     unreachable: 'Impossibile raggiungere il servizio di IA del profilo «{name}».',
@@ -2647,7 +2649,7 @@ export const it = {
     llmModelUnavailable:
       'Il modello di IA configurato non è disponibile. Verifica che sia installato (con Ollama: «ollama pull <modello>») oppure scegli un altro modello nel profilo IA.',
     llmAuthentication:
-      'Il servizio di IA ha rifiutato le credenziali. Controlla la chiave API nel profilo IA.',
+      'Il servizio di IA richiede una chiave API valida. Inseriscila o correggila nel profilo IA.',
     llmTimeout: 'La richiesta IA è scaduta.',
     llmTls: 'La connessione sicura al servizio IA è stata rifiutata.',
     llmMalformedResponse: 'Il servizio IA ha inviato una risposta non leggibile.',

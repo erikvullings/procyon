@@ -3,7 +3,12 @@ import { t } from '../../i18n';
 import type { LlmProfile } from '../../models';
 
 /** What is known about a profile's model on its AI service. */
-export type ProfileModelStatus = 'available' | 'missing' | 'unreachable' | 'unverified';
+export type ProfileModelStatus =
+  | 'available'
+  | 'missing'
+  | 'authRequired'
+  | 'unreachable'
+  | 'unverified';
 
 /** Time allowed for the model list before the profile is reported as unreachable. */
 const CHECK_TIMEOUT_MS = 8000;
@@ -16,6 +21,23 @@ export function modelIsListed(model: string, listed: readonly string[]): boolean
   const wanted = model.trim();
   if (wanted === '') return false;
   return listed.some((candidate) => candidate === wanted || candidate === `${wanted}:latest`);
+}
+
+/** Whether `cause` is the backend's "the service wants a (valid) API key" rejection. */
+function isAuthenticationFailure(cause: unknown): boolean {
+  if (typeof cause !== 'object' || cause === null) return false;
+  const { code, details } = cause as { code?: unknown; details?: unknown };
+  return (
+    code === 'platformOperationFailed' &&
+    typeof details === 'object' &&
+    details !== null &&
+    (details as { reason?: unknown }).reason === 'llmAuthentication'
+  );
+}
+
+/** Whether generating with a profile in this state is bound to fail, so it should be blocked. */
+export function blocksGeneration(status: ProfileModelStatus | undefined): boolean {
+  return status === 'missing' || status === 'authRequired';
 }
 
 /**
@@ -36,8 +58,8 @@ export async function checkProfileModel(
     );
     if (listed.length === 0) return 'unverified';
     return modelIsListed(profile.model, listed) ? 'available' : 'missing';
-  } catch {
-    return 'unreachable';
+  } catch (cause) {
+    return isAuthenticationFailure(cause) ? 'authRequired' : 'unreachable';
   }
 }
 
@@ -48,6 +70,9 @@ export function profileModelNotice(
 ): string | undefined {
   if (status === 'missing') {
     return t('llmProfileCheck', 'modelMissing', { model: profile.model, name: profile.name });
+  }
+  if (status === 'authRequired') {
+    return t('llmProfileCheck', 'authRequired', { name: profile.name });
   }
   if (status === 'unreachable') {
     return t('llmProfileCheck', 'unreachable', { name: profile.name });

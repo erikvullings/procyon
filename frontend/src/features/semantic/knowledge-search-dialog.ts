@@ -79,6 +79,7 @@ import {
   splitSubjects,
 } from './knowledge-scope';
 import {
+  blocksGeneration,
   checkProfileModel,
   type ProfileModelStatus,
   profileModelNotice,
@@ -731,7 +732,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       busy === undefined &&
       (result !== undefined || canSearchForQuestion(attrs)) &&
       answerProfile() !== undefined &&
-      modelStatuses.get(answerProfile()?.id ?? '') !== 'missing'
+      !blocksGeneration(modelStatuses.get(answerProfile()?.id ?? ''))
     );
   }
 
