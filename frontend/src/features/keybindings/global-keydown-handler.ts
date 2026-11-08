@@ -90,6 +90,8 @@ export interface GlobalKeydownContext {
   setCommandPaletteOpen(open: boolean): void;
   setClipboardMessage(msg: string | undefined): void;
   setArchiveCreateRequest(req: ArchiveCreateRequest | undefined): void;
+  /** Flips the pane's open media viewer to the previous/next item of its folder (task 0311). */
+  stepGallery(paneId: PaneId, delta: -1 | 1): boolean;
   setCreateDirectoryOpen(open: boolean): void;
   setCreateFileOpen(open: boolean): void;
   /** Opens the Create link dialog for `target`, creating the link in `destination`. */
@@ -552,6 +554,37 @@ const ACTION_KEYDOWN_ROUTES = [
         }
       }
       return false;
+    },
+  },
+  // Lightbox (task 0311): J/K page the open media viewer through its folder; ArrowLeft/Right do
+  // too for an image that is fitted (zoomed images keep arrows for panning).
+  {
+    id: 'viewer-gallery',
+    tryHandle: (context, event) => {
+      if (
+        isEditableEvent(event) ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      )
+        return false;
+      const key = event.key;
+      const isJk = key === 'j' || key === 'J' || key === 'k' || key === 'K';
+      const isArrow = key === 'ArrowLeft' || key === 'ArrowRight';
+      if (!isJk && !isArrow) return false;
+      const viewerPaneId = findOpenViewerPaneId(context);
+      const viewer = viewerPaneId === undefined ? undefined : context.getViewer(viewerPaneId);
+      if (viewerPaneId === undefined || viewer?.state.status !== 'ready') return false;
+      const content = viewer.state.content;
+      const media =
+        content.kind === 'image' || content.kind === 'video' || content.kind === 'audio';
+      if (!media) return false;
+      if (isArrow && !(content.kind === 'image' && content.fitToContainer)) return false;
+      const delta = key === 'ArrowLeft' || key === 'k' || key === 'K' ? -1 : 1;
+      event.preventDefault();
+      context.stepGallery(viewerPaneId, delta);
+      return;
     },
   },
   // Arrow/Page keys inside an open F3 viewer: scroll text, page-scroll DOCX, page PDFs, or pan/zoom images.

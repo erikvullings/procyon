@@ -271,7 +271,24 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
   let treeWiring: ReturnType<typeof createTreeWiring>;
   let settingsWiring: ReturnType<typeof createSettingsWiring>;
   let miscWiring: ReturnType<typeof createMiscWiring>;
+  /** A tab's entries in pane order: the folder's sort and the quick filter applied. */
+  function visibleEntriesOf(paneId: PaneId, tab: TabProjection): readonly EntrySummary[] {
+    const key = tabKey(paneId, tab.id);
+    const entries = shellState.directories.get(key)?.entries ?? [];
+    return entriesFilteredFor(
+      key,
+      entriesSortedFor(
+        key,
+        entries,
+        effectiveSort(tab.view.sort),
+        tab.view.foldersFirst,
+        tab.location.uri.startsWith('search://'),
+      ),
+      quickFilterQueryFor(key, tab),
+    );
+  }
   const core = {
+    visibleEntries: visibleEntriesOf,
     activeTabKey,
     entriesSortedFor,
     entriesFilteredFor,
@@ -1764,6 +1781,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       const tabId = shellState.workspace?.panesById[paneId]?.activeTabId;
       return tabId === undefined ? undefined : shellState.viewerByTab.get(tabKey(paneId, tabId));
     },
+    stepGallery: (paneId, delta) => previewWiring.stepGallery(shellState.client, paneId, delta),
     getArchiveCreateRequest: () => shellState.dialogs.getState().archiveCreateRequest,
     getCreateDirectoryOpen: () => shellState.dialogs.getState().createDirectoryOpen,
     getCreateFileOpen: () => shellState.dialogs.getState().createFileOpen,
@@ -2420,6 +2438,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         initialPage,
       ),
     closeViewer: previewWiring.closeViewer,
+    getGallery: previewWiring.galleryOf,
+    stepGallery: (paneId, delta) => previewWiring.stepGallery(shellState.client, paneId, delta),
     isDocumentSummaryAvailable: () => shellState.semanticAssistantAvailable,
     showEntryOnMap: imageMapWiring.showEntryOnMap,
     minifyGeo: (entry) => {

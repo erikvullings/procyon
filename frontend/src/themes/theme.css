@@ -760,28 +760,9 @@ main.fm-workspace {
 }
 
 /* mm's checkbox, sized like the conflict dialog's (the label is a flex row here). */
-.fm-app-shell .fm-semantic-ocr-management input[type="checkbox"] + span:not(.lever) {
-  min-height: 20px;
-  padding-left: 28px;
-}
-
 .fm-app-shell .fm-semantic-ocr-management input[type="checkbox"] + span:not(.lever)::before {
   box-sizing: border-box;
   border-color: var(--fm-border);
-}
-
-.fm-app-shell
-  .fm-semantic-ocr-management
-  input[type="checkbox"]:checked
-  + span:not(.lever)::before {
-  top: 0;
-  left: 0;
-  width: 18px;
-  height: 18px;
-  box-sizing: border-box;
-  border: 2px solid var(--fm-accent);
-  background-color: var(--fm-accent);
-  transform: none;
 }
 
 .fm-app-shell .fm-semantic-ocr-management input[type="checkbox"]:checked + span:not(.lever)::after {
@@ -807,14 +788,6 @@ main.fm-workspace {
 .fm-semantic-ocr-error,
 .fm-semantic-ocr-unavailable {
   color: var(--fm-error);
-}
-
-.fm-semantic-ocr-job ul > li {
-  display: block;
-}
-
-.fm-semantic-ocr-job ul > li > span {
-  display: block;
 }
 
 .fm-semantic-ocr-job small {
@@ -2978,15 +2951,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
   font-weight: 600;
 }
 
-.fm-app-shell[data-mm-preset="compact-minimal"]
-  .fm-knowledge-folder-filter
-  > input[type="checkbox"]
-  + span:not(.lever) {
-  color: var(--fm-text-muted);
-  font-size: 0.92em;
-  font-weight: 600;
-}
-
 .fm-knowledge-include-folder-action {
   margin: 0.25rem 0.5rem;
   padding: 0;
@@ -4269,14 +4233,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
  * !important to override). Shrink it for every dialog by default -- lower
  * specificity than the per-modal overrides below, so those still win.
  */
-/* biome-ignore-start lint/complexity/noImportantStyles: overrides ModalPanel's inline title margin */
-.fm-app-shell .modal-content h4 {
-  margin: 0 0 0.6rem 0 !important;
-  font-size: var(--fm-type-heading);
-  font-weight: 600;
-}
-
-/* biome-ignore-end lint/complexity/noImportantStyles: overrides ModalPanel's inline title margin */
 
 /*
  * ModalPanel (mithril-materialized) sets width/padding/title size via inline
@@ -4289,11 +4245,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
 
 .modal.fm-dense-modal .modal-content {
   padding: 0.75rem 1rem !important;
-}
-
-.modal.fm-dense-modal .modal-content h4 {
-  margin: 0 0 0.6rem 0 !important;
-  font-size: var(--fm-type-heading) !important;
 }
 
 .modal.fm-dense-modal .modal-footer {
@@ -6135,4 +6086,55 @@ button.fm-activity-count {
 .fm-terminal-picker__item:hover,
 .fm-terminal-picker__item:focus-visible {
   background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+/* biome-ignore-start lint/complexity/noImportantStyles: overrides ModalPanel's inline title margin */
+.fm-app-shell .modal-content h4 {
+  margin: 0 0 0.6rem 0 !important;
+  font-size: var(--fm-type-heading);
+  font-weight: 600;
+}
+
+/* biome-ignore-end lint/complexity/noImportantStyles: overrides ModalPanel's inline title margin */
+
+.fm-app-shell .fm-semantic-ocr-management input[type="checkbox"] + span:not(.lever) {
+  min-height: 20px;
+  padding-left: 28px;
+}
+
+.fm-app-shell[data-mm-preset="compact-minimal"]
+  .fm-knowledge-folder-filter
+  > input[type="checkbox"]
+  + span:not(.lever) {
+  color: var(--fm-text-muted);
+  font-size: 0.92em;
+  font-weight: 600;
+}
+
+/* Higher-specificity rules kept last so no later, lower-specificity rule trails them. */
+.fm-semantic-ocr-job ul > li {
+  display: block;
+}
+
+.fm-semantic-ocr-job ul > li > span {
+  display: block;
+}
+
+.modal.fm-dense-modal .modal-content h4 {
+  margin: 0 0 0.6rem 0 !important;
+  font-size: var(--fm-type-heading) !important;
+}
+
+.fm-app-shell
+  .fm-semantic-ocr-management
+  input[type="checkbox"]:checked
+  + span:not(.lever)::before {
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  border: 2px solid var(--fm-accent);
+  background-color: var(--fm-accent);
+  transform: none;
 }

@@ -8,6 +8,7 @@ import { parentLocation } from '../features/navigation/navigation';
 import type { PrepareMedia } from '../features/player/media-access';
 import type { PluginPaneState } from '../features/plugins/plugin-panel-host';
 import { createFileViewerController } from '../features/preview/file-viewer-controller';
+import { type GalleryPosition, galleryPosition, isGalleryEntry } from '../features/preview/gallery';
 import { previewPluginRoutes } from '../features/preview/plugin-preview';
 import { openViewerWindow } from '../features/preview/viewer-window';
 import { dispatchWorkspaceCommand } from '../features/workspace/dispatch-workspace-command';
@@ -18,6 +19,7 @@ import type {
   PaneId,
   PluginDescriptor,
   TabId,
+  TabProjection,
   WorkspaceProjection,
 } from '../models';
 import { tabKey, workspaceErrorMessage } from './shell-helpers';
@@ -28,6 +30,8 @@ export interface PreviewCore {
   readonly replaceWorkspace: (next: WorkspaceProjection) => void;
   readonly activatePane: (client: FileManagerClient, paneId: PaneId) => Promise<void>;
   readonly prepareMedia: PrepareMedia;
+  /** A tab's entries in the order its pane shows them (sorted, quick-filtered). */
+  readonly visibleEntries: (paneId: PaneId, tab: TabProjection) => readonly EntrySummary[];
 }
 
 export function createPreviewWiring(shellState: ShellState, core: PreviewCore) {
@@ -222,6 +226,38 @@ export function createPreviewWiring(shellState: ShellState, core: PreviewCore) {
       console.error('openViewerInPane failed', error);
       toast({ html: errorText(error) });
     });
+  }
+
+  /**
+   * Where the pane's open media viewer sits among the folder's images/videos/audio, in the order
+   * the folder is displayed. The viewer tab only borrows its folder from the tab it was opened
+   * from, so that sibling tab provides the listing.
+   */
+  function galleryOf(paneId: PaneId): GalleryPosition | undefined {
+    const pane = shellState.workspace?.panesById[paneId];
+    const viewer =
+      pane === undefined ? undefined : shellState.viewerByTab.get(tabKey(paneId, pane.activeTabId));
+    const viewerTab = pane?.tabsById[pane.activeTabId];
+    if (pane === undefined || viewer === undefined || viewerTab === undefined) return undefined;
+    if (!isGalleryEntry(viewer.state.entry)) return undefined;
+    const source = Object.values(pane.tabsById).find(
+      (tab) =>
+        tab.id !== viewerTab.id &&
+        !shellState.viewerByTab.has(tabKey(paneId, tab.id)) &&
+        tab.location.providerId === viewerTab.location.providerId &&
+        tab.location.uri === viewerTab.location.uri,
+    );
+    if (source === undefined) return undefined;
+    return galleryPosition(core.visibleEntries(paneId, source), viewer.state.entry.location);
+  }
+
+  /** Flips the pane's media viewer to the previous (-1) or next (1) item; false at either end. */
+  function stepGallery(client: FileManagerClient, paneId: PaneId, delta: -1 | 1): boolean {
+    const position = galleryOf(paneId);
+    const target = delta < 0 ? position?.previous : position?.next;
+    if (target === undefined) return false;
+    openViewerInPane(client, paneId, target);
+    return true;
   }
 
   function closeViewer(paneId: PaneId, tabId?: TabId): void {
@@ -465,6 +501,8 @@ export function createPreviewWiring(shellState: ShellState, core: PreviewCore) {
     openViewer,
     openViewerInPane,
     closeViewer,
+    galleryOf,
+    stepGallery,
     openEditor,
     editorIsDirty,
     editorLinkHandlers,

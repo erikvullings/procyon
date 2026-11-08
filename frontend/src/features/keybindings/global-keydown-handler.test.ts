@@ -208,6 +208,7 @@ function makeContext(overrides: Partial<GlobalKeydownContext> = {}): GlobalKeydo
     setCommandPaletteOpen: vi.fn(),
     setClipboardMessage: vi.fn(),
     setArchiveCreateRequest: vi.fn(),
+    stepGallery: vi.fn(() => false),
     setCreateDirectoryOpen: vi.fn(),
     setCreateFileOpen: vi.fn(),
     openCreateLink: vi.fn(),
@@ -920,6 +921,60 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     });
     createGlobalKeydownHandler(context)(keydown('u', { ctrlKey: true, altKey: true }));
     expect(uninstallApplication).not.toHaveBeenCalled();
+  });
+
+  describe('lightbox paging (task 0311)', () => {
+    function viewerWith(content: unknown): GlobalKeydownContext['getViewer'] {
+      return (paneId) =>
+        paneId === PANE_A
+          ? ({ controller: {} as never, state: { status: 'ready', content } as never } as never)
+          : undefined;
+    }
+
+    it('pages with K and J for every media kind', () => {
+      for (const content of [
+        { kind: 'image', fitToContainer: false, zoom: 3 },
+        { kind: 'video', src: 'x' },
+        { kind: 'audio', src: 'x' },
+      ]) {
+        const stepGallery = vi.fn(() => true);
+        const context = makeContext({ getViewer: viewerWith(content), stepGallery });
+        createGlobalKeydownHandler(context)(keydown('k'));
+        createGlobalKeydownHandler(context)(keydown('J'));
+        expect(stepGallery.mock.calls).toEqual([
+          [PANE_A, -1],
+          [PANE_A, 1],
+        ]);
+      }
+    });
+
+    it('pages with the arrows only while the image is fitted, so zoomed images keep panning', () => {
+      const stepGallery = vi.fn(() => true);
+      const fitted = makeContext({
+        getViewer: viewerWith({ kind: 'image', fitToContainer: true, zoom: 1 }),
+        stepGallery,
+      });
+      createGlobalKeydownHandler(fitted)(keydown('ArrowRight'));
+      expect(stepGallery).toHaveBeenCalledWith(PANE_A, 1);
+
+      stepGallery.mockClear();
+      const zoomed = makeContext({
+        getViewer: viewerWith({ kind: 'image', fitToContainer: false, zoom: 2 }),
+        stepGallery,
+      });
+      createGlobalKeydownHandler(zoomed)(keydown('ArrowRight'));
+      expect(stepGallery).not.toHaveBeenCalled();
+    });
+
+    it('leaves J/K alone for non-media viewers', () => {
+      const stepGallery = vi.fn(() => true);
+      const context = makeContext({
+        getViewer: viewerWith({ kind: 'text', text: '' }),
+        stepGallery,
+      });
+      createGlobalKeydownHandler(context)(keydown('j'));
+      expect(stepGallery).not.toHaveBeenCalled();
+    });
   });
 
   it('Alt+Space toggles the metadata panel when a viewer is open in the active pane', () => {

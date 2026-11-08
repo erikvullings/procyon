@@ -331,6 +331,38 @@
   cursor: pointer;
 }
 
+.fm-file-viewer-gallery {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.25rem;
+  margin-inline-start: 0.5rem;
+}
+
+.fm-file-viewer-gallery button {
+  height: var(--fm-header-height);
+  padding: 0 0.5rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.fm-file-viewer-gallery button:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.fm-file-viewer-gallery button:focus-visible {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: -2px;
+}
+
+.fm-file-viewer-gallery-count {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .fm-file-viewer-summary {
   flex: 0 0 auto;
   font: inherit;

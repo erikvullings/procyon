@@ -18,6 +18,7 @@ export type FileViewerAttrsExtras = Pick<
       | 'onMinifyGeo'
       | 'mapClient'
       | 'links'
+      | 'gallery'
     >
   > & {
     readonly openExternalUrl: (url: string) => void;

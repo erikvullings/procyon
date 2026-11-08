@@ -67,6 +67,7 @@ import { PluginPanelHost, type PluginPaneState } from '../plugins/plugin-panel-h
 import { FileViewer } from '../preview/file-viewer';
 import { fileViewerAttrs } from '../preview/file-viewer-attrs';
 import type { FileViewerController, FileViewerState } from '../preview/file-viewer-controller';
+import type { GalleryPosition } from '../preview/gallery';
 import {
   type AdvancedFilterCriteria,
   advancedFilterNotices,
@@ -262,6 +263,9 @@ export interface PaneContentContext {
     initialPage?: number,
   ): void;
   closeViewer(paneId: PaneId): void;
+  /** Position of the pane's open media viewer among its folder's media (lightbox, task 0311). */
+  getGallery(paneId: PaneId): GalleryPosition | undefined;
+  stepGallery(paneId: PaneId, delta: -1 | 1): boolean;
   isDocumentSummaryAvailable?(): boolean;
   /** Hands playlist rows to the audio queue (task 0262). */
   playQueueItems?: PlaylistViewAttrs['onPlay'];
@@ -1190,6 +1194,7 @@ export function createPaneContentBuilder(
                           action.id === 'core.quickLook' &&
                           action.contextRequirements.featureAvailable !== false,
                       );
+                  const gallery = context.getGallery(paneId);
                   return m(
                     FileViewer,
                     fileViewerAttrs(viewer.state, viewer.controller, {
@@ -1251,6 +1256,16 @@ export function createPaneContentBuilder(
                         : { onPlayTracks: context.playQueueItems }),
                       links: context.getEditorLinkHandlers(paneId, viewer.state.entry.location),
                       onClose: () => context.closeViewer(paneId),
+                      ...(gallery === undefined || gallery.count < 2
+                        ? {}
+                        : {
+                            gallery: {
+                              index: gallery.index,
+                              count: gallery.count,
+                              onPrevious: () => context.stepGallery(paneId, -1),
+                              onNext: () => context.stepGallery(paneId, 1),
+                            },
+                          }),
                     }),
                   );
                 })(),

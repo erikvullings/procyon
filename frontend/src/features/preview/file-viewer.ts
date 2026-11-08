@@ -126,6 +126,13 @@ export interface FileViewerAttrs {
   readonly onConvertGeo?: () => void;
   /** Actions for paths and URLs in the viewed text (task 0271). */
   readonly links?: EditorLinkHandlers;
+  /** Lightbox navigation over the folder's media (task 0311); absent for a single item. */
+  readonly gallery?: {
+    readonly index: number;
+    readonly count: number;
+    readonly onPrevious: () => void;
+    readonly onNext: () => void;
+  };
   readonly onClose: () => void;
 }
 
@@ -1758,6 +1765,44 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                 )
               : undefined,
             m('strong.fm-file-viewer-title', state.entry.name),
+            attrs.gallery === undefined
+              ? undefined
+              : m('.fm-file-viewer-gallery', { role: 'group' }, [
+                  tooltip(
+                    t('viewer', 'galleryPrevious'),
+                    m(
+                      'button',
+                      {
+                        type: 'button',
+                        'aria-label': t('viewer', 'galleryPrevious'),
+                        disabled: attrs.gallery.index === 0,
+                        onclick: attrs.gallery.onPrevious,
+                      },
+                      '‹',
+                    ),
+                  ),
+                  m(
+                    'span.fm-file-viewer-gallery-count',
+                    { 'aria-live': 'polite' },
+                    t('viewer', 'galleryPosition', {
+                      index: attrs.gallery.index + 1,
+                      count: attrs.gallery.count,
+                    }),
+                  ),
+                  tooltip(
+                    t('viewer', 'galleryNext'),
+                    m(
+                      'button',
+                      {
+                        type: 'button',
+                        'aria-label': t('viewer', 'galleryNext'),
+                        disabled: attrs.gallery.index === attrs.gallery.count - 1,
+                        onclick: attrs.gallery.onNext,
+                      },
+                      '›',
+                    ),
+                  ),
+                ]),
             state.status === 'ready' &&
             (state.content.kind === 'image' ||
               state.content.kind === 'pdf' ||

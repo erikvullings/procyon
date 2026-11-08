@@ -1,6 +1,6 @@
 # 0311 Gallery lightbox
 
-Status: open
+Status: in_progress
 Priority: low
 Subsystem: frontend
 Depends on: 0134
@@ -25,4 +25,13 @@ arrow keys, zoom, and minimal chrome. Great for curation and a big usability win
   pane.
 
 ## Agent Notes
-- (none yet)
+- 2026-11-08 claude: Built the navigation shell inside the existing F3 viewer (no new renderer):
+  `features/preview/gallery.ts` (media filter + neighbours in pane order), `previewWiring.galleryOf/
+  stepGallery` (listing = the sibling tab the viewer tab borrowed its folder from, sorted + quick-
+  filtered like the pane via `visibleEntries`), key route `viewer-gallery` (J/K for every media kind;
+  ArrowLeft/Right only for a fitted image, zoomed images keep panning), header "‹ 3 of 12 ›" with
+  disabled ends (i18n x8). Tests: gallery.test.ts (3), keydown routes (3), viewer header (2).
+  **Not done (criteria still open):** true full-screen overlay/minimal chrome, swipe, lazy preloading
+  of the neighbour, thumbnail strip, entering from a multi-selection (only flips over the whole
+  folder's media), focus/scroll return on Esc beyond the existing viewer close, survival in tab
+  memory (0270). Not verified visually or in a real host.

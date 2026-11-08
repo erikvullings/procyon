@@ -157,6 +157,39 @@ describe('FileViewer', () => {
     expect(loading?.querySelector('.fm-file-viewer-loading-spinner')).not.toBeNull();
   });
 
+  it('shows the lightbox position and pages through the folder', () => {
+    const onPrevious = vi.fn();
+    const onNext = vi.fn();
+    mount(
+      baseAttrs(
+        { status: 'loading', entry: entry() },
+        { gallery: { index: 2, count: 12, onPrevious, onNext } },
+      ),
+    );
+    expect(root.querySelector('.fm-file-viewer-gallery-count')?.textContent).toBe('3 of 12');
+    const [previous, next] = root.querySelectorAll<HTMLButtonElement>(
+      '.fm-file-viewer-gallery button',
+    );
+    previous?.click();
+    next?.click();
+    expect(onPrevious).toHaveBeenCalledOnce();
+    expect(onNext).toHaveBeenCalledOnce();
+  });
+
+  it('disables paging past the first and last item', () => {
+    mount(
+      baseAttrs(
+        { status: 'loading', entry: entry() },
+        { gallery: { index: 0, count: 1 + 1, onPrevious: vi.fn(), onNext: vi.fn() } },
+      ),
+    );
+    const [previous, next] = root.querySelectorAll<HTMLButtonElement>(
+      '.fm-file-viewer-gallery button',
+    );
+    expect(previous?.disabled).toBe(true);
+    expect(next?.disabled).toBe(false);
+  });
+
   it('offers document summary from the Lister toolbar', () => {
     const onDocumentSummary = vi.fn();
     mount(
