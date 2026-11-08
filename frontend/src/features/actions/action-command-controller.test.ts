@@ -77,6 +77,7 @@ function fakeContext(
     toast: () => {},
     getOpenTerminalSupported: () => false,
     openCreateDirectory: () => {},
+    openNewFromTemplate: () => {},
     setArchiveCreateRequest: () => {},
     openFinderTagsDialog: () => {},
     openSpotlightCommentDialog: () => {},
@@ -447,6 +448,18 @@ describe('action-command-controller uninstallApplication wiring', () => {
     controller.invokePaletteAction(action, undefined, { paneId, cursorEntryId: folder.id });
 
     expect(calculateFolderSize).toHaveBeenCalledWith(paneId, folder);
+  });
+
+  it('invokePaletteAction opens the template picker instead of the backend invoke', () => {
+    const openNewFromTemplate = vi.fn();
+    const action = { ...uninstallAction(), id: 'core.newFromTemplate' };
+    const controller = createActionCommandController(
+      fakeContext({ getRegisteredActions: () => [action], openNewFromTemplate }),
+    );
+
+    controller.invokePaletteAction(action, undefined, { paneId: 'pane-1' as PaneId });
+
+    expect(openNewFromTemplate).toHaveBeenCalledOnce();
   });
 
   it('invokeContextMenuAction dispatches the real discovery flow for the right-click menu', () => {

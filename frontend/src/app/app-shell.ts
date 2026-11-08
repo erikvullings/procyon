@@ -2282,6 +2282,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     toast: (options) => toast(options),
     getOpenTerminalSupported: () => shellState.openTerminalSupported,
     openCreateDirectory: (location) => shellState.dialogs.openCreateDirectory(location),
+    openNewFromTemplate: (location) => shellState.dialogs.openNewFromTemplate(location),
     openFinderTagsDialog: (request) => shellState.dialogs.openFinderTagsDialog(request),
     openSpotlightCommentDialog: (request) => shellState.dialogs.openSpotlightCommentDialog(request),
     openTerminalPickerDialog: (request) => shellState.dialogs.openTerminalPickerDialog(request),

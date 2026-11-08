@@ -133,6 +133,7 @@ export * from './exportCorpusThemesResponseDto.ts';
 export * from './exportSemanticVocabularyResponseDto.ts';
 export * from './favouriteLocationDto.ts';
 export * from './fileDiffOutcomeDto.ts';
+export * from './fileTemplateDto.ts';
 export * from './filterCriteriaDto.ts';
 export * from './filterKindDto.ts';
 export * from './filterPresetDto.ts';

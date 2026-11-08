@@ -303,6 +303,7 @@ export const nl = {
     revealInSystemFileManager: 'Tonen in bestandsbeheer',
     openTerminal: 'Terminal hier openen',
     openTerminalWith: 'Terminal openen met…',
+    newFromTemplate: 'Nieuw bestand uit sjabloon…',
     copyName: 'Bestandsnaam kopiëren',
     copyPath: 'Volledig pad kopiëren',
     copyRelativePath: 'Relatief pad kopiëren',
@@ -388,6 +389,17 @@ export const nl = {
     terminalApps: 'Externe terminals',
     terminalAppsHelp:
       'Eén per regel: Naam = commando (een toepassingsnaam op macOS, een uitvoerbaar bestand op Windows). Aangeboden door “Terminal openen met…”.',
+    fileTemplates: 'Bestandssjablonen',
+    fileTemplatesHelp:
+      'Aangeboden door "Nieuw bestand uit sjabloon". {date} en {name} in de inhoud worden ingevuld bij het aanmaken van het bestand.',
+    templateEnabled: 'Ingeschakeld',
+    templateLabel: 'Naam',
+    templateFileName: 'Voorgestelde bestandsnaam',
+    templateBody: 'Inhoud',
+    templateRemove: 'Sjabloon verwijderen',
+    templateAdd: 'Sjabloon toevoegen',
+    templateReset: 'Standaardwaarden herstellen',
+    templateNewLabel: 'Nieuw sjabloon',
     editor: 'Bewerker',
     editorCommand: 'Bewerkercommando',
     systemDefault: 'Systeemstandaard',
@@ -1551,6 +1563,12 @@ export const nl = {
   terminalPicker: {
     title: 'Terminal openen met…',
     empty: 'Er zijn geen terminaltoepassingen ingesteld. Voeg ze toe via Instellingen → Terminal.',
+  },
+  newFromTemplate: {
+    title: 'Nieuw bestand uit sjabloon',
+    empty: 'Geen sjablonen ingeschakeld. Voeg ze toe of schakel ze in via Instellingen → Terminal.',
+    templates: 'Sjablonen',
+    fileName: 'Bestandsnaam',
   },
   entryMetadata: {
     tagsTitle: 'Labels: {name}',

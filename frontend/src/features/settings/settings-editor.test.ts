@@ -43,6 +43,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     pluginSettings: {},
     terminalCommand: null,
     terminalApps: [],
+    fileTemplates: [],
     editorCommand: null,
     defaultStartLocations: [],
     favouriteLocations: [],

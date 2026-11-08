@@ -299,6 +299,7 @@ export const es = {
     revealInSystemFileManager: 'Mostrar en el explorador de archivos',
     openTerminal: 'Abrir terminal aquí',
     openTerminalWith: 'Abrir terminal con…',
+    newFromTemplate: 'Nuevo archivo desde plantilla…',
     copyName: 'Copiar nombre de archivo',
     copyPath: 'Copiar ruta completa',
     copyRelativePath: 'Copiar ruta relativa',
@@ -388,6 +389,17 @@ export const es = {
     terminalApps: 'Terminales externas',
     terminalAppsHelp:
       'Una por línea: Nombre = comando (un nombre de aplicación en macOS, un ejecutable en Windows). Se ofrecen en «Abrir terminal con…».',
+    fileTemplates: 'Plantillas de archivo',
+    fileTemplatesHelp:
+      'Se ofrecen en «Nuevo archivo desde plantilla». {date} y {name} en el contenido se rellenan al crear el archivo.',
+    templateEnabled: 'Activada',
+    templateLabel: 'Nombre',
+    templateFileName: 'Nombre de archivo sugerido',
+    templateBody: 'Contenido',
+    templateRemove: 'Quitar plantilla',
+    templateAdd: 'Añadir plantilla',
+    templateReset: 'Restablecer valores',
+    templateNewLabel: 'Nueva plantilla',
     editor: 'Editor',
     editorCommand: 'Comando del editor',
     systemDefault: 'Predeterminado del sistema',
@@ -1158,6 +1170,12 @@ export const es = {
   terminalPicker: {
     title: 'Abrir terminal con…',
     empty: 'No hay aplicaciones de terminal configuradas. Añádelas en Ajustes → Terminal.',
+  },
+  newFromTemplate: {
+    title: 'Nuevo archivo desde plantilla',
+    empty: 'No hay plantillas activadas. Añádalas o actívelas en Ajustes → Terminal.',
+    templates: 'Plantillas',
+    fileName: 'Nombre de archivo',
   },
   entryMetadata: {
     tagsTitle: 'Etiquetas: {name}',

@@ -308,6 +308,7 @@ export const de = {
     revealInSystemFileManager: 'Im Dateimanager anzeigen',
     openTerminal: 'Terminal hier öffnen',
     openTerminalWith: 'Terminal öffnen mit…',
+    newFromTemplate: 'Neue Datei aus Vorlage…',
     copyName: 'Dateiname kopieren',
     copyPath: 'Vollständigen Pfad kopieren',
     copyRelativePath: 'Relativen Pfad kopieren',
@@ -397,6 +398,17 @@ export const de = {
     terminalApps: 'Externe Terminals',
     terminalAppsHelp:
       'Eine pro Zeile: Name = Befehl (unter macOS ein Anwendungsname, unter Windows eine ausführbare Datei). Angeboten von „Terminal öffnen mit…“.',
+    fileTemplates: 'Dateivorlagen',
+    fileTemplatesHelp:
+      'Angeboten von „Neue Datei aus Vorlage“. {date} und {name} im Inhalt werden beim Erstellen der Datei ersetzt.',
+    templateEnabled: 'Aktiviert',
+    templateLabel: 'Name',
+    templateFileName: 'Vorgeschlagener Dateiname',
+    templateBody: 'Inhalt',
+    templateRemove: 'Vorlage entfernen',
+    templateAdd: 'Vorlage hinzufügen',
+    templateReset: 'Auf Standard zurücksetzen',
+    templateNewLabel: 'Neue Vorlage',
     editor: 'Editor',
     editorCommand: 'Editorbefehl',
     systemDefault: 'Systemstandard',
@@ -1174,6 +1186,13 @@ export const de = {
     title: 'Terminal öffnen mit…',
     empty:
       'Es sind keine Terminalanwendungen konfiguriert. Fügen Sie sie unter Einstellungen → Terminal hinzu.',
+  },
+  newFromTemplate: {
+    title: 'Neue Datei aus Vorlage',
+    empty:
+      'Keine Vorlagen aktiviert. Fügen Sie sie unter Einstellungen → Terminal hinzu oder aktivieren Sie sie.',
+    templates: 'Vorlagen',
+    fileName: 'Dateiname',
   },
   entryMetadata: {
     tagsTitle: 'Tags: {name}',

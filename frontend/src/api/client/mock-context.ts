@@ -1,4 +1,5 @@
 import { DEFAULT_MAP_SETTINGS } from '../../features/map/map-settings';
+import { DEFAULT_FILE_TEMPLATES } from '../../features/templates/file-templates';
 import { apiErrorMessage } from '../../i18n';
 import type {
   BackendEvent,
@@ -215,6 +216,7 @@ export class MockContext {
     pluginSettings: {},
     terminalCommand: null,
     terminalApps: [{ name: 'Terminal', command: 'Terminal' }],
+    fileTemplates: DEFAULT_FILE_TEMPLATES.map((template) => ({ ...template })),
     editorCommand: null,
     defaultStartLocations: [],
     favouriteLocations: [],

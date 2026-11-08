@@ -303,6 +303,7 @@ export const fr = {
     revealInSystemFileManager: 'Révéler dans le gestionnaire de fichiers',
     openTerminal: 'Ouvrir un terminal ici',
     openTerminalWith: 'Ouvrir un terminal avec…',
+    newFromTemplate: 'Nouveau fichier depuis un modèle…',
     copyName: 'Copier le nom de fichier',
     copyPath: 'Copier le chemin complet',
     copyRelativePath: 'Copier le chemin relatif',
@@ -392,6 +393,17 @@ export const fr = {
     terminalApps: 'Terminaux externes',
     terminalAppsHelp:
       'Un par ligne : Nom = commande (un nom d’application sur macOS, un exécutable sous Windows). Proposés par « Ouvrir un terminal avec… ».',
+    fileTemplates: 'Modèles de fichier',
+    fileTemplatesHelp:
+      'Proposés par « Nouveau fichier depuis un modèle ». {date} et {name} dans le contenu sont remplacés à la création du fichier.',
+    templateEnabled: 'Activé',
+    templateLabel: 'Nom',
+    templateFileName: 'Nom de fichier suggéré',
+    templateBody: 'Contenu',
+    templateRemove: 'Supprimer le modèle',
+    templateAdd: 'Ajouter un modèle',
+    templateReset: 'Rétablir les valeurs par défaut',
+    templateNewLabel: 'Nouveau modèle',
     editor: 'Éditeur',
     editorCommand: "Commande de l'éditeur",
     systemDefault: 'Par défaut du système',
@@ -1160,6 +1172,12 @@ export const fr = {
   terminalPicker: {
     title: 'Ouvrir un terminal avec…',
     empty: 'Aucune application de terminal n’est configurée. Ajoutez-en dans Réglages → Terminal.',
+  },
+  newFromTemplate: {
+    title: 'Nouveau fichier depuis un modèle',
+    empty: 'Aucun modèle activé. Ajoutez-les ou activez-les dans Réglages → Terminal.',
+    templates: 'Modèles',
+    fileName: 'Nom du fichier',
   },
   entryMetadata: {
     tagsTitle: 'Étiquettes : {name}',

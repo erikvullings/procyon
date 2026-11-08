@@ -195,6 +195,7 @@ describe('command availability', () => {
   it('composes empty-area location actions from the registry and disables unavailable targets', () => {
     const actions = [
       action('core.createDirectory'),
+      action('core.newFromTemplate'),
       action('core.paste'),
       action('core.refresh'),
       action('core.openTerminal'),
@@ -204,8 +205,9 @@ describe('command availability', () => {
     expect(menuActionsForContext(actions, context({ locationWritable: false }))).toEqual([
       { action: actions[0], available: false, reason: 'This location is read-only' },
       { action: actions[1], available: false, reason: 'This location is read-only' },
-      { action: actions[2], available: true },
-      { action: actions[3], available: false, reason: 'Terminal is not supported by this host' },
+      { action: actions[2], available: false, reason: 'This location is read-only' },
+      { action: actions[3], available: true },
+      { action: actions[4], available: false, reason: 'Terminal is not supported by this host' },
     ]);
   });
 

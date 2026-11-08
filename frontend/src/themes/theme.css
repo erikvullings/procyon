@@ -6088,6 +6088,43 @@ button.fm-activity-count {
   background: color-mix(in srgb, currentColor 10%, transparent);
 }
 
+.fm-terminal-picker__item[aria-checked="true"] {
+  border-color: var(--fm-accent, currentColor);
+  background: color-mix(in srgb, var(--fm-accent, currentColor) 15%, transparent);
+}
+
+.fm-new-from-template {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* "New File from Template" list editor in Settings (task 0312). */
+.fm-file-templates {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fm-file-template {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--fm-border, currentColor);
+  border-radius: 4px;
+}
+
+.fm-file-template__body {
+  font-family: var(--fm-font-mono, monospace);
+}
+
+.fm-file-templates__actions {
+  display: flex;
+  gap: 8px;
+}
+
 /* biome-ignore-start lint/complexity/noImportantStyles: overrides ModalPanel's inline title margin */
 .fm-app-shell .modal-content h4 {
   margin: 0 0 0.6rem 0 !important;

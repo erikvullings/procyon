@@ -26,6 +26,7 @@ import { MapSettingsSection } from '../map/map-settings-section';
 import { PluginManagement } from '../plugin-management/plugin-management';
 import type { SelectionPlatform } from '../selection/keybindings';
 import { AppUpdateSettings } from './app-update-settings';
+import { FileTemplatesEditor } from './file-templates-editor';
 import { LlmProfileManagement } from './llm-profile-management';
 import {
   SemanticComponentManagement,
@@ -550,6 +551,17 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                           },
                         }),
                         m('p.helper-text', t('settings', 'terminalAppsHelp')),
+                      ]),
+                    ]),
+
+                    m('.row', [
+                      m('.col.s12', [
+                        m('label', t('settings', 'fileTemplates')),
+                        m(FileTemplatesEditor, {
+                          templates: activeDraft.fileTemplates,
+                          onChange: (fileTemplates) => update(current, { fileTemplates }),
+                        }),
+                        m('p.helper-text', t('settings', 'fileTemplatesHelp')),
                       ]),
                     ]),
 

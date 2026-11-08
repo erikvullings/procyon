@@ -99,6 +99,7 @@ export interface ActionCommandControllerContext {
   toast(options: { html: string }): void;
   getOpenTerminalSupported(): boolean;
   openCreateDirectory(location?: import('../../models').Location): void;
+  openNewFromTemplate(location?: import('../../models').Location): void;
   setArchiveCreateRequest(request: ArchiveCreateRequest): void;
   openFinderTagsDialog(
     request: import('../dialogs/dialog-ui-controller').FinderTagsDialogRequest,
@@ -467,6 +468,10 @@ export function createActionCommandController(
       context.openCreateDirectory(undefined);
       return;
     }
+    if (action.id === 'core.newFromTemplate') {
+      context.openNewFromTemplate(undefined);
+      return;
+    }
     if (action.id === 'core.focusLocation') {
       if (contextParam.paneId !== undefined) context.requestLocationEdit?.(contextParam.paneId);
       return;
@@ -649,6 +654,10 @@ export function createActionCommandController(
     }
     if (action.id === 'core.createDirectory') {
       context.openCreateDirectory(directory.location);
+      return;
+    }
+    if (action.id === 'core.newFromTemplate') {
+      context.openNewFromTemplate(directory.location);
       return;
     }
     if (action.id === 'core.refresh') {

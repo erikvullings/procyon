@@ -384,6 +384,113 @@ fn sanitize_terminal_apps(apps: &mut Vec<TerminalApp>) {
     apps.truncate(MAX_TERMINAL_APPS);
 }
 
+/// Most file templates kept for "New file from template" (task 0312).
+pub const MAX_FILE_TEMPLATES: usize = 30;
+/// Longest accepted template label or default file name.
+const MAX_TEMPLATE_NAME_CHARS: usize = 120;
+/// Longest accepted template body, in characters.
+pub const MAX_TEMPLATE_BODY_CHARS: usize = 64 * 1024;
+
+/// A file template offered by "New file from template" (task 0312).
+///
+/// `body` may contain the optional placeholders `{date}` (ISO date) and `{name}` (the new file's
+/// name without extension), which the host fills in when the file is created.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileTemplate {
+    /// Stable identifier; unique within the list.
+    pub id: String,
+    /// User-visible name in the template picker.
+    pub label: String,
+    /// Suggested name of the created file, including its extension.
+    pub file_name: String,
+    /// Initial file content.
+    pub body: String,
+    /// Disabled templates stay in the list but are not offered.
+    pub enabled: bool,
+}
+
+/// The templates offered until the user edits the list.
+#[must_use]
+pub fn default_file_templates() -> Vec<FileTemplate> {
+    let template = |id: &str, label: &str, file_name: &str, body: &str| FileTemplate {
+        id: id.to_owned(),
+        label: label.to_owned(),
+        file_name: file_name.to_owned(),
+        body: body.to_owned(),
+        enabled: true,
+    };
+    vec![
+        template("text", "Text file", "New file.txt", ""),
+        template(
+            "markdown",
+            "Markdown note",
+            "Note.md",
+            "# {name}\n\n{date}\n\n",
+        ),
+        template(
+            "todo",
+            "To-do list",
+            "TODO.md",
+            "# To do\n\n- [ ] \n- [ ] \n- [ ] \n",
+        ),
+        template(
+            "shell",
+            "Shell script",
+            "script.sh",
+            "#!/usr/bin/env bash\nset -euo pipefail\n\n",
+        ),
+        template(
+            "html",
+            "HTML page",
+            "index.html",
+            "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\">\n  <title>{name}</title>\n</head>\n<body>\n\n</body>\n</html>\n",
+        ),
+        template("json", "JSON document", "data.json", "{\n}\n"),
+    ]
+}
+
+/// Whether `name` is usable as a single new-file name.
+fn valid_template_file_name(name: &str) -> bool {
+    !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\', '\0'])
+}
+
+/// Trims labels and names, drops entries with a blank label, an unusable file name or a duplicate
+/// id, and bounds the list and each body.
+fn sanitize_file_templates(templates: &mut Vec<FileTemplate>) {
+    let clean = |text: &str| -> String {
+        text.trim()
+            .chars()
+            .take(MAX_TEMPLATE_NAME_CHARS)
+            .collect::<String>()
+            .trim()
+            .to_owned()
+    };
+    let mut seen: Vec<String> = Vec::new();
+    templates.retain_mut(|template| {
+        template.id = clean(&template.id);
+        template.label = clean(&template.label);
+        template.file_name = clean(&template.file_name);
+        if template.body.chars().count() > MAX_TEMPLATE_BODY_CHARS {
+            template.body = template
+                .body
+                .chars()
+                .take(MAX_TEMPLATE_BODY_CHARS)
+                .collect();
+        }
+        if template.id.is_empty()
+            || template.label.is_empty()
+            || !valid_template_file_name(&template.file_name)
+            || seen.contains(&template.id)
+        {
+            return false;
+        }
+        seen.push(template.id.clone());
+        true
+    });
+    templates.truncate(MAX_FILE_TEMPLATES);
+}
+
 /// Trims names, drops blank or duplicate (case-insensitive) presets, and bounds the list.
 fn sanitize_filter_presets(presets: &mut Vec<FilterPreset>) {
     let mut seen: Vec<String> = Vec::new();
@@ -481,6 +588,8 @@ pub struct Settings {
     /// External terminals offered by "Open Terminal With..." (task 0127); independent of
     /// `terminal_command`, which stays the single default for "Open Terminal Here".
     pub terminal_apps: Vec<TerminalApp>,
+    /// Templates offered by "New file from template" (task 0312); built-ins until edited.
+    pub file_templates: Vec<FileTemplate>,
     /// Optional text-editor executable or command for `core.edit` (task 0086); `None` falls back
     /// to the platform adapter's default text-editor association.
     pub editor_command: Option<String>,
@@ -600,6 +709,7 @@ impl Default for Settings {
             plugin_settings: BTreeMap::new(),
             terminal_command: None,
             terminal_apps: default_terminal_apps(),
+            file_templates: default_file_templates(),
             editor_command: None,
             default_start_locations: Vec::new(),
             favourite_locations: Vec::new(),
@@ -704,6 +814,7 @@ impl SettingsStore {
                 settings.normalise_folder_views();
                 sanitize_filter_presets(&mut settings.filter_presets);
                 sanitize_terminal_apps(&mut settings.terminal_apps);
+                sanitize_file_templates(&mut settings.file_templates);
                 sync_profile::sanitize_sync_profiles(&mut settings.sync_profiles);
                 Ok(LoadOutcome {
                     settings,
@@ -757,6 +868,7 @@ impl SettingsStore {
         current.normalise_folder_views();
         sanitize_filter_presets(&mut current.filter_presets);
         sanitize_terminal_apps(&mut current.terminal_apps);
+        sanitize_file_templates(&mut current.file_templates);
         sync_profile::sanitize_sync_profiles(&mut current.sync_profiles);
         let bytes = serde_json::to_vec_pretty(&current)?;
         atomic_write(&self.directory, SETTINGS_FILE_NAME, &bytes)?;
@@ -1124,6 +1236,13 @@ mod tests {
                 name: "Alacritty".into(),
                 command: "alacritty".into(),
             }],
+            file_templates: vec![FileTemplate {
+                id: "note".into(),
+                label: "Note".into(),
+                file_name: "note.md".into(),
+                body: "# {name}\n".into(),
+                enabled: true,
+            }],
             editor_command: Some("code --wait".into()),
             default_start_locations: vec!["file:///tmp".into()],
             favourite_locations: vec![FavouriteLocation {
@@ -1354,6 +1473,69 @@ mod tests {
         assert_eq!(
             store.load().expect("reload").settings.terminal_apps.len(),
             MAX_TERMINAL_APPS
+        );
+    }
+
+    #[test]
+    fn file_templates_default_and_survive_a_file_without_them() {
+        let directory = tempdir().expect("temp directory");
+        fs::write(
+            directory.path().join(SETTINGS_FILE_NAME),
+            r#"{ "schemaVersion": 9, "theme": "dark" }"#,
+        )
+        .expect("write fixture without fileTemplates");
+        let loaded = SettingsStore::new(directory.path()).load().expect("load");
+        assert_eq!(loaded.settings.file_templates, default_file_templates());
+        assert!(valid_template_file_name("TODO.md"));
+    }
+
+    #[test]
+    fn file_templates_are_sanitized_on_save() {
+        let directory = tempdir().expect("temp directory");
+        let store = SettingsStore::new(directory.path());
+        let template = |id: &str, label: &str, file_name: &str| FileTemplate {
+            id: id.into(),
+            label: label.into(),
+            file_name: file_name.into(),
+            body: "x".into(),
+            enabled: true,
+        };
+        store
+            .save(&Settings {
+                file_templates: vec![
+                    template(" a ", " Alpha ", " a.txt "),
+                    template("a", "Duplicate id", "b.txt"),
+                    template("b", "", "b.txt"),
+                    template("c", "Traversal", "../c.txt"),
+                    template("d", "Nested", "sub/d.txt"),
+                    template("e", "Dots", ".."),
+                    template("f", "Fine", "f.sh"),
+                ],
+                ..Settings::default()
+            })
+            .expect("save");
+        let loaded = store.load().expect("reload").settings.file_templates;
+        assert_eq!(
+            loaded,
+            vec![
+                template("a", "Alpha", "a.txt"),
+                template("f", "Fine", "f.sh")
+            ]
+        );
+
+        let mut oversized = template("big", "Big", "big.txt");
+        oversized.body = "y".repeat(MAX_TEMPLATE_BODY_CHARS + 10);
+        store
+            .save(&Settings {
+                file_templates: vec![oversized],
+                ..Settings::default()
+            })
+            .expect("save big");
+        assert_eq!(
+            store.load().expect("reload").settings.file_templates[0]
+                .body
+                .len(),
+            MAX_TEMPLATE_BODY_CHARS
         );
     }
 

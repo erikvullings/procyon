@@ -13435,6 +13435,39 @@
           "tooLarge"
         ]
       },
+      "FileTemplateDto": {
+        "type": "object",
+        "description": "A file template offered by \"New file from template\".",
+        "required": [
+          "id",
+          "label",
+          "fileName",
+          "body",
+          "enabled"
+        ],
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "Initial file content; `{date}` and `{name}` are filled in on creation."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Disabled templates are kept but not offered."
+          },
+          "fileName": {
+            "type": "string",
+            "description": "Suggested name of the created file, including its extension."
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable identifier; unique within the list."
+          },
+          "label": {
+            "type": "string",
+            "description": "User-visible name in the template picker."
+          }
+        }
+      },
       "FilterCriteriaDto": {
         "type": "object",
         "description": "Structured pane-filter criteria applied to the loaded directory listing.",
@@ -25287,6 +25320,13 @@
               "$ref": "#/components/schemas/FavouriteLocationDto"
             },
             "description": "User-managed named locations, in the order shown by the favourites menu."
+          },
+          "fileTemplates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileTemplateDto"
+            },
+            "description": "Templates offered by \"New file from template\"."
           },
           "filterPresets": {
             "type": "array",

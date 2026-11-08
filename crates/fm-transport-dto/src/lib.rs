@@ -232,7 +232,7 @@ pub use semantic_library::*;
 pub use semantic_ocr::*;
 pub use semantic_vocabulary::*;
 pub use settings::{
-    ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto, FavouriteLocationDto,
+    ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto, FavouriteLocationDto, FileTemplateDto,
     FilterCriteriaDto, FilterKindDto, FilterPresetDto, FilterToggleDto, LanguageDto,
     MapBasemapKindDto, MapSettingsDto, MultiRenameCaseTransformDto, MultiRenamePresetDto,
     MultiRenameRulesDto, MultiRenameSequenceDto, QuickFilterMatchModeDto, SavedSearchDto,

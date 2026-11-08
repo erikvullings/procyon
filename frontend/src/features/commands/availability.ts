@@ -50,6 +50,7 @@ export interface AvailableAction {
 
 const LOCATION_ACTION_IDS = new Set([
   'core.createDirectory',
+  'core.newFromTemplate',
   'core.paste',
   'core.refresh',
   'core.openTerminal',
@@ -290,7 +291,9 @@ export function evaluateActionAvailability(
     return unavailable(action, t('availability', 'openDirectoryFirst'));
   }
   if (
-    (action.id === 'core.createDirectory' || action.id === 'core.paste') &&
+    (action.id === 'core.createDirectory' ||
+      action.id === 'core.newFromTemplate' ||
+      action.id === 'core.paste') &&
     !context.locationWritable
   ) {
     return unavailable(action, t('availability', 'locationReadOnly'));

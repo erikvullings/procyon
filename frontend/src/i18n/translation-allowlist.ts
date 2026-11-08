@@ -62,6 +62,7 @@ export const ENGLISH_IDENTICAL_ALLOWLIST: Readonly<Record<string, Allowlisted>> 
   'archiveCreate.compressionNormal': ['de', 'es', 'pt'],
   'archiveCreate.formatLabel': ['de', 'fr', 'pl'],
   'attributes.archive': ['fr'],
+  'settings.templateLabel': ['de'],
   'attributes.permissions': ['fr'],
   'attributes.sticky': ['nl'],
   'basket.count.1': ['nl', 'pt'],

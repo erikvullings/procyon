@@ -78,6 +78,17 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
                 command: app.command,
             })
             .collect(),
+        file_templates: settings
+            .file_templates
+            .into_iter()
+            .map(|template| fm_transport_dto::FileTemplateDto {
+                id: template.id,
+                label: template.label,
+                file_name: template.file_name,
+                body: template.body,
+                enabled: template.enabled,
+            })
+            .collect(),
         editor_command: settings.editor_command,
         default_start_locations: settings.default_start_locations,
         favourite_locations: settings
@@ -233,6 +244,17 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
             .map(|app| fm_settings::TerminalApp {
                 name: app.name,
                 command: app.command,
+            })
+            .collect(),
+        file_templates: settings
+            .file_templates
+            .into_iter()
+            .map(|template| fm_settings::FileTemplate {
+                id: template.id,
+                label: template.label,
+                file_name: template.file_name,
+                body: template.body,
+                enabled: template.enabled,
             })
             .collect(),
         editor_command: settings.editor_command,

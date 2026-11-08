@@ -109,6 +109,17 @@ export interface TerminalApp {
   readonly command: string;
 }
 
+/** A file template offered by "New file from template" (task 0312). */
+export interface FileTemplate {
+  readonly id: string;
+  readonly label: string;
+  /** Suggested name of the created file, including its extension. */
+  readonly fileName: string;
+  /** Initial content; `{date}` and `{name}` are filled in on creation. */
+  readonly body: string;
+  readonly enabled: boolean;
+}
+
 /** Versioned application-wide settings returned by both backend transports. */
 export interface Settings {
   readonly schemaVersion: number;
@@ -134,6 +145,8 @@ export interface Settings {
   readonly terminalCommand: string | null;
   /** External terminals offered by "Open Terminal With..." (task 0127). */
   readonly terminalApps: readonly TerminalApp[];
+  /** Templates offered by "New file from template" (task 0312). */
+  readonly fileTemplates: readonly FileTemplate[];
   readonly editorCommand: string | null;
   readonly defaultStartLocations: readonly string[];
   readonly favouriteLocations: readonly FavouriteLocation[];

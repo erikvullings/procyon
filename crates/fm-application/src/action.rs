@@ -488,6 +488,14 @@ fn core_actions(capabilities: PlatformCapabilities) -> Vec<ActionDescriptor> {
             ActionContextRequirements::none(),
         ),
         core_action(
+            "core.newFromTemplate",
+            "New File from Template",
+            "fileOperations",
+            Vec::new(),
+            // Client-side flow (template picker, then the ordinary create-file operation).
+            ActionContextRequirements::none(),
+        ),
+        core_action(
             "core.trash",
             "Trash",
             "fileOperations",
@@ -1114,6 +1122,7 @@ mod tests {
             "core.duplicate",
             "core.createLink",
             "core.createFile",
+            "core.newFromTemplate",
             "core.rootDirectory",
             "core.openInNewTab",
             "core.openInNewTabOtherPane",

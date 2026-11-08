@@ -301,6 +301,7 @@ export const en = {
     revealInSystemFileManager: 'Reveal in File Manager',
     openTerminal: 'Open Terminal Here',
     openTerminalWith: 'Open Terminal With…',
+    newFromTemplate: 'New File from Template…',
     copyName: 'Copy Filename',
     copyPath: 'Copy Full Path',
     copyRelativePath: 'Copy Relative Path',
@@ -386,6 +387,17 @@ export const en = {
     terminalApps: 'External terminals',
     terminalAppsHelp:
       'One per line: Name = command (an application name on macOS, an executable on Windows). Offered by “Open Terminal With…”.',
+    fileTemplates: 'File templates',
+    fileTemplatesHelp:
+      'Offered by "New File from Template". {date} and {name} in the content are filled in when the file is created.',
+    templateEnabled: 'Enabled',
+    templateLabel: 'Name',
+    templateFileName: 'Suggested file name',
+    templateBody: 'Content',
+    templateRemove: 'Remove template',
+    templateAdd: 'Add template',
+    templateReset: 'Reset to defaults',
+    templateNewLabel: 'New template',
     editor: 'Editor',
     editorCommand: 'Editor command',
     systemDefault: 'System default',
@@ -1526,6 +1538,12 @@ export const en = {
   terminalPicker: {
     title: 'Open Terminal With…',
     empty: 'No terminal applications are configured. Add them under Settings → Terminal.',
+  },
+  newFromTemplate: {
+    title: 'New File from Template',
+    empty: 'No templates are enabled. Add or enable them under Settings → Terminal.',
+    templates: 'Templates',
+    fileName: 'File name',
   },
   entryMetadata: {
     tagsTitle: 'Tags: {name}',

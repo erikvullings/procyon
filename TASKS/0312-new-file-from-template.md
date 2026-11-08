@@ -1,6 +1,6 @@
 # 0312 New-file-from-template
 
-Status: open
+Status: in_progress
 Priority: low
 Subsystem: frontend, backend
 Depends on: none
@@ -26,4 +26,20 @@ small, delightful addition.
 - Reuse the create-file operation so undo/history (0160) and the operation centre stay consistent.
 
 ## Agent Notes
-- (none yet)
+- 2026-11-08 claude: Built-in/user templates done end to end; plugin-contributed templates are NOT.
+  Backend: `fm-settings` `FileTemplate` (`id,label,fileName,body,enabled`), `default_file_templates()`
+  (text, markdown, to-do, shell, HTML, JSON), `sanitize_file_templates` on load+save (single-segment
+  file names only, unique ids, bounds 30 templates / 64 KiB body), DTO + mapping, OpenAPI/Orval
+  regenerated, `core.newFromTemplate` registered (no shortcut). Frontend: `features/templates/
+  file-templates.ts` (`{date}`/`{name}` placeholders, optional), `NewFromTemplateDialog` (pick
+  template, pre-selected file name, validated), creation via the ordinary `createTextFile` operation
+  (never overwrites, conflict flow, operation centre) then F4 editor opens; palette + empty-area
+  context menu entry (hidden/disabled on read-only locations); Settings editor to enable/edit/add/
+  remove/reset (reset uses a frontend copy of the defaults - keep in sync with `fm-settings`).
+  Tests: 2 Rust (defaults, sanitising), 6 frontend (placeholders, enabled filter, dialog x3,
+  palette routing) + availability.
+  **Open:** plugin-contributed templates via the plugin manifest (0053); a "New >" submenu (the
+  context menu only has bespoke Open With/platform submenus, so it is a single "New File from
+  Template..." entry opening the picker); not verified visually / in a real host; mock action
+  fixture (`fixtures/mock-responses/actions.json`) does not list the new action, like the other
+  recent client-flow actions.

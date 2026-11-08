@@ -51,6 +51,8 @@ export interface DialogUIState {
   createDirectoryOpen: boolean;
   createDirectoryLocation: Location | undefined;
   createFileOpen: boolean;
+  newFromTemplateOpen: boolean;
+  newFromTemplateLocation: Location | undefined;
   createFileLocation: Location | undefined;
   createLinkRequest: CreateLinkDialogRequest | undefined;
   archiveCreateRequest: ArchiveCreateRequest | undefined;
@@ -86,6 +88,9 @@ export interface DialogUIController {
   ): void;
   openCreateFile(location?: Location): void;
   cancelCreateFile(): void;
+  /** Opens the "New file from template" picker for `location` (default: the active directory). */
+  openNewFromTemplate(location?: Location): void;
+  cancelNewFromTemplate(): void;
   confirmCreateFile(
     name: string,
     activeLocation: Location | undefined,
@@ -124,6 +129,8 @@ export function createDialogUIController(): DialogUIController {
     createDirectoryOpen: false,
     createDirectoryLocation: undefined,
     createFileOpen: false,
+    newFromTemplateOpen: false,
+    newFromTemplateLocation: undefined,
     createFileLocation: undefined,
     createLinkRequest: undefined,
     archiveCreateRequest: undefined,
@@ -182,6 +189,16 @@ export function createDialogUIController(): DialogUIController {
     cancelCreateFile(): void {
       state.createFileOpen = false;
       state.createFileLocation = undefined;
+    },
+
+    openNewFromTemplate(location?: Location): void {
+      state.newFromTemplateLocation = location;
+      state.newFromTemplateOpen = true;
+    },
+
+    cancelNewFromTemplate(): void {
+      state.newFromTemplateOpen = false;
+      state.newFromTemplateLocation = undefined;
     },
 
     confirmCreateFile(name, activeLocation, createFile): void {

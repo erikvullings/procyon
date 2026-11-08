@@ -301,6 +301,7 @@ export const pl = {
     revealInSystemFileManager: 'Pokaż w systemowym menedżerze plików',
     openTerminal: 'Otwórz terminal tutaj',
     openTerminalWith: 'Otwórz terminal za pomocą…',
+    newFromTemplate: 'Nowy plik z szablonu…',
     copyName: 'Kopiuj nazwę pliku',
     copyPath: 'Kopiuj pełną ścieżkę',
     copyRelativePath: 'Kopiuj ścieżkę względną',
@@ -390,6 +391,17 @@ export const pl = {
     terminalApps: 'Zewnętrzne terminale',
     terminalAppsHelp:
       'Po jednym w wierszu: Nazwa = polecenie (nazwa aplikacji w macOS, plik wykonywalny w Windows). Oferowane przez „Otwórz terminal za pomocą…”.',
+    fileTemplates: 'Szablony plików',
+    fileTemplatesHelp:
+      'Oferowane przez „Nowy plik z szablonu”. {date} i {name} w treści są uzupełniane podczas tworzenia pliku.',
+    templateEnabled: 'Włączony',
+    templateLabel: 'Nazwa',
+    templateFileName: 'Sugerowana nazwa pliku',
+    templateBody: 'Treść',
+    templateRemove: 'Usuń szablon',
+    templateAdd: 'Dodaj szablon',
+    templateReset: 'Przywróć domyślne',
+    templateNewLabel: 'Nowy szablon',
     editor: 'Edytor',
     editorCommand: 'Polecenie edytora',
     systemDefault: 'Domyślne systemowe',
@@ -1155,6 +1167,12 @@ export const pl = {
   terminalPicker: {
     title: 'Otwórz terminal za pomocą…',
     empty: 'Nie skonfigurowano aplikacji terminala. Dodaj je w Ustawienia → Terminal.',
+  },
+  newFromTemplate: {
+    title: 'Nowy plik z szablonu',
+    empty: 'Brak włączonych szablonów. Dodaj je lub włącz w Ustawienia → Terminal.',
+    templates: 'Szablony',
+    fileName: 'Nazwa pliku',
   },
   entryMetadata: {
     tagsTitle: 'Etykiety: {name}',

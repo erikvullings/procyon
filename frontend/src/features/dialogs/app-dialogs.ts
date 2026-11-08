@@ -76,7 +76,9 @@ import type { FindFilesSearchParams } from '../search/find-files-dialog';
 import { FindFilesDialog } from '../search/find-files-dialog';
 import { deleteSavedSearch, saveSearch, toggleSavedSearchPin } from '../search/saved-searches';
 import { DocumentSummaryDialog } from '../semantic/document-summary-dialog';
+import { enabledTemplates, expandTemplateBody } from '../templates/file-templates';
 import { pathFromUri } from '../workspace/workspace-layout';
+import { NewFromTemplateDialog } from './new-from-template-dialog';
 import { TerminalPickerDialog } from './terminal-picker-dialog';
 
 export interface AppDialogsContext {
@@ -292,6 +294,25 @@ export function renderAppDialogs(
               ctx.openEditorForCreatedFile(loc, n);
             }),
         ),
+    }),
+    m(NewFromTemplateDialog, {
+      open: ds.newFromTemplateOpen,
+      templates: enabledTemplates(ctx.getSettings()?.fileTemplates ?? []),
+      onCancel: () => dialogs.cancelNewFromTemplate(),
+      onCreate: (template, fileName) => {
+        const location = ds.newFromTemplateLocation ?? ctx.getActiveDirectoryLocation();
+        dialogs.cancelNewFromTemplate();
+        // The ordinary create-file operation: it never overwrites and shows in the operation
+        // centre; the editor opens once the file exists.
+        dialogs.confirmCreateFile(fileName, location, (loc, n) =>
+          ctx
+            .getOpsController()
+            .createTextFile(loc, n, expandTemplateBody(template.body, n))
+            .then(() => {
+              ctx.openEditorForCreatedFile(loc, n);
+            }),
+        );
+      },
     }),
     m(CreateLinkDialog, {
       request: ds.createLinkRequest,

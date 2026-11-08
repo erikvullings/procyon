@@ -124,6 +124,22 @@ pub struct TerminalAppDto {
     pub command: String,
 }
 
+/// A file template offered by "New file from template".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FileTemplateDto {
+    /// Stable identifier; unique within the list.
+    pub id: String,
+    /// User-visible name in the template picker.
+    pub label: String,
+    /// Suggested name of the created file, including its extension.
+    pub file_name: String,
+    /// Initial file content; `{date}` and `{name}` are filled in on creation.
+    pub body: String,
+    /// Disabled templates are kept but not offered.
+    pub enabled: bool,
+}
+
 /// How a multi-rename rule cases the composed filename.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -391,6 +407,9 @@ pub struct SettingsDto {
     /// External terminals offered by "Open Terminal With...".
     #[serde(default)]
     pub terminal_apps: Vec<TerminalAppDto>,
+    /// Templates offered by "New file from template".
+    #[serde(default)]
+    pub file_templates: Vec<FileTemplateDto>,
     /// Optional text-editor command for `core.edit`; `None` uses the platform default.
     pub editor_command: Option<String>,
     /// Locations inherited by new panes.

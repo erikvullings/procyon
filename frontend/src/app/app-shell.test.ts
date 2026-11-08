@@ -5874,6 +5874,7 @@ describe('AppShell', () => {
       pluginSettings: {},
       terminalCommand: null,
       terminalApps: [],
+      fileTemplates: [],
       editorCommand: null,
       defaultStartLocations: [],
       favouriteLocations: [],
