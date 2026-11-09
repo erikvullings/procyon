@@ -312,7 +312,12 @@ describe('AppShell', () => {
       item.textContent?.trim(),
     );
     expect(labels).toEqual(
-      expect.arrayContaining(['Settings', 'Compare panes', 'Operations (Alt+Z)']),
+      expect.arrayContaining([
+        'Settings',
+        'Compare panes',
+        'Operations (Alt+Z)',
+        'Synchronized browsing: off',
+      ]),
     );
     root.querySelector<HTMLButtonElement>('.fm-toolbar-overflow-item:last-child')?.click();
     m.redraw.sync();

@@ -6295,3 +6295,21 @@ button.fm-activity-count {
   width: 26px;
   min-width: 26px;
 }
+
+/* Synchronized browsing (task 0255) is a workspace-wide toggle: accent while mirroring, warning
+ * while the panes are apart, muted when off. */
+.fm-workspace-toolbar .fm-toolbar-sync-browsing.fm-toolbar-sync-synced .fm-icon {
+  color: var(--fm-accent);
+}
+
+.fm-workspace-toolbar .fm-toolbar-sync-browsing.fm-toolbar-sync-desynced .fm-icon {
+  color: var(--fm-warning);
+}
+
+.fm-workspace-toolbar .fm-toolbar-sync-browsing.fm-toolbar-sync-off .fm-icon {
+  color: var(--fm-text-muted);
+}
+
+.fm-toolbar-overflow-menu .fm-toolbar-overflow-item[aria-checked="true"] .fm-icon {
+  color: var(--fm-accent);
+}

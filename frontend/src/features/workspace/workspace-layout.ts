@@ -147,9 +147,6 @@ export interface WorkspacePaneContent {
   /** This folder's view was restored from a remembered choice (task 0270). */
   readonly viewRemembered?: boolean;
   readonly onForgetView?: () => void;
-  /** Synchronized-browsing indicator and toggle (task 0255). */
-  readonly syncBrowsing?: 'off' | 'synced' | 'desynced';
-  readonly onToggleSyncBrowsing?: () => void;
   readonly columnWidths?: readonly ColumnWidthEntry[] | undefined;
   readonly onColumnWidthChange?: (columnId: string, width: number) => void;
   readonly onFilterQueryChange: (query: string) => void;
@@ -680,8 +677,6 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
             onViewModeChange: content.onViewModeChange,
             viewRemembered: content.viewRemembered,
             onForgetView: content.onForgetView,
-            syncBrowsing: content.syncBrowsing,
-            onToggleSyncBrowsing: content.onToggleSyncBrowsing,
             columnWidths: content.columnWidths,
             onColumnWidthChange: content.onColumnWidthChange,
           } satisfies TableConfigAttrs,

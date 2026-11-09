@@ -6,8 +6,6 @@ import {
   gridDotsIcon,
   heartIcon,
   heartPlusIcon,
-  linkIcon,
-  linkOffIcon,
   listIcon,
   photoIcon,
   plugIcon,
@@ -205,9 +203,6 @@ export interface TableConfigAttrs {
   readonly viewRemembered?: boolean | undefined;
   /** Drops the remembered view of this folder. */
   readonly onForgetView?: (() => void) | undefined;
-  /** Synchronized-browsing indicator state (task 0255); the toggle is hidden when unset. */
-  readonly syncBrowsing?: 'off' | 'synced' | 'desynced' | undefined;
-  readonly onToggleSyncBrowsing?: (() => void) | undefined;
   readonly columnWidths?: readonly ColumnWidthEntry[] | undefined;
   readonly onColumnWidthChange?: ((columnId: string, width: number) => void) | undefined;
 }
@@ -306,11 +301,6 @@ export interface PaneAttrs {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-function syncBrowsingLabel(state: 'off' | 'synced' | 'desynced'): string {
-  if (state === 'synced') return t('pane', 'syncBrowsingOn');
-  return state === 'desynced' ? t('pane', 'syncBrowsingApart') : t('pane', 'syncBrowsingOff');
-}
 
 function defaultFavouriteLabel(path: string): string {
   const segments = path
@@ -1859,22 +1849,6 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                 plusIcon({ size: 16 }),
               ),
             ),
-            attrs.tableConfig.onToggleSyncBrowsing !== undefined &&
-              attrs.tableConfig.syncBrowsing !== undefined &&
-              tooltip(
-                syncBrowsingLabel(attrs.tableConfig.syncBrowsing),
-                toggleIconButton(
-                  {
-                    className: `fm-pane-sync-browsing fm-pane-sync-${attrs.tableConfig.syncBrowsing}`,
-                    'aria-label': syncBrowsingLabel(attrs.tableConfig.syncBrowsing),
-                    'aria-pressed': String(attrs.tableConfig.syncBrowsing !== 'off'),
-                    onclick: () => attrs.tableConfig.onToggleSyncBrowsing?.(),
-                  },
-                  attrs.tableConfig.syncBrowsing === 'off'
-                    ? linkOffIcon({ size: 16 })
-                    : linkIcon({ size: 16 }),
-                ),
-              ),
             m('.fm-view-mode-menu-wrapper', [
               tooltip(
                 t('pane', 'view'),

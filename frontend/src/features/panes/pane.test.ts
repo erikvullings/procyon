@@ -946,26 +946,6 @@ describe('Pane search breadcrumb rendering', () => {
     ).toContain('310px');
   });
 
-  it('shows synchronized browsing as a link when on and a struck-through link when off', () => {
-    const base = attrs();
-    const render = (syncBrowsing: 'off' | 'synced' | 'desynced'): HTMLElement => {
-      mount({
-        ...base,
-        tableConfig: { ...base.tableConfig, syncBrowsing, onToggleSyncBrowsing: vi.fn() },
-      });
-      const button = root.querySelector<HTMLElement>('.fm-pane-sync-browsing');
-      if (button === null) throw new Error('sync browsing toggle missing');
-      return button;
-    };
-    const off = render('off');
-    expect(off.getAttribute('aria-pressed')).toBe('false');
-    expect(off.querySelector('.fm-icon-link-off')).not.toBeNull();
-    const on = render('synced');
-    expect(on.getAttribute('aria-pressed')).toBe('true');
-    expect(on.querySelector('.fm-icon-link')).not.toBeNull();
-    expect(on.querySelector('.fm-icon-link-off')).toBeNull();
-  });
-
   it('omits indexing coverage above virtual results while keeping the normal table header', () => {
     const syntheticResults = entries.map((entry) => ({
       ...entry,

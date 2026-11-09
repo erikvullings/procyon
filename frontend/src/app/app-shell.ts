@@ -20,6 +20,8 @@ import {
   cornerLeftUpIcon,
   helpIcon,
   layoutGridIcon,
+  linkIcon,
+  linkOffIcon,
   operationsIcon,
   plusIcon,
   searchIcon,
@@ -2424,8 +2426,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     locationForPath: (current, path) => locationForPath(current, path, shellState.homeDirectory),
     activeDirectory,
     getNavigation: () => shellState.navigation,
-    getSyncBrowsingState: () => shellState.syncedBrowsing?.state() ?? 'off',
-    toggleSyncBrowsing: () => shellState.syncedBrowsing?.toggle(),
     getWorkspaceController: () => shellState.workspaceController,
     getOpsController: () => shellState.opsController,
     openSavedSearch: (saved) =>
@@ -3338,6 +3338,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
           commandIcon(),
         ),
       );
+      const syncBrowsingState = shellState.syncedBrowsing?.state() ?? 'off';
+      const syncBrowsingLabel = t(
+        'pane',
+        syncBrowsingState === 'synced'
+          ? 'syncBrowsingOn'
+          : syncBrowsingState === 'desynced'
+            ? 'syncBrowsingApart'
+            : 'syncBrowsingOff',
+      );
+      const syncBrowsingDisabled =
+        shellState.syncedBrowsing === undefined ||
+        (shellState.workspace?.paneOrder.length ?? 0) < 2;
       const overflowItems: ToolbarOverflowItem[] = [];
       if (shellState.knowledgeSearchAvailable || !shellState.knowledgeSearchChecked) {
         overflowItems.push({
@@ -3387,6 +3399,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
           disabled:
             activeDirectory() === undefined || (shellState.workspace?.paneOrder.length ?? 0) < 2,
           onclick: () => shellState.comparisonController.startComparison('sizeAndTimestamp'),
+        },
+        {
+          id: 'sync-browsing',
+          label: syncBrowsingLabel,
+          icon: syncBrowsingState === 'off' ? linkOffIcon() : linkIcon(),
+          disabled: syncBrowsingDisabled,
+          pressed: syncBrowsingState !== 'off',
+          onclick: () => shellState.syncedBrowsing?.toggle(),
         },
         {
           id: 'operations',
@@ -3693,6 +3713,20 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                           shellState.comparisonController.startComparison('sizeAndTimestamp'),
                       },
                       compareIcon(),
+                    ),
+                  ),
+                  tooltip(
+                    syncBrowsingLabel,
+                    m(
+                      IconButton,
+                      {
+                        className: `fm-toolbar-sync-browsing fm-toolbar-sync-${syncBrowsingState}`,
+                        disabled: syncBrowsingDisabled,
+                        'aria-label': syncBrowsingLabel,
+                        'aria-pressed': String(syncBrowsingState !== 'off'),
+                        onclick: () => shellState.syncedBrowsing?.toggle(),
+                      },
+                      syncBrowsingState === 'off' ? linkOffIcon() : linkIcon(),
                     ),
                   ),
                 ]),

@@ -28,6 +28,10 @@ export function tooltip(label: string, child: m.Children, extraAttrs?: m.Attribu
       onmouseleave: hideTooltipPortal,
       onfocusin: (event: FocusEvent) => showTooltipPortal(event.currentTarget, label),
       onfocusout: hideTooltipPortal,
+      // Acting on the control answers what the tooltip described, and the popup it may open (a
+      // menu, a dialog) must not stay covered by it. Runs after the mousedown-time focus that
+      // would otherwise show it again.
+      onclick: hideTooltipPortal,
     },
     child,
   );
