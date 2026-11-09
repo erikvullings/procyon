@@ -6175,3 +6175,123 @@ button.fm-activity-count {
   background-color: var(--fm-accent);
   transform: none;
 }
+
+/* The generated summary is content the user may want to quote: allow partial selection. */
+.fm-document-summary-result,
+.fm-document-summary-result * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.fm-document-summary-result .fm-document-summary-copy {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.fm-document-summary-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+/* Compact toolbar: the overflow button and its menu. The menu sits inside the toolbar, whose own
+   rules shrink the font and mute every button, so the item rules are scoped one level deeper. */
+.fm-toolbar-overflow {
+  position: relative;
+}
+
+.fm-toolbar-overflow-button {
+  position: relative;
+  z-index: 5;
+}
+
+.fm-toolbar-overflow-backdrop {
+  position: fixed;
+  z-index: 4;
+  inset: 0;
+}
+
+.fm-toolbar-overflow .fm-toolbar-overflow-menu {
+  position: absolute;
+  z-index: 5;
+  top: 100%;
+  left: 0;
+  display: grid;
+  min-width: 17rem;
+  padding: 0.25rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 0.25rem;
+  background: var(--fm-surface-elevated);
+  box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 25%);
+  font-family: var(--fm-font-family);
+  font-size: var(--fm-font-size);
+}
+
+.fm-toolbar-overflow-menu .fm-toolbar-overflow-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 1.9rem;
+  padding: 0.25rem 1.25rem 0.25rem 0.6rem;
+  border: 0;
+  border-radius: var(--fm-radius);
+  background: transparent;
+  color: var(--fm-text);
+  text-align: left;
+  white-space: nowrap;
+  font: inherit;
+  line-height: 1.2;
+}
+
+.fm-toolbar-overflow-menu .fm-toolbar-overflow-item:hover:not(:disabled) {
+  background: var(--fm-hover);
+}
+
+.fm-toolbar-overflow-menu .fm-toolbar-overflow-item:disabled {
+  color: var(--fm-text-muted);
+  opacity: 0.5;
+}
+
+.fm-toolbar-overflow-menu .fm-toolbar-overflow-item[aria-checked="true"] {
+  color: var(--fm-accent);
+}
+
+.fm-toolbar-overflow-menu .fm-toolbar-overflow-icon {
+  display: inline-flex;
+  flex: 0 0 18px;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.fm-toolbar-overflow-menu .fm-toolbar-overflow-icon .fm-icon {
+  display: block;
+  color: currentcolor;
+}
+
+/* Keybindings: grouped by category, with a filter box above. */
+.fm-settings-keybinding-filter {
+  margin-bottom: 0.5rem;
+}
+
+.fm-settings-keybinding-group-title {
+  margin: 1rem 0 0.25rem;
+  color: var(--fm-text-muted);
+  font-size: 0.85em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* macOS overlay toolbar: back/forward/up read as one group, set apart from the app title. */
+.fm-app-shell[data-mac-titlebar-overlay="true"] .fm-mac-toolbar-brand {
+  margin-right: 16px;
+}
+
+.fm-app-shell[data-mac-titlebar-overlay="true"] .fm-navigation-controls > .fm-tooltip > button {
+  width: 26px;
+  min-width: 26px;
+}

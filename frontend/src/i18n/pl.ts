@@ -80,6 +80,7 @@ export const pl = {
     confirmDelete: 'Usuń trwale',
   },
   shell: {
+    moreActions: 'Więcej akcji',
     loading: 'Wczytywanie…',
     workspaceLoading: 'Wczytywanie obszaru roboczego…',
     title: 'Procyon',
@@ -352,6 +353,10 @@ export const pl = {
     theme: 'Motyw',
     fontSize: 'Rozmiar czcionki (px)',
     rowHeight: 'Wysokość wiersza (px)',
+    keybindingFilter: 'Filtruj według akcji lub skrótu…',
+    toolbarLayout: 'Pasek narzędzi',
+    toolbarFull: 'Wszystkie przyciski',
+    toolbarCompact: 'Kompaktowy',
     dateFormat: 'Format daty',
     dateFormatShort: 'Krótki',
     dateFormatMedium: 'Średni',
@@ -1857,6 +1862,9 @@ export const pl = {
   },
   documentSummary: {
     title: 'Podsumowanie · {name}',
+    copy: 'Kopiuj',
+    copied: 'Skopiowano',
+    copyAll: 'Kopiuj podsumowanie',
     working: 'Przygotowywanie zawartości dokumentu…',
     generatingUsingProfile: 'Generowanie podsumowania przy użyciu {name} · {model}…',
     loadFailed: 'Nie udało się wczytać podsumowania.',

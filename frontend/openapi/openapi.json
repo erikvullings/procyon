@@ -25226,6 +25226,7 @@
           "dateFormat",
           "sizeFormat",
           "showHiddenFiles",
+          "compactToolbar",
           "confirmPermanentDelete",
           "confirmFileOperations",
           "defaultConflictPolicy",
@@ -25265,6 +25266,10 @@
             "propertyNames": {
               "type": "string"
             }
+          },
+          "compactToolbar": {
+            "type": "boolean",
+            "description": "Keep only navigation, search, workspaces and the command palette in the window toolbar."
           },
           "confirmFileOperations": {
             "type": "boolean",

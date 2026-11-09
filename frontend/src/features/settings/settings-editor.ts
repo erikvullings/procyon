@@ -1,6 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import { NumberInput, Select, Switch, TextInput, ThemeSwitcher } from 'mithril-materialized';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
+import { displayShortcut } from '../../app/shell-helpers';
 import type { Locale } from '../../i18n';
 import { LOCALES, t } from '../../i18n';
 import type { en } from '../../i18n/en';
@@ -27,6 +28,7 @@ import { PluginManagement } from '../plugin-management/plugin-management';
 import type { SelectionPlatform } from '../selection/keybindings';
 import { AppUpdateSettings } from './app-update-settings';
 import { FileTemplatesEditor } from './file-templates-editor';
+import { keybindingGroups } from './keybinding-list';
 import { LlmProfileManagement } from './llm-profile-management';
 import {
   SemanticComponentManagement,
@@ -126,6 +128,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
   let saving = false;
   let saveError: string | undefined;
   let activeSection: SettingsSection = 'appearance';
+  let keybindingFilter = '';
   let lastInitialSection: SettingsSection | undefined;
   let semanticStatus: SemanticComponentStatus | undefined;
   let semanticOcrEnabled: boolean | undefined;
@@ -317,6 +320,17 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                         max: 64,
                         oninput: (value: number) => update(current, { rowHeight: value }),
                         ...errorAttrs('rowHeight'),
+                      }),
+                    ]),
+                    m('.row', [
+                      m(Switch, {
+                        className: 'col s12 m6',
+                        label: t('settings', 'toolbarLayout'),
+                        checked: activeDraft.compactToolbar,
+                        left: t('settings', 'toolbarFull'),
+                        right: t('settings', 'toolbarCompact'),
+                        onchange: (checked: boolean) =>
+                          update(current, { compactToolbar: checked }),
                       }),
                     ]),
                     m('.row', [
@@ -607,57 +621,83 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                             m(
                               'li',
                               t('settings', 'keybindingConflict', {
-                                shortcut: conflict.shortcut,
+                                shortcut: displayShortcut(conflict.shortcut, current.platform),
                                 actions: conflict.actionIds.join(', '),
                               }),
                             ),
                           ),
                         ),
-                    m(
-                      'ul.fm-settings-keybindings.row',
-                      current.actions.map((action) => {
-                        const shortcut = liveBindings.find(
-                          (binding) => binding.actionId === action.id,
-                        );
-                        return m(
-                          'li.fm-settings-keybinding-row.col.s12.m6',
-                          {
-                            'data-action-id': action.id,
-                            'data-conflict': String(conflictedActionIds.has(action.id)),
-                          },
-                          [
-                            m('span.fm-settings-keybinding-title', action.title),
-                            m(TextInput, {
-                              className: 'fm-settings-keybinding-input',
-                              // label: 'Shortcut',
-                              value: activeDraft.keybindings[action.id] ?? '',
-                              placeholder: shortcut?.shortcut ?? t('settings', 'shortcutNone'),
-                              oninput: (value: string) =>
-                                update(current, {
-                                  keybindings: setKeybindingOverride(
-                                    activeDraft.keybindings,
-                                    action.id,
-                                    value,
-                                  ),
-                                }),
-                              onchange: (value: string) =>
-                                update(current, {
-                                  keybindings: setKeybindingOverride(
-                                    activeDraft.keybindings,
-                                    action.id,
-                                    value,
-                                  ),
-                                }),
+                    m(TextInput, {
+                      className: 'fm-settings-keybinding-filter',
+                      label: t('settings', 'keybindingFilter'),
+                      value: keybindingFilter,
+                      oninput: (value: string) => {
+                        keybindingFilter = value;
+                      },
+                    }),
+                    keybindingGroups(
+                      current.actions,
+                      liveBindings,
+                      activeDraft.keybindings,
+                      current.platform,
+                      keybindingFilter,
+                    ).map((group) =>
+                      m(
+                        'section.fm-settings-keybinding-group',
+                        { key: group.category, 'aria-label': group.label },
+                        [
+                          m('h5.fm-settings-keybinding-group-title', group.label),
+                          m(
+                            'ul.fm-settings-keybindings.row',
+                            group.rows.map(({ action, title }) => {
+                              const shortcut = liveBindings.find(
+                                (binding) => binding.actionId === action.id,
+                              );
+                              return m(
+                                'li.fm-settings-keybinding-row.col.s12.m6',
+                                {
+                                  key: action.id,
+                                  'data-action-id': action.id,
+                                  'data-conflict': String(conflictedActionIds.has(action.id)),
+                                },
+                                [
+                                  m('span.fm-settings-keybinding-title', title),
+                                  m(TextInput, {
+                                    className: 'fm-settings-keybinding-input',
+                                    value: activeDraft.keybindings[action.id] ?? '',
+                                    placeholder:
+                                      shortcut === undefined
+                                        ? t('settings', 'shortcutNone')
+                                        : displayShortcut(shortcut.shortcut, current.platform),
+                                    oninput: (value: string) =>
+                                      update(current, {
+                                        keybindings: setKeybindingOverride(
+                                          activeDraft.keybindings,
+                                          action.id,
+                                          value,
+                                        ),
+                                      }),
+                                    onchange: (value: string) =>
+                                      update(current, {
+                                        keybindings: setKeybindingOverride(
+                                          activeDraft.keybindings,
+                                          action.id,
+                                          value,
+                                        ),
+                                      }),
+                                  }),
+                                  shortcut?.available === false
+                                    ? m(
+                                        'span.fm-settings-keybinding-unavailable',
+                                        t('settings', 'unavailableInBrowser'),
+                                      )
+                                    : undefined,
+                                ],
+                              );
                             }),
-                            shortcut?.available === false
-                              ? m(
-                                  'span.fm-settings-keybinding-unavailable',
-                                  t('settings', 'unavailableInBrowser'),
-                                )
-                              : undefined,
-                          ],
-                        );
-                      }),
+                          ),
+                        ],
+                      ),
                     ),
                   ]
                 : undefined,

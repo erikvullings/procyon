@@ -136,6 +136,20 @@ describe('DocumentSummaryDialog', () => {
     );
     expect(root.textContent).toContain('AuthorsUnavailable');
     expect(root.textContent).toContain('Full summary');
+
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const copyButtons = [...root.querySelectorAll<HTMLButtonElement>('.fm-document-summary-copy')];
+    expect(copyButtons).toHaveLength(2);
+    copyButtons[0]?.click();
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('A concise document summary.'));
+    const copyAll = [...root.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+      button.textContent?.includes('Copy summary'),
+    );
+    copyAll?.click();
+    await vi.waitFor(() =>
+      expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining('Evidence review')),
+    );
   });
 
   it('shows an accessible skeleton during summary generation and keeps text inspectable', async () => {

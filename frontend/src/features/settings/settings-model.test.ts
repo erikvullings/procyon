@@ -25,6 +25,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     dateFormat: 'medium',
     sizeFormat: 'binary',
     showHiddenFiles: false,
+    compactToolbar: true,
     confirmPermanentDelete: true,
     confirmFileOperations: true,
     defaultConflictPolicy: 'ask',

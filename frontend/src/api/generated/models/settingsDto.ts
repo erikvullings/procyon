@@ -32,6 +32,8 @@ export interface SettingsDto {
   checkForUpdatesAutomatically: boolean;
   /** Column widths in CSS pixels, keyed by column id, shared by every tab and pane. */
   columnWidths: SettingsDtoColumnWidths;
+  /** Keep only navigation, search, workspaces and the command palette in the window toolbar. */
+  compactToolbar: boolean;
   /** Confirm routine copy, move, and Trash operations before they start. */
   confirmFileOperations: boolean;
   /** Confirm permanent deletion. */

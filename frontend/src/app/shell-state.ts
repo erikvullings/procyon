@@ -176,6 +176,8 @@ export function createShellState(client: FileManagerClient) {
     settingsUpdateQueue: Promise.resolve(),
     settingsDisclosureElement: undefined as unknown as HTMLDetailsElement | undefined,
     settingsDialogOpen: false,
+    /** Whether the compact toolbar's overflow menu is open. */
+    toolbarOverflowOpen: false,
     semanticInstallation: undefined as unknown as
       | { state: 'installing' | 'succeeded' | 'failed'; message: string }
       | undefined,

@@ -50,6 +50,7 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
             SizeFormat::Bytes => SizeFormatDto::Bytes,
         },
         show_hidden_files: settings.show_hidden_files,
+        compact_toolbar: settings.compact_toolbar,
         confirm_permanent_delete: settings.confirm_permanent_delete,
         confirm_file_operations: settings.confirm_file_operations,
         default_conflict_policy: match settings.default_conflict_policy {
@@ -219,6 +220,7 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
             SizeFormatDto::Bytes => SizeFormat::Bytes,
         },
         show_hidden_files: settings.show_hidden_files,
+        compact_toolbar: settings.compact_toolbar,
         confirm_permanent_delete: settings.confirm_permanent_delete,
         confirm_file_operations: settings.confirm_file_operations,
         default_conflict_policy: match settings.default_conflict_policy {

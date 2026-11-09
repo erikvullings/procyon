@@ -80,6 +80,7 @@ export const fr = {
     confirmDelete: 'Supprimer définitivement',
   },
   shell: {
+    moreActions: 'Plus d’actions',
     loading: 'Chargement…',
     workspaceLoading: "Chargement de l'espace de travail…",
     title: 'Procyon',
@@ -354,6 +355,10 @@ export const fr = {
     theme: 'Thème',
     fontSize: 'Taille de police (px)',
     rowHeight: 'Hauteur de ligne (px)',
+    keybindingFilter: 'Filtrer par action ou raccourci…',
+    toolbarLayout: 'Barre d’outils',
+    toolbarFull: 'Tous les boutons',
+    toolbarCompact: 'Compacte',
     dateFormat: 'Format de date',
     dateFormatShort: 'Court',
     dateFormatMedium: 'Moyen',
@@ -1866,6 +1871,9 @@ export const fr = {
   },
   documentSummary: {
     title: 'Résumé · {name}',
+    copy: 'Copier',
+    copied: 'Copié',
+    copyAll: 'Copier le résumé',
     working: 'Préparation du contenu du document…',
     generatingUsingProfile: 'Génération du résumé avec {name} · {model}…',
     loadFailed: "Le résumé n'a pas pu être chargé.",

@@ -329,6 +329,26 @@ export const linkIcon = trustedStrokeIcon(
   'fm-icon-link',
 );
 
+/** "progress" — the operation centre (running and finished file operations); deliberately unlike
+ * the pane's list/grid view icons. */
+export const operationsIcon = trustedStrokeIcon(
+  '<path d="M10 20.777a8.942 8.942 0 0 1 -2.48 -.969" />' +
+    '<path d="M14 3.223a9.003 9.003 0 0 1 0 17.554" />' +
+    '<path d="M4.579 17.093a8.961 8.961 0 0 1 -1.227 -2.592" />' +
+    '<path d="M3.124 10.5c.16 -.95 .468 -1.85 .9 -2.675l.169 -.305" />' +
+    '<path d="M6.907 4.579a8.954 8.954 0 0 1 3.093 -1.356" />',
+  'fm-icon-operations',
+);
+
+/** "link-off" — synchronized browsing switched off (the struck-through counterpart of `linkIcon`). */
+export const linkOffIcon = trustedStrokeIcon(
+  '<path d="M9 15l3 -3m2 -2l1 -1" />' +
+    '<path d="M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464" />' +
+    '<path d="M3 3l18 18" />' +
+    '<path d="M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463" />',
+  'fm-icon-link-off',
+);
+
 /** "activity" — diagnostics / system health indicator. */
 export const activityIcon = trustedStrokeIcon(
   '<path d="M3 12h4l3 8l4 -16l3 8h4" />',

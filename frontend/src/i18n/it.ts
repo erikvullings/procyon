@@ -79,6 +79,7 @@ export const it = {
     confirmDelete: 'Elimina definitivamente',
   },
   shell: {
+    moreActions: 'Altre azioni',
     loading: 'Caricamento…',
     workspaceLoading: 'Caricamento dello spazio di lavoro…',
     title: 'Procyon',
@@ -352,6 +353,10 @@ export const it = {
     theme: 'Tema',
     fontSize: 'Dimensione carattere (px)',
     rowHeight: 'Altezza riga (px)',
+    keybindingFilter: 'Filtra per azione o scorciatoia…',
+    toolbarLayout: 'Barra degli strumenti',
+    toolbarFull: 'Tutti i pulsanti',
+    toolbarCompact: 'Compatta',
     dateFormat: 'Formato data',
     dateFormatShort: 'Breve',
     dateFormatMedium: 'Medio',
@@ -1857,6 +1862,9 @@ export const it = {
   },
   documentSummary: {
     title: 'Riepilogo · {name}',
+    copy: 'Copia',
+    copied: 'Copiato',
+    copyAll: 'Copia riepilogo',
     working: 'Preparazione del contenuto del documento…',
     generatingUsingProfile: 'Generazione del riepilogo con {name} · {model}…',
     loadFailed: 'Non è stato possibile caricare il riepilogo.',

@@ -77,6 +77,7 @@ export const en = {
     confirmDelete: 'Delete permanently',
   },
   shell: {
+    moreActions: 'More actions',
     loading: 'Loading…',
     workspaceLoading: 'Loading workspace…',
     title: 'Procyon',
@@ -346,6 +347,10 @@ export const en = {
     theme: 'Theme',
     fontSize: 'Font size (px)',
     rowHeight: 'Row height (px)',
+    keybindingFilter: 'Filter by action or shortcut…',
+    toolbarLayout: 'Toolbar',
+    toolbarFull: 'All buttons',
+    toolbarCompact: 'Compact',
     dateFormat: 'Date format',
     dateFormatShort: 'Short',
     dateFormatMedium: 'Medium',
@@ -1105,6 +1110,9 @@ export const en = {
   },
   documentSummary: {
     title: 'Summary · {name}',
+    copy: 'Copy',
+    copied: 'Copied',
+    copyAll: 'Copy summary',
     working: 'Preparing document content…',
     generatingUsingProfile: 'Generating summary using {name} · {model}…',
     loadFailed: 'The summary could not be loaded.',

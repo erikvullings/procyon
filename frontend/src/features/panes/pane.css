@@ -540,8 +540,14 @@ button.fm-breadcrumb-scheme:hover {
   z-index: 5;
 }
 
-.fm-pane-photo-mode[aria-pressed="true"] {
+.fm-pane-photo-mode[aria-pressed="true"],
+.fm-pane-sync-browsing[aria-pressed="true"] {
   color: var(--fm-accent);
+}
+
+/* Switched off: muted and struck through (see `linkOffIcon`), so on and off read at a glance. */
+.fm-pane-sync-browsing[aria-pressed="false"] {
+  color: var(--fm-text-muted);
 }
 
 .fm-view-mode-menu-backdrop {

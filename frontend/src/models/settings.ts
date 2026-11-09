@@ -130,6 +130,7 @@ export interface Settings {
   readonly dateFormat: 'short' | 'medium' | 'iso';
   readonly sizeFormat: 'binary' | 'decimal' | 'bytes';
   readonly showHiddenFiles: boolean;
+  readonly compactToolbar: boolean;
   readonly confirmPermanentDelete: boolean;
   readonly confirmFileOperations: boolean;
   readonly defaultConflictPolicy: 'ask' | 'overwrite' | 'keepBoth' | 'skip';

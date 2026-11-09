@@ -80,6 +80,7 @@ export const de = {
     confirmDelete: 'Endgültig löschen',
   },
   shell: {
+    moreActions: 'Weitere Aktionen',
     loading: 'Wird geladen…',
     workspaceLoading: 'Arbeitsbereich wird geladen…',
     title: 'Procyon',
@@ -359,6 +360,10 @@ export const de = {
     theme: 'Design',
     fontSize: 'Schriftgröße (px)',
     rowHeight: 'Zeilenhöhe (px)',
+    keybindingFilter: 'Nach Aktion oder Tastenkürzel filtern…',
+    toolbarLayout: 'Symbolleiste',
+    toolbarFull: 'Alle Schaltflächen',
+    toolbarCompact: 'Kompakt',
     dateFormat: 'Datumsformat',
     dateFormatShort: 'Kurz',
     dateFormatMedium: 'Mittel',
@@ -1879,6 +1884,9 @@ export const de = {
   },
   documentSummary: {
     title: 'Zusammenfassung · {name}',
+    copy: 'Kopieren',
+    copied: 'Kopiert',
+    copyAll: 'Zusammenfassung kopieren',
     working: 'Dokumentinhalt wird vorbereitet…',
     generatingUsingProfile: 'Zusammenfassung wird mit {name} · {model} generiert…',
     loadFailed: 'Die Zusammenfassung konnte nicht geladen werden.',

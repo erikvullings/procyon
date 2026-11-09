@@ -381,6 +381,8 @@ pub struct SettingsDto {
     pub size_format: SizeFormatDto,
     /// Show hidden entries by default.
     pub show_hidden_files: bool,
+    /// Keep only navigation, search, workspaces and the command palette in the window toolbar.
+    pub compact_toolbar: bool,
     /// Confirm permanent deletion.
     pub confirm_permanent_delete: bool,
     /// Confirm routine copy, move, and Trash operations before they start.

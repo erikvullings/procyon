@@ -240,8 +240,19 @@ function toolsMenu(actions: readonly ActionDescriptor[]): NativeMenu {
         'core.openTerminal',
         'core.revealInSystemFileManager',
       ]),
+      ...folderSizeItems(actions),
     ],
   };
+}
+
+/** Cmd+. is macOS's "cancel" key equivalent: WKWebView never delivers it to the page, so the
+ * shortcut only works as a native menu accelerator, which AppKit matches first. The chord is
+ * spelled with `meta` (not the action's `ctrl`, which the macOS adapter would map to the literal
+ * Control key) so the menu shows and handles Cmd+. there, and Ctrl+. on Windows. */
+function folderSizeItems(actions: readonly ActionDescriptor[]): NativeMenuItem[] {
+  return actionItems(actions, ['core.calculateFolderSize']).map((item) =>
+    item.kind === 'action' ? { ...item, shortcut: { key: '.', meta: true } } : item,
+  );
 }
 
 /** Excludes `core.favourites` itself: invoking it opens the command palette pre-filtered to

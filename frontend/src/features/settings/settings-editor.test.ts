@@ -31,6 +31,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     dateFormat: 'medium',
     sizeFormat: 'binary',
     showHiddenFiles: false,
+    compactToolbar: true,
     confirmPermanentDelete: true,
     confirmFileOperations: true,
     defaultConflictPolicy: 'ask',
@@ -518,6 +519,21 @@ describe('SettingsEditor', () => {
       'core.rename',
     ]);
     expect(root.querySelector('.fm-settings-keybinding-conflicts')?.textContent).toContain('F2');
+  });
+
+  it('filters the keybindings by action name or shortcut', async () => {
+    mountEditor({ settings: fixtureSettings({}) });
+    openSection('Keybindings');
+    const filter = root.querySelector<HTMLInputElement>('.fm-settings-keybinding-filter input');
+    if (filter === null) throw new Error('keybinding filter missing');
+    filter.value = 'rename';
+    filter.dispatchEvent(new Event('input', { bubbles: true }));
+    m.redraw.sync();
+    expect(
+      [...root.querySelectorAll('.fm-settings-keybinding-row')].map((row) =>
+        row.getAttribute('data-action-id'),
+      ),
+    ).toEqual(['core.rename']);
   });
 
   it('embeds plugin management for enable/disable rather than a second path', () => {

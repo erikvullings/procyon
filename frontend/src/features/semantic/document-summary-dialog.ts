@@ -30,6 +30,19 @@ const REPRESENTATIVE_TOKEN_BUDGET = 4_096;
 const MAX_SUMMARY_INPUT_TOKENS = 131_072;
 const PROMPT_TOKEN_RESERVE = 1_024;
 
+/** Plain text of a generated summary, for the clipboard. */
+export function summaryAsText(
+  summary: DocumentSummary,
+  labels: { title: string; authors: string; brief: string; full: string },
+): string {
+  const parts: string[] = [];
+  if (summary.title) parts.push(`${labels.title}: ${summary.title.value}`);
+  const authors = (summary.authors ?? []).map((author) => author.value);
+  if (authors.length > 0) parts.push(`${labels.authors}: ${authors.join(', ')}`);
+  parts.push(`${labels.brief}\n${summary.brief}`, `${labels.full}\n${summary.full}`);
+  return parts.join('\n\n');
+}
+
 function inputTokenBudget(profile: LlmProfile | undefined): number {
   if (profile === undefined) return REPRESENTATIVE_TOKEN_BUDGET;
   return Math.min(
@@ -209,6 +222,40 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
     await refreshPreview(attrs);
   }
 
+  function summaryLabels(): { title: string; authors: string; brief: string; full: string } {
+    return {
+      title: t('documentSummary', 'extractedTitle'),
+      authors: t('documentSummary', 'extractedAuthors'),
+      brief: t('documentSummary', 'brief'),
+      full: t('documentSummary', 'full'),
+    };
+  }
+
+  /** Which copy button was just used, to flash "Copied" on it. */
+  let copiedKey: string | undefined;
+
+  async function copyText(key: string, text: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(text);
+      copiedKey = key;
+    } catch {
+      copiedKey = undefined;
+    }
+    m.redraw();
+    setTimeout(() => {
+      if (copiedKey === key) copiedKey = undefined;
+      m.redraw();
+    }, 1500);
+  }
+
+  function copyButton(key: string, text: string): m.Vnode {
+    return m(
+      'button.btn-flat.fm-document-summary-copy',
+      { type: 'button', onclick: () => void copyText(key, text) },
+      copiedKey === key ? t('documentSummary', 'copied') : t('documentSummary', 'copy'),
+    );
+  }
+
   async function generate(attrs: DocumentSummaryDialogAttrs): Promise<void> {
     const requestTarget = target(attrs);
     if (requestTarget === undefined || selectedProfileId === undefined || preview === undefined)
@@ -334,9 +381,15 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
                       ),
                     )
                   : m('p', t('documentSummary', 'unavailable')),
-                m('h4', t('documentSummary', 'brief')),
+                m('.fm-document-summary-heading', [
+                  m('h4', t('documentSummary', 'brief')),
+                  copyButton('brief', summary.brief),
+                ]),
                 m('p', summary.brief),
-                m('h4', t('documentSummary', 'full')),
+                m('.fm-document-summary-heading', [
+                  m('h4', t('documentSummary', 'full')),
+                  copyButton('full', summary.full),
+                ]),
                 m('p', summary.full),
               ]),
           preview === undefined
@@ -355,6 +408,20 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
         ]),
         buttons: [
           { label: t('button', 'close'), onclick: attrs.onClose },
+          ...(summary === null
+            ? []
+            : [
+                {
+                  label:
+                    copiedKey === 'all'
+                      ? t('documentSummary', 'copied')
+                      : t('documentSummary', 'copyAll'),
+                  onclick: () => {
+                    if (summary !== null)
+                      void copyText('all', summaryAsText(summary, summaryLabels()));
+                  },
+                },
+              ]),
           ...(selectedProfileId === undefined || preview === undefined
             ? []
             : [

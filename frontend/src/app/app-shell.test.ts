@@ -235,8 +235,17 @@ async function openOperationCentre(container: HTMLElement = root): Promise<void>
   );
 }
 
+let fullToolbarSpy: ReturnType<typeof vi.spyOn> | undefined;
+
 beforeEach(() => {
   vi.stubGlobal('EventSource', TestEventSource);
+  // The real default is the compact toolbar; most tests drive the full set of toolbar buttons.
+  const originalGetSettings = MockFileManagerClient.prototype.getSettings;
+  fullToolbarSpy = vi
+    .spyOn(MockFileManagerClient.prototype, 'getSettings')
+    .mockImplementation(async function (this: MockFileManagerClient, signal?: AbortSignal) {
+      return { ...(await originalGetSettings.call(this, signal)), compactToolbar: false };
+    });
   globalThis.localStorage?.removeItem(DISMISSED_OPERATIONS_STORAGE_KEY);
   globalThis.localStorage?.removeItem(WALKTHROUGH_INVITATION_STORAGE_KEY);
   for (let index = localStorage.length - 1; index >= 0; index -= 1) {
@@ -248,6 +257,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  fullToolbarSpy?.mockRestore();
   vi.unstubAllGlobals();
   m.mount(root, null);
   root.remove();
@@ -273,6 +283,42 @@ async function clickFindByConcept(): Promise<void> {
 }
 
 describe('AppShell', () => {
+  it('keeps only navigation, search, workspaces and the palette in the compact toolbar', async () => {
+    const client = new MockFileManagerClient();
+    const settings = await client.getSettings();
+    vi.spyOn(client, 'getSettings').mockResolvedValue({ ...settings, compactToolbar: true });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.querySelector('.fm-workspace')).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-toolbar-overflow-button')).not.toBeNull(),
+    );
+
+    for (const hidden of [
+      '.fm-basket-add-button',
+      '.fm-basket-open-button',
+      '.fm-settings-button',
+      '.fm-operation-centre-button',
+    ]) {
+      expect(root.querySelector(`.fm-workspace-toolbar ${hidden}`)).toBeNull();
+    }
+    expect(root.querySelector('.fm-workspace-toolbar .fm-command-palette-trigger')).not.toBeNull();
+    expect(
+      root.querySelector('.fm-workspace-toolbar .fm-workspace-switcher-button'),
+    ).not.toBeNull();
+
+    root.querySelector<HTMLButtonElement>('.fm-toolbar-overflow-button')?.click();
+    m.redraw.sync();
+    const labels = [...root.querySelectorAll('.fm-toolbar-overflow-item')].map((item) =>
+      item.textContent?.trim(),
+    );
+    expect(labels).toEqual(
+      expect.arrayContaining(['Settings', 'Compare panes', 'Operations (Alt+Z)']),
+    );
+    root.querySelector<HTMLButtonElement>('.fm-toolbar-overflow-item:last-child')?.click();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-toolbar-overflow-menu')).toBeNull();
+  });
+
   for (const runtime of ['mock', 'http', 'tauri'] as const) {
     it(`offers a non-modal, silent walkthrough once a fresh ${runtime} workspace opens`, async () => {
       const client = new MockFileManagerClient();
@@ -5672,6 +5718,7 @@ describe('AppShell', () => {
     vi.spyOn(client, 'getSettings').mockResolvedValue({
       ...savedSettings,
       showHiddenFiles: true,
+      compactToolbar: true,
     });
     const dispatchWorkspaceCommand = vi.spyOn(client, 'dispatchWorkspaceCommand');
     const listDirectory = vi.spyOn(client, 'listDirectory');
@@ -5862,6 +5909,7 @@ describe('AppShell', () => {
       dateFormat: 'medium',
       sizeFormat: 'binary',
       showHiddenFiles: false,
+      compactToolbar: true,
       confirmPermanentDelete: true,
       confirmFileOperations: true,
       defaultConflictPolicy: 'ask',

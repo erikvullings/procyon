@@ -317,6 +317,23 @@ describe('buildNativeMenuSpec', () => {
     ]);
   });
 
+  it('offers Folder Size in Tools with a Command accelerator, since the webview never sees Cmd+.', () => {
+    const toolsMenu = buildNativeMenuSpec(
+      inputs({
+        actions: [
+          action('core.calculateFolderSize', 'Calculate Folder Size', [{ key: '.', ctrl: true }]),
+        ],
+      }),
+    ).menus.find((menu) => menu.title === 'Tools');
+    expect(toolsMenu?.items).toContainEqual(
+      expect.objectContaining({
+        kind: 'action',
+        id: 'core.calculateFolderSize',
+        shortcut: { key: '.', meta: true },
+      }),
+    );
+  });
+
   it('skips Tools menu ids that are not currently registered instead of crashing', () => {
     const toolsMenu = buildNativeMenuSpec(inputs({ actions: [] })).menus.find(
       (menu) => menu.title === 'Tools',

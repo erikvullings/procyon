@@ -7,6 +7,7 @@ import {
   heartIcon,
   heartPlusIcon,
   linkIcon,
+  linkOffIcon,
   listIcon,
   photoIcon,
   plugIcon,
@@ -1869,7 +1870,9 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                     'aria-pressed': String(attrs.tableConfig.syncBrowsing !== 'off'),
                     onclick: () => attrs.tableConfig.onToggleSyncBrowsing?.(),
                   },
-                  linkIcon({ size: 16 }),
+                  attrs.tableConfig.syncBrowsing === 'off'
+                    ? linkOffIcon({ size: 16 })
+                    : linkIcon({ size: 16 }),
                 ),
               ),
             m('.fm-view-mode-menu-wrapper', [

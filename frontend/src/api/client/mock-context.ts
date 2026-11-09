@@ -204,6 +204,7 @@ export class MockContext {
     dateFormat: 'iso',
     sizeFormat: 'binary',
     showHiddenFiles: false,
+    compactToolbar: true,
     confirmPermanentDelete: true,
     confirmFileOperations: true,
     defaultConflictPolicy: 'ask',

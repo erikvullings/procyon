@@ -20,7 +20,7 @@ import {
   cornerLeftUpIcon,
   helpIcon,
   layoutGridIcon,
-  listIcon,
+  operationsIcon,
   plusIcon,
   searchIcon,
   settingsIcon,
@@ -170,6 +170,7 @@ import { SyncProfilesDialog } from '../features/sync-profiles/sync-profiles-dial
 import { tauriTerminalClient } from '../features/terminal/terminal-client';
 import { TerminalDrawer } from '../features/terminal/terminal-drawer';
 import { focusOpenedTerminal, isTerminalVisible } from '../features/terminal/terminal-state';
+import { ToolbarOverflow, type ToolbarOverflowItem } from '../features/toolbar/toolbar-overflow.ts';
 import { WalkthroughPanel } from '../features/walkthroughs/walkthrough-panel';
 import { formatWindowTitle } from '../features/window-title/window-title';
 import { dispatchWorkspaceCommand } from '../features/workspace/dispatch-workspace-command';
@@ -3303,6 +3304,116 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         );
       const basketF5 =
         basketWiring.basketVisible() && !basketFocused && shortcutFor('core.copy') === 'F5';
+      const compactToolbar = shellState.currentSettings?.compactToolbar === true;
+      const toggleSettingsFromToolbar = (): void => {
+        if (shellState.settingsDisclosureElement === undefined) return;
+        const openStarted = perfStart();
+        shellState.settingsInitialSection = 'appearance';
+        shellState.settingsDisclosureElement.open = !shellState.settingsDisclosureElement.open;
+        shellState.settingsDialogOpen = shellState.settingsDisclosureElement.open;
+        if (shellState.settingsDialogOpen) {
+          perfEndAfterRender('settings-open', openStarted, { via: 'button' });
+        }
+        if (!shellState.settingsDialogOpen && shellState.currentSettings !== undefined) {
+          settingsWiring.applyAppearance(shellState.currentSettings);
+          settingsWiring.settingsClosed();
+        }
+        m.redraw();
+      };
+      const commandPaletteButton = tooltip(
+        miscWiring.labelWithShortcut(
+          t('shell', 'commandPalette'),
+          `${shellState.platform === 'macos' ? 'Cmd' : 'Ctrl'}+P`,
+        ),
+        m(
+          IconButton,
+          {
+            className: 'fm-command-palette-trigger',
+            disabled: shellState.registeredActions.length === 0,
+            'aria-label': t('shell', 'commandPalette'),
+            onclick: () => {
+              shellState.commandPaletteOpen = true;
+            },
+          },
+          commandIcon(),
+        ),
+      );
+      const overflowItems: ToolbarOverflowItem[] = [];
+      if (shellState.knowledgeSearchAvailable || !shellState.knowledgeSearchChecked) {
+        overflowItems.push({
+          id: 'knowledge-search',
+          label: !shellState.knowledgeSearchChecked
+            ? t('knowledgeSearch', 'checkingAvailability')
+            : t(
+                'knowledgeSearch',
+                shellState.semanticAssistantAvailable ? 'openWithAskTitle' : 'openTitle',
+              ),
+          icon: contentSearchIcon(),
+          disabled: !shellState.knowledgeSearchAvailable,
+          onclick: knowledgeWiring.openKnowledgeSearch,
+        });
+      }
+      if (shellState.themesAvailable && shellState.themesWorkspaceIndexed) {
+        overflowItems.push({
+          id: 'themes',
+          label: t('themes', 'openTitle'),
+          icon: themeMapIcon(),
+          onclick: knowledgeWiring.openThemes,
+        });
+      }
+      overflowItems.push(
+        {
+          id: 'basket-add',
+          label: t('basket', 'add'),
+          icon: plusIcon(),
+          disabled: basketWiring.basketSourcePaneId() === undefined,
+          onclick: basketWiring.collectSelection,
+        },
+        {
+          id: 'basket-toggle',
+          label:
+            basketWiring.basketTabLocation() === undefined
+              ? t('basket', 'open')
+              : t('basket', 'close'),
+          icon: basketWiring.basketTabLocation() === undefined ? basketIcon() : basketOpenIcon(),
+          disabled: shellState.workspace === undefined,
+          pressed: basketWiring.basketTabLocation() !== undefined,
+          onclick: basketWiring.toggleBasket,
+        },
+        {
+          id: 'compare',
+          label: t('shell', 'comparePanes'),
+          icon: compareIcon(),
+          disabled:
+            activeDirectory() === undefined || (shellState.workspace?.paneOrder.length ?? 0) < 2,
+          onclick: () => shellState.comparisonController.startComparison('sizeAndTimestamp'),
+        },
+        {
+          id: 'operations',
+          label: t('shell', 'operationCentre'),
+          icon: operationsIcon(),
+          disabled: shellState.workspace === undefined,
+          pressed: shellState.workspace?.operationCentre.visible === true,
+          onclick: () => {
+            shellState.activityOpen = false;
+            opsWiring.toggleOperationCentre();
+          },
+        },
+        {
+          id: 'settings',
+          label: t('shell', 'settings'),
+          icon: settingsIcon(),
+          onclick: toggleSettingsFromToolbar,
+        },
+        {
+          id: 'help',
+          label: t('menu', 'help'),
+          icon: helpIcon(),
+          onclick: () => {
+            shellState.walkthroughsOpen = true;
+          },
+        },
+      );
       return m(
         '.fm-app-shell',
         {
@@ -3457,7 +3568,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                   searchIcon(),
                 ),
               ),
-              shellState.knowledgeSearchAvailable || !shellState.knowledgeSearchChecked
+              !compactToolbar &&
+              (shellState.knowledgeSearchAvailable || !shellState.knowledgeSearchChecked)
                 ? tooltip(
                     miscWiring.labelWithShortcut(
                       !shellState.knowledgeSearchChecked
@@ -3489,7 +3601,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                     ),
                   )
                 : undefined,
-              shellState.themesAvailable && shellState.themesWorkspaceIndexed
+              !compactToolbar && shellState.themesAvailable && shellState.themesWorkspaceIndexed
                 ? tooltip(
                     miscWiring.labelWithShortcut(
                       t('themes', 'openTitle'),
@@ -3506,83 +3618,85 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                     ),
                   )
                 : undefined,
+              compactToolbar
+                ? tooltip(
+                    t('shell', 'moreActions'),
+                    m(ToolbarOverflow, {
+                      label: t('shell', 'moreActions'),
+                      open: shellState.toolbarOverflowOpen,
+                      items: overflowItems,
+                      onToggle: (open) => {
+                        shellState.toolbarOverflowOpen = open;
+                      },
+                    }),
+                  )
+                : undefined,
             ]),
-            m('.fm-toolbar-separator', {
-              role: 'separator',
-              'aria-orientation': 'vertical',
-            }),
-            tooltip(
-              t('basket', 'add'),
-              m(
-                IconButton,
-                {
-                  className: 'fm-basket-add-button',
-                  disabled: basketWiring.basketSourcePaneId() === undefined,
-                  'aria-label': t('basket', 'add'),
-                  onclick: basketWiring.collectSelection,
-                },
-                plusIcon(),
-              ),
-            ),
-            tooltip(
-              basketWiring.basketTabLocation() === undefined
-                ? t('basket', 'open')
-                : t('basket', 'close'),
-              m(
-                IconButton,
-                {
-                  className: 'fm-basket-open-button',
-                  disabled: shellState.workspace === undefined,
-                  'aria-label':
+            ...(compactToolbar
+              ? []
+              : [
+                  m('.fm-toolbar-separator', {
+                    role: 'separator',
+                    'aria-orientation': 'vertical',
+                  }),
+                  tooltip(
+                    t('basket', 'add'),
+                    m(
+                      IconButton,
+                      {
+                        className: 'fm-basket-add-button',
+                        disabled: basketWiring.basketSourcePaneId() === undefined,
+                        'aria-label': t('basket', 'add'),
+                        onclick: basketWiring.collectSelection,
+                      },
+                      plusIcon(),
+                    ),
+                  ),
+                  tooltip(
                     basketWiring.basketTabLocation() === undefined
                       ? t('basket', 'open')
                       : t('basket', 'close'),
-                  'aria-pressed': String(basketWiring.basketTabLocation() !== undefined),
-                  onclick: basketWiring.toggleBasket,
-                },
-                basketWiring.basketTabLocation() === undefined ? basketIcon() : basketOpenIcon(),
-              ),
-            ),
-            m('.fm-toolbar-separator', {
-              role: 'separator',
-              'aria-orientation': 'vertical',
-            }),
-            tooltip(
-              miscWiring.labelWithShortcut(
-                t('shell', 'comparePanes'),
-                shortcutFor('core.compareDirectories'),
-              ),
-              m(
-                IconButton,
-                {
-                  disabled:
-                    activeDirectory() === undefined ||
-                    (shellState.workspace?.paneOrder.length ?? 0) < 2,
-                  'aria-label': t('shell', 'comparePanes'),
-                  onclick: () =>
-                    shellState.comparisonController.startComparison('sizeAndTimestamp'),
-                },
-                compareIcon(),
-              ),
-            ),
-            tooltip(
-              miscWiring.labelWithShortcut(
-                t('shell', 'commandPalette'),
-                `${shellState.platform === 'macos' ? 'Cmd' : 'Ctrl'}+P`,
-              ),
-              m(
-                IconButton,
-                {
-                  className: 'fm-command-palette-trigger',
-                  disabled: shellState.registeredActions.length === 0,
-                  'aria-label': t('shell', 'commandPalette'),
-                  onclick: () => {
-                    shellState.commandPaletteOpen = true;
-                  },
-                },
-                commandIcon(),
-              ),
-            ),
+                    m(
+                      IconButton,
+                      {
+                        className: 'fm-basket-open-button',
+                        disabled: shellState.workspace === undefined,
+                        'aria-label':
+                          basketWiring.basketTabLocation() === undefined
+                            ? t('basket', 'open')
+                            : t('basket', 'close'),
+                        'aria-pressed': String(basketWiring.basketTabLocation() !== undefined),
+                        onclick: basketWiring.toggleBasket,
+                      },
+                      basketWiring.basketTabLocation() === undefined
+                        ? basketIcon()
+                        : basketOpenIcon(),
+                    ),
+                  ),
+                  m('.fm-toolbar-separator', {
+                    role: 'separator',
+                    'aria-orientation': 'vertical',
+                  }),
+                  tooltip(
+                    miscWiring.labelWithShortcut(
+                      t('shell', 'comparePanes'),
+                      shortcutFor('core.compareDirectories'),
+                    ),
+                    m(
+                      IconButton,
+                      {
+                        disabled:
+                          activeDirectory() === undefined ||
+                          (shellState.workspace?.paneOrder.length ?? 0) < 2,
+                        'aria-label': t('shell', 'comparePanes'),
+                        onclick: () =>
+                          shellState.comparisonController.startComparison('sizeAndTimestamp'),
+                      },
+                      compareIcon(),
+                    ),
+                  ),
+                ]),
+            compactToolbar ? undefined : commandPaletteButton,
             m('.fm-toolbar-spacer', {
               'aria-hidden': 'true',
               'data-tauri-drag-region': isMacOverlay ? '' : undefined,
@@ -3608,6 +3722,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 layoutGridIcon(),
               ),
             ),
+            compactToolbar ? commandPaletteButton : undefined,
             m(
               'details.fm-workspace-disclosure',
               {
@@ -3691,10 +3806,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 ),
               ],
             ),
-            m('.fm-toolbar-separator', {
-              role: 'separator',
-              'aria-orientation': 'vertical',
-            }),
+            compactToolbar
+              ? undefined
+              : m('.fm-toolbar-separator', {
+                  role: 'separator',
+                  'aria-orientation': 'vertical',
+                }),
             m(
               '.fm-activity-anchor',
               {
@@ -3706,25 +3823,27 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 },
               },
               [
-                tooltip(
-                  t('shell', 'operationCentre'),
-                  m(
-                    IconButton,
-                    {
-                      className: 'fm-operation-centre-button',
-                      disabled: shellState.workspace === undefined,
-                      'aria-label': t('shell', 'operationCentre'),
-                      'aria-pressed': String(
-                        shellState.workspace?.operationCentre.visible === true,
+                compactToolbar
+                  ? undefined
+                  : tooltip(
+                      t('shell', 'operationCentre'),
+                      m(
+                        IconButton,
+                        {
+                          className: 'fm-operation-centre-button',
+                          disabled: shellState.workspace === undefined,
+                          'aria-label': t('shell', 'operationCentre'),
+                          'aria-pressed': String(
+                            shellState.workspace?.operationCentre.visible === true,
+                          ),
+                          onclick: () => {
+                            shellState.activityOpen = false;
+                            opsWiring.toggleOperationCentre();
+                          },
+                        },
+                        operationsIcon(),
                       ),
-                      onclick: () => {
-                        shellState.activityOpen = false;
-                        opsWiring.toggleOperationCentre();
-                      },
-                    },
-                    listIcon(),
-                  ),
-                ),
+                    ),
                 activityCount > 0
                   ? m(
                       'button.fm-activity-count',
@@ -3836,57 +3955,43 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                   },
                   activityIcon({ size: 16 }),
                 ),
-            m('.fm-toolbar-separator', {
-              role: 'separator',
-              'aria-orientation': 'vertical',
-            }),
-            tooltip(
-              miscWiring.labelWithShortcut(
-                t('shell', 'openSettings'),
-                `${shellState.platform === 'macos' ? 'Cmd' : 'Ctrl'}+,`,
-              ),
-              m(
-                IconButton,
-                {
-                  className: 'fm-settings-button',
-                  'aria-label': t('shell', 'settings'),
-                  onclick: () => {
-                    if (shellState.settingsDisclosureElement === undefined) return;
-                    const openStarted = perfStart();
-                    shellState.settingsInitialSection = 'appearance';
-                    shellState.settingsDisclosureElement.open =
-                      !shellState.settingsDisclosureElement.open;
-                    shellState.settingsDialogOpen = shellState.settingsDisclosureElement.open;
-                    if (shellState.settingsDialogOpen) {
-                      perfEndAfterRender('settings-open', openStarted, { via: 'button' });
-                    }
-                    if (
-                      !shellState.settingsDialogOpen &&
-                      shellState.currentSettings !== undefined
-                    ) {
-                      settingsWiring.applyAppearance(shellState.currentSettings);
-                      settingsWiring.settingsClosed();
-                    }
-                    m.redraw();
-                  },
-                },
-                settingsIcon(),
-              ),
-            ),
-            tooltip(
-              t('menu', 'help'),
-              m(
-                IconButton,
-                {
-                  className: 'fm-settings-button fm-help-trigger',
-                  'aria-label': t('walkthroughs', 'title'),
-                  onclick: () => {
-                    shellState.walkthroughsOpen = true;
-                  },
-                },
-                helpIcon(),
-              ),
-            ),
+            ...(compactToolbar
+              ? []
+              : [
+                  m('.fm-toolbar-separator', {
+                    role: 'separator',
+                    'aria-orientation': 'vertical',
+                  }),
+                  tooltip(
+                    miscWiring.labelWithShortcut(
+                      t('shell', 'openSettings'),
+                      `${shellState.platform === 'macos' ? 'Cmd' : 'Ctrl'}+,`,
+                    ),
+                    m(
+                      IconButton,
+                      {
+                        className: 'fm-settings-button',
+                        'aria-label': t('shell', 'settings'),
+                        onclick: toggleSettingsFromToolbar,
+                      },
+                      settingsIcon(),
+                    ),
+                  ),
+                  tooltip(
+                    t('menu', 'help'),
+                    m(
+                      IconButton,
+                      {
+                        className: 'fm-settings-button fm-help-trigger',
+                        'aria-label': t('walkthroughs', 'title'),
+                        onclick: () => {
+                          shellState.walkthroughsOpen = true;
+                        },
+                      },
+                      helpIcon(),
+                    ),
+                  ),
+                ]),
             m(
               'details.fm-settings-disclosure',
               {

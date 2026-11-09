@@ -562,6 +562,9 @@ pub struct Settings {
     pub size_format: SizeFormat,
     /// Whether hidden entries are shown by default.
     pub show_hidden_files: bool,
+    /// Whether the window toolbar keeps only navigation, search, the workspace switcher and the
+    /// command palette, moving every other button into an overflow menu.
+    pub compact_toolbar: bool,
     /// Whether permanent deletion requires confirmation.
     pub confirm_permanent_delete: bool,
     /// Whether routine copy, move, and Trash operations require confirmation.
@@ -692,6 +695,7 @@ impl Default for Settings {
             date_format: DateFormat::Iso,
             size_format: SizeFormat::Binary,
             show_hidden_files: false,
+            compact_toolbar: true,
             confirm_permanent_delete: true,
             confirm_file_operations: true,
             default_conflict_policy: ConflictPolicy::Ask,

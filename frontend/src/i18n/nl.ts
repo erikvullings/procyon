@@ -78,6 +78,7 @@ export const nl = {
     confirmDelete: 'Permanent verwijderen',
   },
   shell: {
+    moreActions: 'Meer acties',
     loading: 'Laden…',
     workspaceLoading: 'Werkruimte laden…',
     title: 'Procyon',
@@ -348,6 +349,10 @@ export const nl = {
     theme: 'Thema',
     fontSize: 'Lettergrootte (px)',
     rowHeight: 'Rijhoogte (px)',
+    keybindingFilter: 'Filteren op actie of sneltoets…',
+    toolbarLayout: 'Werkbalk',
+    toolbarFull: 'Alle knoppen',
+    toolbarCompact: 'Compact',
     dateFormat: 'Datumnotatie',
     dateFormatShort: 'Kort',
     dateFormatMedium: 'Middellang',
@@ -1118,6 +1123,9 @@ export const nl = {
   },
   documentSummary: {
     title: 'Samenvatting · {name}',
+    copy: 'Kopiëren',
+    copied: 'Gekopieerd',
+    copyAll: 'Samenvatting kopiëren',
     working: 'Documentinhoud voorbereiden…',
     generatingUsingProfile: 'Samenvatting maken met {name} · {model}…',
     loadFailed: 'De samenvatting kon niet worden geladen.',
