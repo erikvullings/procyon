@@ -199,7 +199,9 @@ export function evaluateActionAvailability(
   if (
     action.id === 'core.extract' &&
     soleSelectedEntry !== undefined &&
-    archiveRootForEntry(soleSelectedEntry) === undefined
+    // Extraction reads a local file; archives nested inside another archive are browse-only.
+    (soleSelectedEntry.location.providerId !== 'local' ||
+      archiveRootForEntry(soleSelectedEntry) === undefined)
   ) {
     return unavailable(action, t('availability', 'selectArchive'));
   }

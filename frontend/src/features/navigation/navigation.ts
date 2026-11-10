@@ -185,20 +185,24 @@ function activeTab(workspace: WorkspaceProjection, paneId: PaneId) {
 export function parentLocation(location: Location): Location {
   try {
     if (location.providerId === 'archive' && location.uri.startsWith('archive://')) {
-      const remainder = location.uri.slice('archive://'.length);
-      const separator = remainder.indexOf('!');
-      if (separator >= 0) {
-        const outer = remainder.slice(0, separator);
-        const inner = remainder.slice(separator + 1).replace(/^\/+|\/+$/g, '');
-        if (inner.length === 0) {
-          return parentLocation({ providerId: 'local', uri: `file://${outer}` });
+      const [outer = '', ...layers] = location.uri.slice('archive://'.length).split('!');
+      const last = layers.length - 1;
+      if (last >= 0) {
+        const inner = (layers[last] ?? '').replace(/^\/+|\/+$/g, '');
+        if (inner.length > 0) {
+          const finalSeparator = inner.lastIndexOf('/');
+          const parentInner = finalSeparator < 0 ? '' : inner.slice(0, finalSeparator);
+          const prefix = [outer, ...layers.slice(0, last)].join('!');
+          return { providerId: 'archive', uri: `archive://${prefix}!/${parentInner}` };
         }
-        const finalSeparator = inner.lastIndexOf('/');
-        const parentInner = finalSeparator < 0 ? '' : inner.slice(0, finalSeparator);
-        return {
-          providerId: 'archive',
-          uri: `archive://${outer}!/${parentInner}`,
-        };
+        if (last === 0) return parentLocation({ providerId: 'local', uri: `file://${outer}` });
+        // The root of a nested archive: step out to the folder holding the archive entry.
+        const container = (layers[last - 1] ?? '').replace(/^\/+|\/+$/g, '');
+        const containerSeparator = container.lastIndexOf('/');
+        const containerParent =
+          containerSeparator < 0 ? '' : container.slice(0, containerSeparator);
+        const prefix = [outer, ...layers.slice(0, last - 1)].join('!');
+        return { providerId: 'archive', uri: `archive://${prefix}!/${containerParent}` };
       }
     }
     const url = new URL(location.uri);
@@ -219,14 +223,12 @@ export function parentLocation(location: Location): Location {
 export function lastPathSegment(location: Location): string | undefined {
   try {
     if (location.providerId === 'archive' && location.uri.startsWith('archive://')) {
-      const [outer, rawInner = ''] = location.uri.slice('archive://'.length).split('!', 2);
-      const inner = rawInner.replace(/^\/+|\/+$/g, '');
-      if (inner.length > 0) {
-        return decodeURIComponent(inner.slice(inner.lastIndexOf('/') + 1));
+      const [outer = '', ...layers] = location.uri.slice('archive://'.length).split('!');
+      for (const layer of [...layers].reverse()) {
+        const inner = layer.replace(/^\/+|\/+$/g, '');
+        if (inner.length > 0) return decodeURIComponent(inner.slice(inner.lastIndexOf('/') + 1));
       }
-      if (outer !== undefined) {
-        return decodeURIComponent(outer.slice(outer.lastIndexOf('/') + 1));
-      }
+      return decodeURIComponent(outer.slice(outer.lastIndexOf('/') + 1));
     }
     const path = new URL(location.uri).pathname.replace(/\/+$/, '');
     const finalSeparator = path.lastIndexOf('/');

@@ -19,17 +19,24 @@ export const ARCHIVE_SUFFIXES = [
   '.zip',
 ] as const;
 
-/** Returns the folder-like archive root for a supported local archive entry. */
-export function archiveRootForEntry(entry: EntrySummary): Location | undefined {
-  if (entry.kind !== 'file' || entry.location.providerId !== 'local') return undefined;
-  const lowerName = entry.name.toLocaleLowerCase('en-US');
-  if (!ARCHIVE_SUFFIXES.some((suffix) => lowerName.endsWith(suffix))) return undefined;
-  if (!entry.location.uri.startsWith('file://')) return undefined;
+/** True when the file name has a supported archive suffix. */
+export function hasArchiveSuffix(name: string): boolean {
+  const lowerName = name.toLocaleLowerCase('en-US');
+  return ARCHIVE_SUFFIXES.some((suffix) => lowerName.endsWith(suffix));
+}
 
-  return {
-    providerId: 'archive',
-    uri: `archive://${entry.location.uri.slice('file://'.length)}!/`,
-  };
+/** Returns the folder-like archive root for a supported archive entry: a local file, or a file
+ * inside another archive (`archive://outer.zip!/inner.zip` opens as `archive://outer.zip!/inner.zip!`). */
+export function archiveRootForEntry(entry: EntrySummary): Location | undefined {
+  if (entry.kind !== 'file' || !hasArchiveSuffix(entry.name)) return undefined;
+  const { providerId, uri } = entry.location;
+  if (providerId === 'local' && uri.startsWith('file://')) {
+    return { providerId: 'archive', uri: `archive://${uri.slice('file://'.length)}!/` };
+  }
+  if (providerId === 'archive' && uri.startsWith('archive://') && !uri.endsWith('!')) {
+    return { providerId: 'archive', uri: `${uri}!` };
+  }
+  return undefined;
 }
 
 /** Builds the location of a known entry inside an archive, given the archive's root (from

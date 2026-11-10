@@ -95,7 +95,7 @@ impl ArchiveFileSystemProvider {
         &self,
         location: &Location,
     ) -> Result<ArchiveSummaryMetadata, VfsError> {
-        let parsed = ParsedArchiveLocation::parse(location)?;
+        let parsed = self.resolve(location).await?;
         let password = self.password_for(&parsed.archive_path);
         tokio::task::spawn_blocking(move || {
             summary_metadata_for_path(
@@ -120,12 +120,40 @@ impl ArchiveFileSystemProvider {
 
     /// Caches an archive password in owned, zeroizing memory for this provider session.
     pub fn cache_password(&self, location: &Location, password: String) -> Result<(), VfsError> {
-        let archive_path = ParsedArchiveLocation::parse(location)?.archive_path;
+        let archive_path = ParsedArchiveLocation::parse_chain(location)?.archive_path;
         self.passwords
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .insert(archive_path, Zeroizing::new(password));
         Ok(())
+    }
+
+    /// Parses a read location and, for archives inside archives, expands each level into the
+    /// session cache so `archive_path` is always a real local file.
+    async fn resolve(&self, location: &Location) -> Result<ParsedArchiveLocation, VfsError> {
+        let mut parsed = ParsedArchiveLocation::parse_chain(location)?;
+        if parsed.nested.is_empty() {
+            return Ok(parsed);
+        }
+        let cache = self.extraction_cache.clone();
+        let limits = self.limits;
+        let mut password = self.password_for(&parsed.archive_path);
+        parsed.read_only = true;
+        tokio::task::spawn_blocking(move || {
+            for container in std::mem::take(&mut parsed.nested) {
+                let source = materialize_entry(
+                    &cache,
+                    &parsed.archive_path,
+                    &container,
+                    limits,
+                    password.take().as_ref().map(|value| value.as_str()),
+                )?;
+                parsed.archive_path = source.path;
+            }
+            Ok(parsed)
+        })
+        .await
+        .map_err(join_error)?
     }
 
     fn password_for(&self, archive_path: &Path) -> Option<Zeroizing<String>> {
@@ -327,7 +355,7 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
     }
 
     fn validate_location(&self, location: &Location) -> Result<(), VfsError> {
-        ParsedArchiveLocation::parse(location).map(|_| ())
+        ParsedArchiveLocation::parse_chain(location).map(|_| ())
     }
 
     fn capabilities(&self) -> ProviderCapabilities {
@@ -345,10 +373,10 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
     }
 
     fn capabilities_for(&self, location: &Location) -> Result<ProviderCapabilities, VfsError> {
-        let archive_path = ParsedArchiveLocation::parse(location)?.archive_path;
-        let format = detect_format(&archive_path)?;
+        let parsed = ParsedArchiveLocation::parse_chain(location)?;
         let mut capabilities = self.capabilities();
-        if format == ArchiveFormat::Zip {
+        // Archives inside archives are read-only: rewriting one would mean rewriting its parent.
+        if parsed.nested.is_empty() && detect_format(&parsed.archive_path)? == ArchiveFormat::Zip {
             capabilities |= ProviderCapabilities::WRITE
                 | ProviderCapabilities::CREATE_DIRECTORY
                 | ProviderCapabilities::DELETE;
@@ -363,9 +391,10 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
         cancellation: CancellationToken,
     ) -> Result<DirectoryPage, VfsError> {
         check_request(location, options.page_size, &cancellation)?;
-        let parsed = ParsedArchiveLocation::parse(location)?;
+        let parsed = self.resolve(location).await?;
         let requested = parsed.inner.clone();
         let archive_path = parsed.archive_path.clone();
+        let read_only = parsed.read_only;
         let password = self.password_for(&archive_path);
         let (entries, writable) = tokio::task::spawn_blocking(move || {
             let entries = list_archive(
@@ -373,7 +402,10 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
                 &requested,
                 password.as_ref().map(|value| value.as_str()),
             )?;
-            Ok::<_, VfsError>((entries, detect_format(&archive_path)? == ArchiveFormat::Zip))
+            Ok::<_, VfsError>((
+                entries,
+                !read_only && detect_format(&archive_path)? == ArchiveFormat::Zip,
+            ))
         })
         .await
         .map_err(join_error)??;
@@ -390,7 +422,7 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
     ) -> Result<EntryMetadata, VfsError> {
         let summary = self.inspect(entry, cancellation).await?;
         let archive = if summary.kind == EntryKind::File {
-            let parsed = ParsedArchiveLocation::parse(&entry.location)?;
+            let parsed = self.resolve(&entry.location).await?;
             tokio::task::spawn_blocking(move || {
                 zip_entry_archive_info(&parsed.archive_path, &parsed.inner)
             })
@@ -420,17 +452,24 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
         if cancellation.is_cancelled() {
             return Err(VfsError::Cancelled);
         }
-        let parsed = ParsedArchiveLocation::parse(&entry.location)?;
+        let parsed = self.resolve(&entry.location).await?;
         if parsed.inner.is_empty() {
             // The archive root has no parent listing to find itself in. Describe it directly so
             // callers (e.g. the pane's writability check) see a real directory instead of an error.
             let archive_path = parsed.archive_path;
-            let name = archive_path
-                .file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-                .ok_or_else(|| invalid(&entry.location))?;
+            let read_only = parsed.read_only;
+            // A nested archive's cached copy has a generated name; show the entry's own name.
+            let name = if read_only {
+                entry.location.name().ok()
+            } else {
+                archive_path
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+            }
+            .ok_or_else(|| invalid(&entry.location))?;
             let writable = tokio::task::spawn_blocking(move || {
-                detect_format(&archive_path).map(|format| format == ArchiveFormat::Zip)
+                detect_format(&archive_path)
+                    .map(|format| !read_only && format == ArchiveFormat::Zip)
             })
             .await
             .map_err(join_error)??;
@@ -572,7 +611,7 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
         if cancellation.is_cancelled() {
             return Err(VfsError::Cancelled);
         }
-        let parsed = ParsedArchiveLocation::parse(&entry.location)?;
+        let parsed = self.resolve(&entry.location).await?;
         if parsed.inner.is_empty() {
             return Err(VfsError::IsADirectory {
                 location: entry.location.uri.clone(),
@@ -619,7 +658,7 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
         if cancellation.is_cancelled() {
             return Err(VfsError::Cancelled);
         }
-        let parsed = ParsedArchiveLocation::parse(&entry.location)?;
+        let parsed = self.resolve(&entry.location).await?;
         if parsed.inner.is_empty() {
             return Err(VfsError::IsADirectory {
                 location: entry.location.uri.clone(),
@@ -979,12 +1018,24 @@ fn locate_range_source(
     limits: ArchiveLimits,
     password: Option<&str>,
 ) -> Result<RangeSource, VfsError> {
-    let format = detect_format(archive_path)?;
-    if format == ArchiveFormat::Zip
+    if detect_format(archive_path)? == ArchiveFormat::Zip
         && let Some(source) = stored_zip_source(archive_path, inner)?
     {
         return Ok(source);
     }
+    materialize_entry(cache, archive_path, inner, limits, password)
+}
+
+/// Expands an entry into the session cache (or reuses the earlier expansion) so it is a
+/// standalone seekable file; nested archives are opened through it.
+fn materialize_entry(
+    cache: &Mutex<Option<SessionExtractionCache>>,
+    archive_path: &Path,
+    inner: &str,
+    limits: ArchiveLimits,
+    password: Option<&str>,
+) -> Result<RangeSource, VfsError> {
+    let format = detect_format(archive_path)?;
     let key = CacheKey::new(archive_path, inner)?;
     if let Some((path, length)) = cache
         .lock()
@@ -1191,11 +1242,28 @@ fn set_private_permissions(_path: &Path) -> std::io::Result<()> {
 #[derive(Debug)]
 struct ParsedArchiveLocation {
     archive_path: PathBuf,
+    /// Entry paths of the archives nested inside `archive_path`, outermost first. Empty for an
+    /// archive on the local filesystem; [`ArchiveFileSystemProvider::resolve`] empties it by
+    /// expanding each level.
+    nested: Vec<String>,
+    /// Set by `resolve` when `archive_path` is a cached copy of a nested archive.
+    read_only: bool,
     inner: String,
 }
 
 impl ParsedArchiveLocation {
+    /// Parses a location that must address a plain (non-nested) archive; mutations use this
+    /// because nested archives are read-only.
     fn parse(location: &Location) -> Result<Self, VfsError> {
+        let parsed = Self::parse_chain(location)?;
+        if parsed.nested.is_empty() {
+            Ok(parsed)
+        } else {
+            unsupported(ProviderCapabilities::WRITE)
+        }
+    }
+
+    fn parse_chain(location: &Location) -> Result<Self, VfsError> {
         if location.provider_id.as_str() != "archive" {
             return Err(invalid(location));
         }
@@ -1206,8 +1274,11 @@ impl ParsedArchiveLocation {
         if remainder.contains(['?', '#']) {
             return Err(invalid(location));
         }
-        let (outer, inner) = remainder.split_once('!').ok_or_else(|| invalid(location))?;
-        if outer.is_empty() || outer.contains('!') {
+        let mut layers = remainder.split('!');
+        let outer = layers.next().unwrap_or_default();
+        let mut layers: Vec<&str> = layers.collect();
+        let inner = layers.pop().ok_or_else(|| invalid(location))?;
+        if outer.is_empty() {
             return Err(invalid(location));
         }
         let local = Location::parse(&format!("{FILE_PREFIX}{outer}"))
@@ -1225,9 +1296,21 @@ impl ParsedArchiveLocation {
         } else {
             inner.strip_prefix('/').ok_or_else(|| invalid(location))?
         };
+        let nested = layers
+            .into_iter()
+            .map(|layer| {
+                let path = layer.strip_prefix('/').ok_or_else(|| invalid(location))?;
+                match decode_archive_inner_path(path) {
+                    Ok(decoded) if !decoded.is_empty() => Ok(decoded),
+                    _ => Err(invalid(location)),
+                }
+            })
+            .collect::<Result<Vec<_>, VfsError>>()?;
         let inner = decode_archive_inner_path(inner).map_err(|_| invalid(location))?;
         Ok(Self {
             archive_path,
+            nested,
+            read_only: false,
             inner,
         })
     }

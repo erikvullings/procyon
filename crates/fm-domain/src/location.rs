@@ -295,7 +295,10 @@ struct ParsedFileUri {
 #[derive(Debug)]
 struct ParsedArchiveUri {
     outer: String,
-    inner_segments: Vec<Vec<u8>>,
+    /// Path segments per archive level: `layers[0]` lies inside the outer archive file and each
+    /// further layer inside the archive entry named by the previous one (`a.zip!/b.zip!/c`).
+    /// Never empty; only the last layer may be empty (an archive root).
+    layers: Vec<Vec<Vec<u8>>>,
 }
 
 /// Structural path algebra for conventionally hierarchical provider URIs.
@@ -858,8 +861,10 @@ impl ParsedArchiveUri {
         if remainder.contains(['?', '#']) {
             return Err(LocationError::InvalidUri);
         }
-        let (outer, inner) = remainder.split_once('!').ok_or(LocationError::InvalidUri)?;
-        if outer.is_empty() || outer.contains('!') {
+        let mut parts = remainder.split('!');
+        let outer = parts.next().ok_or(LocationError::InvalidUri)?;
+        let raw_layers: Vec<&str> = parts.collect();
+        if outer.is_empty() || raw_layers.is_empty() {
             return Err(LocationError::InvalidUri);
         }
         let outer_file_uri = format!("file://{outer}");
@@ -868,61 +873,87 @@ impl ParsedArchiveUri {
         if parsed_outer.segments.is_empty() {
             return Err(LocationError::InvalidUri);
         }
-        let inner = if inner.is_empty() {
-            ""
-        } else {
-            inner.strip_prefix('/').ok_or(LocationError::InvalidUri)?
-        };
-        let inner_segments = if inner.is_empty() {
-            Vec::new()
-        } else {
-            inner
-                .split('/')
-                .map(|segment| {
-                    let decoded = percent_decode(segment)?;
-                    let name = String::from_utf8(decoded.clone())
-                        .map_err(|_| LocationError::InvalidUnicode)?;
-                    validate_name(&name)?;
-                    Ok(decoded)
-                })
-                .collect::<Result<Vec<_>, LocationError>>()?
-        };
+        let last = raw_layers.len() - 1;
+        let layers = raw_layers
+            .iter()
+            .enumerate()
+            .map(|(index, raw)| {
+                let segments = Self::parse_layer(raw)?;
+                // A nested archive is addressed by an entry, so only the final layer can be a root.
+                if segments.is_empty() && index != last {
+                    return Err(LocationError::InvalidUri);
+                }
+                Ok(segments)
+            })
+            .collect::<Result<Vec<_>, LocationError>>()?;
         Ok(Self {
             outer: outer.to_owned(),
-            inner_segments,
+            layers,
         })
     }
 
+    fn parse_layer(inner: &str) -> Result<Vec<Vec<u8>>, LocationError> {
+        if inner.is_empty() {
+            return Ok(Vec::new());
+        }
+        let inner = inner.strip_prefix('/').ok_or(LocationError::InvalidUri)?;
+        if inner.is_empty() {
+            return Ok(Vec::new());
+        }
+        inner
+            .split('/')
+            .map(|segment| {
+                let decoded = percent_decode(segment)?;
+                let name = String::from_utf8(decoded.clone())
+                    .map_err(|_| LocationError::InvalidUnicode)?;
+                validate_name(&name)?;
+                Ok(decoded)
+            })
+            .collect()
+    }
+
     fn into_location(self) -> Location {
-        let inner = self
-            .inner_segments
-            .iter()
-            .map(|segment| percent_encode(segment))
-            .collect::<Vec<_>>()
-            .join("/");
-        let separator = if inner.is_empty() { "" } else { "/" };
-        Location::new(
-            ProviderId::new("archive"),
-            format!("archive://{}!{separator}{inner}", self.outer),
-        )
+        let mut uri = format!("archive://{}", self.outer);
+        for layer in &self.layers {
+            uri.push('!');
+            for segment in layer {
+                uri.push('/');
+                uri.push_str(&percent_encode(segment));
+            }
+        }
+        Location::new(ProviderId::new("archive"), uri)
     }
 
     fn join(mut self, name: &str) -> Result<Location, LocationError> {
-        self.inner_segments.push(name.as_bytes().to_vec());
+        if let Some(last) = self.layers.last_mut() {
+            last.push(name.as_bytes().to_vec());
+        }
         Ok(self.into_location())
     }
 
+    /// The directory containing this location; the root of a nested archive sits in the folder
+    /// holding the archive entry, and the outermost root has no parent here (callers leave the
+    /// archive through the local file's own parent).
     fn parent(mut self) -> Result<Option<Location>, LocationError> {
-        if self.inner_segments.pop().is_none() {
-            return Ok(None);
+        if self.layers.last_mut().and_then(Vec::pop).is_some() {
+            return Ok(Some(self.into_location()));
         }
-        Ok(Some(self.into_location()))
+        if self.layers.len() > 1 {
+            self.layers.pop();
+            if let Some(last) = self.layers.last_mut() {
+                last.pop();
+            }
+            return Ok(Some(self.into_location()));
+        }
+        Ok(None)
     }
 
     fn name(&self) -> Result<String, LocationError> {
         let segment = self
-            .inner_segments
-            .last()
+            .layers
+            .iter()
+            .rev()
+            .find_map(|layer| layer.last())
             .ok_or_else(|| LocationError::InvalidName("archive root has no name".to_owned()))?;
         String::from_utf8(segment.clone()).map_err(|_| LocationError::InvalidUnicode)
     }

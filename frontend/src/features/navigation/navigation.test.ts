@@ -4,6 +4,7 @@ import { ApiError } from '../../api/fetch-mutator';
 import type { DirectorySnapshot, EntryId, WorkspaceProjection } from '../../models';
 import {
   createNavigationController,
+  lastPathSegment,
   listingOptionsChanged,
   type NavigationClient,
   type PaneDirectoryView,
@@ -189,6 +190,18 @@ describe('parentLocation', () => {
     expect(
       parentLocation({ providerId: 'archive', uri: 'archive:///home/erik/comic.zip!/' }),
     ).toEqual({ providerId: 'local', uri: 'file:///home/erik' });
+  });
+
+  it('steps out of a nested archive to the folder holding it', () => {
+    expect(
+      parentLocation({ providerId: 'archive', uri: 'archive:///tmp/a.zip!/docs/b.zip!/' }),
+    ).toEqual({ providerId: 'archive', uri: 'archive:///tmp/a.zip!/docs' });
+    expect(
+      parentLocation({ providerId: 'archive', uri: 'archive:///tmp/a.zip!/docs/b.zip!/x/y' }),
+    ).toEqual({ providerId: 'archive', uri: 'archive:///tmp/a.zip!/docs/b.zip!/x' });
+    expect(
+      lastPathSegment({ providerId: 'archive', uri: 'archive:///tmp/a.zip!/docs/b.zip!/' }),
+    ).toBe('b.zip');
   });
 
   it('moves between directories inside an archive before leaving its root', () => {

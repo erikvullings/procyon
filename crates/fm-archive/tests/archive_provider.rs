@@ -1010,3 +1010,80 @@ async fn inspecting_a_zip_root_reports_a_writable_directory() {
     assert_eq!(entry.kind, EntryKind::Directory);
     assert!(!entry.read_only, "a ZIP root must accept drops");
 }
+
+/// `outer.zip` holds `docs/inner.zip`, which holds `notes/readme.txt`.
+fn nested_zip_fixture(root: &std::path::Path) -> std::path::PathBuf {
+    let mut inner = Vec::new();
+    {
+        let mut writer = ZipWriter::new(std::io::Cursor::new(&mut inner));
+        writer
+            .start_file("notes/readme.txt", SimpleFileOptions::default())
+            .expect("start inner entry");
+        writer
+            .write_all(b"nested hello")
+            .expect("write inner entry");
+        writer.finish().expect("finish inner zip");
+    }
+    let outer_path = root.join("outer.zip");
+    let mut writer = ZipWriter::new(std::fs::File::create(&outer_path).expect("create outer"));
+    writer
+        .start_file("docs/inner.zip", SimpleFileOptions::default())
+        .expect("start outer entry");
+    writer.write_all(&inner).expect("write outer entry");
+    writer.finish().expect("finish outer zip");
+    outer_path
+}
+
+#[tokio::test]
+async fn archive_inside_an_archive_is_navigable_and_readable_but_read_only() {
+    let root = tempdir().expect("temporary root");
+    let outer = zip_location(&nested_zip_fixture(root.path()));
+    let provider = ArchiveFileSystemProvider::new();
+
+    let nested_root = outer.join("docs").unwrap().join("inner.zip").unwrap();
+    let nested_root = Location::parse(&format!("{}!", nested_root.uri)).expect("nested URI parses");
+    assert_eq!(nested_root.name().unwrap(), "inner.zip");
+    assert_eq!(
+        nested_root.parent().unwrap().unwrap().uri,
+        outer.join("docs").unwrap().uri
+    );
+
+    let page = provider
+        .list(
+            &nested_root,
+            ListOptions::default(),
+            CancellationToken::new(),
+        )
+        .await
+        .expect("list nested archive");
+    assert_eq!(page.entries.len(), 1);
+    assert_eq!(page.entries[0].name, "notes");
+    assert!(page.entries[0].read_only, "nested archives are read-only");
+
+    let file = nested_root
+        .join("notes")
+        .unwrap()
+        .join("readme.txt")
+        .unwrap();
+    let entry = fm_vfs::EntryRef {
+        id: fm_domain::EntryId::new(),
+        location: file.clone(),
+    };
+    let mut stream = provider
+        .open_read(&entry, CancellationToken::new())
+        .await
+        .expect("open nested entry");
+    let mut text = String::new();
+    stream
+        .read_to_string(&mut text)
+        .await
+        .expect("read nested entry");
+    assert_eq!(text, "nested hello");
+
+    assert!(
+        !provider
+            .capabilities_for(&file)
+            .unwrap()
+            .contains(ProviderCapabilities::WRITE)
+    );
+}

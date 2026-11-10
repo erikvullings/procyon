@@ -33,14 +33,23 @@ describe('archiveRootForEntry', () => {
     });
   });
 
-  it('leaves ordinary files and non-local entries to the normal open action', () => {
+  it('leaves ordinary files to the normal open action', () => {
     expect(archiveRootForEntry(entry('notes.txt'))).toBeUndefined();
     expect(
       archiveRootForEntry({
-        ...entry('nested.zip'),
-        location: { providerId: 'archive', uri: 'archive:///tmp/outer.zip!/nested.zip' },
+        ...entry('notes.txt'),
+        location: { providerId: 'archive', uri: 'archive:///tmp/outer.zip!/notes.txt' },
       }),
     ).toBeUndefined();
+  });
+
+  it('opens an archive stored inside another archive as a nested root', () => {
+    expect(
+      archiveRootForEntry({
+        ...entry('nested.zip'),
+        location: { providerId: 'archive', uri: 'archive:///tmp/outer.zip!/docs/nested.zip' },
+      }),
+    ).toEqual({ providerId: 'archive', uri: 'archive:///tmp/outer.zip!/docs/nested.zip!' });
   });
 });
 
