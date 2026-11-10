@@ -912,6 +912,13 @@ export const it = {
     requiredTitle: "È richiesta la password dell'archivio",
     unlock: 'Sblocca',
   },
+  archiveEdit: {
+    title: 'Salvare le modifiche a {name}?',
+    body: '"{name}" si trova in un altro archivio. Il salvataggio lo sostituisce lì e non può essere annullato. Scartando si perdono le modifiche.',
+    save: 'Salva modifiche',
+    discard: 'Scarta modifiche',
+    later: 'Non ora',
+  },
   pluginManagement: {
     ariaLabel: 'Plugin',
     noPlugins: 'Nessun plugin trovato.',

@@ -914,6 +914,13 @@ export const nl = {
     requiredTitle: 'Archiefwachtwoord vereist',
     unlock: 'Ontgrendelen',
   },
+  archiveEdit: {
+    title: 'Wijzigingen in {name} opslaan?',
+    body: '"{name}" zit in een ander archief. Opslaan vervangt het daar en dat kan niet ongedaan worden gemaakt. Verwerpen gooit je wijzigingen weg.',
+    save: 'Wijzigingen opslaan',
+    discard: 'Wijzigingen verwerpen',
+    later: 'Nu niet',
+  },
   pluginManagement: {
     ariaLabel: 'Plug-ins',
     noPlugins: 'Geen plug-ins gevonden.',

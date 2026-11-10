@@ -6,6 +6,7 @@ import type {
   ApplySyncPlanRequest,
   ApplySyncPlanResult,
   ArchiveCredentialRequest,
+  ArchiveEdit,
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
   AttachSemanticVocabularyRequest,
@@ -144,6 +145,7 @@ import type {
   ReadStructuredRowsRequest,
   RemoveApplicationDockIconRequest,
   RemoveApplicationDockIconResult,
+  ResolveArchiveEditRequest,
   ResolveConflictRequest,
   ResolvedRagCitation,
   ResolveKnowledgeSourceRequest,
@@ -253,6 +255,8 @@ import {
   listActions as requestActions,
   removeApplicationDockIcon as requestApplicationDockIconRemoval,
   discoverApplicationUninstallCandidates as requestApplicationUninstallDiscovery,
+  resolveArchiveEdit as requestArchiveEditResolution,
+  listArchiveEdits as requestArchiveEdits,
   cacheArchivePassword as requestArchivePasswordCache,
   archiveSummary as requestArchiveSummary,
   cancelChecksums as requestChecksumCancel,
@@ -537,6 +541,26 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 204) {
       throw unexpectedResponseError('cacheArchivePassword', response.status);
+    }
+  }
+  async listArchiveEdits(signal?: AbortSignal): Promise<ArchiveEdit[]> {
+    const response = await requestArchiveEdits(signal === undefined ? undefined : { signal });
+    if (response.status !== 200) {
+      throw unexpectedResponseError('listArchiveEdits', response.status);
+    }
+    return response.data as ArchiveEdit[];
+  }
+
+  async resolveArchiveEdit(
+    request: ResolveArchiveEditRequest,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const response = await requestArchiveEditResolution(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204) {
+      throw unexpectedResponseError('resolveArchiveEdit', response.status);
     }
   }
   async getRuntimeCapabilities(signal?: AbortSignal): Promise<RuntimeCapabilities> {

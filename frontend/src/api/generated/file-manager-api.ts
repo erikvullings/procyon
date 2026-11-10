@@ -13,6 +13,7 @@ import type {
   ApplySyncPlanRequestDto,
   ApplySyncPlanResponseDto,
   ArchiveCredentialRequestDto,
+  ArchiveEditDto,
   ArchiveSummaryRequestDto,
   ArchiveSummaryResponseDto,
   AttachSemanticVocabularyRequestDto,
@@ -176,6 +177,7 @@ import type {
   RemoveApplicationDockIconResponseDto,
   RenderChecksumFileRequestDto,
   RenderPluginPreviewRequestDto,
+  ResolveArchiveEditRequestDto,
   ResolveKnowledgeSourceRequestDto,
   ResolveLinkTargetRequestDto,
   ResolveMetadataTokensRequestDto,
@@ -561,6 +563,99 @@ return fetchMutator<cacheArchivePasswordResponse>(getCacheArchivePasswordUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(archiveCredentialRequestDto)
+  }
+);}
+
+
+
+export type listArchiveEditsResponse200 = {
+  data: ArchiveEditDto[]
+  status: 200
+}
+
+export type listArchiveEditsResponseSuccess = (listArchiveEditsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listArchiveEditsResponse = (listArchiveEditsResponseSuccess)
+
+export const getListArchiveEditsUrl = () => {
+
+
+
+
+  return `/api/v1/archives/edits`
+}
+
+/**
+ * @summary Lists nested archives whose changes are not yet written back to their containing archive.
+ */
+export const listArchiveEdits = async ( options?: Parameters<typeof fetchMutator>[1]): Promise<listArchiveEditsResponse> => {
+
+  return fetchMutator<listArchiveEditsResponse>(getListArchiveEditsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type resolveArchiveEditResponse204 = {
+  data: void
+  status: 204
+}
+
+export type resolveArchiveEditResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type resolveArchiveEditResponseSuccess = (resolveArchiveEditResponse204) & {
+  headers: Headers;
+};
+export type resolveArchiveEditResponseError = (resolveArchiveEditResponse400) & {
+  headers: Headers;
+};
+
+export type resolveArchiveEditResponse = (resolveArchiveEditResponseSuccess | resolveArchiveEditResponseError)
+
+export const getResolveArchiveEditUrl = () => {
+
+
+
+
+  return `/api/v1/archives/edits/resolve`
+}
+
+/**
+ * @summary Writes a nested archive's pending changes into its containing archive, or discards them.
+ */
+export const resolveArchiveEdit = async (resolveArchiveEditRequestDto: ResolveArchiveEditRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<resolveArchiveEditResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<resolveArchiveEditResponse>(getResolveArchiveEditUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(resolveArchiveEditRequestDto)
   }
 );}
 

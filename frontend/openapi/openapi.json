@@ -254,6 +254,58 @@
         }
       }
     },
+    "/api/v1/archives/edits": {
+      "get": {
+        "summary": "Lists nested archives whose changes are not yet written back to their containing archive.",
+        "operationId": "listArchiveEdits",
+        "responses": {
+          "200": {
+            "description": "Nested archives with pending changes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArchiveEditDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/archives/edits/resolve": {
+      "post": {
+        "summary": "Writes a nested archive's pending changes into its containing archive, or discards them.",
+        "operationId": "resolveArchiveEdit",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveArchiveEditRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "The pending changes were written back or discarded"
+          },
+          "400": {
+            "description": "The archive location was invalid or the write-back failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/archives/summary": {
       "post": {
         "summary": "Computes the F3 archive summary through the archive provider's virtual root.",
@@ -9651,6 +9703,24 @@
             "type": "string",
             "format": "password",
             "description": "Password to cache in backend memory. Transport adapters must not log request bodies."
+          }
+        }
+      },
+      "ArchiveEditDto": {
+        "type": "object",
+        "description": "A nested archive with changes that are not yet written back to its containing archive.",
+        "required": [
+          "location",
+          "name"
+        ],
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Root of the nested archive; pass it back unchanged to resolve the edit."
+          },
+          "name": {
+            "type": "string",
+            "description": "File name of the nested archive, for display."
           }
         }
       },
@@ -21349,6 +21419,24 @@
           "location": {
             "$ref": "#/components/schemas/LocationDto",
             "description": "The file to preview; its extension must be one the plugin claims."
+          }
+        }
+      },
+      "ResolveArchiveEditRequestDto": {
+        "type": "object",
+        "description": "Writes a nested archive's pending changes into its containing archive, or discards them.",
+        "required": [
+          "location",
+          "commit"
+        ],
+        "properties": {
+          "commit": {
+            "type": "boolean",
+            "description": "`true` replaces the archive inside its container; `false` throws the changes away."
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Root of the nested archive, as listed by [`ArchiveEditDto`]."
           }
         }
       },

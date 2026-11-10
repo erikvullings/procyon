@@ -922,6 +922,13 @@ export const de = {
     requiredTitle: 'Archivpasswort erforderlich',
     unlock: 'Entsperren',
   },
+  archiveEdit: {
+    title: 'Änderungen an {name} speichern?',
+    body: '"{name}" liegt in einem anderen Archiv. Das Speichern ersetzt es dort und lässt sich nicht rückgängig machen. Beim Verwerfen gehen Ihre Änderungen verloren.',
+    save: 'Änderungen speichern',
+    discard: 'Änderungen verwerfen',
+    later: 'Jetzt nicht',
+  },
   pluginManagement: {
     ariaLabel: 'Plugins',
     noPlugins: 'Keine Plugins gefunden.',

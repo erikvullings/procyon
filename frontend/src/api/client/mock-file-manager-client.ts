@@ -6,6 +6,7 @@ import type {
   ApplySyncPlanRequest,
   ApplySyncPlanResult,
   ArchiveCredentialRequest,
+  ArchiveEdit,
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
   AttachSemanticVocabularyRequest,
@@ -141,6 +142,7 @@ import type {
   ReadStructuredRowsRequest,
   RemoveApplicationDockIconRequest,
   RemoveApplicationDockIconResult,
+  ResolveArchiveEditRequest,
   ResolveConflictRequest,
   ResolvedRagCitation,
   ResolveKnowledgeSourceRequest,
@@ -281,6 +283,12 @@ export class MockFileManagerClient implements FileManagerClient {
   }
   cacheArchivePassword(_request: ArchiveCredentialRequest, signal?: AbortSignal): Promise<void> {
     return this.workspaceClient.cacheArchivePassword(_request, signal);
+  }
+  listArchiveEdits(signal?: AbortSignal): Promise<ArchiveEdit[]> {
+    return this.workspaceClient.listArchiveEdits(signal);
+  }
+  resolveArchiveEdit(request: ResolveArchiveEditRequest, signal?: AbortSignal): Promise<void> {
+    return this.workspaceClient.resolveArchiveEdit(request, signal);
   }
   getRuntimeCapabilities(signal?: AbortSignal): Promise<RuntimeCapabilities> {
     return this.connectionClient.getRuntimeCapabilities(signal);

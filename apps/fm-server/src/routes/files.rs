@@ -4,7 +4,7 @@
 use axum::extract::{Extension, Path, State};
 use axum::{Json, http::StatusCode};
 use fm_transport_dto::{
-    ApplicationErrorDto, ArchiveCredentialRequestDto, ArchiveSummaryRequestDto,
+    ApplicationErrorDto, ArchiveCredentialRequestDto, ArchiveEditDto, ArchiveSummaryRequestDto,
     ArchiveSummaryResponseDto, CalculateFolderSizeRequestDto, CalculateFolderSizeResponseDto,
     ConvertGeoTextRequestDto, ConvertGeoTextResponseDto, DocxPreviewSessionRequestDto,
     GeoDocumentDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto, ImageMetadataDto,
@@ -18,11 +18,12 @@ use fm_transport_dto::{
     ReadFileRangeResponseDto, ReadGeoFileRequestDto, ReadImageGpsRequestDto,
     ReadImageGpsResponseDto, ReadImageMetadataRequestDto, ReadPptxPreviewPdfRequestDto,
     ReadStructuredJsonWindowRequestDto, ReadStructuredJsonWindowResponseDto,
-    ReadStructuredRowsRequestDto, ReadStructuredRowsResponseDto, ResolveMetadataTokensRequestDto,
-    ResolveMetadataTokensResponseDto, SaveEditableFileRequestDto, SaveEditableFileResponseDto,
-    ScanDiskUsageRequestDto, SearchInFileRequestDto, SearchInFileResponseDto,
-    SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto, SqliteViewSessionRequestDto,
-    StructuredViewSessionRequestDto, StructuredViewStatusDto, UpdateStructuredViewRequestDto,
+    ReadStructuredRowsRequestDto, ReadStructuredRowsResponseDto, ResolveArchiveEditRequestDto,
+    ResolveMetadataTokensRequestDto, ResolveMetadataTokensResponseDto, SaveEditableFileRequestDto,
+    SaveEditableFileResponseDto, ScanDiskUsageRequestDto, SearchInFileRequestDto,
+    SearchInFileResponseDto, SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto,
+    SqliteViewSessionRequestDto, StructuredViewSessionRequestDto, StructuredViewStatusDto,
+    UpdateStructuredViewRequestDto,
 };
 use tower_http::request_id::RequestId;
 use uuid::Uuid;
@@ -51,6 +52,43 @@ pub(crate) async fn cache_archive_password(
     state
         .service
         .cache_archive_password(request)
+        .map(|()| StatusCode::NO_CONTENT)
+        .map_err(|error| ApiError::new(error, request_id))
+}
+
+/// Lists nested archives whose changes are not yet written back to their containing archive.
+#[utoipa::path(
+    get,
+    path = "/api/v1/archives/edits",
+    operation_id = "listArchiveEdits",
+    responses((status = 200, description = "Nested archives with pending changes", body = Vec<ArchiveEditDto>))
+)]
+pub(crate) async fn list_archive_edits(State(state): State<AppState>) -> Json<Vec<ArchiveEditDto>> {
+    Json(state.service.archive_edits())
+}
+
+/// Writes a nested archive's pending changes into its containing archive, or discards them.
+#[utoipa::path(
+    post,
+    path = "/api/v1/archives/edits/resolve",
+    operation_id = "resolveArchiveEdit",
+    request_body = ResolveArchiveEditRequestDto,
+    responses(
+        (status = 204, description = "The pending changes were written back or discarded"),
+        (status = 400, description = "The archive location was invalid or the write-back failed", body = ApplicationErrorDto),
+    )
+)]
+pub(crate) async fn resolve_archive_edit(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<ResolveArchiveEditRequestDto>,
+) -> Result<StatusCode, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    crate::error::require_within_roots(&request.location, &state.accessible_roots, request_id)?;
+    state
+        .service
+        .resolve_archive_edit(request)
+        .await
         .map(|()| StatusCode::NO_CONTENT)
         .map_err(|error| ApiError::new(error, request_id))
 }

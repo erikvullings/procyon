@@ -913,6 +913,13 @@ export const es = {
     requiredTitle: 'Se requiere contraseña de archivo comprimido',
     unlock: 'Desbloquear',
   },
+  archiveEdit: {
+    title: '¿Guardar los cambios de {name}?',
+    body: '"{name}" está dentro de otro archivo. Guardar lo sustituye allí y no se puede deshacer. Descartar pierde tus cambios.',
+    save: 'Guardar cambios',
+    discard: 'Descartar cambios',
+    later: 'Ahora no',
+  },
   pluginManagement: {
     ariaLabel: 'Complementos',
     noPlugins: 'No se encontraron complementos.',

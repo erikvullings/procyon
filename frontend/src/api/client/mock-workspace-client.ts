@@ -1,6 +1,7 @@
 import { errorText } from '../../i18n';
 import type {
   ArchiveCredentialRequest,
+  ArchiveEdit,
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
   AttributeChangePreview,
@@ -57,6 +58,7 @@ import type {
   ReadStructuredRowsRequest,
   RemoveApplicationDockIconRequest,
   RemoveApplicationDockIconResult,
+  ResolveArchiveEditRequest,
   ResolveMetadataTokensRequest,
   ResolveMetadataTokensResult,
   SaveEditableFileRequest,
@@ -102,6 +104,14 @@ export class MockWorkspaceClient implements WorkspaceClient {
 
   cacheArchivePassword(_request: ArchiveCredentialRequest, signal?: AbortSignal): Promise<void> {
     return this.ctx.perform('cacheArchivePassword', signal, () => undefined);
+  }
+
+  listArchiveEdits(signal?: AbortSignal): Promise<ArchiveEdit[]> {
+    return this.ctx.perform('listArchiveEdits', signal, () => []);
+  }
+
+  resolveArchiveEdit(_request: ResolveArchiveEditRequest, signal?: AbortSignal): Promise<void> {
+    return this.ctx.perform('resolveArchiveEdit', signal, () => undefined);
   }
 
   getFileIcon(sampleLocationUri: string, signal?: AbortSignal): Promise<Uint8Array | undefined> {

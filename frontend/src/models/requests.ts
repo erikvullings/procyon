@@ -131,6 +131,20 @@ export interface ArchiveCredentialRequest {
   password: string;
 }
 
+/** A nested archive with changes that are not yet written back to its containing archive. */
+export interface ArchiveEdit {
+  /** Root of the nested archive; pass it back unchanged to resolve the edit. */
+  location: Location;
+  /** File name of the nested archive, for display. */
+  name: string;
+}
+
+/** Writes a nested archive's pending changes into its container (`commit`) or drops them. */
+export interface ResolveArchiveEditRequest {
+  location: Location;
+  commit: boolean;
+}
+
 /**
  * Starts a mutating operation (spec §17). No backend DTO exists yet
  * (operations land in tasks 0037+); fields mirror the domain `Operation`

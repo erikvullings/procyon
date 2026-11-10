@@ -1,5 +1,6 @@
 import type {
   ApplicationUninstallCandidate,
+  ArchiveEdit,
   EntrySummary,
   FinderTag,
   Location,
@@ -16,6 +17,13 @@ export interface PendingArchiveCredential {
   readonly location: Location;
   readonly invalid: boolean;
   readonly resolve: (supplied: boolean) => void;
+}
+
+/** A nested archive whose edits are waiting for the user to save or discard them. */
+export interface PendingArchiveEditPrompt {
+  readonly edit: ArchiveEdit;
+  /** Why the last save attempt failed, shown inside the dialog. */
+  readonly error?: string;
 }
 
 export interface FinderTagsDialogRequest {
@@ -64,6 +72,7 @@ export interface DialogUIState {
   propertiesEntries: readonly EntrySummary[];
   pendingArchiveCredential: PendingArchiveCredential | undefined;
   archiveCredentialError: string | undefined;
+  pendingArchiveEdit: PendingArchiveEditPrompt | undefined;
   pendingCreatedLocation: string | undefined;
   finderTagsDialog: FinderTagsDialogRequest | undefined;
   spotlightCommentDialog: SpotlightCommentDialogRequest | undefined;
@@ -111,6 +120,7 @@ export interface DialogUIController {
   setPendingArchiveCredential(credential: PendingArchiveCredential | undefined): void;
   setArchiveCredentialError(error: string | undefined): void;
   clearArchiveCredential(): void;
+  setPendingArchiveEdit(prompt: PendingArchiveEditPrompt | undefined): void;
   setPendingCreatedLocation(uri: string | undefined): void;
   openFinderTagsDialog(request: FinderTagsDialogRequest): void;
   cancelFinderTagsDialog(): void;
@@ -142,6 +152,7 @@ export function createDialogUIController(): DialogUIController {
     propertiesEntries: [],
     pendingArchiveCredential: undefined,
     archiveCredentialError: undefined,
+    pendingArchiveEdit: undefined,
     pendingCreatedLocation: undefined,
     finderTagsDialog: undefined,
     spotlightCommentDialog: undefined,
@@ -264,6 +275,10 @@ export function createDialogUIController(): DialogUIController {
     clearArchiveCredential(): void {
       state.pendingArchiveCredential = undefined;
       state.archiveCredentialError = undefined;
+    },
+
+    setPendingArchiveEdit(prompt): void {
+      state.pendingArchiveEdit = prompt;
     },
 
     setPendingCreatedLocation(uri): void {

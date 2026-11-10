@@ -141,6 +141,8 @@ export type MockClientMethod =
   | 'getSpotlightComment'
   | 'setSpotlightComment'
   | 'cacheArchivePassword'
+  | 'listArchiveEdits'
+  | 'resolveArchiveEdit'
   | 'readFileRange'
   | 'previewGeoConversion'
   | 'previewGeoMinify'

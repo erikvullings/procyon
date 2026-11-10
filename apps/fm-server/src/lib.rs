@@ -205,6 +205,8 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::files::cancel_disk_usage))
         .routes(utoipa_axum::routes!(routes::files::get_file_git_history))
         .routes(utoipa_axum::routes!(routes::files::cache_archive_password))
+        .routes(utoipa_axum::routes!(routes::files::list_archive_edits))
+        .routes(utoipa_axum::routes!(routes::files::resolve_archive_edit))
         .routes(utoipa_axum::routes!(
             routes::application_uninstall::discover_application_uninstall_candidates
         ))

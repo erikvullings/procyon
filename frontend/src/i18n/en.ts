@@ -903,6 +903,13 @@ export const en = {
     requiredTitle: 'Archive password required',
     unlock: 'Unlock',
   },
+  archiveEdit: {
+    title: 'Save changes to {name}?',
+    body: '"{name}" is stored inside another archive. Saving replaces it there, and that cannot be undone. Discarding loses your changes.',
+    save: 'Save changes',
+    discard: 'Discard changes',
+    later: 'Not now',
+  },
   pluginManagement: {
     ariaLabel: 'Plugins',
     noPlugins: 'No plugins discovered.',

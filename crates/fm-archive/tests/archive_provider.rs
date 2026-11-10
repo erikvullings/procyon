@@ -1013,6 +1013,13 @@ async fn inspecting_a_zip_root_reports_a_writable_directory() {
 
 /// `outer.zip` holds `docs/inner.zip`, which holds `notes/readme.txt`.
 fn nested_zip_fixture(root: &std::path::Path) -> std::path::PathBuf {
+    nested_zip_fixture_with(root, zip::CompressionMethod::Deflated)
+}
+
+fn nested_zip_fixture_with(
+    root: &std::path::Path,
+    method: zip::CompressionMethod,
+) -> std::path::PathBuf {
     let mut inner = Vec::new();
     {
         let mut writer = ZipWriter::new(std::io::Cursor::new(&mut inner));
@@ -1027,7 +1034,10 @@ fn nested_zip_fixture(root: &std::path::Path) -> std::path::PathBuf {
     let outer_path = root.join("outer.zip");
     let mut writer = ZipWriter::new(std::fs::File::create(&outer_path).expect("create outer"));
     writer
-        .start_file("docs/inner.zip", SimpleFileOptions::default())
+        .start_file(
+            "docs/inner.zip",
+            SimpleFileOptions::default().compression_method(method),
+        )
         .expect("start outer entry");
     writer.write_all(&inner).expect("write outer entry");
     writer.finish().expect("finish outer zip");
@@ -1035,17 +1045,28 @@ fn nested_zip_fixture(root: &std::path::Path) -> std::path::PathBuf {
 }
 
 #[tokio::test]
-async fn archive_inside_an_archive_is_navigable_and_readable_but_read_only() {
+async fn archive_inside_an_archive_is_navigable_and_readable() {
     let root = tempdir().expect("temporary root");
     let outer = zip_location(&nested_zip_fixture(root.path()));
     let provider = ArchiveFileSystemProvider::new();
 
-    let nested_root = outer.join("docs").unwrap().join("inner.zip").unwrap();
+    let nested_root = outer
+        .join("docs")
+        .expect("nested archive fixture")
+        .join("inner.zip")
+        .expect("nested archive fixture");
     let nested_root = Location::parse(&format!("{}!", nested_root.uri)).expect("nested URI parses");
-    assert_eq!(nested_root.name().unwrap(), "inner.zip");
     assert_eq!(
-        nested_root.parent().unwrap().unwrap().uri,
-        outer.join("docs").unwrap().uri
+        nested_root.name().expect("nested archive fixture"),
+        "inner.zip"
+    );
+    assert_eq!(
+        nested_root
+            .parent()
+            .expect("nested archive fixture")
+            .expect("nested archive fixture")
+            .uri,
+        outer.join("docs").expect("nested archive fixture").uri
     );
 
     let page = provider
@@ -1058,13 +1079,16 @@ async fn archive_inside_an_archive_is_navigable_and_readable_but_read_only() {
         .expect("list nested archive");
     assert_eq!(page.entries.len(), 1);
     assert_eq!(page.entries[0].name, "notes");
-    assert!(page.entries[0].read_only, "nested archives are read-only");
+    assert!(
+        !page.entries[0].read_only,
+        "a ZIP nested one level deep is editable"
+    );
 
     let file = nested_root
         .join("notes")
-        .unwrap()
+        .expect("nested archive fixture")
         .join("readme.txt")
-        .unwrap();
+        .expect("nested archive fixture");
     let entry = fm_vfs::EntryRef {
         id: fm_domain::EntryId::new(),
         location: file.clone(),
@@ -1079,11 +1103,213 @@ async fn archive_inside_an_archive_is_navigable_and_readable_but_read_only() {
         .await
         .expect("read nested entry");
     assert_eq!(text, "nested hello");
+}
 
+#[tokio::test]
+async fn stored_archive_inside_an_archive_is_read_in_place_including_ranges() {
+    let root = tempdir().expect("temporary root");
+    let outer = zip_location(&nested_zip_fixture_with(
+        root.path(),
+        zip::CompressionMethod::Stored,
+    ));
+    let provider = ArchiveFileSystemProvider::new();
+    let nested_root = Location::parse(&format!(
+        "{}!",
+        outer
+            .join("docs")
+            .expect("nested archive fixture")
+            .join("inner.zip")
+            .expect("nested archive fixture")
+            .uri
+    ))
+    .expect("nested archive fixture");
+
+    let page = provider
+        .list(
+            &nested_root.join("notes").expect("nested archive fixture"),
+            ListOptions::default(),
+            CancellationToken::new(),
+        )
+        .await
+        .expect("list stored nested archive");
+    assert_eq!(page.entries[0].name, "readme.txt");
+
+    let entry = fm_vfs::EntryRef {
+        id: fm_domain::EntryId::new(),
+        location: nested_root
+            .join("notes")
+            .expect("nested archive fixture")
+            .join("readme.txt")
+            .expect("nested archive fixture"),
+    };
+    let mut stream = provider
+        .read_range(&entry, 7, Some(5), CancellationToken::new())
+        .await
+        .expect("range read");
+    let mut text = String::new();
+    stream
+        .read_to_string(&mut text)
+        .await
+        .expect("nested archive fixture");
+    assert_eq!(text, "hello");
+}
+
+fn nested_root(outer: &Location) -> Location {
+    Location::parse(&format!(
+        "{}!",
+        outer
+            .join("docs")
+            .expect("nested archive fixture")
+            .join("inner.zip")
+            .expect("nested archive fixture")
+            .uri
+    ))
+    .expect("nested archive fixture")
+}
+
+async fn nested_names(provider: &ArchiveFileSystemProvider, root: &Location) -> Vec<String> {
+    provider
+        .list(root, ListOptions::default(), CancellationToken::new())
+        .await
+        .expect("list nested archive")
+        .entries
+        .into_iter()
+        .map(|entry| entry.name)
+        .collect()
+}
+
+#[tokio::test]
+async fn nested_archive_edits_stay_pending_until_committed_into_the_outer_archive() {
+    let root = tempdir().expect("temporary root");
+    let outer_path = nested_zip_fixture(root.path());
+    let outer = zip_location(&outer_path);
+    let nested = nested_root(&outer);
+    let provider = ArchiveFileSystemProvider::new();
+    let before = std::fs::read(&outer_path).expect("nested archive fixture");
+
+    provider
+        .create_directory(&nested, "added", CancellationToken::new())
+        .await
+        .expect("create a directory inside the nested archive");
+
+    // Edits show up immediately, but the outer archive is untouched and the edit is pending.
+    assert_eq!(nested_names(&provider, &nested).await, ["added", "notes"]);
+    assert_eq!(
+        std::fs::read(&outer_path).expect("nested archive fixture"),
+        before
+    );
+    let pending = provider.pending_edits();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].root, nested);
+    assert_eq!(pending[0].name, "inner.zip");
+
+    provider.commit_edit(&nested).await.expect("write back");
+    assert!(provider.pending_edits().is_empty());
+    assert_ne!(
+        std::fs::read(&outer_path).expect("nested archive fixture"),
+        before
+    );
+    // A fresh provider (nothing cached) sees the committed change through the outer archive.
+    assert_eq!(
+        nested_names(&ArchiveFileSystemProvider::new(), &nested).await,
+        ["added", "notes"]
+    );
+}
+
+#[tokio::test]
+async fn discarding_nested_archive_edits_leaves_the_outer_archive_unchanged() {
+    let root = tempdir().expect("temporary root");
+    let outer_path = nested_zip_fixture(root.path());
+    let nested = nested_root(&zip_location(&outer_path));
+    let provider = ArchiveFileSystemProvider::new();
+    let before = std::fs::read(&outer_path).expect("nested archive fixture");
+
+    provider
+        .create_directory(&nested, "added", CancellationToken::new())
+        .await
+        .expect("nested archive fixture");
+    provider.discard_edit(&nested);
+
+    assert!(provider.pending_edits().is_empty());
+    assert_eq!(nested_names(&provider, &nested).await, ["notes"]);
+    assert_eq!(
+        std::fs::read(&outer_path).expect("nested archive fixture"),
+        before
+    );
+}
+
+#[tokio::test]
+async fn committing_refuses_to_overwrite_an_outer_archive_that_changed() {
+    let root = tempdir().expect("temporary root");
+    let outer_path = nested_zip_fixture(root.path());
+    let nested = nested_root(&zip_location(&outer_path));
+    let provider = ArchiveFileSystemProvider::new();
+    provider
+        .create_directory(&nested, "added", CancellationToken::new())
+        .await
+        .expect("nested archive fixture");
+
+    // Something else rewrites the outer archive meanwhile.
+    let mut bytes = std::fs::read(&outer_path).expect("nested archive fixture");
+    bytes.extend_from_slice(b"trailing");
+    std::fs::write(&outer_path, &bytes).expect("nested archive fixture");
+
+    assert!(provider.commit_edit(&nested).await.is_err());
+    assert_eq!(
+        std::fs::read(&outer_path).expect("nested archive fixture"),
+        bytes
+    );
+    assert_eq!(provider.pending_edits().len(), 1, "the edit is kept");
+}
+
+#[tokio::test]
+async fn archives_nested_two_levels_deep_stay_read_only() {
+    let root = tempdir().expect("temporary root");
+    let mut innermost = Vec::new();
+    {
+        let mut writer = ZipWriter::new(std::io::Cursor::new(&mut innermost));
+        writer
+            .start_file("a.txt", SimpleFileOptions::default())
+            .expect("nested archive fixture");
+        writer.write_all(b"a").expect("nested archive fixture");
+        writer.finish().expect("nested archive fixture");
+    }
+    let mut middle = Vec::new();
+    {
+        let mut writer = ZipWriter::new(std::io::Cursor::new(&mut middle));
+        writer
+            .start_file("deep.zip", SimpleFileOptions::default())
+            .expect("nested archive fixture");
+        writer
+            .write_all(&innermost)
+            .expect("nested archive fixture");
+        writer.finish().expect("nested archive fixture");
+    }
+    let outer_path = root.path().join("outer.zip");
+    let mut writer =
+        ZipWriter::new(std::fs::File::create(&outer_path).expect("nested archive fixture"));
+    writer
+        .start_file("mid.zip", SimpleFileOptions::default())
+        .expect("nested archive fixture");
+    writer.write_all(&middle).expect("nested archive fixture");
+    writer.finish().expect("nested archive fixture");
+
+    let deep = Location::parse(&format!(
+        "{}!/mid.zip!/deep.zip!",
+        zip_location(&outer_path).uri.trim_end_matches('!')
+    ))
+    .expect("nested archive fixture");
+    let provider = ArchiveFileSystemProvider::new();
+    let page = provider
+        .list(&deep, ListOptions::default(), CancellationToken::new())
+        .await
+        .expect("list two levels deep");
+    assert_eq!(page.entries[0].name, "a.txt");
+    assert!(page.entries[0].read_only);
     assert!(
-        !provider
-            .capabilities_for(&file)
-            .unwrap()
-            .contains(ProviderCapabilities::WRITE)
+        provider
+            .create_directory(&deep, "x", CancellationToken::new())
+            .await
+            .is_err()
     );
 }

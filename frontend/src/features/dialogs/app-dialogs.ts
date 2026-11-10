@@ -41,6 +41,7 @@ import type { FinderTagsLoader } from '../directory-table/finder-tags-loader';
 import type { EntryFormatSettings } from '../entry-formatting/entry-formatting';
 import { FinderTagsDialog } from '../entry-metadata/finder-tags-dialog';
 import { SpotlightCommentDialog } from '../entry-metadata/spotlight-comment-dialog';
+import { ArchiveEditDialog } from '../navigation/archive-edit-dialog';
 import { ArchivePasswordDialog } from '../navigation/archive-password-dialog';
 import { parentLocation } from '../navigation/navigation';
 import { ApplicationUninstallDialog } from '../operations/application-uninstall-dialog';
@@ -105,6 +106,8 @@ export interface AppDialogsContext {
   getPermanentDeleteRequest(): readonly Location[] | undefined;
   resolvePermanentDeleteRequest(confirmed: boolean): void;
   getDialogs(): DialogUIController;
+  /** Applies the user's answer to the pending "save changes to the nested archive" prompt. */
+  resolveArchiveEditPrompt(choice: 'save' | 'discard' | 'later'): void;
   getFinderTagsLoader(): FinderTagsLoader | undefined;
   getRuntimeCapabilities(): RuntimeCapabilities | undefined;
   getFormatSettings(): EntryFormatSettings;
@@ -451,6 +454,14 @@ export function renderAppDialogs(
             ctx.redraw();
           });
       },
+    }),
+    m(ArchiveEditDialog, {
+      open: ds.pendingArchiveEdit !== undefined,
+      archiveName: ds.pendingArchiveEdit?.edit.name ?? '',
+      ...(ds.pendingArchiveEdit?.error === undefined ? {} : { error: ds.pendingArchiveEdit.error }),
+      onSave: () => ctx.resolveArchiveEditPrompt('save'),
+      onDiscard: () => ctx.resolveArchiveEditPrompt('discard'),
+      onLater: () => ctx.resolveArchiveEditPrompt('later'),
     }),
     m(ConnectionsManager, {
       open: ctx.getConnectionsManagerOpen(),

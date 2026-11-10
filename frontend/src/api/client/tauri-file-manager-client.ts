@@ -16,6 +16,7 @@ import type {
   AppUpdateCheckOptions,
   AppUpdateProgress,
   ArchiveCredentialRequest,
+  ArchiveEdit,
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
   AttachSemanticVocabularyRequest,
@@ -152,6 +153,7 @@ import type {
   ReadStructuredRowsRequest,
   RemoveApplicationDockIconRequest,
   RemoveApplicationDockIconResult,
+  ResolveArchiveEditRequest,
   ResolveConflictRequest,
   ResolvedRagCitation,
   ResolveKnowledgeSourceRequest,
@@ -364,6 +366,14 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   cacheArchivePassword(request: ArchiveCredentialRequest, _signal?: AbortSignal): Promise<void> {
     return invoke<void>('cache_archive_password', { request });
+  }
+
+  listArchiveEdits(_signal?: AbortSignal): Promise<ArchiveEdit[]> {
+    return invoke<ArchiveEdit[]>('list_archive_edits');
+  }
+
+  resolveArchiveEdit(request: ResolveArchiveEditRequest, _signal?: AbortSignal): Promise<void> {
+    return invoke<void>('resolve_archive_edit', { request });
   }
 
   async getRuntimeCapabilities(_signal?: AbortSignal): Promise<RuntimeCapabilities> {

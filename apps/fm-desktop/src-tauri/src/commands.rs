@@ -23,11 +23,12 @@ use fm_domain::OperationId;
 use fm_transport_dto::{
     AcceptSemanticInstallationOfferRequestDto, AcceptSshHostKeyRequestDto, ActionDescriptorDto,
     ActionResultDto, ApplicationErrorDto, ApplySyncPlanRequestDto, ApplySyncPlanResponseDto,
-    ArchiveCredentialRequestDto, ArchiveSummaryRequestDto, ArchiveSummaryResponseDto,
-    AttachSemanticVocabularyRequestDto, BeginOneDriveAuthorizationResponseDto,
-    CalculateFolderSizeRequestDto, CalculateFolderSizeResponseDto,
-    CancelSemanticOcrRemediationRequestDto, CheckpointSemanticModelMigrationRequestDto,
-    ChecksumFileDto, ChecksumPageDto, ComparisonPageDto, CompleteSemanticModelMigrationRequestDto,
+    ArchiveCredentialRequestDto, ArchiveEditDto, ArchiveSummaryRequestDto,
+    ArchiveSummaryResponseDto, AttachSemanticVocabularyRequestDto,
+    BeginOneDriveAuthorizationResponseDto, CalculateFolderSizeRequestDto,
+    CalculateFolderSizeResponseDto, CancelSemanticOcrRemediationRequestDto,
+    CheckpointSemanticModelMigrationRequestDto, ChecksumFileDto, ChecksumPageDto,
+    ComparisonPageDto, CompleteSemanticModelMigrationRequestDto,
     ConfirmSemanticEnrolmentRequestDto, ConfirmSemanticExclusionRequestDto,
     ConfirmSemanticIndexRemovalRequestDto, ConfirmSemanticModelMigrationRequestDto, ConnectionDto,
     ConnectionStateDto, CreateConnectionRequestDto, CreateSemanticIndexRemovalPlanRequestDto,
@@ -56,19 +57,20 @@ use fm_transport_dto::{
     ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
     ReadStructuredRowsResponseDto, RemoveApplicationDockIconRequestDto,
     RemoveApplicationDockIconResponseDto, RenderChecksumFileRequestDto,
-    ResolveOperationConflictRequestDto, ResumeSemanticCleanupRequestDto,
-    ReviewConceptCandidateRequestDto, RuntimeCapabilitiesDto, SaveChecksumFileRequestDto,
-    SaveChecksumFileResponseDto, SaveLlmProfileRequestDto, ScanDiskUsageRequestDto,
-    SearchInFileRequestDto, SearchInFileResponseDto, SearchStructuredRowsRequestDto,
-    SearchStructuredRowsResponseDto, SemanticComponentCapabilitiesDto, SemanticComponentErrorDto,
-    SemanticComponentStatusDto, SemanticDataMoveReceiptDto, SemanticEnrolmentPreviewDto,
-    SemanticExclusionPlanDto, SemanticFolderStatusDto, SemanticIndexRemovalPlanDto,
-    SemanticIndexRemovalReceiptDto, SemanticInstallReceiptDto, SemanticInstallationOfferDto,
-    SemanticLibraryCapabilitiesDto, SemanticLibraryErrorDto, SemanticLibraryRevisionRequestDto,
-    SemanticLibraryStatusDto, SemanticModelMigrationPlanDto, SemanticModelMigrationProgressDto,
-    SemanticModelProfileDto, SemanticModelSelectionDto, SemanticOcrErrorDto, SemanticOcrJobDto,
-    SemanticOcrStatusDto, SemanticUninstallReceiptDto, SemanticVocabularyDto,
-    SemanticWorkerPatchResponseDto, SetPaneActivityRequest, SetSemanticOcrConsentRequestDto,
+    ResolveArchiveEditRequestDto, ResolveOperationConflictRequestDto,
+    ResumeSemanticCleanupRequestDto, ReviewConceptCandidateRequestDto, RuntimeCapabilitiesDto,
+    SaveChecksumFileRequestDto, SaveChecksumFileResponseDto, SaveLlmProfileRequestDto,
+    ScanDiskUsageRequestDto, SearchInFileRequestDto, SearchInFileResponseDto,
+    SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto,
+    SemanticComponentCapabilitiesDto, SemanticComponentErrorDto, SemanticComponentStatusDto,
+    SemanticDataMoveReceiptDto, SemanticEnrolmentPreviewDto, SemanticExclusionPlanDto,
+    SemanticFolderStatusDto, SemanticIndexRemovalPlanDto, SemanticIndexRemovalReceiptDto,
+    SemanticInstallReceiptDto, SemanticInstallationOfferDto, SemanticLibraryCapabilitiesDto,
+    SemanticLibraryErrorDto, SemanticLibraryRevisionRequestDto, SemanticLibraryStatusDto,
+    SemanticModelMigrationPlanDto, SemanticModelMigrationProgressDto, SemanticModelProfileDto,
+    SemanticModelSelectionDto, SemanticOcrErrorDto, SemanticOcrJobDto, SemanticOcrStatusDto,
+    SemanticUninstallReceiptDto, SemanticVocabularyDto, SemanticWorkerPatchResponseDto,
+    SetPaneActivityRequest, SetSemanticOcrConsentRequestDto,
     SetSemanticOcrReplaceOriginalRequestDto, SettingsDto, SpotlightCommentDto,
     StartChecksumRequestDto, StartChecksumResponseDto, StartComparisonRequestDto,
     StartComparisonResponseDto, StartDuplicateScanRequestDto, StartDuplicateScanResponseDto,
@@ -713,6 +715,25 @@ pub(crate) fn cache_archive_password(
     state
         .service
         .cache_archive_password(request)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Lists nested archives with changes that are not yet written back to their container.
+#[tauri::command]
+pub(crate) fn list_archive_edits(state: State<'_, AppState>) -> Vec<ArchiveEditDto> {
+    state.service.archive_edits()
+}
+
+/// Writes a nested archive's pending changes into its container, or discards them.
+#[tauri::command]
+pub(crate) async fn resolve_archive_edit(
+    state: State<'_, AppState>,
+    request: ResolveArchiveEditRequestDto,
+) -> Result<(), ApplicationErrorDto> {
+    state
+        .service
+        .resolve_archive_edit(request)
+        .await
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 

@@ -911,6 +911,13 @@ export const pl = {
     requiredTitle: 'Wymagane jest hasło archiwum',
     unlock: 'Odblokuj',
   },
+  archiveEdit: {
+    title: 'Zapisać zmiany w {name}?',
+    body: '„{name}” znajduje się w innym archiwum. Zapis zastąpi go tam i nie można tego cofnąć. Odrzucenie utraci zmiany.',
+    save: 'Zapisz zmiany',
+    discard: 'Odrzuć zmiany',
+    later: 'Nie teraz',
+  },
   pluginManagement: {
     ariaLabel: 'Wtyczki',
     noPlugins: 'Nie znaleziono wtyczek.',

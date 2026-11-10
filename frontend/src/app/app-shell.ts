@@ -191,6 +191,7 @@ import { errorText, t } from '../i18n';
 import { footerFunctionKeyBindings, getLiveBindings } from '../keybindings/dispatcher';
 import type {
   ActionInvocationContext,
+  ArchiveEdit,
   DirectoryDelta,
   EntrySummary,
   Location,
@@ -363,6 +364,71 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       shellState.dialogs.setPendingArchiveCredential({ location, invalid, resolve });
       m.redraw();
     });
+  }
+
+  /** Archive roots whose pending changes the user postponed; asked again once they are reopened. */
+  const postponedArchiveEdits = new Set<string>();
+
+  function openLocationUris(): string[] {
+    const workspace = shellState.workspace;
+    if (workspace === undefined) return [];
+    return workspace.paneOrder.flatMap((paneId) => {
+      const pane = workspace.panesById[paneId];
+      return pane === undefined
+        ? []
+        : pane.tabOrder.flatMap((tabId) => pane.tabsById[tabId]?.location.uri ?? []);
+    });
+  }
+
+  /**
+   * Offers to write back changes made inside an archive that is stored in another archive once
+   * no tab shows it any more. Writing replaces the entry in the containing archive and cannot be
+   * undone, so the user is always asked.
+   */
+  async function reviewArchiveEdits(): Promise<void> {
+    if (shellState.dialogs.getState().pendingArchiveEdit !== undefined) return;
+    let edits: readonly ArchiveEdit[];
+    try {
+      edits = await shellState.client.listArchiveEdits();
+    } catch {
+      return;
+    }
+    const open = openLocationUris();
+    const inUse = (root: string): boolean => open.some((uri) => uri.startsWith(root));
+    for (const root of [...postponedArchiveEdits]) {
+      if (inUse(root)) postponedArchiveEdits.delete(root);
+    }
+    const next = edits.find(
+      (edit) => !inUse(edit.location.uri) && !postponedArchiveEdits.has(edit.location.uri),
+    );
+    if (next === undefined) return;
+    shellState.dialogs.setPendingArchiveEdit({ edit: next });
+    m.redraw();
+  }
+
+  async function resolveArchiveEditPrompt(choice: 'save' | 'discard' | 'later'): Promise<void> {
+    const prompt = shellState.dialogs.getState().pendingArchiveEdit;
+    if (prompt === undefined) return;
+    if (choice === 'later') {
+      postponedArchiveEdits.add(prompt.edit.location.uri);
+    } else {
+      try {
+        await shellState.client.resolveArchiveEdit({
+          location: prompt.edit.location,
+          commit: choice === 'save',
+        });
+      } catch (error) {
+        shellState.dialogs.setPendingArchiveEdit({
+          edit: prompt.edit,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        m.redraw();
+        return;
+      }
+    }
+    shellState.dialogs.setPendingArchiveEdit(undefined);
+    m.redraw();
+    void reviewArchiveEdits();
   }
 
   /** Every open tab across every pane, flattened for the native Window menu (task 0133). */
@@ -2686,6 +2752,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
   }
 
   const appDialogsContext: AppDialogsContext = {
+    resolveArchiveEditPrompt: (choice) => void resolveArchiveEditPrompt(choice),
     getHomeDirectory: () => shellState.homeDirectory,
     getOperationCentreVisible: () => shellState.workspace?.operationCentre.visible === true,
     toggleOperationCentre: opsWiring.toggleOperationCentre,
@@ -2965,6 +3032,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 getWorkspace: () => shellState.workspace,
                 replaceWorkspace: (next) => replaceWorkspace(next),
                 onLocationVisited: (workspaceId, location) => {
+                  void reviewArchiveEdits();
                   shellState.unavailableLocations.delete(`${location.providerId}:${location.uri}`);
                   void updateLocationSettings(attrs.client, (settings) => ({
                     ...settings,

@@ -18,6 +18,26 @@ pub struct ArchiveCredentialRequestDto {
     pub password: String,
 }
 
+/// A nested archive with changes that are not yet written back to its containing archive.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ArchiveEditDto {
+    /// Root of the nested archive; pass it back unchanged to resolve the edit.
+    pub location: LocationDto,
+    /// File name of the nested archive, for display.
+    pub name: String,
+}
+
+/// Writes a nested archive's pending changes into its containing archive, or discards them.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolveArchiveEditRequestDto {
+    /// Root of the nested archive, as listed by [`ArchiveEditDto`].
+    pub location: LocationDto,
+    /// `true` replaces the archive inside its container; `false` throws the changes away.
+    pub commit: bool,
+}
+
 /// Requests a byte range from a single file (`POST /api/v1/files/range`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]

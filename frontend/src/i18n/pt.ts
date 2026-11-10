@@ -915,6 +915,13 @@ export const pt = {
     requiredTitle: 'É necessária a palavra-passe do arquivo',
     unlock: 'Desbloquear',
   },
+  archiveEdit: {
+    title: 'Guardar as alterações em {name}?',
+    body: '"{name}" está dentro de outro arquivo. Guardar substitui-o aí e não pode ser desfeito. Descartar perde as suas alterações.',
+    save: 'Guardar alterações',
+    discard: 'Descartar alterações',
+    later: 'Agora não',
+  },
   pluginManagement: {
     ariaLabel: 'Extensões',
     noPlugins: 'Nenhuma extensão encontrada.',

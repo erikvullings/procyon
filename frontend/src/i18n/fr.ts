@@ -917,6 +917,13 @@ export const fr = {
     requiredTitle: "Mot de passe d'archive requis",
     unlock: 'Déverrouiller',
   },
+  archiveEdit: {
+    title: 'Enregistrer les modifications de {name} ?',
+    body: '« {name} » est stocké dans une autre archive. L’enregistrement le remplace à cet endroit et ne peut pas être annulé. Abandonner perd vos modifications.',
+    save: 'Enregistrer',
+    discard: 'Abandonner',
+    later: 'Pas maintenant',
+  },
   pluginManagement: {
     ariaLabel: 'Extensions',
     noPlugins: 'Aucune extension découverte.',

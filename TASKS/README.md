@@ -558,3 +558,4 @@ subtask block (0299–0303) and the earlier corpus-themes follow-ups.
 - [x] 0314 Global quick-filter match-mode toggle *(frontend — fuzzy vs contains switch driving both
   the filter and type-to-select; done, global in-memory, commit 0c11dd11)*
 - [x] 0319 Compact window toolbar *(frontend + settings — overflow menu, `compactToolbar` setting, sync-browsing on/off icons)*
+- [x] 0320 Archives inside archives *(backend + frontend — browse/read nested archives, zero-copy for stored ZIPs, edit one level deep with a save/discard prompt)*

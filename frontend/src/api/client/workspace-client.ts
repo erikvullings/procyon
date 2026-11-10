@@ -1,5 +1,6 @@
 import type {
   ArchiveCredentialRequest,
+  ArchiveEdit,
   ArchiveSummaryRequest,
   ArchiveSummaryResult,
   AttributeChangePreview,
@@ -57,6 +58,7 @@ import type {
   ReadStructuredRowsRequest,
   RemoveApplicationDockIconRequest,
   RemoveApplicationDockIconResult,
+  ResolveArchiveEditRequest,
   ResolveMetadataTokensRequest,
   ResolveMetadataTokensResult,
   SaveEditableFileRequest,
@@ -116,6 +118,12 @@ export interface WorkspaceClient {
   ): Promise<BeginOneDriveAuthorizationResponse>;
 
   cacheArchivePassword(request: ArchiveCredentialRequest, signal?: AbortSignal): Promise<void>;
+
+  /** Nested archives whose edits are waiting to be written back into their container. */
+  listArchiveEdits(signal?: AbortSignal): Promise<ArchiveEdit[]>;
+
+  /** Writes a nested archive's pending edits back into its container, or discards them. */
+  resolveArchiveEdit(request: ResolveArchiveEditRequest, signal?: AbortSignal): Promise<void>;
 
   /** Recursively sums a directory's total size (task 0071's Total Commander-style folder-size
    * key). Aborting `signal` (e.g. because the cursor moved to a different entry) stops the walk

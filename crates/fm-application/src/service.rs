@@ -3512,6 +3512,35 @@ impl FileManagerService {
             .map_err(ApplicationError::from)
     }
 
+    /// Nested archives with changes that still have to be written back to their container.
+    pub fn archive_edits(&self) -> Vec<fm_transport_dto::ArchiveEditDto> {
+        self.archive_provider
+            .pending_edits()
+            .into_iter()
+            .map(|edit| fm_transport_dto::ArchiveEditDto {
+                location: edit.root.into(),
+                name: edit.name,
+            })
+            .collect()
+    }
+
+    /// Writes a nested archive's pending changes into its containing archive, or discards them.
+    pub async fn resolve_archive_edit(
+        &self,
+        request: fm_transport_dto::ResolveArchiveEditRequestDto,
+    ) -> Result<(), ApplicationError> {
+        let root = Location::from(request.location);
+        if request.commit {
+            self.archive_provider
+                .commit_edit(&root)
+                .await
+                .map_err(ApplicationError::from)
+        } else {
+            self.archive_provider.discard_edit(&root);
+            Ok(())
+        }
+    }
+
     /// Lists one page of a directory.
     ///
     /// Listing deliberately reports *nothing* to the semantic library. A

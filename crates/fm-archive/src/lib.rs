@@ -64,7 +64,55 @@ pub struct ArchiveFileSystemProvider {
     staged_writes: Mutex<HashMap<String, PathBuf>>,
     passwords: Mutex<HashMap<PathBuf, Zeroizing<String>>>,
     extraction_cache: Arc<Mutex<Option<SessionExtractionCache>>>,
+    /// Working copies of archives nested one level deep that are being edited, keyed by the
+    /// nested archive's root URI (`archive://outer.zip!/dir/inner.zip!`).
+    nested_edits: Mutex<HashMap<String, NestedEdit>>,
+    edit_directory: Option<tempfile::TempDir>,
     limits: ArchiveLimits,
+}
+
+/// An editable temporary copy of a ZIP stored inside another ZIP. Changes accumulate here and
+/// only replace the entry in the outer archive when the caller commits them.
+#[derive(Debug)]
+struct NestedEdit {
+    working: PathBuf,
+    outer_path: PathBuf,
+    /// Entry path of the nested archive inside the outer archive.
+    container: String,
+    /// The outer archive as it was when the copy was taken; a commit refuses to overwrite a
+    /// changed outer archive.
+    outer_fingerprint: FileFingerprint,
+    dirty: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct FileFingerprint {
+    len: u64,
+    modified_nanos: u128,
+}
+
+impl FileFingerprint {
+    fn of(path: &Path) -> Result<Self, VfsError> {
+        let metadata = std::fs::metadata(path).map_err(|error| io_error(error, path))?;
+        let modified = metadata
+            .modified()
+            .map_err(|error| io_error(error, path))?
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_nanos());
+        Ok(Self {
+            len: metadata.len(),
+            modified_nanos: modified,
+        })
+    }
+}
+
+/// A nested archive with changes that have not been written back to its containing archive.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingArchiveEdit {
+    /// Root location of the nested archive (`archive://outer.zip!/inner.zip!`).
+    pub root: Location,
+    /// File name of the nested archive.
+    pub name: String,
 }
 
 /// Content-derived archive details that do not require walking the virtual directory tree.
@@ -100,6 +148,7 @@ impl ArchiveFileSystemProvider {
         tokio::task::spawn_blocking(move || {
             summary_metadata_for_path(
                 &parsed.archive_path,
+                parsed.window,
                 password.as_ref().map(|value| value.as_str()),
             )
         })
@@ -114,13 +163,18 @@ impl ArchiveFileSystemProvider {
             staged_writes: Mutex::new(HashMap::new()),
             passwords: Mutex::new(HashMap::new()),
             extraction_cache: Arc::new(Mutex::new(SessionExtractionCache::new().ok())),
+            nested_edits: Mutex::new(HashMap::new()),
+            edit_directory: tempfile::Builder::new()
+                .prefix("procyon-archive-edit-")
+                .tempdir()
+                .ok(),
             limits,
         }
     }
 
     /// Caches an archive password in owned, zeroizing memory for this provider session.
     pub fn cache_password(&self, location: &Location, password: String) -> Result<(), VfsError> {
-        let archive_path = ParsedArchiveLocation::parse_chain(location)?.archive_path;
+        let archive_path = ParsedArchiveLocation::parse(location)?.archive_path;
         self.passwords
             .lock()
             .unwrap_or_else(|error| error.into_inner())
@@ -131,29 +185,237 @@ impl ArchiveFileSystemProvider {
     /// Parses a read location and, for archives inside archives, expands each level into the
     /// session cache so `archive_path` is always a real local file.
     async fn resolve(&self, location: &Location) -> Result<ParsedArchiveLocation, VfsError> {
-        let mut parsed = ParsedArchiveLocation::parse_chain(location)?;
+        let mut parsed = ParsedArchiveLocation::parse(location)?;
         if parsed.nested.is_empty() {
             return Ok(parsed);
         }
+        if parsed.nested.len() == 1
+            && let Some(working) = self.edit_working_copy(location)
+        {
+            // Show the pending changes rather than the stale copy inside the outer archive.
+            parsed.archive_path = working;
+            parsed.nested.clear();
+            return Ok(parsed);
+        }
+        let depth = parsed.nested.len();
         let cache = self.extraction_cache.clone();
         let limits = self.limits;
         let mut password = self.password_for(&parsed.archive_path);
-        parsed.read_only = true;
         tokio::task::spawn_blocking(move || {
             for container in std::mem::take(&mut parsed.nested) {
-                let source = materialize_entry(
+                let password = password.take();
+                let password = password.as_ref().map(|value| value.as_str());
+                let (path, window) = open_nested(
                     &cache,
                     &parsed.archive_path,
+                    parsed.window,
                     &container,
                     limits,
-                    password.take().as_ref().map(|value| value.as_str()),
+                    password,
                 )?;
-                parsed.archive_path = source.path;
+                parsed.archive_path = path;
+                parsed.window = window;
             }
+            parsed.read_only = depth > 1
+                || archive_format(&parsed.archive_path, parsed.window)? != ArchiveFormat::Zip;
             Ok(parsed)
         })
         .await
         .map_err(join_error)?
+    }
+
+    fn edit_working_copy(&self, location: &Location) -> Option<PathBuf> {
+        let key = nested_root_key(location)?;
+        self.nested_edits
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .get(&key)
+            .map(|edit| edit.working.clone())
+    }
+
+    /// Parses a mutation target. A location inside an archive nested one level deep is redirected
+    /// to an editable working copy of that archive, returned with its edit key so the caller can
+    /// mark it changed once the mutation succeeded.
+    async fn writable_target(
+        &self,
+        location: &Location,
+    ) -> Result<(ParsedArchiveLocation, Option<String>), VfsError> {
+        let mut parsed = ParsedArchiveLocation::parse(location)?;
+        match parsed.nested.len() {
+            0 => Ok((parsed, None)),
+            1 => {
+                let key = nested_root_key(location).ok_or_else(|| invalid(location))?;
+                parsed.archive_path = self.ensure_edit(&key, &parsed).await?;
+                parsed.nested.clear();
+                Ok((parsed, Some(key)))
+            }
+            _ => unsupported(ProviderCapabilities::WRITE),
+        }
+    }
+
+    async fn ensure_edit(
+        &self,
+        key: &str,
+        parsed: &ParsedArchiveLocation,
+    ) -> Result<PathBuf, VfsError> {
+        if let Some(edit) = self
+            .nested_edits
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .get(key)
+        {
+            return Ok(edit.working.clone());
+        }
+        let directory = self
+            .edit_directory
+            .as_ref()
+            .map(|directory| directory.path().to_path_buf())
+            .ok_or_else(|| VfsError::Io {
+                message: "the archive edit directory is unavailable".into(),
+            })?;
+        let outer_path = parsed.archive_path.clone();
+        let container = parsed.nested[0].clone();
+        let password = self.password_for(&outer_path);
+        let limits = self.limits;
+        let (working, outer_fingerprint) = tokio::task::spawn_blocking(move || {
+            require_zip_mutation(&outer_path, ProviderCapabilities::WRITE)?;
+            let outer_fingerprint = FileFingerprint::of(&outer_path)?;
+            let working = directory.join(format!("{}.zip", Uuid::new_v4()));
+            extract_zip_entry_to_file(
+                &outer_path,
+                None,
+                &container,
+                limits,
+                password.as_ref().map(|value| value.as_str()),
+                &working,
+            )?;
+            if detect_format(&working)? != ArchiveFormat::Zip {
+                let _ = std::fs::remove_file(&working);
+                return unsupported(ProviderCapabilities::WRITE);
+            }
+            Ok::<_, VfsError>((working, outer_fingerprint))
+        })
+        .await
+        .map_err(join_error)??;
+        let mut edits = self
+            .nested_edits
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if let Some(existing) = edits.get(key) {
+            // A concurrent mutation created the copy first; keep that one.
+            let _ = std::fs::remove_file(&working);
+            return Ok(existing.working.clone());
+        }
+        edits.insert(
+            key.to_owned(),
+            NestedEdit {
+                working: working.clone(),
+                outer_path: parsed.archive_path.clone(),
+                container: parsed.nested[0].clone(),
+                outer_fingerprint,
+                dirty: false,
+            },
+        );
+        Ok(working)
+    }
+
+    fn mark_edited(&self, key: Option<String>) {
+        let Some(key) = key else { return };
+        if let Some(edit) = self
+            .nested_edits
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .get_mut(&key)
+        {
+            edit.dirty = true;
+        }
+    }
+
+    /// Nested archives whose changes have not been written back yet.
+    #[must_use]
+    pub fn pending_edits(&self) -> Vec<PendingArchiveEdit> {
+        let edits = self
+            .nested_edits
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let mut pending: Vec<PendingArchiveEdit> = edits
+            .iter()
+            .filter(|(_, edit)| edit.dirty)
+            .map(|(key, edit)| PendingArchiveEdit {
+                root: Location::new(ProviderId::new("archive"), key.clone()),
+                name: edit
+                    .container
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or(&edit.container)
+                    .to_owned(),
+            })
+            .collect();
+        pending.sort_by(|left, right| left.root.uri.cmp(&right.root.uri));
+        pending
+    }
+
+    /// Writes a nested archive's changes into its containing archive, replacing the entry.
+    ///
+    /// Fails without touching either archive when the containing archive changed since the
+    /// nested copy was taken; the pending changes are then kept so they can be discarded.
+    pub async fn commit_edit(&self, root: &Location) -> Result<(), VfsError> {
+        let key = root.uri.clone();
+        let (working, outer_path, container, fingerprint) = {
+            let edits = self
+                .nested_edits
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let edit = edits.get(&key).ok_or_else(|| VfsError::NotFound {
+                location: key.clone(),
+            })?;
+            (
+                edit.working.clone(),
+                edit.outer_path.clone(),
+                edit.container.clone(),
+                edit.outer_fingerprint,
+            )
+        };
+        tokio::task::spawn_blocking(move || {
+            if FileFingerprint::of(&outer_path)? != fingerprint {
+                return Err(VfsError::Io {
+                    message: "the containing archive changed while the nested archive was open; \
+                              the changes were not written back"
+                        .into(),
+                });
+            }
+            rewrite_zip(
+                &outer_path,
+                Rewrite::AddFile {
+                    inner: &container,
+                    staging: &working,
+                    overwrite: true,
+                    // The nested archive is already compressed; storing it keeps it readable in
+                    // place afterwards.
+                    method: zip::CompressionMethod::Stored,
+                },
+                &CancellationToken::new(),
+            )
+        })
+        .await
+        .map_err(join_error)??;
+        self.nested_edits
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .remove(&key);
+        Ok(())
+    }
+
+    /// Throws away a nested archive's pending changes.
+    pub fn discard_edit(&self, root: &Location) {
+        let removed = self
+            .nested_edits
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .remove(&root.uri);
+        if let Some(edit) = removed {
+            let _ = std::fs::remove_file(edit.working);
+        }
     }
 
     fn password_for(&self, archive_path: &Path) -> Option<Zeroizing<String>> {
@@ -355,7 +617,7 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
     }
 
     fn validate_location(&self, location: &Location) -> Result<(), VfsError> {
-        ParsedArchiveLocation::parse_chain(location).map(|_| ())
+        ParsedArchiveLocation::parse(location).map(|_| ())
     }
 
     fn capabilities(&self) -> ProviderCapabilities {
@@ -373,10 +635,11 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
     }
 
     fn capabilities_for(&self, location: &Location) -> Result<ProviderCapabilities, VfsError> {
-        let parsed = ParsedArchiveLocation::parse_chain(location)?;
+        let parsed = ParsedArchiveLocation::parse(location)?;
         let mut capabilities = self.capabilities();
-        // Archives inside archives are read-only: rewriting one would mean rewriting its parent.
-        if parsed.nested.is_empty() && detect_format(&parsed.archive_path)? == ArchiveFormat::Zip {
+        // Archives nested one level deep are edited through a working copy that is written back
+        // on request; deeper levels stay read-only.
+        if parsed.nested.len() <= 1 && detect_format(&parsed.archive_path)? == ArchiveFormat::Zip {
             capabilities |= ProviderCapabilities::WRITE
                 | ProviderCapabilities::CREATE_DIRECTORY
                 | ProviderCapabilities::DELETE;
@@ -395,10 +658,12 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
         let requested = parsed.inner.clone();
         let archive_path = parsed.archive_path.clone();
         let read_only = parsed.read_only;
+        let window = parsed.window;
         let password = self.password_for(&archive_path);
         let (entries, writable) = tokio::task::spawn_blocking(move || {
             let entries = list_archive(
                 &archive_path,
+                window,
                 &requested,
                 password.as_ref().map(|value| value.as_str()),
             )?;
@@ -424,7 +689,7 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
         let archive = if summary.kind == EntryKind::File {
             let parsed = self.resolve(&entry.location).await?;
             tokio::task::spawn_blocking(move || {
-                zip_entry_archive_info(&parsed.archive_path, &parsed.inner)
+                zip_entry_archive_info(&parsed.archive_path, parsed.window, &parsed.inner)
             })
             .await
             .map_err(join_error)??
@@ -539,7 +804,7 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
             return Err(VfsError::Cancelled);
         }
         let destination = location.join(name).map_err(|_| invalid(location))?;
-        let parsed = ParsedArchiveLocation::parse(&destination)?;
+        let (parsed, edit_key) = self.writable_target(&destination).await?;
         let archive_path = parsed.archive_path;
         let inner = format!("{}/", parsed.inner);
         let rewrite_cancellation = cancellation.clone();
@@ -553,6 +818,7 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
         })
         .await
         .map_err(join_error)??;
+        self.mark_edited(edit_key);
         Ok(EntryRef {
             id: stable_id(&destination),
             location: destination,
@@ -580,7 +846,7 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
         if options.use_trash {
             return unsupported(ProviderCapabilities::TRASH);
         }
-        let parsed = ParsedArchiveLocation::parse(&entry.location)?;
+        let (parsed, edit_key) = self.writable_target(&entry.location).await?;
         if parsed.inner.is_empty() {
             return Err(invalid(&entry.location));
         }
@@ -600,6 +866,7 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
         })
         .await
         .map_err(join_error)??;
+        self.mark_edited(edit_key);
         Ok(())
     }
 
@@ -618,12 +885,13 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
             });
         }
         let archive_path = parsed.archive_path;
+        let window = parsed.window;
         let inner = parsed.inner;
         let password = self.password_for(&archive_path);
         let limits = self.limits;
         let extraction_cache = self.extraction_cache.clone();
         let bytes = tokio::task::spawn_blocking(move || {
-            if detect_format(&archive_path)? == ArchiveFormat::Rar {
+            if archive_format(&archive_path, window)? == ArchiveFormat::Rar {
                 read_cached_rar_entry(
                     &extraction_cache,
                     &archive_path,
@@ -634,6 +902,7 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
             } else {
                 read_archive_entry(
                     &archive_path,
+                    window,
                     &inner,
                     limits,
                     password.as_ref().map(|value| value.as_str()),
@@ -671,6 +940,7 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
             locate_range_source(
                 &extraction_cache,
                 &parsed.archive_path,
+                parsed.window,
                 &parsed.inner,
                 limits,
                 password.as_ref().map(|value| value.as_str()),
@@ -704,7 +974,7 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
         if cancellation.is_cancelled() {
             return Err(VfsError::Cancelled);
         }
-        let parsed = ParsedArchiveLocation::parse(destination)?;
+        let (parsed, _) = self.writable_target(destination).await?;
         let archive_path = parsed.archive_path.clone();
         tokio::task::spawn_blocking(move || {
             require_zip_mutation(&archive_path, ProviderCapabilities::WRITE)
@@ -746,7 +1016,7 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
             .unwrap_or_else(|error| error.into_inner())
             .remove(&temporary.uri)
             .ok_or_else(|| invalid(temporary))?;
-        let parsed = ParsedArchiveLocation::parse(destination)?;
+        let (parsed, edit_key) = self.writable_target(destination).await?;
         let archive_path = parsed.archive_path;
         let inner = parsed.inner;
         let staging_for_worker = staging.clone();
@@ -759,6 +1029,7 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
                     inner: &inner,
                     staging: &staging_for_worker,
                     overwrite: options.overwrite,
+                    method: zip::CompressionMethod::Deflated,
                 },
                 &rewrite_cancellation,
             )
@@ -769,6 +1040,7 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
             let _ = tokio::fs::remove_file(&staging).await;
         }
         result?;
+        self.mark_edited(edit_key);
         Ok(EntryRef {
             id: stable_id(destination),
             location: destination.clone(),
@@ -807,13 +1079,14 @@ impl FileSystemProvider for ArchiveFileSystemProvider {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct CacheKey {
     archive_path: PathBuf,
+    window: Option<ByteWindow>,
     archive_len: u64,
     archive_modified_nanos: u128,
     inner: String,
 }
 
 impl CacheKey {
-    fn new(archive_path: &Path, inner: &str) -> Result<Self, VfsError> {
+    fn new(archive_path: &Path, window: Option<ByteWindow>, inner: &str) -> Result<Self, VfsError> {
         let metadata =
             std::fs::metadata(archive_path).map_err(|error| io_error(error, archive_path))?;
         let modified = metadata
@@ -828,6 +1101,7 @@ impl CacheKey {
             })?;
         Ok(Self {
             archive_path: archive_path.to_path_buf(),
+            window,
             archive_len: metadata.len(),
             archive_modified_nanos: modified.as_nanos(),
             inner: inner.to_owned(),
@@ -1014,16 +1288,53 @@ struct RangeSource {
 fn locate_range_source(
     cache: &Mutex<Option<SessionExtractionCache>>,
     archive_path: &Path,
+    window: Option<ByteWindow>,
     inner: &str,
     limits: ArchiveLimits,
     password: Option<&str>,
 ) -> Result<RangeSource, VfsError> {
-    if detect_format(archive_path)? == ArchiveFormat::Zip
-        && let Some(source) = stored_zip_source(archive_path, inner)?
+    if archive_format(archive_path, window)? == ArchiveFormat::Zip
+        && let Some(source) = stored_zip_source(archive_path, window, inner)?
     {
         return Ok(source);
     }
-    materialize_entry(cache, archive_path, inner, limits, password)
+    materialize_entry(cache, archive_path, window, inner, limits, password)
+}
+
+/// Opens the archive stored as `container` inside `archive_path`: in place when it is an
+/// uncompressed ZIP (no copy, no cache), otherwise through a cached extraction.
+fn open_nested(
+    cache: &Mutex<Option<SessionExtractionCache>>,
+    archive_path: &Path,
+    window: Option<ByteWindow>,
+    container: &str,
+    limits: ArchiveLimits,
+    password: Option<&str>,
+) -> Result<(PathBuf, Option<ByteWindow>), VfsError> {
+    if archive_format(archive_path, window)? == ArchiveFormat::Zip
+        && let Some(source) = stored_zip_source(archive_path, window, container)?
+        && holds_zip(&source)?
+    {
+        let window = ByteWindow {
+            start: source.start,
+            len: source.length,
+        };
+        return Ok((source.path, Some(window)));
+    }
+    let source = materialize_entry(cache, archive_path, window, container, limits, password)?;
+    Ok((source.path, None))
+}
+
+/// Whether the bytes at `source` start with a ZIP signature.
+fn holds_zip(source: &RangeSource) -> Result<bool, VfsError> {
+    let mut file = File::open(&source.path).map_err(|error| io_error(error, &source.path))?;
+    file.seek(SeekFrom::Start(source.start))
+        .map_err(|error| io_error(error, &source.path))?;
+    let mut magic = [0_u8; 4];
+    if source.length < 4 || file.read_exact(&mut magic).is_err() {
+        return Ok(false);
+    }
+    Ok(magic.starts_with(ZIP_MAGIC))
 }
 
 /// Expands an entry into the session cache (or reuses the earlier expansion) so it is a
@@ -1031,12 +1342,13 @@ fn locate_range_source(
 fn materialize_entry(
     cache: &Mutex<Option<SessionExtractionCache>>,
     archive_path: &Path,
+    window: Option<ByteWindow>,
     inner: &str,
     limits: ArchiveLimits,
     password: Option<&str>,
 ) -> Result<RangeSource, VfsError> {
-    let format = detect_format(archive_path)?;
-    let key = CacheKey::new(archive_path, inner)?;
+    let format = archive_format(archive_path, window)?;
+    let key = CacheKey::new(archive_path, window, inner)?;
     if let Some((path, length)) = cache
         .lock()
         .unwrap_or_else(|error| error.into_inner())
@@ -1058,9 +1370,9 @@ fn materialize_entry(
             message: "the archive extraction cache is unavailable".into(),
         })?;
     let length = if format == ArchiveFormat::Zip {
-        extract_zip_entry_to_file(archive_path, inner, limits, password, &staging)?
+        extract_zip_entry_to_file(archive_path, window, inner, limits, password, &staging)?
     } else {
-        let bytes = read_archive_entry(archive_path, inner, limits, password)?;
+        let bytes = read_archive_entry(archive_path, window, inner, limits, password)?;
         std::fs::write(&staging, &bytes).map_err(|error| io_error(error, &staging))?;
         u64::try_from(bytes.len()).unwrap_or(u64::MAX)
     };
@@ -1084,10 +1396,111 @@ fn materialize_entry(
     }
 }
 
-/// The in-place location of an unencrypted `Stored` ZIP entry, if it is one.
-fn stored_zip_source(archive_path: &Path, inner: &str) -> Result<Option<RangeSource>, VfsError> {
+/// A contiguous byte range of a local file that holds a complete ZIP archive, e.g. an
+/// uncompressed (`Stored`) archive nested inside another ZIP, readable without copying it out.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct ByteWindow {
+    start: u64,
+    len: u64,
+}
+
+/// `Read + Seek` over a [`ByteWindow`] of a file.
+struct WindowReader {
+    file: File,
+    window: ByteWindow,
+    position: u64,
+}
+
+impl Read for WindowReader {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let remaining = self.window.len.saturating_sub(self.position);
+        let wanted = usize::try_from(remaining).map_or(buffer.len(), |left| left.min(buffer.len()));
+        if wanted == 0 {
+            return Ok(0);
+        }
+        self.file
+            .seek(SeekFrom::Start(self.window.start + self.position))?;
+        let count = self.file.read(&mut buffer[..wanted])?;
+        self.position += count as u64;
+        Ok(count)
+    }
+}
+
+impl Seek for WindowReader {
+    fn seek(&mut self, target: SeekFrom) -> std::io::Result<u64> {
+        let next = match target {
+            SeekFrom::Start(offset) => i128::from(offset),
+            SeekFrom::End(delta) => i128::from(self.window.len) + i128::from(delta),
+            SeekFrom::Current(delta) => i128::from(self.position) + i128::from(delta),
+        };
+        self.position = u64::try_from(next).map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "seek before the start of the archive",
+            )
+        })?;
+        Ok(self.position)
+    }
+}
+
+/// The input of a ZIP reader: a whole file or a window inside one.
+enum ZipInput {
+    File(File),
+    Window(WindowReader),
+}
+
+impl Read for ZipInput {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Self::File(file) => file.read(buffer),
+            Self::Window(window) => window.read(buffer),
+        }
+    }
+}
+
+impl Seek for ZipInput {
+    fn seek(&mut self, target: SeekFrom) -> std::io::Result<u64> {
+        match self {
+            Self::File(file) => file.seek(target),
+            Self::Window(window) => window.seek(target),
+        }
+    }
+}
+
+fn open_zip_archive(
+    archive_path: &Path,
+    window: Option<ByteWindow>,
+) -> Result<zip::ZipArchive<ZipInput>, VfsError> {
     let file = File::open(archive_path).map_err(|error| io_error(error, archive_path))?;
-    let mut archive = zip::ZipArchive::new(file).map_err(zip_error)?;
+    let input = match window {
+        Some(window) => ZipInput::Window(WindowReader {
+            file,
+            window,
+            position: 0,
+        }),
+        None => ZipInput::File(file),
+    };
+    zip::ZipArchive::new(input).map_err(zip_error)
+}
+
+/// Format of a whole archive file, or `Zip` for a [`ByteWindow`] (only ZIPs are read in place).
+fn archive_format(
+    archive_path: &Path,
+    window: Option<ByteWindow>,
+) -> Result<ArchiveFormat, VfsError> {
+    match window {
+        Some(_) => Ok(ArchiveFormat::Zip),
+        None => detect_format(archive_path),
+    }
+}
+
+/// The in-place location of an unencrypted `Stored` ZIP entry, if it is one.
+fn stored_zip_source(
+    archive_path: &Path,
+    window: Option<ByteWindow>,
+    inner: &str,
+) -> Result<Option<RangeSource>, VfsError> {
+    let mut archive = open_zip_archive(archive_path, window)?;
     let index = archive
         .index_for_name(inner)
         .ok_or_else(|| VfsError::NotFound {
@@ -1107,7 +1520,7 @@ fn stored_zip_source(archive_path: &Path, inner: &str) -> Result<Option<RangeSou
     };
     Ok(Some(RangeSource {
         path: archive_path.to_path_buf(),
-        start,
+        start: window.map_or(0, |window| window.start) + start,
         length: item.size(),
     }))
 }
@@ -1115,13 +1528,13 @@ fn stored_zip_source(archive_path: &Path, inner: &str) -> Result<Option<RangeSou
 /// Expands one ZIP entry straight into `destination` without holding it in memory.
 fn extract_zip_entry_to_file(
     archive_path: &Path,
+    window: Option<ByteWindow>,
     inner: &str,
     limits: ArchiveLimits,
     password: Option<&str>,
     destination: &Path,
 ) -> Result<u64, VfsError> {
-    let file = File::open(archive_path).map_err(|error| io_error(error, archive_path))?;
-    let mut archive = zip::ZipArchive::new(file).map_err(zip_error)?;
+    let mut archive = open_zip_archive(archive_path, window)?;
     let mut item = match password {
         Some(password) => archive.by_name_decrypt(inner, password.as_bytes()),
         None => archive.by_name(inner),
@@ -1175,7 +1588,7 @@ fn read_cached_rar_entry(
     limits: ArchiveLimits,
     password: Option<&str>,
 ) -> Result<Vec<u8>, VfsError> {
-    let key = CacheKey::new(archive_path, inner)?;
+    let key = CacheKey::new(archive_path, None, inner)?;
     if let Some(bytes) = cache
         .lock()
         .unwrap_or_else(|error| error.into_inner())
@@ -1239,6 +1652,13 @@ fn set_private_permissions(_path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Root URI of the archive a location lies in, when that archive is nested: everything up to the
+/// last `!`, e.g. `archive://a.zip!/dir/b.zip!` for `archive://a.zip!/dir/b.zip!/file.txt`.
+fn nested_root_key(location: &Location) -> Option<String> {
+    let (prefix, _) = location.uri.rsplit_once('!')?;
+    prefix.contains('!').then(|| format!("{prefix}!"))
+}
+
 #[derive(Debug)]
 struct ParsedArchiveLocation {
     archive_path: PathBuf,
@@ -1248,22 +1668,13 @@ struct ParsedArchiveLocation {
     nested: Vec<String>,
     /// Set by `resolve` when `archive_path` is a cached copy of a nested archive.
     read_only: bool,
+    /// When set, the archive is this byte range of `archive_path` rather than the whole file.
+    window: Option<ByteWindow>,
     inner: String,
 }
 
 impl ParsedArchiveLocation {
-    /// Parses a location that must address a plain (non-nested) archive; mutations use this
-    /// because nested archives are read-only.
     fn parse(location: &Location) -> Result<Self, VfsError> {
-        let parsed = Self::parse_chain(location)?;
-        if parsed.nested.is_empty() {
-            Ok(parsed)
-        } else {
-            unsupported(ProviderCapabilities::WRITE)
-        }
-    }
-
-    fn parse_chain(location: &Location) -> Result<Self, VfsError> {
         if location.provider_id.as_str() != "archive" {
             return Err(invalid(location));
         }
@@ -1311,6 +1722,7 @@ impl ParsedArchiveLocation {
             archive_path,
             nested,
             read_only: false,
+            window: None,
             inner,
         })
     }
@@ -1380,9 +1792,12 @@ fn unix_seconds_to_utc(seconds: u64) -> Option<DateTime<Utc>> {
         .and_then(|value| DateTime::from_timestamp(value, 0))
 }
 
-fn list_zip(archive_path: &Path, requested: &str) -> Result<Vec<RawEntry>, VfsError> {
-    let file = File::open(archive_path).map_err(|error| io_error(error, archive_path))?;
-    let mut archive = zip::ZipArchive::new(file).map_err(zip_error)?;
+fn list_zip(
+    archive_path: &Path,
+    window: Option<ByteWindow>,
+    requested: &str,
+) -> Result<Vec<RawEntry>, VfsError> {
+    let mut archive = open_zip_archive(archive_path, window)?;
     let prefix = if requested.is_empty() {
         String::new()
     } else {
@@ -1441,13 +1856,13 @@ fn list_zip(archive_path: &Path, requested: &str) -> Result<Vec<RawEntry>, VfsEr
 /// best-effort metadata, not required for an entry to be browsable.
 fn zip_entry_archive_info(
     archive_path: &Path,
+    window: Option<ByteWindow>,
     inner_path: &str,
 ) -> Result<Option<ArchiveInfo>, VfsError> {
-    if detect_format(archive_path)? != ArchiveFormat::Zip {
+    if archive_format(archive_path, window)? != ArchiveFormat::Zip {
         return Ok(None);
     }
-    let file = File::open(archive_path).map_err(|error| io_error(error, archive_path))?;
-    let mut archive = zip::ZipArchive::new(file).map_err(zip_error)?;
+    let mut archive = open_zip_archive(archive_path, window)?;
     for index in 0..archive.len() {
         let item = archive.by_index_raw(index).map_err(zip_error)?;
         if item.is_dir() {
@@ -1593,13 +2008,13 @@ fn detect_format(archive_path: &Path) -> Result<ArchiveFormat, VfsError> {
 
 fn summary_metadata_for_path(
     archive_path: &Path,
+    window: Option<ByteWindow>,
     password: Option<&str>,
 ) -> Result<ArchiveSummaryMetadata, VfsError> {
-    let format = detect_format(archive_path)?;
+    let format = archive_format(archive_path, window)?;
     let (label, compressed_size) = match format {
         ArchiveFormat::Zip => {
-            let file = File::open(archive_path).map_err(|error| io_error(error, archive_path))?;
-            let mut archive = zip::ZipArchive::new(file).map_err(zip_error)?;
+            let mut archive = open_zip_archive(archive_path, window)?;
             let mut packed = 0_u64;
             for index in 0..archive.len() {
                 let entry = archive.by_index_raw(index).map_err(zip_error)?;
@@ -1679,11 +2094,12 @@ fn require_zip_mutation(
 
 fn list_archive(
     archive_path: &Path,
+    window: Option<ByteWindow>,
     requested: &str,
     password: Option<&str>,
 ) -> Result<Vec<RawEntry>, VfsError> {
-    match detect_format(archive_path)? {
-        ArchiveFormat::Zip => list_zip(archive_path, requested),
+    match archive_format(archive_path, window)? {
+        ArchiveFormat::Zip => list_zip(archive_path, window, requested),
         ArchiveFormat::SevenZip => list_seven_zip(archive_path, requested, password),
         ArchiveFormat::Gzip => list_gzip(archive_path, requested),
         ArchiveFormat::Tar(compression) => list_tar(archive_path, requested, compression),
@@ -1844,12 +2260,13 @@ fn collect_children(
 
 fn read_archive_entry(
     archive_path: &Path,
+    window: Option<ByteWindow>,
     inner: &str,
     limits: ArchiveLimits,
     password: Option<&str>,
 ) -> Result<Vec<u8>, VfsError> {
-    match detect_format(archive_path)? {
-        ArchiveFormat::Zip => read_zip_entry(archive_path, inner, limits, password),
+    match archive_format(archive_path, window)? {
+        ArchiveFormat::Zip => read_zip_entry(archive_path, window, inner, limits, password),
         ArchiveFormat::SevenZip => {
             let password = password
                 .map(sevenz_rust2::Password::from)
@@ -2026,12 +2443,12 @@ fn read_tar_entry(
 
 fn read_zip_entry(
     archive_path: &Path,
+    window: Option<ByteWindow>,
     inner: &str,
     limits: ArchiveLimits,
     password: Option<&str>,
 ) -> Result<Vec<u8>, VfsError> {
-    let file = File::open(archive_path).map_err(|error| io_error(error, archive_path))?;
-    let mut archive = zip::ZipArchive::new(file).map_err(zip_error)?;
+    let mut archive = open_zip_archive(archive_path, window)?;
     let mut item = match password {
         Some(password) => archive.by_name_decrypt(inner, password.as_bytes()),
         None => archive.by_name(inner),
@@ -2135,6 +2552,7 @@ enum Rewrite<'a> {
         inner: &'a str,
         staging: &'a Path,
         overwrite: bool,
+        method: zip::CompressionMethod,
     },
     AddDirectory(&'a str),
     Remove {
@@ -2210,12 +2628,20 @@ fn rewrite_zip(
         }
     }
     match rewrite {
-        Rewrite::AddFile { inner, staging, .. } => {
+        Rewrite::AddFile {
+            inner,
+            staging,
+            method,
+            ..
+        } => {
             if cancellation.is_cancelled() {
                 return Err(VfsError::Cancelled);
             }
             writer
-                .start_file(inner, zip::write::SimpleFileOptions::default())
+                .start_file(
+                    inner,
+                    zip::write::SimpleFileOptions::default().compression_method(method),
+                )
                 .map_err(zip_error)?;
             let mut input = File::open(staging).map_err(|error| io_error(error, staging))?;
             std::io::copy(&mut input, &mut writer).map_err(|error| VfsError::Io {
@@ -2426,7 +2852,7 @@ mod unit_tests {
         let cache_root = directory.path().join("cache");
         let archive_path = directory.path().join("comic.rar");
         std::fs::write(&archive_path, b"first archive").expect("write archive fixture");
-        let first_key = CacheKey::new(&archive_path, "001.jpg").expect("first fingerprint");
+        let first_key = CacheKey::new(&archive_path, None, "001.jpg").expect("first fingerprint");
         let mut cache = SessionExtractionCache::new_in(&cache_root).expect("create cache");
 
         cache
@@ -2435,7 +2861,8 @@ mod unit_tests {
         assert_eq!(cache.read(&first_key), Some(b"page one".to_vec()));
 
         std::fs::write(&archive_path, b"changed archive contents").expect("change archive fixture");
-        let changed_key = CacheKey::new(&archive_path, "001.jpg").expect("changed fingerprint");
+        let changed_key =
+            CacheKey::new(&archive_path, None, "001.jpg").expect("changed fingerprint");
         assert_ne!(changed_key, first_key);
         assert_eq!(cache.read(&changed_key), None);
     }
