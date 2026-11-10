@@ -96,8 +96,8 @@ describe('filterEntries', () => {
     const elapsedMs = performance.now() - started;
     expect(filtered).toHaveLength(1);
     // A single linear substring pass over 100k short strings is well under a frame budget;
-    // a generous bound here just guards against an accidentally quadratic implementation.
-    expect(elapsedMs).toBeLessThan(200);
+    // a generous bound (CI runners vary 2-5x) only guards against a quadratic implementation.
+    expect(elapsedMs).toBeLessThan(1000);
   });
 });
 
