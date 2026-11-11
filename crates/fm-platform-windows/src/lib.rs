@@ -932,6 +932,50 @@ fn mapped_network_locations() -> Vec<SystemLocation> {
     locations
 }
 
+/// WSL2 distributions exposed as `\\wsl.localhost\<distro>` (and the legacy
+/// `\\wsl$\<distro>`) UNC shares, surfaced as network system locations so they appear in the
+/// Go menu / favourites alongside other OS-discovered folders. Best-effort: a host without WSL
+/// installed simply yields none, and `\\wsl.localhost` is preferred over `\\wsl$` so a
+/// distribution is only listed once even though both roots name the same shares.
+fn wsl_network_locations() -> Vec<SystemLocation> {
+    const WSL_ROOTS: [&str; 2] = [r"\\wsl.localhost", r"\\wsl$"];
+    let mut seen = std::collections::HashSet::new();
+    let mut locations = Vec::new();
+    for root in WSL_ROOTS {
+        let Ok(entries) = std::fs::read_dir(root) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            if !entry.path().is_dir() {
+                continue;
+            }
+            let Some(name) = entry.file_name().to_str() else {
+                continue;
+            };
+            if !seen.insert(name.to_owned()) {
+                continue;
+            }
+            locations.push(wsl_location(name, root));
+        }
+    }
+    locations
+}
+
+/// Builds a [`SystemLocation`] for one WSL distribution share under `root`.
+fn wsl_location(name: &str, root: &str) -> SystemLocation {
+    let path = PathBuf::from(format!("{root}\\{name}"));
+    SystemLocation {
+        name: name.to_owned(),
+        path,
+        kind: SystemLocationKind::Network,
+        provider_hint: Some("wsl".to_owned()),
+        protocol: Some("wsl".to_owned()),
+        server: Some(root.trim_start_matches('\\').to_owned()),
+        share: Some(name.to_owned()),
+        read_only: None,
+    }
+}
+
 /// Paints a window's caption bar and title text, so the OS-drawn title bar can match the
 /// application chrome instead of the system light/dark chrome colour.
 ///
@@ -1056,6 +1100,7 @@ impl PlatformAdapter for WindowsPlatformAdapter {
             });
         }
         locations.extend(mapped_network_locations());
+        locations.extend(wsl_network_locations());
         Ok(locations)
     }
 
@@ -1801,5 +1846,21 @@ mod tests {
             Some("resolved\r\n"),
             "shortcut target did not finish writing its marker"
         );
+    }
+
+    #[test]
+    fn wsl_locations_are_network_shares_with_advisory_metadata() {
+        let location = wsl_location("Ubuntu", r"\\wsl.localhost");
+        assert_eq!(location.name, "Ubuntu");
+        assert_eq!(location.path, PathBuf::from(r"\\wsl.localhost\Ubuntu"));
+        assert_eq!(location.kind, SystemLocationKind::Network);
+        assert_eq!(location.provider_hint.as_deref(), Some("wsl"));
+        assert_eq!(location.protocol.as_deref(), Some("wsl"));
+        assert_eq!(location.server.as_deref(), Some("wsl.localhost"));
+        assert_eq!(location.share.as_deref(), Some("Ubuntu"));
+        // The legacy root only changes the advisory server name, never the kind.
+        let legacy = wsl_location("Debian", r"\\wsl$");
+        assert_eq!(legacy.server.as_deref(), Some("wsl$"));
+        assert_eq!(legacy.kind, SystemLocationKind::Network);
     }
 }

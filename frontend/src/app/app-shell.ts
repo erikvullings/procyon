@@ -2833,9 +2833,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       const active = activeDirectory();
       if (active === undefined) return;
       refetchAffectedPanes(active.paneId);
+      // The editor loads `entry.location`, so it must be the new file's own
+      // location (the directory under the cursor joined with its name), not the
+      // directory location the create flow passes in - otherwise the load
+      // inspects the folder and fails with "Unable to load file".
+      const fileLocation: Location = {
+        providerId: location.providerId,
+        uri: `${location.uri.replace(/\/$/u, '')}/${encodeURIComponent(name)}`,
+      };
       previewWiring.openEditor(shellState.client, active.paneId, {
         id: crypto.randomUUID(),
-        location,
+        location: fileLocation,
         name,
         kind: 'file',
         hidden: false,
@@ -3803,117 +3811,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
               'aria-hidden': 'true',
               'data-tauri-drag-region': isMacOverlay ? '' : undefined,
             }),
-            tooltip(
-              t('shell', 'workspaceSwitcherLabel', {
-                name: shellState.workspace?.name ?? t('shell', 'none'),
-              }),
-              m(
-                IconButton,
-                {
-                  className: 'fm-workspace-switcher-button',
-                  'aria-label': t('shell', 'workspaceSwitcherLabel', {
-                    name: shellState.workspace?.name ?? t('shell', 'none'),
-                  }),
-                  onclick: () => {
-                    if (shellState.workspaceDisclosureElement !== undefined) {
-                      shellState.workspaceDisclosureElement.open =
-                        !shellState.workspaceDisclosureElement.open;
-                    }
-                  },
-                },
-                layoutGridIcon(),
-              ),
-            ),
-            compactToolbar ? commandPaletteButton : undefined,
-            m(
-              'details.fm-workspace-disclosure',
-              {
-                oncreate: ({ dom }) => {
-                  shellState.workspaceDisclosureElement = dom as HTMLDetailsElement;
-                },
-                onremove: () => {
-                  shellState.workspaceDisclosureElement = undefined;
-                },
-              },
-              [
-                m('summary.fm-disclosure-summary-hidden'),
-                m('.fm-workspace-switcher-backdrop', {
-                  onclick: (event: MouseEvent) => {
-                    const disclosure = (event.currentTarget as HTMLElement).closest('details');
-                    if (disclosure instanceof HTMLDetailsElement) disclosure.open = false;
-                  },
-                }),
-                m(
-                  '.fm-workspace-switcher-panel',
-                  { role: 'dialog', 'aria-label': t('shell', 'workspaceSwitcher') },
-                  [
-                    m('.fm-workspace-switcher-heading', [
-                      m('strong', t('shell', 'workspaceSwitcher')),
-                      m(
-                        'button',
-                        {
-                          type: 'button',
-                          'aria-label': t('shell', 'closeWorkspaces'),
-                          onclick: (event: MouseEvent) => {
-                            const disclosure = (event.currentTarget as HTMLElement).closest(
-                              'details',
-                            );
-                            if (disclosure instanceof HTMLDetailsElement) disclosure.open = false;
-                          },
-                        },
-                        closeIcon(),
-                      ),
-                    ]),
-                    m(WorkspaceSwitcher, {
-                      summaries: sortWorkspaceSummaries(shellState.workspaceSummaries),
-                      // An ephemeral window's own id is never listed here (ephemeral workspaces
-                      // are excluded from the switcher) - the row that should read as "current"
-                      // is the named workspace it was forked from, if any. A non-ephemeral
-                      // window (the main/dock window) already is that named workspace.
-                      activeWorkspaceId:
-                        shellState.workspace === undefined
-                          ? undefined
-                          : shellState.workspace.ephemeral
-                            ? shellState.workspace.forkedFrom
-                            : shellState.workspace.id,
-                      error: shellState.workspaceActionError,
-                      onSwitch: (workspaceId) => {
-                        void switchWorkspace(workspaceId);
-                      },
-                      onCreate: () => shellState.workspaceController.createWorkspaceAction(),
-                      onRename: (workspaceId, name) =>
-                        shellState.workspaceController.renameWorkspaceAction(workspaceId, name),
-                      onDelete: (workspaceId) =>
-                        shellState.workspaceController.deleteWorkspaceAction(workspaceId),
-                      ...(shellState.client.openWorkspaceWindow === undefined
-                        ? {}
-                        : {
-                            onOpenInNewWindow: (workspaceId: WorkspaceId) => {
-                              void shellState.client.openWorkspaceWindow?.(workspaceId);
-                              if (shellState.workspaceDisclosureElement !== undefined) {
-                                shellState.workspaceDisclosureElement.open = false;
-                              }
-                            },
-                          }),
-                      ...(shellState.client.resyncWorkspace === undefined ||
-                      shellState.workspace === undefined
-                        ? {}
-                        : {
-                            onUpdate: (workspaceId: WorkspaceId) => {
-                              void resyncWorkspace(shellState.client, workspaceId);
-                            },
-                          }),
-                    }),
-                  ],
-                ),
-              ],
-            ),
-            compactToolbar
-              ? undefined
-              : m('.fm-toolbar-separator', {
-                  role: 'separator',
-                  'aria-orientation': 'vertical',
-                }),
             m(
               '.fm-activity-anchor',
               {
@@ -4042,6 +3939,117 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                       ],
                     )
                   : undefined,
+              ],
+            ),
+            compactToolbar
+              ? undefined
+              : m('.fm-toolbar-separator', {
+                  role: 'separator',
+                  'aria-orientation': 'vertical',
+                }),
+            tooltip(
+              t('shell', 'workspaceSwitcherLabel', {
+                name: shellState.workspace?.name ?? t('shell', 'none'),
+              }),
+              m(
+                IconButton,
+                {
+                  className: 'fm-workspace-switcher-button',
+                  'aria-label': t('shell', 'workspaceSwitcherLabel', {
+                    name: shellState.workspace?.name ?? t('shell', 'none'),
+                  }),
+                  onclick: () => {
+                    if (shellState.workspaceDisclosureElement !== undefined) {
+                      shellState.workspaceDisclosureElement.open =
+                        !shellState.workspaceDisclosureElement.open;
+                    }
+                  },
+                },
+                layoutGridIcon(),
+              ),
+            ),
+            compactToolbar ? commandPaletteButton : undefined,
+            m(
+              'details.fm-workspace-disclosure',
+              {
+                oncreate: ({ dom }) => {
+                  shellState.workspaceDisclosureElement = dom as HTMLDetailsElement;
+                },
+                onremove: () => {
+                  shellState.workspaceDisclosureElement = undefined;
+                },
+              },
+              [
+                m('summary.fm-disclosure-summary-hidden'),
+                m('.fm-workspace-switcher-backdrop', {
+                  onclick: (event: MouseEvent) => {
+                    const disclosure = (event.currentTarget as HTMLElement).closest('details');
+                    if (disclosure instanceof HTMLDetailsElement) disclosure.open = false;
+                  },
+                }),
+                m(
+                  '.fm-workspace-switcher-panel',
+                  { role: 'dialog', 'aria-label': t('shell', 'workspaceSwitcher') },
+                  [
+                    m('.fm-workspace-switcher-heading', [
+                      m('strong', t('shell', 'workspaceSwitcher')),
+                      m(
+                        'button',
+                        {
+                          type: 'button',
+                          'aria-label': t('shell', 'closeWorkspaces'),
+                          onclick: (event: MouseEvent) => {
+                            const disclosure = (event.currentTarget as HTMLElement).closest(
+                              'details',
+                            );
+                            if (disclosure instanceof HTMLDetailsElement) disclosure.open = false;
+                          },
+                        },
+                        closeIcon(),
+                      ),
+                    ]),
+                    m(WorkspaceSwitcher, {
+                      summaries: sortWorkspaceSummaries(shellState.workspaceSummaries),
+                      // An ephemeral window's own id is never listed here (ephemeral workspaces
+                      // are excluded from the switcher) - the row that should read as "current"
+                      // is the named workspace it was forked from, if any. A non-ephemeral
+                      // window (the main/dock window) already is that named workspace.
+                      activeWorkspaceId:
+                        shellState.workspace === undefined
+                          ? undefined
+                          : shellState.workspace.ephemeral
+                            ? shellState.workspace.forkedFrom
+                            : shellState.workspace.id,
+                      error: shellState.workspaceActionError,
+                      onSwitch: (workspaceId) => {
+                        void switchWorkspace(workspaceId);
+                      },
+                      onCreate: () => shellState.workspaceController.createWorkspaceAction(),
+                      onRename: (workspaceId, name) =>
+                        shellState.workspaceController.renameWorkspaceAction(workspaceId, name),
+                      onDelete: (workspaceId) =>
+                        shellState.workspaceController.deleteWorkspaceAction(workspaceId),
+                      ...(shellState.client.openWorkspaceWindow === undefined
+                        ? {}
+                        : {
+                            onOpenInNewWindow: (workspaceId: WorkspaceId) => {
+                              void shellState.client.openWorkspaceWindow?.(workspaceId);
+                              if (shellState.workspaceDisclosureElement !== undefined) {
+                                shellState.workspaceDisclosureElement.open = false;
+                              }
+                            },
+                          }),
+                      ...(shellState.client.resyncWorkspace === undefined ||
+                      shellState.workspace === undefined
+                        ? {}
+                        : {
+                            onUpdate: (workspaceId: WorkspaceId) => {
+                              void resyncWorkspace(shellState.client, workspaceId);
+                            },
+                          }),
+                    }),
+                  ],
+                ),
               ],
             ),
             shellState.semanticInstallation === undefined

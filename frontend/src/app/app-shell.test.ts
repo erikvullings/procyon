@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFileManagerClient } from '../api/client/create-client';
 import { MockFileManagerClient } from '../api/client/mock-file-manager-client';
 import { ApiError } from '../api/fetch-mutator';
+import type { LoadEditableFileResponseDto } from '../api/generated/models/loadEditableFileResponseDto';
 import { DEFAULT_MAP_SETTINGS } from '../features/map/map-settings';
 import { decodeViewerRequest } from '../features/preview/viewer-window';
 import type { DirectorySnapshot, EntrySummary, Location, Operation } from '../models';
@@ -433,8 +434,17 @@ describe('AppShell', () => {
       dragSpace?.previousElementSibling?.querySelector('.fm-command-palette-trigger'),
     ).not.toBeNull();
     expect(
-      dragSpace?.nextElementSibling?.querySelector('.fm-workspace-switcher-button'),
+      dragSpace?.previousElementSibling?.querySelector('.fm-command-palette-trigger'),
     ).not.toBeNull();
+    // The activity counter is now the first icon after the spacer, before the workspace
+    // switcher, so an empty activity no longer leaves a gap at the far-right edge.
+    expect(dragSpace?.nextElementSibling?.classList.contains('fm-activity-anchor')).toBe(true);
+    const switcher = toolbar?.querySelector('.fm-workspace-switcher-button');
+    expect(switcher).not.toBeNull();
+    expect(
+      dragSpace?.nextElementSibling?.compareDocumentPosition(switcher as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
 
     m.mount(root, null);
     runtimeCapabilities.mockResolvedValue({
@@ -2481,6 +2491,50 @@ describe('AppShell', () => {
     await invokeOperationCentreToggle('Hide Operations Centre');
     await vi.waitFor(() => expect(root.querySelector('.fm-operation-centre')).toBeNull());
     expect(invokeAction).not.toHaveBeenCalled();
+  });
+
+  it('opens the created template file (not its parent directory) in the editor', async () => {
+    const client = new MockFileManagerClient();
+    const startOperation = vi.spyOn(client, 'startOperation');
+    // The editor loads entry.location; the created file must be addressed by its own location,
+    // otherwise the load inspects the parent directory and fails with "Unable to load file".
+    const loadEditableFile = vi.spyOn(client, 'loadEditableFile').mockResolvedValue({
+      content: '',
+      revision: 'created-revision',
+      size: 0,
+    } as LoadEditableFileResponseDto);
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
+
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, bubbles: true }),
+    );
+    m.redraw.sync();
+    const input = root.querySelector<HTMLInputElement>('.mm-command-palette-search input');
+    if (input === null) throw new Error('command palette did not open');
+    input.value = 'template';
+    input.dispatchEvent(new Event('input'));
+    m.redraw.sync();
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    // The picker dialog opens with the first built-in template (Text file → "New file.txt").
+    await vi.waitFor(() => expect(root.querySelector('.fm-new-from-template')).not.toBeNull());
+    // Selecting a template names the file (mirrors the user picking/confirming a template).
+    root.querySelector<HTMLButtonElement>('.fm-terminal-picker__item')?.click();
+    m.redraw.sync();
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Create' && !button.disabled)
+      ?.click();
+    m.redraw.sync();
+
+    await vi.waitFor(() => expect(loadEditableFile).toHaveBeenCalledOnce(), {
+      timeout: 5000,
+    });
+    expect(startOperation).toHaveBeenCalledOnce();
+    const request = loadEditableFile.mock.calls[0]?.[0];
+    expect(request?.location.uri).toContain('New%20file.txt');
+    expect(request?.location.uri).not.toBe('mock:///');
   });
 
   it('opens F7 validation and selects the directory after a reset refresh', async () => {
