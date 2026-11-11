@@ -889,6 +889,55 @@
   text-align: center;
 }
 
+.fm-file-viewer-error {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+  max-width: 42rem;
+  color: var(--fm-text);
+  text-align: left;
+}
+
+.fm-file-viewer-error-reason {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* The raw backend detail (everything after the first ": ") in a distinct mono block, so its own
+ * internal punctuation no longer stacks onto one long wrapped line with the human-readable reason.
+ */
+.fm-file-viewer-error-detail {
+  margin: 0;
+  padding: 0.5rem 0.6rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--fm-font-mono);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--fm-text-secondary);
+  background: var(--fm-surface-muted);
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+}
+
+.fm-file-viewer-error-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface-elevated);
+  color: var(--fm-text-muted);
+  cursor: pointer;
+}
+
+.fm-file-viewer-error-copy:hover:not(:disabled) {
+  color: var(--fm-text);
+}
+
 .fm-file-viewer-fallback-actions {
   display: flex;
   gap: 0.5rem;

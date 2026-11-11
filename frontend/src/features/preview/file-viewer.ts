@@ -1660,9 +1660,38 @@ function renderVideoBody(
   );
 }
 
+/**
+ * Renders a preview-unavailable message: the human-readable reason on its own line, the raw
+ * technical detail (everything after the first ": ") in a distinct, wrapping mono block so the
+ * "reason: detail" colon pair no longer reads as one long wrapped line, plus a button that copies
+ * the whole message verbatim. The detail keeps its own internal punctuation (e.g. "Format error
+ * decoding Png: Invalid PNG signature") untouched.
+ */
+function renderPreviewErrorMessage(message: string): m.Children {
+  const separator = message.indexOf(': ');
+  const reason = separator < 0 ? message : message.slice(0, separator);
+  const detail = separator < 0 ? undefined : message.slice(separator + 2);
+  return m('.fm-file-viewer-error', [
+    m('p.fm-file-viewer-error-reason', reason),
+    detail === undefined ? undefined : m('pre.fm-file-viewer-error-detail', {}, detail),
+    tooltip(
+      t('viewer', 'copyText'),
+      m(
+        'button.fm-file-viewer-error-copy',
+        {
+          type: 'button',
+          'aria-label': t('viewer', 'copyText'),
+          onclick: () => void copyWithToast(() => copyText(message), t('viewer', 'textCopied')),
+        },
+        copyIcon({ size: 12 }),
+      ),
+    ),
+  ]);
+}
+
 function renderExternalFallback(attrs: FileViewerAttrs, message: string): m.Children {
   return m('.fm-file-viewer-body.fm-file-viewer-external-fallback', [
-    m('p', message),
+    renderPreviewErrorMessage(message),
     m('.fm-file-viewer-fallback-actions', [
       attrs.quickLookAvailable
         ? m(
