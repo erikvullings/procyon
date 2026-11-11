@@ -118,7 +118,10 @@ describe('WorkspaceSwitcher', () => {
 
     row('workspace-2').querySelector<HTMLButtonElement>('.fm-workspace-rename-button')?.click();
     m.redraw.sync();
-    [...root.querySelectorAll('button')].find((b) => b.textContent === 'Cancel')?.click();
+    const cancel = root.querySelector<HTMLButtonElement>('.fm-inline-action-cancel');
+    expect(cancel?.getAttribute('aria-label')).toBe('Cancel');
+    expect(cancel?.textContent).toBe('');
+    cancel?.click();
     m.redraw.sync();
 
     expect(root.querySelector('.fm-workspace-rename-form')).toBeNull();

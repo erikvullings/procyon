@@ -6,6 +6,8 @@ import { dotsIcon } from '../../components/tabler-icons.ts';
 export interface ToolbarOverflowItem {
   readonly id: string;
   readonly label: string;
+  /** Display form of the action's shortcut, shown right-aligned like every other menu. */
+  readonly shortcut?: string | undefined;
   readonly icon: Children;
   readonly disabled?: boolean;
   /** Set for toggles (e.g. the basket tab being open). */
@@ -68,7 +70,13 @@ export const ToolbarOverflow = {
                         item.onclick();
                       },
                     },
-                    [m('span.fm-toolbar-overflow-icon', item.icon), m('span', item.label)],
+                    [
+                      m('span.fm-toolbar-overflow-icon', item.icon),
+                      m('span.fm-toolbar-overflow-label', item.label),
+                      item.shortcut === undefined
+                        ? undefined
+                        : m('span.fm-menu-shortcut', item.shortcut),
+                    ],
                   ),
                 ),
               ),

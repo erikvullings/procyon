@@ -97,7 +97,7 @@ export const it = {
     findFiles: 'Trova file',
     comparePanes: 'Confronta riquadri',
     comparePanesTooltip: 'Seleziona le voci che differiscono tra i due riquadri (Maiusc+F2)',
-    operationCentre: 'Operazioni (Alt+Z)',
+    operationCentre: 'Operazioni',
     activityCount: '{count} attività in background',
     activitySingle: '1 attività in background',
     indexingActivity: 'Indicizzazione semantica',

@@ -40,7 +40,7 @@
 .fm-diff-summary,
 .fm-diff-notice {
   color: var(--fm-text-muted);
-  font-size: 0.85rem;
+  font-size: var(--fm-type-label);
 }
 
 .fm-diff-scroll {
@@ -49,7 +49,7 @@
   border: 1px solid var(--fm-border);
   border-radius: var(--fm-radius);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.8rem;
+  font-size: var(--fm-type-label);
 }
 
 .fm-diff-spacer {

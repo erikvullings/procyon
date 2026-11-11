@@ -193,7 +193,7 @@ button.fm-disk-usage-ancestor:hover {
   flex: 0 0 auto;
   width: 0.6rem;
   height: 0.6rem;
-  border-radius: 2px;
+  border-radius: var(--fm-radius-control);
 }
 
 .fm-disk-usage-item-name {

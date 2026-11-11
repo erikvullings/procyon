@@ -6,11 +6,11 @@
  */
 import m from 'mithril';
 import type { Theme } from 'mithril-materialized';
+import { formatBindingShortcut } from '../features/commands/shortcut-label';
 import type { PaneDirectoryView } from '../features/navigation/navigation';
 import type { SelectionPlatform } from '../features/selection/keybindings';
 import type { SortColumn, SortModel } from '../features/sorting/sorting';
 import { t } from '../i18n';
-import { usesLiteralControl } from '../keybindings/dispatcher';
 import type {
   Location,
   OperationId,
@@ -220,16 +220,7 @@ export function diskUsageRootName(location: Location): string {
 
 /** Renders a keybinding chord for the current platform (`CTRL` -> `Cmd`/`Ctrl`). */
 export function displayShortcut(shortcut: string, platform: SelectionPlatform): string {
-  const parts = shortcut.split('+');
-  const literalControl = usesLiteralControl({ key: parts.at(-1) ?? '', ctrl: true });
-  return parts
-    .map((part) => {
-      if (part === 'CTRL') return platform === 'macos' && !literalControl ? 'Cmd' : 'Ctrl';
-      if (part === 'ALT') return platform === 'macos' ? 'Option' : 'Alt';
-      if (part === 'SHIFT') return 'Shift';
-      return part.length === 1 ? part.toUpperCase() : part;
-    })
-    .join('+');
+  return formatBindingShortcut(shortcut, platform);
 }
 
 /** A label with its shortcut appended in parentheses, when it has one. */

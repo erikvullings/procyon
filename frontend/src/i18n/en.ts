@@ -95,7 +95,7 @@ export const en = {
     findFiles: 'Find files',
     comparePanes: 'Compare panes',
     comparePanesTooltip: 'Select the entries that differ between the two panes (Shift+F2)',
-    operationCentre: 'Operations (Alt+Z)',
+    operationCentre: 'Operations',
     activityCount: '{count} background activities',
     activitySingle: '1 background activity',
     indexingActivity: 'Semantic indexing',

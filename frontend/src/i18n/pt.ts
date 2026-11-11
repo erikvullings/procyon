@@ -97,7 +97,7 @@ export const pt = {
     findFiles: 'Localizar ficheiros',
     comparePanes: 'Comparar painéis',
     comparePanesTooltip: 'Selecione as entradas que diferem entre os dois painéis (Shift+F2)',
-    operationCentre: 'Operações (Alt+Z)',
+    operationCentre: 'Operações',
     activityCount: '{count} atividades em segundo plano',
     activitySingle: '1 atividade em segundo plano',
     indexingActivity: 'Indexação semântica',

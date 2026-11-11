@@ -99,7 +99,7 @@ export const de = {
     comparePanes: 'Bereiche vergleichen',
     comparePanesTooltip:
       'Wählt die Einträge aus, die sich zwischen den beiden Bereichen unterscheiden (Shift+F2)',
-    operationCentre: 'Vorgänge (Alt+Z)',
+    operationCentre: 'Vorgänge',
     activityCount: '{count} Hintergrundaktivitäten',
     activitySingle: '1 Hintergrundaktivität',
     indexingActivity: 'Semantische Indizierung',

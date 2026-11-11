@@ -268,7 +268,7 @@ describe('theme stylesheet', () => {
       '[data-theme="dark"] .fm-app-shell .select-wrapper .dropdown-content li.active',
     );
     expect(materializedCss).toMatch(
-      /\.fm-app-shell\s+input\[type="text"\]:not\(\.browser-default\)\s*\{[^}]*padding-inline:\s*0\.55rem/s,
+      /\.fm-app-shell\s+input\[type="text"\]:not\(\.browser-default\)\s*\{[^}]*padding-inline:\s*var\(--fm-control-padding-inline\)/s,
     );
     expect(themeCss).toMatch(
       /\.fm-shortcuts-help-controls\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s,
@@ -288,8 +288,40 @@ describe('theme stylesheet', () => {
       /\.select-wrapper input\.select-dropdown\s*\{[^}]*-webkit-text-fill-color:\s*currentColor/s,
     );
     expect(themeCss).toMatch(
-      /\.fm-semantic-field \.fm-semantic-number-input\s*\{[^}]*padding-inline:\s*0\.55rem/s,
+      /\.fm-semantic-field \.fm-semantic-number-input\s*\{[^}]*padding-inline:\s*var\(--fm-control-padding-inline\)/s,
     );
+  });
+
+  it('sizes every form control from the shared control tokens', () => {
+    for (const token of [
+      '--fm-control-height: var(--fm-header-height)',
+      '--fm-control-height-dense: var(--fm-row-height)',
+      '--fm-radius-control: 2px',
+      '--fm-type-label: max(0.92rem, 12px)',
+    ]) {
+      expect(themeCss).toContain(token);
+    }
+    // The preset's own control variables resolve to Procyon tokens, so mm fields, selects and
+    // buttons cannot drift from hand-written ones.
+    expect(materializedCss).toMatch(
+      /\.fm-app-shell\[data-mm-preset="compact-minimal"\]\s*\{[^}]*--mm-control-height:\s*var\(--fm-control-height\)[^}]*--mm-control-font-size:\s*var\(--fm-type-body\)/s,
+    );
+    expect(materializedCss).toMatch(/--mm-switch-checked-thumb:\s*var\(--fm-accent\)/);
+  });
+
+  it('keeps raw type sizes and radii out of feature styles', () => {
+    const stylesheets = [themeCss, materializedCss, fileViewerCss];
+    for (const css of stylesheets) {
+      const declarations = css
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => !line.startsWith('--'));
+      // Nothing below the 12px label floor: sub-1rem sizes go through --fm-type-label.
+      expect(declarations.filter((line) => /^font-size:\s*0\.[0-8]\d*rem;/.test(line))).toEqual([]);
+      expect(
+        declarations.filter((line) => /^border-radius:\s*(2px|4px|0\.25rem|999px);/.test(line)),
+      ).toEqual([]);
+    }
   });
 
   it('removes transitions and animations when reduced motion is requested', () => {

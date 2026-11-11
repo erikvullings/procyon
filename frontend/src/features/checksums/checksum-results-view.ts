@@ -1,4 +1,5 @@
 import m, { type FactoryComponent } from 'mithril';
+import { inlineEditActions } from '../../components/inline-edit-actions';
 
 import { operationEntryErrorText, t } from '../../i18n';
 import {
@@ -192,21 +193,14 @@ export const ChecksumResultsView: FactoryComponent<ChecksumResultsViewAttrs> = (
                   },
                 }),
               ]),
-              m(
-                'button.checksum-results__save-confirm',
-                { type: 'submit', disabled: saveFileName.trim() === '' },
-                t('button', 'save'),
-              ),
-              m(
-                'button.checksum-results__save-cancel',
-                {
-                  type: 'button',
-                  onclick: () => {
-                    saveOpen = false;
-                  },
+              ...inlineEditActions({
+                confirmClass: 'checksum-results__save-confirm',
+                cancelClass: 'checksum-results__save-cancel',
+                confirmDisabled: saveFileName.trim() === '',
+                onCancel: () => {
+                  saveOpen = false;
                 },
-                t('button', 'cancel'),
-              ),
+              }),
             ],
           ),
 

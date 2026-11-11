@@ -250,6 +250,9 @@ export {
   respectSystemLocationReadOnly,
 } from './shell-helpers';
 
+/** Toggles the operation centre; handled by the global keydown handler, not the action registry. */
+const OPERATION_CENTRE_SHORTCUT = 'ALT+Z';
+
 /** Attributes of the application shell. */
 export interface AppShellAttrs {
   /** Transport this build talks to, resolved from `VITE_RUNTIME`. */
@@ -3380,6 +3383,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         );
       const basketF5 =
         basketWiring.basketVisible() && !basketFocused && shortcutFor('core.copy') === 'F5';
+      const menuShortcut = (shortcut: string | undefined): string | undefined =>
+        shortcut === undefined ? undefined : miscWiring.displayShortcut(shortcut);
       const compactToolbar = shellState.currentSettings?.compactToolbar === true;
       const toggleSettingsFromToolbar = (): void => {
         if (shellState.settingsDisclosureElement === undefined) return;
@@ -3399,7 +3404,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       const commandPaletteButton = tooltip(
         miscWiring.labelWithShortcut(
           t('shell', 'commandPalette'),
-          `${shellState.platform === 'macos' ? 'Cmd' : 'Ctrl'}+P`,
+          shortcutFor('core.palette') ?? 'CTRL+P',
         ),
         m(
           IconButton,
@@ -3471,6 +3476,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         {
           id: 'compare',
           label: t('shell', 'comparePanes'),
+          shortcut: menuShortcut(shortcutFor('core.compareDirectories')),
           icon: compareIcon(),
           disabled:
             activeDirectory() === undefined || (shellState.workspace?.paneOrder.length ?? 0) < 2,
@@ -3479,6 +3485,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         {
           id: 'sync-browsing',
           label: syncBrowsingLabel,
+          shortcut: menuShortcut(shortcutFor('core.syncBrowsing')),
           icon: syncBrowsingState === 'off' ? linkOffIcon() : linkIcon(),
           disabled: syncBrowsingDisabled,
           pressed: syncBrowsingState !== 'off',
@@ -3487,6 +3494,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         {
           id: 'operations',
           label: t('shell', 'operationCentre'),
+          shortcut: menuShortcut(OPERATION_CENTRE_SHORTCUT),
           icon: operationsIcon(),
           disabled: shellState.workspace === undefined,
           pressed: shellState.workspace?.operationCentre.visible === true,
@@ -3825,7 +3833,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 compactToolbar
                   ? undefined
                   : tooltip(
-                      t('shell', 'operationCentre'),
+                      miscWiring.labelWithShortcut(
+                        t('shell', 'operationCentre'),
+                        OPERATION_CENTRE_SHORTCUT,
+                      ),
                       m(
                         IconButton,
                         {

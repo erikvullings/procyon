@@ -96,7 +96,7 @@ export const nl = {
     findFiles: 'Bestanden zoeken',
     comparePanes: 'Vensters vergelijken',
     comparePanesTooltip: 'Selecteer de verskillende bestanden tussen de twee vensters (Shift+F2)',
-    operationCentre: 'Bewerkingen (Alt+Z)',
+    operationCentre: 'Bewerkingen',
     activityCount: '{count} achtergrondactiviteiten',
     activitySingle: '1 achtergrondactiviteit',
     indexingActivity: 'Semantisch indexeren',

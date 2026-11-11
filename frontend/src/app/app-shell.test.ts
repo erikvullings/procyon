@@ -4,11 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFileManagerClient } from '../api/client/create-client';
 import { MockFileManagerClient } from '../api/client/mock-file-manager-client';
 import { ApiError } from '../api/fetch-mutator';
-import type { LoadEditableFileResponseDto } from '../api/generated/models/loadEditableFileResponseDto';
 import { DEFAULT_MAP_SETTINGS } from '../features/map/map-settings';
 import { decodeViewerRequest } from '../features/preview/viewer-window';
 import type { DirectorySnapshot, EntrySummary, Location, Operation } from '../models';
 import { encodeDiskUsageTree } from '../models';
+import type { EditableFile } from '../models/requests';
 import {
   AppShell,
   knowledgeEvidencePage,
@@ -310,13 +310,18 @@ describe('AppShell', () => {
     root.querySelector<HTMLButtonElement>('.fm-toolbar-overflow-button')?.click();
     m.redraw.sync();
     const labels = [...root.querySelectorAll('.fm-toolbar-overflow-item')].map((item) =>
-      item.textContent?.trim(),
+      item.querySelector('.fm-toolbar-overflow-label')?.textContent?.trim(),
     );
+    expect(
+      [...root.querySelectorAll('.fm-toolbar-overflow-item .fm-menu-shortcut')].some((shortcut) =>
+        shortcut.textContent?.endsWith('+Z'),
+      ),
+    ).toBe(true);
     expect(labels).toEqual(
       expect.arrayContaining([
         'Settings',
         'Compare panes',
-        'Operations (Alt+Z)',
+        'Operations',
         'Synchronized browsing: off',
       ]),
     );
@@ -433,16 +438,13 @@ describe('AppShell', () => {
     expect(
       dragSpace?.previousElementSibling?.querySelector('.fm-command-palette-trigger'),
     ).not.toBeNull();
-    expect(
-      dragSpace?.previousElementSibling?.querySelector('.fm-command-palette-trigger'),
-    ).not.toBeNull();
     // The activity counter is now the first icon after the spacer, before the workspace
     // switcher, so an empty activity no longer leaves a gap at the far-right edge.
     expect(dragSpace?.nextElementSibling?.classList.contains('fm-activity-anchor')).toBe(true);
     const switcher = toolbar?.querySelector('.fm-workspace-switcher-button');
     expect(switcher).not.toBeNull();
     expect(
-      dragSpace?.nextElementSibling?.compareDocumentPosition(switcher as Node) &
+      (dragSpace?.nextElementSibling?.compareDocumentPosition(switcher as Node) ?? 0) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
 
@@ -2495,14 +2497,14 @@ describe('AppShell', () => {
 
   it('opens the created template file (not its parent directory) in the editor', async () => {
     const client = new MockFileManagerClient();
-    const startOperation = vi.spyOn(client, 'startOperation');
     // The editor loads entry.location; the created file must be addressed by its own location,
     // otherwise the load inspects the parent directory and fails with "Unable to load file".
+    const startOperation = vi.spyOn(client, 'startOperation');
     const loadEditableFile = vi.spyOn(client, 'loadEditableFile').mockResolvedValue({
       content: '',
       revision: 'created-revision',
       size: 0,
-    } as LoadEditableFileResponseDto);
+    } as EditableFile);
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await vi.waitFor(() => expect(root.textContent).toContain('Documents'));
 
@@ -2523,14 +2525,12 @@ describe('AppShell', () => {
     // Selecting a template names the file (mirrors the user picking/confirming a template).
     root.querySelector<HTMLButtonElement>('.fm-terminal-picker__item')?.click();
     m.redraw.sync();
-    [...root.querySelectorAll<HTMLButtonElement>('button')]
+    [...root.querySelectorAll<HTMLButtonElement>('.fm-dense-modal button')]
       .find((button) => button.textContent?.trim() === 'Create' && !button.disabled)
       ?.click();
     m.redraw.sync();
 
-    await vi.waitFor(() => expect(loadEditableFile).toHaveBeenCalledOnce(), {
-      timeout: 5000,
-    });
+    await vi.waitFor(() => expect(loadEditableFile).toHaveBeenCalledOnce(), { timeout: 5000 });
     expect(startOperation).toHaveBeenCalledOnce();
     const request = loadEditableFile.mock.calls[0]?.[0];
     expect(request?.location.uri).toContain('New%20file.txt');

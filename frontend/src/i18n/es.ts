@@ -96,7 +96,7 @@ export const es = {
     findFiles: 'Buscar archivos',
     comparePanes: 'Comparar paneles',
     comparePanesTooltip: 'Selecciona las entradas que difieren entre los dos paneles (Mayús+F2)',
-    operationCentre: 'Operaciones (Alt+Z)',
+    operationCentre: 'Operaciones',
     activityCount: '{count} actividades en segundo plano',
     activitySingle: '1 actividad en segundo plano',
     indexingActivity: 'Indexación semántica',

@@ -98,7 +98,7 @@ export const pl = {
     findFiles: 'Znajdź pliki',
     comparePanes: 'Porównaj panele',
     comparePanesTooltip: 'Zaznacz wpisy różniące się między dwoma panelami (Shift+F2)',
-    operationCentre: 'Operacje (Alt+Z)',
+    operationCentre: 'Operacje',
     activityCount: '{count} aktywności w tle',
     activitySingle: '1 aktywność w tle',
     indexingActivity: 'Indeksowanie semantyczne',

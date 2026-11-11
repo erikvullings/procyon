@@ -303,6 +303,22 @@ function prepareFileOperationEntries(
  * single non-parent file (or symlink) entry under the active pane's cursor, and the opposite pane to open it
  * into. Shared so Alt+Space can open a viewer exactly the way F3 would, rather than duplicating
  * this resolution logic. */
+/** The real (non-parent) directory under the active pane's cursor, if any. */
+function cursorFolder(
+  context: GlobalKeydownContext,
+): { readonly paneId: PaneId; readonly entry: EntrySummary } | undefined {
+  const active = context.activeDirectory();
+  if (active === undefined) return undefined;
+  const key = context.activeTabKey(active.paneId);
+  const cursorEntryId = context.getSelections().get(key)?.cursorEntryId;
+  if (cursorEntryId === undefined || isParentEntry(cursorEntryId)) return undefined;
+  const entry = context
+    .getDirectories()
+    .get(key)
+    ?.entries.find((candidate) => candidate.id === cursorEntryId);
+  return entry?.kind === 'directory' ? { paneId: active.paneId, entry } : undefined;
+}
+
 function resolveViewTarget(context: GlobalKeydownContext):
   | {
       readonly paneId: PaneId;
@@ -806,6 +822,14 @@ const ACTION_KEYDOWN_ROUTES = [
           event.preventDefault();
           activeViewer.controller.toggleMetadataPanel();
           context.redraw();
+          return;
+        }
+        // F3 on a folder measures it (TC parity, identical on every host) instead of handing the
+        // folder to the OS file manager, which Enter/core.open already does.
+        const folder = cursorFolder(context);
+        if (folder !== undefined) {
+          event.preventDefault();
+          context.calculateFolderSize(folder.paneId, folder.entry);
           return;
         }
         const target = resolveViewTarget(context);
@@ -1706,11 +1730,19 @@ const ACTION_KEYDOWN_ROUTES = [
           activeViewer.controller.goToNextMatch();
           return;
         }
-        // F3 acts on the cursor file regardless of the wider selection. Directories and
-        // single-pane workspaces (no opposite pane to open into) fall through
+        // F3 acts on the cursor file regardless of the wider selection. Single-pane
+        // workspaces (no opposite pane to open into) fall through
         // to the generic core.view/core.edit/core.openWith block below, which opens the OS default
         // application instead. The viewer itself closes and shows a toast for content that turns
         // out to be binary once its first chunk is fetched, rather than falling back further.
+        // F3 on a folder measures it (TC parity, identical on every host) instead of handing the
+        // folder to the OS file manager, which Enter/core.open already does.
+        const folder = cursorFolder(context);
+        if (folder !== undefined) {
+          event.preventDefault();
+          context.calculateFolderSize(folder.paneId, folder.entry);
+          return;
+        }
         const target = resolveViewTarget(context);
         if (target !== undefined) {
           event.preventDefault();

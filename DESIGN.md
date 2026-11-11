@@ -37,12 +37,12 @@ typography:
     lineHeight: 1.35
   label:
     fontFamily: "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
-    fontSize: "0.82rem"
+    fontSize: "max(0.92rem, 12px)"
     fontWeight: 400
     lineHeight: 1.15
   mono:
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, Liberation Mono, monospace"
-    fontSize: "0.85rem"
+    fontSize: "max(0.92rem, 12px)"
     fontWeight: 400
     lineHeight: 1.35
 rounded:
@@ -62,22 +62,29 @@ components:
     textColor: "{colors.cursor-text}"
     typography: "{typography.body}"
     rounded: "{rounded.control}"
-    padding: "2px 4px"
-    height: "20px"
+    padding: "0 10px"
+    height: "24px"
   button-flat:
+    backgroundColor: "transparent"
+    textColor: "{colors.day-text}"
+    typography: "{typography.body}"
+    rounded: "{rounded.control}"
+    padding: "0 10px"
+    height: "24px"
+  button-chrome:
     backgroundColor: "transparent"
     textColor: "{colors.day-text}"
     typography: "{typography.body}"
     rounded: "{rounded.control}"
     padding: "2px 4px"
     height: "20px"
-  input-compact:
+  input-form:
     backgroundColor: "{colors.day-surface}"
     textColor: "{colors.day-text}"
     typography: "{typography.body}"
     rounded: "{rounded.control}"
-    padding: "0 0.55rem"
-    height: "20px"
+    padding: "0 8px"
+    height: "24px"
   directory-row:
     backgroundColor: "{colors.night-surface}"
     textColor: "{colors.night-text}"
@@ -158,17 +165,32 @@ The palette is a low-chroma blue-gray field with precise blue interaction signal
 - **Title** (600, `var(--fm-type-title)` / 1rem, 1.2): Active tabs, pane titles, table headings, and compact section titles.
 - **Body** (400, `var(--fm-type-body)` / 1rem, 1.35): Default controls, file metadata, settings copy, and operational messages.
 - **Label** (400, `var(--fm-type-label)` / max(0.92rem, 12px), 1.15): Static field labels and secondary control text, using muted ink. The 12px floor keeps functional text legible under the compact root font setting.
-- **Mono** (400, 0.85rem, 1.35): Terminal content, source text, hashes, and technical identifiers.
+- **Mono** (400, `var(--fm-type-label)` in chrome / `var(--fm-type-mono)` inline, 1.35): Terminal content, source text, hashes, and technical identifiers.
 
 ### Named Rules
 
 **The No Hero Type Rule.** Application typography should never consume working area for visual drama. Hierarchy comes from weight, alignment, and tonal contrast before size.
 
+**The Four Steps Rule.** Chrome text is exactly one of `--fm-type-heading`, `--fm-type-title`, `--fm-type-body`, or `--fm-type-label`. A raw `font-size` in `rem` or `px` in a feature stylesheet is a defect (`theme.test.ts` fails on sub-1rem literals). Relative `em` sizes are reserved for rendered document content (Markdown, previews), never for controls.
+
+**The 12px Floor Rule.** Nothing a user must read renders below 12px. `--fm-type-label` carries the floor, so a smaller root font setting cannot push labels, help text, or field values under it.
+
+**The Own Your Type Rule.** Overlays (dialogs, settings, drawers) set `--fm-type-body` on their root instead of inheriting from wherever they are mounted; the same dialog must not change size because it was opened from the toolbar.
+
 ## Layout
 
 The desktop workspace is a full-viewport operational grid anchored by two equal panes. Pane boundaries, tab strips, breadcrumbs, table headers, status bars, optional drawers, and the function-key bar form a continuous stack with no ornamental gaps. Splitters may have a generous invisible hit area, but their visible rule remains hairline-thin.
 
-The base density unit is the 20px file row. Structural headers are 24px, compact controls normally resolve to 20px, and most internal padding uses 2px, 4px, 8px, 12px, or 16px. Forms may breathe more than file lists, but should still align labels and controls to this compact rhythm. Dialog content scrolls within its working region while titles and action footers remain available.
+The base density unit is the 20px file row. Structural headers are 24px, and internal padding uses the spacing scale only: 2px, 4px, 8px, 12px, 16px (`--fm-space-1` … `--fm-space-5`). Dialog content scrolls within its working region while titles and action footers remain available.
+
+There are exactly two control densities, and a surface uses one of them throughout:
+
+| Density | Token | Height | Where |
+| --- | --- | --- | --- |
+| **Chrome** | `--fm-control-height-dense` (= `--fm-row-height`) | 20px | Panes, tab strips, breadcrumbs, toolbars, filter bars, the function-key bar, inline rename |
+| **Form** | `--fm-control-height` (= `--fm-header-height`) | 24px | Dialogs, settings, drawers, the find-files form, any decision row |
+
+Within one density every control in a row (text field, select, segmented choice, button) has the same height, the same body type, and the same 2px radius, so they align without per-feature tuning. Marta's calm comes from this sameness, not from extra whitespace.
 
 At narrow widths, paired form controls and help-dialog controls stack rather than compressing below usable width. Existing responsive thresholds include 640px/40rem for compact forms and 44rem for broader layout changes. Preserve feature access across widths; do not create a separate simplified product.
 
@@ -194,21 +216,30 @@ Borders are normally 1px and use the theme divider color. Clipping should preser
 
 ### Buttons
 
-Compact and explicit, with no ornamental lift.
+Compact and explicit, with no ornamental lift. Every `<button>` in the shell is flat by default; the host OS's bevelled button must never appear.
 
-- **Shape:** 2px radius, 1px border, minimum 20px height, and 2px 4px padding.
-- **Primary:** Instrument Blue fill with high-contrast text; reserve it for the decisive action in a dialog or compact action group.
-- **Hover / Focus:** Use a tonal hover change. Do not add a shadow or transform; keyboard focus must remain accessible through the component's semantic state and surrounding context.
-- **Motion:** Keep icon-button click waves; limit button hover/focus surface changes to 120ms. Never animate position, scale, text color, opacity, or enabled/disabled state.
-- **Flat:** Transparent with normal text; hover uses the theme hover wash and no border emphasis.
+- **Shape:** 2px radius and a 1px border (transparent when flat). Chrome buttons are 20px high with 2px 4px padding; form buttons are 24px high with 0 10px padding and a 4.5rem minimum width so "OK" and "Cancel" are equally easy to hit.
+- **One primary per decision.** The confirming action is last (rightmost), outlined in Instrument Blue at rest and filled once it holds focus. Enter triggers it; Escape cancels. Destructive confirmations use the danger color in the same outline/fill pattern.
+- **Secondary actions** are flat with normal text. A third, non-deciding action (e.g. "Remove all", "Save as preset…") sits at the leading edge, separated from the decision pair.
+- **Decision rows** use the modal footer or, outside a modal, `.fm-form-actions` with `.fm-primary-action`. Do not hand-style a new action row.
+- **Decision actions come in exactly two formats.** *Text* in dialog and settings footers (Cancel, then the confirming verb last; the verb names the outcome: Save, Delete, Overwrite). *Icons* for an edit made inline in a row (rename a workspace, name a checksum file): a check that submits and an x that cancels, 20px chrome density, each with an accessible name and tooltip, Enter and Escape always equivalent. Build inline pairs with `inlineEditActions`; never mix text and icon decisions in one row, and never put icon-only decisions in a footer.
+- **Close buttons** are one size everywhere a panel, dialog, or disclosure can be dismissed: a 1.25rem (20px) hit box, 0.15rem padding, a 0.75rem x icon, muted at rest, hover wash, top trailing corner. A panel never sizes its own close button.
+- **Hover / Focus:** Tonal hover only. No shadow or transform.
+- **Disabled:** Muted text, no border emphasis. A busy action keeps normal contrast and shows progress instead of looking unavailable.
+- **Motion:** Keep icon-button click waves; limit hover/focus surface changes to 120ms (`--fm-duration`). Never animate position, scale, text color, opacity, or enabled/disabled state.
+- **Icon-only buttons** always carry an accessible name and a tooltip of the form `Label (Shortcut)`.
 
 ### Inputs / Fields
 
-Inputs are compact instruments, not floating decorative fields.
+Inputs are compact instruments, not floating decorative fields. There is one text field; features do not restyle their own.
 
-- **Style:** Surface background, 1px divider border, 2px radius, 20px height, and `0 0.55rem` horizontal padding.
-- **Labels:** Static, above the field, muted, and close to the control.
-- **Focus:** Preserve the neutral border with no blue glow, thick ring, or animated floating-label movement. Selection and caret behavior provide the text-entry cue.
+- **Style:** Surface background, 1px divider border, 2px radius, body type, 8px inline padding, at the density's height (24px in forms, 20px in chrome). The canonical rule lives in `mithril-materialized-procyon.css`; a plain `<input>` inside a dialog or settings gets it automatically.
+- **Composite fields** (an input plus inline toggles or buttons) draw the border on the wrapper at the same height and mark the inner input `.browser-default` so it stays borderless.
+- **Labels:** Static, above the field, muted, label type, close to the control. Never a floating or animated label.
+- **Help and errors:** Label type directly under the field; errors use the danger color plus text that names the problem.
+- **Focus:** The border darkens to the muted text colour; the caret is Instrument Blue. No accent border, glow, underline, thicker ring, or layout shift. A field inside a row must be able to shrink (`min-width: 0`) so its focus edge never collides with neighbouring actions.
+- **Selects, switches, segmented choices:** Same height and border as a text field. Checked/active state uses Instrument Blue or the selection wash, never the component library's default teal.
+- **Browser surfaces:** Caret, native checkbox/radio/range accent, and text selection are themed from the palette (`caret-color`, `accent-color`, `::selection`).
 - **Error / Disabled:** Use semantic color or muted opacity in addition to accessible text; never rely on color alone.
 
 ### Navigation
@@ -221,7 +252,9 @@ Tabs, breadcrumbs, toolbars, and the function bar form one continuous control fr
 
 ### Menus and Command Palette
 
-Menus use the raised surface, fine border, overlay shadow, and compact rows. Hover and keyboard focus use the hover/selection washes. Shortcut chips use a bordered inactive-selection fill so key labels remain readable in dark mode.
+Menus (context menu, toolbar overflow, native-style menu bar, select dropdowns) use the raised surface, fine border, the single overlay shadow, a 4px radius, and 24px rows with a 2px item radius. Hover and keyboard focus use the hover/selection washes.
+
+A menu row is `icon · label · shortcut`: the shortcut is right-aligned in muted label type and is never appended to the label text. Key caps (`<kbd>`) — bordered inactive-selection fill — are for the command palette, the shortcut help table, and walkthroughs, where the key itself is the subject.
 
 ### Dialogs
 
@@ -246,6 +279,27 @@ Use compact bordered chips or small indicators. Finder tag colors retain their r
 
 Skeletons preserve the exact geometry of the content they replace. Progress indicators use the accent sparingly and must not cause pane or row reflow. Respect `prefers-reduced-motion`; operational clarity is more important than continuous animation.
 
+## Keyboard and Shortcuts
+
+The keyboard model is Total Commander's, with the host platform's conventions layered on top, so a Total Commander or Marta user finds their habits intact.
+
+- **Function keys are the spine.** F1 Help, F2 Rename, F3 View, F4 Edit, F5 Copy, F6 Move, F7 New folder, F8 Delete, always visible in the function-key bar. Holding a modifier relabels the bar with that layer (Shift+F4 New file, Alt+F5 Pack, Alt+F7 Find files). Anything the bar advertises must work when pressed and when clicked.
+- **Commander navigation.** Tab switches pane, Backspace goes up, Enter opens, Insert/Space mark, typing starts quick search.
+- **Platform conventions for everything else.** The primary modifier is Command on macOS and Control elsewhere: Cmd/Ctrl+P command palette (Marta's entry point), +T/+W tabs, +L location, +F quick filter, +R refresh. Where Total Commander has a second well-known chord (Shift+F6 rename, Ctrl+PageUp parent) it is kept as an alias rather than replacing the platform one.
+- **One display form.** Shortcuts are rendered only through `features/commands/shortcut-label.ts`: `Cmd`/`Option` on macOS, `Ctrl`/`Alt` elsewhere, `Shift`, then the key — single characters upper-case, named keys capitalised (`Enter`, `Backspace`, `Up`, `Space`, `Esc`), joined with `+`. Never show a stored binding string (`CTRL+ENTER`) or bake a shortcut into a translation.
+- **Where shortcuts appear.** Tooltips: `Label (Shortcut)`. Menus: right-aligned. Palette and help: key caps. Settings: the same display form, editable.
+- **F3 on a folder** calculates its size in place (the same as Alt+Space / Ctrl+.), identically in the browser and the desktop app. It never hands the folder to the OS file manager; Enter and Alt+F3 do that.
+- **Dialogs.** Initial focus lands on the first field (or the safe action for destructive confirmations), Enter confirms, Escape cancels, Tab order follows reading order.
+
+## Progressive Disclosure
+
+A first-time user sees two panes, a five-control toolbar, and the function-key bar — enough to navigate, copy, move, and delete without reading anything. Power is one step away, never on screen by default.
+
+- **Three tiers.** (1) Always visible: navigation, find, the function-key bar. (2) One click or keystroke: the overflow menu, context menus, the command palette (every action, searchable, with its shortcut). (3) Opt-in: optional panels, semantic features, plugins, and anything configured in Settings.
+- **New capability goes to the palette first.** A feature earns a permanent toolbar or status-bar position only when it is used every session; otherwise it lives in the palette, a menu, and the shortcut table.
+- **Teach in place.** Tooltips, menus, and the palette show the shortcut next to the action so mouse use trains keyboard use. Empty and unavailable states say what to do next instead of only reporting absence.
+- **Defaults are quiet.** Optional chrome (tree, operation centre, extra columns, previews) is off or collapsed until asked for, and remembers the user's choice per workspace.
+
 ## Do's and Don'ts
 
 ### Do:
@@ -255,6 +309,8 @@ Skeletons preserve the exact geometry of the content they replace. Progress indi
 - **Do** keep primary actions scarce and explicit; secondary actions should remain flat.
 - **Do** maintain equivalent visual behavior across browser and Tauri hosts.
 - **Do** keep focus, selection, disabled, error, and progress states accessible without depending on color alone.
+- **Do** size and round controls with the tokens (`--fm-control-height`, `--fm-control-height-dense`, `--fm-radius-control`, `--fm-radius`, `--fm-space-*`, `--fm-type-*`); map component-library variables onto them rather than overriding individual rules.
+- **Do** render every shortcut through the shared formatter and show it beside its action.
 
 ### Don't:
 - **Don't** turn Procyon into a spacious card dashboard or add whitespace that reduces simultaneous file context.
@@ -263,3 +319,6 @@ Skeletons preserve the exact geometry of the content they replace. Progress indi
 - **Don't** introduce oversized headings, decorative typography, or icon-only actions without accessible names.
 - **Don't** let modals, drawers, or toolbars make their primary action scroll off-screen.
 - **Don't** create host-specific visual behavior that breaks browser/Tauri parity.
+- **Don't** write raw font sizes, radii, or one-off shadows in a feature stylesheet, or restyle a text field, button, or menu locally.
+- **Don't** mix the two densities on one surface, or let a control render below the 12px type floor.
+- **Don't** add a permanently visible control for an occasional action, or advertise a shortcut that the current host cannot dispatch.

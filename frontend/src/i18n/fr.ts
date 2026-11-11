@@ -98,7 +98,7 @@ export const fr = {
     findFiles: 'Rechercher des fichiers',
     comparePanes: 'Comparer les panneaux',
     comparePanesTooltip: 'Sélectionne les éléments qui diffèrent entre les deux panneaux (Maj+F2)',
-    operationCentre: 'Opérations (Alt+Z)',
+    operationCentre: 'Opérations',
     activityCount: '{count} activités en arrière-plan',
     activitySingle: '1 activité en arrière-plan',
     indexingActivity: 'Indexation sémantique',

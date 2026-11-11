@@ -7,6 +7,7 @@ import {
   normalizedShortcut,
 } from '../../keybindings/dispatcher';
 import type { ActionDescriptor } from '../../models';
+import { formatBindingShortcut } from '../commands/shortcut-label';
 import type { SelectionPlatform } from '../selection/keybindings';
 
 export interface ShortcutsHelpDialogAttrs {
@@ -53,6 +54,7 @@ export const ShortcutsHelpDialog: FactoryComponent<ShortcutsHelpDialogAttrs> = (
         .sort((a, b) => a.action.title.localeCompare(b.action.title));
 
       const normalizedQuery = query.trim().toLowerCase();
+      const display = (shortcut: string): string => formatBindingShortcut(shortcut, attrs.platform);
       const filtered =
         normalizedQuery === ''
           ? bindings
@@ -60,9 +62,11 @@ export const ShortcutsHelpDialog: FactoryComponent<ShortcutsHelpDialogAttrs> = (
               ({ binding, action }) =>
                 action.title.toLowerCase().includes(normalizedQuery) ||
                 (action.description ?? '').toLowerCase().includes(normalizedQuery) ||
-                binding.shortcut.toLowerCase().includes(normalizedQuery),
+                binding.shortcut.toLowerCase().includes(normalizedQuery) ||
+                display(binding.shortcut).toLowerCase().includes(normalizedQuery),
             );
 
+      const capturedLabel = capturedShortcut === undefined ? '' : display(capturedShortcut);
       const captureMatches =
         capturedShortcut === undefined
           ? []
@@ -120,9 +124,9 @@ export const ShortcutsHelpDialog: FactoryComponent<ShortcutsHelpDialogAttrs> = (
                 : m(
                     '.fm-shortcuts-help-capture-result',
                     captureMatches.length === 0
-                      ? t('keybindingsHelp', 'noActionBound', { shortcut: capturedShortcut ?? '' })
+                      ? t('keybindingsHelp', 'noActionBound', { shortcut: capturedLabel })
                       : captureMatches
-                          .map(({ action }) => `${capturedShortcut} → ${action.title}`)
+                          .map(({ action }) => `${capturedLabel} → ${action.title}`)
                           .join(', '),
                   ),
             ]),
@@ -139,7 +143,7 @@ export const ShortcutsHelpDialog: FactoryComponent<ShortcutsHelpDialogAttrs> = (
                       m('div', action.title),
                       action.description === undefined ? undefined : m('small', action.description),
                     ]),
-                    m('td', m('kbd', binding.shortcut)),
+                    m('td', m('kbd', display(binding.shortcut))),
                   ]),
                 ),
               ),
