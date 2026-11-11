@@ -32,7 +32,12 @@ pub(crate) const MAX_PPTX_MEDIA_ITEMS: usize = 128;
 pub(crate) const MAX_PPTX_MEDIA_BYTES: usize = 64 * 1024 * 1024;
 pub(crate) const MAX_PPTX_SINGLE_MEDIA_BYTES: usize = 64 * 1024 * 1024;
 pub(crate) const MAX_PPTX_SINGLE_IMAGE_PIXELS: u64 = 16 * 1024 * 1024;
-pub(crate) const MAX_PPTX_TOTAL_IMAGE_PIXELS: u64 = 32 * 1024 * 1024;
+// A whole deck's images summed, not a per-image cap: this must stay far above
+// `MAX_PPTX_SINGLE_IMAGE_PIXELS` (a photo-heavy presentation legitimately totals many more
+// megapixels than any single slide image), otherwise a small deck of a few high-resolution photos
+// is wrongly refused. 512 MP still bounds cumulative decode/render work and, with the single-image
+// cap and the 128-item media budget, caps the practical total at 128 * 16 MP.
+pub(crate) const MAX_PPTX_TOTAL_IMAGE_PIXELS: u64 = 512 * 1024 * 1024;
 const MAX_PPTX_SESSIONS: usize = 8;
 
 struct Session {
@@ -730,6 +735,36 @@ mod tests {
             .expect_err("decoded image pixel budget must be enforced");
 
         assert!(error.to_string().contains("decoded pixels"), "{error}");
+    }
+
+    /// A minimal GIF89a whose logical-screen dimensions the `image` crate reads via
+    /// `into_dimensions()`, matching the byte layout the sibling rejection test overwrites.
+    fn gif_with_dims(width: u16, height: u16) -> Vec<u8> {
+        let mut gif = b"GIF89a\x01\0\x01\0\x80\0\0\0\0\0\xff\xff\xff\
+            \x21\xf9\x04\x01\0\0\0\0\x2c\0\0\0\0\x01\0\x01\0\0\
+            \x02\x02\x44\x01\0\x3b"
+            .to_vec();
+        let mut dims = [0_u8; 4];
+        dims[0..2].copy_from_slice(&width.to_le_bytes());
+        dims[2..4].copy_from_slice(&height.to_le_bytes());
+        gif[6..10].copy_from_slice(&dims);
+        gif
+    }
+
+    #[test]
+    fn accepts_a_photo_heavy_deck_within_the_total_pixel_budget() {
+        // Three 4000x3000 (12 MP) photos: each is under the single-image cap, but they total 36 MP,
+        // which exceeded the previous 32 MP total budget and wrongly refused an ordinary deck.
+        let gif1 = gif_with_dims(4000, 3000);
+        let gif2 = gif_with_dims(4000, 3000);
+        let gif3 = gif_with_dims(4000, 3000);
+        let bytes = package(&[
+            ("ppt/media/image1.gif", &gif1),
+            ("ppt/media/image2.gif", &gif2),
+            ("ppt/media/image3.gif", &gif3),
+        ]);
+        preflight_package(&bytes, &CancellationToken::new())
+            .expect("a deck whose images total under the budget must preview");
     }
 
     #[test]
