@@ -1,4 +1,4 @@
-import type { FileTemplate } from '../../models';
+import type { FileTemplate, FileTemplateEntry } from '../../models';
 
 /** The templates the backend ships until the user edits the list (mirrors `fm-settings`). */
 export const DEFAULT_FILE_TEMPLATES: readonly FileTemplate[] = [
@@ -11,6 +11,13 @@ export const DEFAULT_FILE_TEMPLATES: readonly FileTemplate[] = [
     enabled: true,
   },
   {
+    id: 'meeting',
+    label: 'Meeting note',
+    fileName: 'Meeting.md',
+    body: '# Meeting {name}\n\nDate: {date}\n\n## Attendees\n\n- \n\n## Notes\n\n- \n\n## Actions\n\n- [ ] \n',
+    enabled: true,
+  },
+  {
     id: 'todo',
     label: 'To-do list',
     fileName: 'TODO.md',
@@ -19,9 +26,31 @@ export const DEFAULT_FILE_TEMPLATES: readonly FileTemplate[] = [
   },
   {
     id: 'shell',
-    label: 'Shell script',
+    label: 'Bash script',
     fileName: 'script.sh',
     body: '#!/usr/bin/env bash\nset -euo pipefail\n\n',
+    enabled: true,
+  },
+  {
+    id: 'python',
+    label: 'Python script',
+    fileName: 'script.py',
+    body: '#!/usr/bin/env python3\n"""{name}."""\n\n\ndef main() -> None:\n    pass\n\n\nif __name__ == "__main__":\n    main()\n',
+    enabled: true,
+  },
+  {
+    id: 'typescript',
+    label: 'TypeScript module',
+    fileName: 'module.ts',
+    body: '// {name}\n\nexport {};\n',
+    enabled: true,
+  },
+  { id: 'csv', label: 'CSV table', fileName: 'data.csv', body: 'column1,column2\n', enabled: true },
+  {
+    id: 'gitignore',
+    label: 'Git ignore',
+    fileName: '.gitignore',
+    body: '.DS_Store\n',
     enabled: true,
   },
   {
@@ -37,6 +66,18 @@ export const DEFAULT_FILE_TEMPLATES: readonly FileTemplate[] = [
 /** The templates to offer: enabled ones, in their configured order. */
 export function enabledTemplates(templates: readonly FileTemplate[]): readonly FileTemplate[] {
   return templates.filter((template) => template.enabled);
+}
+
+/** The enabled settings templates as catalogue entries from the app source. */
+export function appTemplateEntries(templates: readonly FileTemplate[]): FileTemplateEntry[] {
+  return enabledTemplates(templates).map((template) => ({
+    id: template.id,
+    label: template.label,
+    fileName: template.fileName,
+    body: template.body,
+    source: 'app',
+    sourceName: null,
+  }));
 }
 
 function isoDate(now: Date): string {

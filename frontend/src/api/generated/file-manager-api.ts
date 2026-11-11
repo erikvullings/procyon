@@ -64,6 +64,7 @@ import type {
   ExportCorpusThemesRequestDto,
   ExportCorpusThemesResponseDto,
   ExportSemanticVocabularyResponseDto,
+  FileTemplateEntryDto,
   FindLinkReplacementsRequestDto,
   FindLinkReplacementsResponseDto,
   FinderTagsDto,
@@ -2808,6 +2809,42 @@ return fetchMutator<diffFilesResponse>(getDiffFilesUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(diffFilesRequestDto)
+  }
+);}
+
+
+
+export type listFileTemplatesResponse200 = {
+  data: FileTemplateEntryDto[]
+  status: 200
+}
+
+export type listFileTemplatesResponseSuccess = (listFileTemplatesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listFileTemplatesResponse = (listFileTemplatesResponseSuccess)
+
+export const getListFileTemplatesUrl = () => {
+
+
+
+
+  return `/api/v1/file-templates`
+}
+
+/**
+ * @summary Lists "New file from template" entries across app, folder and plugin sources (task 0312).
+ */
+export const listFileTemplates = async ( options?: Parameters<typeof fetchMutator>[1]): Promise<listFileTemplatesResponse> => {
+
+  return fetchMutator<listFileTemplatesResponse>(getListFileTemplatesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 

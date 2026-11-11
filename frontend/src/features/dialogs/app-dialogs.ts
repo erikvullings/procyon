@@ -77,7 +77,7 @@ import type { FindFilesSearchParams } from '../search/find-files-dialog';
 import { FindFilesDialog } from '../search/find-files-dialog';
 import { deleteSavedSearch, saveSearch, toggleSavedSearchPin } from '../search/saved-searches';
 import { DocumentSummaryDialog } from '../semantic/document-summary-dialog';
-import { enabledTemplates, expandTemplateBody } from '../templates/file-templates';
+import { appTemplateEntries, expandTemplateBody } from '../templates/file-templates';
 import { pathFromUri } from '../workspace/workspace-layout';
 import { NewFromTemplateDialog } from './new-from-template-dialog';
 import { TerminalPickerDialog } from './terminal-picker-dialog';
@@ -300,7 +300,8 @@ export function renderAppDialogs(
     }),
     m(NewFromTemplateDialog, {
       open: ds.newFromTemplateOpen,
-      templates: enabledTemplates(ctx.getSettings()?.fileTemplates ?? []),
+      templates:
+        ds.newFromTemplateEntries ?? appTemplateEntries(ctx.getSettings()?.fileTemplates ?? []),
       onCancel: () => dialogs.cancelNewFromTemplate(),
       onCreate: (template, fileName) => {
         const location = ds.newFromTemplateLocation ?? ctx.getActiveDirectoryLocation();

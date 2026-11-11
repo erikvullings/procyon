@@ -574,6 +574,8 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                         m(FileTemplatesEditor, {
                           templates: activeDraft.fileTemplates,
                           onChange: (fileTemplates) => update(current, { fileTemplates }),
+                          folder: activeDraft.templateFolder,
+                          onFolderChange: (templateFolder) => update(current, { templateFolder }),
                         }),
                         m('p.helper-text', t('settings', 'fileTemplatesHelp')),
                       ]),

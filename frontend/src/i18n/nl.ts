@@ -397,6 +397,9 @@ export const nl = {
     fileTemplates: 'Bestandssjablonen',
     fileTemplatesHelp:
       'Aangeboden door "Nieuw bestand uit sjabloon". {date} en {name} in de inhoud worden ingevuld bij het aanmaken van het bestand.',
+    templateFolder: 'Sjablonenmap',
+    templateFolderHelp:
+      'Tekstbestanden in deze map worden ook aangeboden bij «Nieuw bestand uit sjabloon». Leeg laten om dit uit te schakelen.',
     templateEnabled: 'Ingeschakeld',
     templateLabel: 'Naam',
     templateFileName: 'Voorgestelde bestandsnaam',
@@ -1582,6 +1585,8 @@ export const nl = {
     empty: 'Er zijn geen terminaltoepassingen ingesteld. Voeg ze toe via Instellingen → Terminal.',
   },
   newFromTemplate: {
+    folderSource: 'Map',
+    pluginSource: 'Plug-in',
     title: 'Nieuw bestand uit sjabloon',
     empty: 'Geen sjablonen ingeschakeld. Voeg ze toe of schakel ze in via Instellingen → Terminal.',
     templates: 'Sjablonen',

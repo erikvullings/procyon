@@ -120,6 +120,7 @@ export type MockClientMethod =
   | 'readOsClipboardFiles'
   | 'showPlatformContextMenu'
   | 'getSettings'
+  | 'listFileTemplates'
   | 'updateSettings'
   | 'getWorkspace'
   | 'listWorkspaces'

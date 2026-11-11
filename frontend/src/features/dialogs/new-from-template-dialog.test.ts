@@ -1,6 +1,7 @@
 import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_FILE_TEMPLATES } from '../templates/file-templates';
+import type { FileTemplateEntry } from '../../models';
+import { appTemplateEntries, DEFAULT_FILE_TEMPLATES } from '../templates/file-templates';
 import { NewFromTemplateDialog } from './new-from-template-dialog';
 
 let root: HTMLElement;
@@ -18,7 +19,12 @@ afterEach(() => {
 function mount(open: boolean, onCreate = vi.fn(), onCancel = vi.fn()): void {
   m.mount(root, {
     view: () =>
-      m(NewFromTemplateDialog, { open, templates: DEFAULT_FILE_TEMPLATES, onCreate, onCancel }),
+      m(NewFromTemplateDialog, {
+        open,
+        templates: appTemplateEntries(DEFAULT_FILE_TEMPLATES),
+        onCreate,
+        onCancel,
+      }),
   });
   m.redraw.sync();
 }
@@ -40,6 +46,41 @@ describe('NewFromTemplateDialog', () => {
     expect(markdown?.getAttribute('aria-checked')).toBe('true');
   });
 
+  it('names the folder and the plugin behind non-app entries', () => {
+    const entries: FileTemplateEntry[] = [
+      {
+        id: 'folder:Log.md',
+        label: 'Log.md',
+        fileName: 'Log.md',
+        body: '',
+        source: 'folder',
+        sourceName: 'Templates',
+      },
+      {
+        id: 'plugin:example.p:t',
+        label: 'Plugin note',
+        fileName: 'p.md',
+        body: '',
+        source: 'plugin',
+        sourceName: 'Example',
+      },
+    ];
+    m.mount(root, {
+      view: () =>
+        m(NewFromTemplateDialog, {
+          open: true,
+          templates: entries,
+          onCreate: vi.fn(),
+          onCancel: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    const tags = [...root.querySelectorAll('.fm-terminal-picker__source')].map(
+      (tag) => tag.textContent,
+    );
+    expect(tags).toEqual(['Folder', 'Example']);
+  });
+
   it('creates the chosen template under the edited name on Enter', () => {
     const onCreate = vi.fn();
     mount(true, onCreate);
@@ -48,7 +89,10 @@ describe('NewFromTemplateDialog', () => {
     input.value = 'Meeting.txt';
     input.dispatchEvent(new InputEvent('input', { bubbles: true }));
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    expect(onCreate).toHaveBeenCalledWith(DEFAULT_FILE_TEMPLATES[0], 'Meeting.txt');
+    expect(onCreate).toHaveBeenCalledWith(
+      appTemplateEntries(DEFAULT_FILE_TEMPLATES)[0],
+      'Meeting.txt',
+    );
   });
 
   it('refuses an invalid name', () => {

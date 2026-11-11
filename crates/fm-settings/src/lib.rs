@@ -429,6 +429,12 @@ pub fn default_file_templates() -> Vec<FileTemplate> {
             "# {name}\n\n{date}\n\n",
         ),
         template(
+            "meeting",
+            "Meeting note",
+            "Meeting.md",
+            "# Meeting {name}\n\nDate: {date}\n\n## Attendees\n\n- \n\n## Notes\n\n- \n\n## Actions\n\n- [ ] \n",
+        ),
+        template(
             "todo",
             "To-do list",
             "TODO.md",
@@ -436,10 +442,24 @@ pub fn default_file_templates() -> Vec<FileTemplate> {
         ),
         template(
             "shell",
-            "Shell script",
+            "Bash script",
             "script.sh",
             "#!/usr/bin/env bash\nset -euo pipefail\n\n",
         ),
+        template(
+            "python",
+            "Python script",
+            "script.py",
+            "#!/usr/bin/env python3\n\"\"\"{name}.\"\"\"\n\n\ndef main() -> None:\n    pass\n\n\nif __name__ == \"__main__\":\n    main()\n",
+        ),
+        template(
+            "typescript",
+            "TypeScript module",
+            "module.ts",
+            "// {name}\n\nexport {};\n",
+        ),
+        template("csv", "CSV table", "data.csv", "column1,column2\n"),
+        template("gitignore", "Git ignore", ".gitignore", ".DS_Store\n"),
         template(
             "html",
             "HTML page",
@@ -448,6 +468,15 @@ pub fn default_file_templates() -> Vec<FileTemplate> {
         ),
         template("json", "JSON document", "data.json", "{\n}\n"),
     ]
+}
+
+/// Trims the template folder and drops it when blank.
+fn sanitize_template_folder(folder: &mut Option<String>) {
+    *folder = folder
+        .as_deref()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(str::to_owned);
 }
 
 /// Whether `name` is usable as a single new-file name.
@@ -593,6 +622,9 @@ pub struct Settings {
     pub terminal_apps: Vec<TerminalApp>,
     /// Templates offered by "New file from template" (task 0312); built-ins until edited.
     pub file_templates: Vec<FileTemplate>,
+    /// Host folder whose text files are also offered by "New file from template" (task 0312);
+    /// `None` disables the folder source.
+    pub template_folder: Option<String>,
     /// Optional text-editor executable or command for `core.edit` (task 0086); `None` falls back
     /// to the platform adapter's default text-editor association.
     pub editor_command: Option<String>,
@@ -714,6 +746,7 @@ impl Default for Settings {
             terminal_command: None,
             terminal_apps: default_terminal_apps(),
             file_templates: default_file_templates(),
+            template_folder: None,
             editor_command: None,
             default_start_locations: Vec::new(),
             favourite_locations: Vec::new(),
@@ -819,6 +852,7 @@ impl SettingsStore {
                 sanitize_filter_presets(&mut settings.filter_presets);
                 sanitize_terminal_apps(&mut settings.terminal_apps);
                 sanitize_file_templates(&mut settings.file_templates);
+                sanitize_template_folder(&mut settings.template_folder);
                 sync_profile::sanitize_sync_profiles(&mut settings.sync_profiles);
                 Ok(LoadOutcome {
                     settings,
@@ -873,6 +907,7 @@ impl SettingsStore {
         sanitize_filter_presets(&mut current.filter_presets);
         sanitize_terminal_apps(&mut current.terminal_apps);
         sanitize_file_templates(&mut current.file_templates);
+        sanitize_template_folder(&mut current.template_folder);
         sync_profile::sanitize_sync_profiles(&mut current.sync_profiles);
         let bytes = serde_json::to_vec_pretty(&current)?;
         atomic_write(&self.directory, SETTINGS_FILE_NAME, &bytes)?;
@@ -1491,6 +1526,31 @@ mod tests {
         let loaded = SettingsStore::new(directory.path()).load().expect("load");
         assert_eq!(loaded.settings.file_templates, default_file_templates());
         assert!(valid_template_file_name("TODO.md"));
+    }
+
+    #[test]
+    fn template_folder_is_trimmed_and_a_blank_value_turns_it_off() {
+        let directory = tempdir().expect("temp directory");
+        let store = SettingsStore::new(directory.path());
+        store
+            .save(&Settings {
+                template_folder: Some("  /Users/me/Templates  ".into()),
+                ..Settings::default()
+            })
+            .expect("save");
+        let loaded = store.load().expect("reload").settings;
+        assert_eq!(
+            loaded.template_folder.as_deref(),
+            Some("/Users/me/Templates")
+        );
+
+        store
+            .save(&Settings {
+                template_folder: Some("   ".into()),
+                ..Settings::default()
+            })
+            .expect("save");
+        assert_eq!(store.load().expect("reload").settings.template_folder, None);
     }
 
     #[test]

@@ -39,6 +39,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     terminalCommand: null,
     terminalApps: [],
     fileTemplates: [],
+    templateFolder: null,
     editorCommand: null,
     defaultStartLocations: ['file:///home'],
     favouriteLocations: [],

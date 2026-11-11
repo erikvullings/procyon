@@ -1,15 +1,25 @@
-import m, { type FactoryComponent } from 'mithril';
+import m, { type Children, type FactoryComponent } from 'mithril';
 import { ModalPanel } from 'mithril-materialized';
 import { t } from '../../i18n';
-import type { FileTemplate } from '../../models';
+import type { FileTemplateEntry } from '../../models';
 import { validateEntryName } from '../operations/create-directory-dialog';
 import { focusAndSelect } from '../operations/focus-select';
 
 export interface NewFromTemplateDialogAttrs {
   readonly open: boolean;
-  readonly templates: readonly FileTemplate[];
-  readonly onCreate: (template: FileTemplate, fileName: string) => void;
+  readonly templates: readonly FileTemplateEntry[];
+  readonly onCreate: (template: FileTemplateEntry, fileName: string) => void;
   readonly onCancel: () => void;
+}
+
+/** The small suffix naming a non-app source in the picker: the folder, or the contributing plugin. */
+function sourceTag(template: FileTemplateEntry): Children | undefined {
+  if (template.source === 'app') return undefined;
+  const text =
+    template.source === 'folder'
+      ? t('newFromTemplate', 'folderSource')
+      : (template.sourceName ?? t('newFromTemplate', 'pluginSource'));
+  return m('span.fm-terminal-picker__source', text);
 }
 
 /** Moves focus out of the modal before it closes, so the browser never applies aria-hidden to an
@@ -29,7 +39,7 @@ export const NewFromTemplateDialog: FactoryComponent<NewFromTemplateDialogAttrs>
   let wasOpen = false;
   let focusPending = false;
 
-  function select(template: FileTemplate): void {
+  function select(template: FileTemplateEntry): void {
     selectedId = template.id;
     fileName = template.fileName;
     focusAndSelect('new-from-template-name', fileName);
@@ -89,6 +99,7 @@ export const NewFromTemplateDialog: FactoryComponent<NewFromTemplateDialogAttrs>
                           onclick: () => select(template),
                         },
                         template.label,
+                        sourceTag(template),
                       ),
                     ),
                   ),

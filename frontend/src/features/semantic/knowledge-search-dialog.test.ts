@@ -1784,7 +1784,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(input?.getAttribute('aria-label')).toBeTruthy();
     expect(input?.getAttribute('autocomplete')).toBe('off');
     expect(input?.getAttribute('autocorrect')).toBe('off');
-    expect(input?.getAttribute('autocapitalize')).toBe('off');
+    expect(input?.getAttribute('autocapitalize')).toBe('none');
     expect(input?.getAttribute('spellcheck')).toBeNull();
   });
 

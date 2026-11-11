@@ -63,6 +63,7 @@ import type {
   FileDiffResult,
   Location as FileLocation,
   FileRangeChunk,
+  FileTemplateEntry,
   FinderTags,
   FindLinkReplacementsRequest,
   FindLinkReplacementsResult,
@@ -300,6 +301,7 @@ import {
   startDuplicateScan as requestDuplicateScanStart,
   getEntryMetadata as requestEntryMetadata,
   getFileIcon as requestFileIcon,
+  listFileTemplates as requestFileTemplates,
   getFinderTags as requestFinderTags,
   setFinderTags as requestFinderTagsUpdate,
   findTransferConflicts as requestFindTransferConflicts,
@@ -1248,6 +1250,14 @@ export class HttpFileManagerClient implements FileManagerClient {
     return settingsFromDto(
       (await requestSettings(signal === undefined ? undefined : { signal })).data,
     );
+  }
+
+  async listFileTemplates(signal?: AbortSignal): Promise<FileTemplateEntry[]> {
+    const response = await requestFileTemplates(signal === undefined ? undefined : { signal });
+    if (response.status !== 200) {
+      throw unexpectedResponseError('listFileTemplates', response.status);
+    }
+    return response.data as FileTemplateEntry[];
   }
 
   async updateSettings(settings: Settings, signal?: AbortSignal): Promise<Settings> {

@@ -395,6 +395,9 @@ export const en = {
     fileTemplates: 'File templates',
     fileTemplatesHelp:
       'Offered by "New File from Template". {date} and {name} in the content are filled in when the file is created.',
+    templateFolder: 'Template folder',
+    templateFolderHelp:
+      'Text files in this folder are also offered by "New File from Template". Leave empty to turn this off.',
     templateEnabled: 'Enabled',
     templateLabel: 'Name',
     templateFileName: 'Suggested file name',
@@ -1557,6 +1560,8 @@ export const en = {
     empty: 'No terminal applications are configured. Add them under Settings → Terminal.',
   },
   newFromTemplate: {
+    folderSource: 'Folder',
+    pluginSource: 'Plugin',
     title: 'New File from Template',
     empty: 'No templates are enabled. Add or enable them under Settings → Terminal.',
     templates: 'Templates',

@@ -2354,7 +2354,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     toast: (options) => toast(options),
     getOpenTerminalSupported: () => shellState.openTerminalSupported,
     openCreateDirectory: (location) => shellState.dialogs.openCreateDirectory(location),
-    openNewFromTemplate: (location) => shellState.dialogs.openNewFromTemplate(location),
+    openNewFromTemplate: (location) => {
+      shellState.dialogs.openNewFromTemplate(location);
+      // The picker lists app, folder and plugin templates; the backend answers with all three.
+      void shellState.client.listFileTemplates().then(
+        (entries) => {
+          shellState.dialogs.setNewFromTemplateEntries(entries);
+          m.redraw();
+        },
+        () => undefined,
+      );
+    },
     openFinderTagsDialog: (request) => shellState.dialogs.openFinderTagsDialog(request),
     openSpotlightCommentDialog: (request) => shellState.dialogs.openSpotlightCommentDialog(request),
     openTerminalPickerDialog: (request) => shellState.dialogs.openTerminalPickerDialog(request),

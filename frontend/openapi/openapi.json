@@ -2098,6 +2098,27 @@
         }
       }
     },
+    "/api/v1/file-templates": {
+      "get": {
+        "summary": "Lists \"New file from template\" entries across app, folder and plugin sources (task 0312).",
+        "operationId": "listFileTemplates",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileTemplateEntryDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/files/docx/close": {
       "post": {
         "summary": "Cancels and releases a DOCX preview session.",
@@ -13537,6 +13558,55 @@
             "description": "User-visible name in the template picker."
           }
         }
+      },
+      "FileTemplateEntryDto": {
+        "type": "object",
+        "description": "One template offered by \"New file from template\", across every source (task 0312).",
+        "required": [
+          "id",
+          "label",
+          "fileName",
+          "body",
+          "source"
+        ],
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "Initial file content; `{date}` and `{name}` are filled in on creation."
+          },
+          "fileName": {
+            "type": "string",
+            "description": "Suggested name of the created file, including its extension."
+          },
+          "id": {
+            "type": "string",
+            "description": "Unique across sources: plain for app templates, `folder:<file>`, `plugin:<plugin>:<id>`."
+          },
+          "label": {
+            "type": "string",
+            "description": "User-visible name in the template picker."
+          },
+          "source": {
+            "$ref": "#/components/schemas/FileTemplateSourceDto",
+            "description": "Which source offered this entry."
+          },
+          "sourceName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The template folder's name for `folder` entries, the plugin's name for `plugin` entries."
+          }
+        }
+      },
+      "FileTemplateSourceDto": {
+        "type": "string",
+        "description": "Where an entry offered by \"New file from template\" comes from (task 0312).",
+        "enum": [
+          "app",
+          "folder",
+          "plugin"
+        ]
       },
       "FilterCriteriaDto": {
         "type": "object",
@@ -25540,6 +25610,13 @@
               "$ref": "#/components/schemas/SyncProfileDto"
             },
             "description": "Saved synchronization profiles."
+          },
+          "templateFolder": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Host folder whose text files are also offered as templates (task 0312); `None` disables."
           },
           "terminalApps": {
             "type": "array",

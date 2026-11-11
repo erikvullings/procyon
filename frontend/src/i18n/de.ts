@@ -406,6 +406,9 @@ export const de = {
     fileTemplates: 'Dateivorlagen',
     fileTemplatesHelp:
       'Angeboten von „Neue Datei aus Vorlage“. {date} und {name} im Inhalt werden beim Erstellen der Datei ersetzt.',
+    templateFolder: 'Vorlagenordner',
+    templateFolderHelp:
+      'Textdateien in diesem Ordner werden ebenfalls unter „Neue Datei aus Vorlage“ angeboten. Leer lassen, um dies zu deaktivieren.',
     templateEnabled: 'Aktiviert',
     templateLabel: 'Name',
     templateFileName: 'Vorgeschlagener Dateiname',
@@ -1202,6 +1205,8 @@ export const de = {
       'Es sind keine Terminalanwendungen konfiguriert. Fügen Sie sie unter Einstellungen → Terminal hinzu.',
   },
   newFromTemplate: {
+    folderSource: 'Ordner',
+    pluginSource: 'Erweiterung',
     title: 'Neue Datei aus Vorlage',
     empty:
       'Keine Vorlagen aktiviert. Fügen Sie sie unter Einstellungen → Terminal hinzu oder aktivieren Sie sie.',

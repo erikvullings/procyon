@@ -412,6 +412,9 @@ pub struct SettingsDto {
     /// Templates offered by "New file from template".
     #[serde(default)]
     pub file_templates: Vec<FileTemplateDto>,
+    /// Host folder whose text files are also offered as templates (task 0312); `None` disables.
+    #[serde(default)]
+    pub template_folder: Option<String>,
     /// Optional text-editor command for `core.edit`; `None` uses the platform default.
     pub editor_command: Option<String>,
     /// Locations inherited by new panes.
@@ -516,4 +519,34 @@ impl Default for MapSettingsDto {
 
 fn remember_folder_views_default() -> bool {
     true
+}
+
+/// Where an entry offered by "New file from template" comes from (task 0312).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum FileTemplateSourceDto {
+    /// Built-in or user-edited templates stored in settings.
+    App,
+    /// A text file in the user's template folder.
+    Folder,
+    /// A template contributed by an enabled plugin.
+    Plugin,
+}
+
+/// One template offered by "New file from template", across every source (task 0312).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FileTemplateEntryDto {
+    /// Unique across sources: plain for app templates, `folder:<file>`, `plugin:<plugin>:<id>`.
+    pub id: String,
+    /// User-visible name in the template picker.
+    pub label: String,
+    /// Suggested name of the created file, including its extension.
+    pub file_name: String,
+    /// Initial file content; `{date}` and `{name}` are filled in on creation.
+    pub body: String,
+    /// Which source offered this entry.
+    pub source: FileTemplateSourceDto,
+    /// The template folder's name for `folder` entries, the plugin's name for `plugin` entries.
+    pub source_name: Option<String>,
 }

@@ -401,6 +401,9 @@ export const fr = {
     fileTemplates: 'Modèles de fichier',
     fileTemplatesHelp:
       'Proposés par « Nouveau fichier depuis un modèle ». {date} et {name} dans le contenu sont remplacés à la création du fichier.',
+    templateFolder: 'Dossier de modèles',
+    templateFolderHelp:
+      'Les fichiers texte de ce dossier sont aussi proposés par « Nouveau fichier depuis un modèle ». Laisser vide pour désactiver.',
     templateEnabled: 'Activé',
     templateLabel: 'Nom',
     templateFileName: 'Nom de fichier suggéré',
@@ -1188,6 +1191,8 @@ export const fr = {
     empty: 'Aucune application de terminal n’est configurée. Ajoutez-en dans Réglages → Terminal.',
   },
   newFromTemplate: {
+    folderSource: 'Dossier',
+    pluginSource: 'Extension',
     title: 'Nouveau fichier depuis un modèle',
     empty: 'Aucun modèle activé. Ajoutez-les ou activez-les dans Réglages → Terminal.',
     templates: 'Modèles',

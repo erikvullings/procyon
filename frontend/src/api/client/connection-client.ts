@@ -4,6 +4,7 @@ import type {
   AppUpdateProgress,
   BackendEvent,
   DiagnosticsResult,
+  FileTemplateEntry,
   FrontendDiagnostic,
   Location,
   RuntimeCapabilities,
@@ -39,6 +40,9 @@ export interface ConnectionClient {
   getRuntimeCapabilities(signal?: AbortSignal): Promise<RuntimeCapabilities>;
 
   getSettings(signal?: AbortSignal): Promise<Settings>;
+
+  /** Templates for "New file from template" across app, folder and plugin sources (task 0312). */
+  listFileTemplates(signal?: AbortSignal): Promise<FileTemplateEntry[]>;
 
   getSystemLocations(signal?: AbortSignal): Promise<SystemLocation[]>;
 

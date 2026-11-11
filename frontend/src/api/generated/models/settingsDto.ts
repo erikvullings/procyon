@@ -118,6 +118,11 @@ export interface SettingsDto {
   sizeFormat: SizeFormatDto;
   /** Saved synchronization profiles. */
   syncProfiles?: SyncProfileDto[];
+  /**
+     * Host folder whose text files are also offered as templates (task 0312); `None` disables.
+     * @nullable
+     */
+  templateFolder?: string | null;
   /** External terminals offered by "Open Terminal With...". */
   terminalApps?: TerminalAppDto[];
   /**

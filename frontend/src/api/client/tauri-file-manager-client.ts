@@ -72,6 +72,7 @@ import type {
   FileDiffOptions,
   FileDiffResult,
   FileRangeChunk,
+  FileTemplateEntry,
   FinderTags,
   FindLinkReplacementsRequest,
   FindLinkReplacementsResult,
@@ -854,6 +855,10 @@ export class TauriFileManagerClient implements FileManagerClient {
       uri: locationUri,
       request: comment,
     });
+  }
+
+  async listFileTemplates(_signal?: AbortSignal): Promise<FileTemplateEntry[]> {
+    return invoke<FileTemplateEntry[]>('list_file_templates');
   }
 
   async getSettings(_signal?: AbortSignal): Promise<Settings> {

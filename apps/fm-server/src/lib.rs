@@ -302,6 +302,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::action::list_actions))
         .routes(utoipa_axum::routes!(routes::action::invoke_action))
         .routes(utoipa_axum::routes!(routes::plugin::list_plugins))
+        .routes(utoipa_axum::routes!(routes::plugin::list_file_templates))
         .routes(utoipa_axum::routes!(routes::plugin::enable_plugin))
         .routes(utoipa_axum::routes!(routes::plugin::disable_plugin))
         .routes(utoipa_axum::routes!(routes::plugin::get_plugin_logs))

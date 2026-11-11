@@ -61,6 +61,7 @@ import type {
   FileDiffOptions,
   FileDiffResult,
   FileRangeChunk,
+  FileTemplateEntry,
   FinderTags,
   FindLinkReplacementsRequest,
   FindLinkReplacementsResult,
@@ -555,6 +556,10 @@ export class MockFileManagerClient implements FileManagerClient {
   }
   getSettings(signal?: AbortSignal): Promise<Settings> {
     return this.connectionClient.getSettings(signal);
+  }
+
+  listFileTemplates(signal?: AbortSignal): Promise<FileTemplateEntry[]> {
+    return this.connectionClient.listFileTemplates(signal);
   }
   getFileIcon(sampleLocationUri: string, signal?: AbortSignal): Promise<Uint8Array | undefined> {
     return this.workspaceClient.getFileIcon(sampleLocationUri, signal);

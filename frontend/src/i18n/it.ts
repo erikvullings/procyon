@@ -399,6 +399,9 @@ export const it = {
     fileTemplates: 'Modelli di file',
     fileTemplatesHelp:
       'Offerti da «Nuovo file da modello». {date} e {name} nel contenuto vengono sostituiti alla creazione del file.',
+    templateFolder: 'Cartella dei modelli',
+    templateFolderHelp:
+      'I file di testo in questa cartella sono proposti anche in «Nuovo file da modello». Lasciare vuoto per disattivare.',
     templateEnabled: 'Attivato',
     templateLabel: 'Nome',
     templateFileName: 'Nome file suggerito',
@@ -1182,6 +1185,8 @@ export const it = {
     empty: 'Nessuna applicazione terminale configurata. Aggiungile in Impostazioni → Terminale.',
   },
   newFromTemplate: {
+    folderSource: 'Cartella',
+    pluginSource: 'Estensione',
     title: 'Nuovo file da modello',
     empty: 'Nessun modello attivato. Aggiungili o attivali in Impostazioni → Terminale.',
     templates: 'Modelli',

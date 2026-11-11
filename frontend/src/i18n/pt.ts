@@ -401,6 +401,9 @@ export const pt = {
     fileTemplates: 'Modelos de ficheiro',
     fileTemplatesHelp:
       'Oferecidos por «Novo ficheiro a partir de modelo». {date} e {name} no conteúdo são preenchidos ao criar o ficheiro.',
+    templateFolder: 'Pasta de modelos',
+    templateFolderHelp:
+      'Os ficheiros de texto desta pasta também são oferecidos em «Novo ficheiro a partir de modelo». Deixe vazio para desativar.',
     templateEnabled: 'Ativado',
     templateLabel: 'Nome',
     templateFileName: 'Nome de ficheiro sugerido',
@@ -1187,6 +1190,8 @@ export const pt = {
     empty: 'Não há aplicações de terminal configuradas. Adicione-as em Definições → Terminal.',
   },
   newFromTemplate: {
+    folderSource: 'Pasta',
+    pluginSource: 'Extensão',
     title: 'Novo ficheiro a partir de modelo',
     empty: 'Nenhum modelo ativado. Adicione-os ou ative-os em Definições → Terminal.',
     templates: 'Modelos',

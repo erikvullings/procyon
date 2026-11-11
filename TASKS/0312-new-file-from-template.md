@@ -38,8 +38,23 @@ small, delightful addition.
   remove/reset (reset uses a frontend copy of the defaults - keep in sync with `fm-settings`).
   Tests: 2 Rust (defaults, sanitising), 6 frontend (placeholders, enabled filter, dialog x3,
   palette routing) + availability.
-  **Open:** plugin-contributed templates via the plugin manifest (0053); a "New >" submenu (the
-  context menu only has bespoke Open With/platform submenus, so it is a single "New File from
-  Template..." entry opening the picker); not verified visually / in a real host; mock action
-  fixture (`fixtures/mock-responses/actions.json`) does not list the new action, like the other
-  recent client-flow actions.
+  **Open:** a "New >" submenu (the context menu only has bespoke Open With/platform submenus, so it
+  is a single "New File from Template..." entry opening the picker); not verified visually / in a
+  real host; mock action fixture (`fixtures/mock-responses/actions.json`) does not list the new
+  action, like the other recent client-flow actions.
+- 2026-11-11 claude: Three template sources now merged by backend `GET /api/v1/file-templates`
+  (`listFileTemplates`, Tauri `list_file_templates`; `fm_application::file_templates::catalog`):
+  (1) app templates from settings (enabled only); (2) user **template folder** — setting
+  `templateFolder` (`fm-settings`, edited in Settings → Terminal beside the list); regular,
+  non-hidden, UTF-8 files ≤64 KiB directly inside it, sorted, max 30, symlinks skipped; (3) **plugin**
+  templates — manifest `contributions.file_templates = true` + sibling `file-templates.json`
+  (`fm_plugin_api::parse_file_templates`, validated; invalid document disables the plugin with a
+  diagnostic). Entries carry `source` (`app|folder|plugin`) + `sourceName`; ids `folder:<file>` /
+  `plugin:<plugin>:<id>`; the picker shows the source as a suffix tag. Picker loads the catalogue
+  on open (`dialogs.setNewFromTemplateEntries`), falling back to settings templates. Built-ins
+  extended: Meeting note, Python script, TypeScript module, CSV table, Git ignore; "Shell script"
+  relabelled "Bash script" (id unchanged). Frontend `DEFAULT_FILE_TEMPLATES` mirrors `fm-settings`.
+  Folder source reads the host's filesystem (desktop: local; server: the server host).
+  Tests: Rust (catalog, folder scan, plugin manifest + discovery, settings sanitise), frontend
+  (catalogue entries, source tags). Also fixed two pre-existing test breakages from b9d4f3c9
+  (`querySelectorAll` selector; stale `autocapitalize` expectation).

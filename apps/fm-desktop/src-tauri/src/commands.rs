@@ -2755,6 +2755,14 @@ pub(crate) async fn invoke_action<R: Runtime>(
         .map_err(|e| e.into_dto(Uuid::new_v4()))
 }
 
+/// Lists "New file from template" entries across app, folder and plugin sources (task 0312).
+#[tauri::command]
+pub(crate) fn list_file_templates(
+    state: State<'_, AppState>,
+) -> Vec<fm_transport_dto::FileTemplateEntryDto> {
+    state.service.list_file_templates()
+}
+
 /// Lists plugins through the shared discovery service.
 #[tauri::command]
 pub(crate) fn list_plugins(state: State<'_, AppState>) -> Vec<PluginDescriptorDto> {

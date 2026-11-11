@@ -20,7 +20,7 @@ describe('installGlobalInputDefaults', () => {
     wrapper.innerHTML = '<input type="search"><textarea></textarea>';
     document.body.append(wrapper);
     await settle();
-    for (const control of [existing, ...wrapper.querySelectorAll('input', 'textarea')]) {
+    for (const control of [existing, ...wrapper.querySelectorAll('input, textarea')]) {
       expect(control.getAttribute('autocomplete')).toBe('off');
       expect(control.getAttribute('autocapitalize')).toBe('none');
       expect(control.getAttribute('autocorrect')).toBe('off');

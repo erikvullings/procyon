@@ -233,11 +233,12 @@ pub use semantic_ocr::*;
 pub use semantic_vocabulary::*;
 pub use settings::{
     ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto, FavouriteLocationDto, FileTemplateDto,
-    FilterCriteriaDto, FilterKindDto, FilterPresetDto, FilterToggleDto, LanguageDto,
-    MapBasemapKindDto, MapSettingsDto, MultiRenameCaseTransformDto, MultiRenamePresetDto,
-    MultiRenameRulesDto, MultiRenameSequenceDto, QuickFilterMatchModeDto, SavedSearchDto,
-    SettingsDto, SizeFormatDto, SyncProfileDto, SyncRunOutcomeDto, SyncRunSummaryDto,
-    SyncRunTriggerDto, SyncScheduleConfirmationDto, SyncScheduleDto, TerminalAppDto, ThemeDto,
+    FileTemplateEntryDto, FileTemplateSourceDto, FilterCriteriaDto, FilterKindDto, FilterPresetDto,
+    FilterToggleDto, LanguageDto, MapBasemapKindDto, MapSettingsDto, MultiRenameCaseTransformDto,
+    MultiRenamePresetDto, MultiRenameRulesDto, MultiRenameSequenceDto, QuickFilterMatchModeDto,
+    SavedSearchDto, SettingsDto, SizeFormatDto, SyncProfileDto, SyncRunOutcomeDto,
+    SyncRunSummaryDto, SyncRunTriggerDto, SyncScheduleConfirmationDto, SyncScheduleDto,
+    TerminalAppDto, ThemeDto,
 };
 pub use snapshot::{DirectorySnapshotDto, LoadingStateDto, VolumeCapacityDto};
 pub use snapshots::{

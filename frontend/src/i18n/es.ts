@@ -397,6 +397,9 @@ export const es = {
     fileTemplates: 'Plantillas de archivo',
     fileTemplatesHelp:
       'Se ofrecen en «Nuevo archivo desde plantilla». {date} y {name} en el contenido se rellenan al crear el archivo.',
+    templateFolder: 'Carpeta de plantillas',
+    templateFolderHelp:
+      'Los archivos de texto de esta carpeta también se ofrecen en «Nuevo archivo desde plantilla». Déjelo vacío para desactivarlo.',
     templateEnabled: 'Activada',
     templateLabel: 'Nombre',
     templateFileName: 'Nombre de archivo sugerido',
@@ -1186,6 +1189,8 @@ export const es = {
     empty: 'No hay aplicaciones de terminal configuradas. Añádelas en Ajustes → Terminal.',
   },
   newFromTemplate: {
+    folderSource: 'Carpeta',
+    pluginSource: 'Complemento',
     title: 'Nuevo archivo desde plantilla',
     empty: 'No hay plantillas activadas. Añádalas o actívelas en Ajustes → Terminal.',
     templates: 'Plantillas',

@@ -12,8 +12,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use fm_plugin_api::{
-    ActionContribution, ColumnContribution, IconThemeManifest, Permission, PluginManifest,
-    PluginRuntimeKind, PreviewOutput, SelectedEntryContext,
+    ActionContribution, ColumnContribution, FILE_TEMPLATES_FILE_NAME, FileTemplateContribution,
+    IconThemeManifest, Permission, PluginManifest, PluginRuntimeKind, PreviewOutput,
+    SelectedEntryContext, parse_file_templates,
 };
 use mlua::{Error as LuaError, HookTriggers, Lua, LuaOptions, LuaSerdeExt, StdLib, Table, VmState};
 use serde::de::DeserializeOwned;
@@ -669,6 +670,9 @@ pub struct DiscoveredPlugin {
     pub diagnostic: Option<String>,
     /// The parsed `icon-theme.json`, present only for a valid `icon_theme` contribution.
     pub icon_theme: Option<IconThemeManifest>,
+    /// The parsed `file-templates.json` entries, present only for a valid `file_templates`
+    /// contribution (task 0312).
+    pub file_templates: Vec<FileTemplateContribution>,
 }
 
 impl DiscoveredPlugin {
@@ -777,6 +781,7 @@ pub fn discover_plugins(directory: &Path) -> Vec<DiscoveredPlugin> {
                         directory,
                         diagnostic: Some(error.to_string()),
                         icon_theme: None,
+                        file_templates: Vec::new(),
                     },
                 },
                 Err(error) => DiscoveredPlugin {
@@ -784,6 +789,7 @@ pub fn discover_plugins(directory: &Path) -> Vec<DiscoveredPlugin> {
                     directory,
                     diagnostic: Some(format!("could not read plugin.toml: {error}")),
                     icon_theme: None,
+                    file_templates: Vec::new(),
                 },
             })
         })
@@ -795,6 +801,35 @@ pub fn discover_plugins(directory: &Path) -> Vec<DiscoveredPlugin> {
 /// `plugin.toml` — an icon-theme contribution runs no code, so this is the only validation gate
 /// it gets.
 fn load_discovered_plugin(manifest: PluginManifest, directory: PathBuf) -> DiscoveredPlugin {
+    let wants_file_templates = manifest.contributions.file_templates;
+    let mut discovered = load_contributions(manifest, directory);
+    if !wants_file_templates || !discovered.is_valid() {
+        return discovered;
+    }
+    match load_file_templates(&discovered.directory) {
+        Ok(templates) => {
+            discovered.file_templates = templates;
+            discovered
+        }
+        Err(diagnostic) => DiscoveredPlugin {
+            manifest: None,
+            directory: discovered.directory,
+            diagnostic: Some(diagnostic),
+            icon_theme: None,
+            file_templates: Vec::new(),
+        },
+    }
+}
+
+/// Reads a plugin's `file-templates.json` (task 0312); a missing or invalid document disables the
+/// plugin with a diagnostic, like an invalid icon theme.
+fn load_file_templates(directory: &Path) -> Result<Vec<FileTemplateContribution>, String> {
+    let source = fs::read_to_string(directory.join(FILE_TEMPLATES_FILE_NAME))
+        .map_err(|error| format!("could not read {FILE_TEMPLATES_FILE_NAME}: {error}"))?;
+    parse_file_templates(&source).map_err(|error| error.to_string())
+}
+
+fn load_contributions(manifest: PluginManifest, directory: PathBuf) -> DiscoveredPlugin {
     if let Some(panel) = &manifest.contributions.spa_panel {
         let safe = resolve_plugin_asset(&directory, &panel.entrypoint)
             .is_some_and(|asset| asset.is_file());
@@ -806,6 +841,7 @@ fn load_discovered_plugin(manifest: PluginManifest, directory: PathBuf) -> Disco
                     "SPA panel entrypoint is missing or escapes the plugin directory".to_owned(),
                 ),
                 icon_theme: None,
+                file_templates: Vec::new(),
             };
         }
     }
@@ -815,6 +851,7 @@ fn load_discovered_plugin(manifest: PluginManifest, directory: PathBuf) -> Disco
             directory,
             diagnostic: None,
             icon_theme: None,
+            file_templates: Vec::new(),
         };
     }
     match load_icon_theme(&directory) {
@@ -823,12 +860,14 @@ fn load_discovered_plugin(manifest: PluginManifest, directory: PathBuf) -> Disco
             directory,
             diagnostic: None,
             icon_theme: Some(icon_theme),
+            file_templates: Vec::new(),
         },
         Err(diagnostic) => DiscoveredPlugin {
             manifest: None,
             directory,
             diagnostic: Some(diagnostic),
             icon_theme: None,
+            file_templates: Vec::new(),
         },
     }
 }
@@ -884,6 +923,45 @@ mod tests {
                 .as_deref()
                 .is_some_and(|diagnostic| diagnostic.contains("invalid plugin manifest"))
         );
+    }
+
+    #[test]
+    fn discovers_a_plugin_with_file_templates_and_disables_an_invalid_document() {
+        let root = tempfile::tempdir().expect("temp directory");
+        let valid = root.path().join("valid");
+        fs::create_dir(&valid).expect("plugin directory");
+        fs::write(
+            valid.join("plugin.toml"),
+            "id='example.templates'\nname='Templates'\nversion='1'\napi_version='1'\ndescription='Templates'\n[contributions]\nfile_templates=true",
+        )
+        .expect("manifest");
+        fs::write(
+            valid.join("file-templates.json"),
+            r##"[{"id":"note","label":"Note","fileName":"note.md","body":"# {name}"}]"##,
+        )
+        .expect("templates");
+        let invalid = root.path().join("invalid");
+        fs::create_dir(&invalid).expect("plugin directory");
+        fs::write(
+            invalid.join("plugin.toml"),
+            "id='example.broken'\nname='Broken'\nversion='1'\napi_version='1'\ndescription='Broken'\n[contributions]\nfile_templates=true",
+        )
+        .expect("manifest");
+        fs::write(invalid.join("file-templates.json"), "[{\"id\":\"x\"}]").expect("templates");
+
+        let discovered = PluginDiscovery::new(root.path()).discover();
+        let valid_plugin = discovered
+            .iter()
+            .find(|plugin| plugin.id() == "example.templates")
+            .expect("valid plugin");
+        assert!(valid_plugin.is_valid());
+        assert_eq!(valid_plugin.file_templates[0].label, "Note");
+        let broken = discovered
+            .iter()
+            .find(|plugin| plugin.directory.ends_with("invalid"))
+            .expect("broken plugin");
+        assert!(!broken.is_valid());
+        assert!(broken.diagnostic.is_some());
     }
 
     #[test]

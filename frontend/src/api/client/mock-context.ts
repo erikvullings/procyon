@@ -218,6 +218,7 @@ export class MockContext {
     terminalCommand: null,
     terminalApps: [{ name: 'Terminal', command: 'Terminal' }],
     fileTemplates: DEFAULT_FILE_TEMPLATES.map((template) => ({ ...template })),
+    templateFolder: null,
     editorCommand: null,
     defaultStartLocations: [],
     favouriteLocations: [],

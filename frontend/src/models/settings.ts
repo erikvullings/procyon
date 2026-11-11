@@ -120,6 +120,20 @@ export interface FileTemplate {
   readonly enabled: boolean;
 }
 
+/** Where an entry offered by "New file from template" comes from (task 0312). */
+export type FileTemplateSource = 'app' | 'folder' | 'plugin';
+
+/** One template offered by "New file from template", across every source (task 0312). */
+export interface FileTemplateEntry {
+  readonly id: string;
+  readonly label: string;
+  readonly fileName: string;
+  readonly body: string;
+  readonly source: FileTemplateSource;
+  /** Folder name for `folder` entries, plugin name for `plugin` entries. */
+  readonly sourceName: string | null;
+}
+
 /** Versioned application-wide settings returned by both backend transports. */
 export interface Settings {
   readonly schemaVersion: number;
@@ -148,6 +162,8 @@ export interface Settings {
   readonly terminalApps: readonly TerminalApp[];
   /** Templates offered by "New file from template" (task 0312). */
   readonly fileTemplates: readonly FileTemplate[];
+  /** Host folder whose text files are also offered as templates (task 0312); `null` disables. */
+  readonly templateFolder: string | null;
   readonly editorCommand: string | null;
   readonly defaultStartLocations: readonly string[];
   readonly favouriteLocations: readonly FavouriteLocation[];

@@ -26,6 +26,7 @@ mod docx_preview;
 mod error;
 mod file_diff;
 mod file_editor;
+mod file_templates;
 mod folder_size;
 mod folder_views;
 mod ftp;

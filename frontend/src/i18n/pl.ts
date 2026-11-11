@@ -399,6 +399,9 @@ export const pl = {
     fileTemplates: 'Szablony plików',
     fileTemplatesHelp:
       'Oferowane przez „Nowy plik z szablonu”. {date} i {name} w treści są uzupełniane podczas tworzenia pliku.',
+    templateFolder: 'Folder szablonów',
+    templateFolderHelp:
+      'Pliki tekstowe z tego folderu są też oferowane w „Nowy plik z szablonu”. Pozostaw puste, aby wyłączyć.',
     templateEnabled: 'Włączony',
     templateLabel: 'Nazwa',
     templateFileName: 'Sugerowana nazwa pliku',
@@ -1183,6 +1186,8 @@ export const pl = {
     empty: 'Nie skonfigurowano aplikacji terminala. Dodaj je w Ustawienia → Terminal.',
   },
   newFromTemplate: {
+    folderSource: 'Katalog',
+    pluginSource: 'Wtyczka',
     title: 'Nowy plik z szablonu',
     empty: 'Brak włączonych szablonów. Dodaj je lub włącz w Ustawienia → Terminal.',
     templates: 'Szablony',

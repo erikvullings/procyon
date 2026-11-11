@@ -5982,6 +5982,7 @@ describe('AppShell', () => {
       terminalCommand: null,
       terminalApps: [],
       fileTemplates: [],
+      templateFolder: null,
       editorCommand: null,
       defaultStartLocations: [],
       favouriteLocations: [],
