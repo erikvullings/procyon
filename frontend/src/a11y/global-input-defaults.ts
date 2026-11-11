@@ -29,12 +29,19 @@ function applyWithin(root: ParentNode): void {
 /**
  * Every text input and textarea in the app, including those rendered by library components,
  * gets `autocomplete`, `autocapitalize`, `autocorrect` off and `spellcheck` false: the browser must
- * not offer saved values, capitalise the first letter or correct commands, paths and queries.
- * An element that sets one of these attributes itself (e.g. a password field) keeps its value.
+ * not offer saved values, capitalise the first letter or correct commands, paths and queries. An
+ * element that sets one of these attributes itself (e.g. a password field) keeps its value.
+ *
+ * `autocapitalize` is also stamped on the document root, so it is *inherited* by every control -
+ * the per-element attribute alone is ignored by some browsers (notably older Safari) for inputs
+ * that don't happen to carry it explicitly, which is what let the first letter of a new folder
+ * name capitalise itself.
+ *
  * Returns a function that stops observing.
  */
 export function installGlobalInputDefaults(root: Document = document): () => void {
   applyWithin(root);
+  root.documentElement.setAttribute('autocapitalize', 'none');
   const observer = new MutationObserver((records) => {
     for (const record of records) {
       for (const added of record.addedNodes) {

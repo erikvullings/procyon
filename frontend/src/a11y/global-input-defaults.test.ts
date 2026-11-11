@@ -15,13 +15,14 @@ describe('installGlobalInputDefaults', () => {
     const existing = document.createElement('input');
     document.body.append(existing);
     stop = installGlobalInputDefaults(document);
+    expect(document.documentElement.getAttribute('autocapitalize')).toBe('none');
     const wrapper = document.createElement('div');
     wrapper.innerHTML = '<input type="search"><textarea></textarea>';
     document.body.append(wrapper);
     await settle();
-    for (const control of [existing, ...wrapper.querySelectorAll('input, textarea')]) {
+    for (const control of [existing, ...wrapper.querySelectorAll('input', 'textarea')]) {
       expect(control.getAttribute('autocomplete')).toBe('off');
-      expect(control.getAttribute('autocapitalize')).toBe('off');
+      expect(control.getAttribute('autocapitalize')).toBe('none');
       expect(control.getAttribute('autocorrect')).toBe('off');
       expect(control.getAttribute('spellcheck')).toBe('false');
     }
@@ -34,7 +35,7 @@ describe('installGlobalInputDefaults', () => {
     await settle();
     const [password, checkbox] = document.querySelectorAll('input');
     expect(password?.getAttribute('autocomplete')).toBe('current-password');
-    expect(password?.getAttribute('autocapitalize')).toBe('off');
+    expect(password?.getAttribute('autocapitalize')).toBe('none');
     expect(checkbox?.hasAttribute('autocomplete')).toBe(false);
   });
 
@@ -44,6 +45,6 @@ describe('installGlobalInputDefaults', () => {
     const input = document.querySelector('input');
     input?.setAttribute('type', 'text');
     await settle();
-    expect(input?.getAttribute('autocapitalize')).toBe('off');
+    expect(input?.getAttribute('autocapitalize')).toBe('none');
   });
 });
