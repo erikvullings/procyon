@@ -900,18 +900,27 @@ export class MockWorkspaceClient implements WorkspaceClient {
   openPptxPreview(request: OpenPptxPreviewRequest, signal?: AbortSignal): Promise<PptxPreview> {
     return this.ctx.perform('openPptxPreview', signal, () => {
       const sessionId = crypto.randomUUID();
-      const pdf = new TextEncoder().encode(
+      const firstPagePdf = new TextEncoder().encode(
         '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n' +
           '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n' +
           '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R>>endobj\n' +
           '4 0 obj<</Length 0>>stream\nendstream\nendobj\ntrailer<</Root 1 0 R>>\n%%EOF\n',
       );
-      this.ctx.pptxSessions.set(sessionId, pdf);
+      const fullDeckPdf = new TextEncoder().encode(
+        '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n' +
+          '2 0 obj<</Type/Pages/Kids[3 0 R 5 0 R 6 0 R]/Count 3>>endobj\n' +
+          '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\n' +
+          '5 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\n' +
+          '6 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\n' +
+          'trailer<</Root 1 0 R>>\n%%EOF\n',
+      );
+      this.ctx.pptxSessions.set(sessionId, fullDeckPdf);
       return {
         sessionId,
         sourceRevision: `mock:${request.location.uri}`,
         sourceBytes: 2048,
-        firstPagePdf: Array.from(pdf),
+        slideCount: 3,
+        firstPagePdf: Array.from(firstPagePdf),
       };
     });
   }

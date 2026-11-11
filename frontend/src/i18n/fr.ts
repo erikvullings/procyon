@@ -755,6 +755,7 @@ export const fr = {
     nextPage: 'Page suivante',
     loadingPage: 'Chargement de la page…',
     loadingChapter: 'Chargement du chapitre…',
+    convertingSlides: 'Conversion des diapositives…',
     chapter: 'Chapitre',
     selectSection: 'Sélectionner une section',
     goToPage: 'Aller à la page',

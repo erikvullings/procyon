@@ -203,6 +203,7 @@ describe('file viewer controller', () => {
       sessionId: 'pptx-session',
       sourceRevision: 'r1',
       sourceBytes: 4096,
+      slideCount: 3,
       firstPagePdf: [37, 80, 68, 70],
     });
     vi.mocked(context.client.readPptxPreviewPdf).mockReturnValue(fullPdf);
@@ -244,6 +245,7 @@ describe('file viewer controller', () => {
       sessionId: 'pptx-session',
       sourceRevision: 'r1',
       sourceBytes: 4096,
+      slideCount: 3,
       firstPagePdf: [37, 80, 68, 70],
     });
     vi.mocked(context.client.readPptxPreviewPdf)
@@ -314,6 +316,7 @@ describe('file viewer controller', () => {
       sessionId: 'pptx-session',
       sourceRevision: 'r1',
       sourceBytes: 1024,
+      slideCount: 3,
       firstPagePdf: [37, 80, 68, 70],
     });
     vi.mocked(context.client.readPptxPreviewPdf).mockRejectedValue(

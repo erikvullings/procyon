@@ -1710,6 +1710,7 @@ describe('HttpFileManagerClient', () => {
         sessionId: 'pptx-session',
         sourceRevision: 'r1',
         sourceBytes: 2048,
+        slideCount: 3,
         firstPagePdf: [37, 80, 68, 70],
       };
       requestOpenPptxPreview.mockResolvedValue({

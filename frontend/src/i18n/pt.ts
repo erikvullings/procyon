@@ -753,6 +753,7 @@ export const pt = {
     nextPage: 'Página seguinte',
     loadingPage: 'A carregar página…',
     loadingChapter: 'A carregar capítulo…',
+    convertingSlides: 'A converter diapositivos…',
     chapter: 'Capítulo',
     selectSection: 'Selecionar secção',
     goToPage: 'Ir para a página',

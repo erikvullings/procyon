@@ -749,6 +749,7 @@ export const pl = {
     nextPage: 'Następna strona',
     loadingPage: 'Wczytywanie strony…',
     loadingChapter: 'Wczytywanie rozdziału…',
+    convertingSlides: 'Konwertowanie diapostywów…',
     chapter: 'Rozdział',
     selectSection: 'Wybierz sekcję',
     goToPage: 'Przejdź do strony',

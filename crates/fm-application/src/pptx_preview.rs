@@ -161,7 +161,7 @@ impl PptxPreviewService {
         if bytes.len() as u64 > MAX_PPTX_SOURCE_BYTES {
             return Err(budget_error("source file size", MAX_PPTX_SOURCE_BYTES));
         }
-        preflight_package(&bytes, &cancellation)?;
+        let slide_count = preflight_package(&bytes, &cancellation)?;
         if cancellation.is_cancelled() {
             return Err(ApplicationError::OperationCancelled);
         }
@@ -206,6 +206,7 @@ impl PptxPreviewService {
             session_id,
             source_revision: revision,
             source_bytes,
+            slide_count,
             first_page_pdf,
         })
     }
@@ -320,15 +321,17 @@ async fn validate_revision(session: &Session) -> Result<(), ApplicationError> {
 fn preflight_package(
     bytes: &[u8],
     cancellation: &CancellationToken,
-) -> Result<(), ApplicationError> {
+) -> Result<usize, ApplicationError> {
     preflight_package_with_expanded_limit(bytes, cancellation, MAX_PPTX_EXPANDED_BYTES)
 }
 
+/// Validates the package against every preview budget and returns the slide count discovered
+/// while scanning, so callers can show the deck size before the full PDF finishes rendering.
 fn preflight_package_with_expanded_limit(
     bytes: &[u8],
     cancellation: &CancellationToken,
     max_expanded_bytes: u64,
-) -> Result<(), ApplicationError> {
+) -> Result<usize, ApplicationError> {
     if bytes.len() as u64 > MAX_PPTX_SOURCE_BYTES {
         return Err(budget_error("source file size", MAX_PPTX_SOURCE_BYTES));
     }
@@ -422,7 +425,7 @@ fn preflight_package_with_expanded_limit(
             }
         }
     }
-    Ok(())
+    Ok(slide_count)
 }
 
 fn raster_image_format(name: &str) -> Option<image::ImageFormat> {
@@ -789,6 +792,20 @@ mod tests {
         ]);
         preflight_package(&bytes, &CancellationToken::new())
             .expect("a deck whose images total under the budget must preview");
+    }
+
+    #[test]
+    fn reports_the_slide_count_discovered_during_preflight() {
+        // Preflight scans `ppt/slides/slide*.xml`; the returned count lets the viewer show the deck
+        // size (and a converting indicator) before the full multi-page PDF finishes rendering.
+        let deck = package(&[
+            ("ppt/slides/slide1.xml", b"<p:sld/>".as_slice()),
+            ("ppt/slides/slide2.xml", b"<p:sld/>".as_slice()),
+            ("ppt/slides/slide3.xml", b"<p:sld/>".as_slice()),
+        ]);
+        let slide_count = preflight_package(&deck, &CancellationToken::new())
+            .expect("a well-formed deck must preview");
+        assert_eq!(slide_count, 3);
     }
 
     #[test]

@@ -197,7 +197,10 @@ const MarkdownPreview: FactoryComponent<MarkdownPreviewAttrs> = () => {
 function pagedContentInfo(
   content: Extract<FileViewerState, { status: 'ready' }>['content'],
 ): { readonly current: number; readonly total: number } | undefined {
-  if (content.kind === 'pdf') return { current: content.currentPage, total: content.pageCount };
+  if (content.kind === 'pdf')
+    // A PowerPoint preview reports the deck size up front (only the first page is loaded at first),
+    // so prefer that over the 1-page first-slide document until the full PDF finishes converting.
+    return { current: content.currentPage, total: content.slideTotal ?? content.pageCount };
   if (content.kind === 'comic')
     return { current: content.currentPage + 1, total: content.pageCount };
   if (content.kind === 'epub')
@@ -1903,6 +1906,13 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                   const pageInfo = pagedContentInfo(state.content);
                   if (pageInfo === undefined) return undefined;
                   return m('.fm-file-viewer-page-controls', [
+                    state.content.kind === 'pdf' && state.content.slidesConverting
+                      ? m(
+                          '.fm-file-viewer-slide-converting[role=status]',
+                          t('viewer', 'convertingSlides'),
+                          m('span.fm-file-viewer-loading-spinner', { 'aria-hidden': 'true' }),
+                        )
+                      : undefined,
                     tooltip(
                       t('viewer', 'previousPage'),
                       m(
@@ -1981,7 +1991,10 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                         {
                           type: 'button',
                           'aria-label': t('viewer', 'nextPage'),
-                          disabled: pageInfo.current >= pageInfo.total,
+                          // Only the first slide is loaded while the rest convert.
+                          disabled:
+                            pageInfo.current >= pageInfo.total ||
+                            (state.content.kind === 'pdf' && state.content.slidesConverting),
                           onclick: attrs.onNextPage,
                         },
                         '▶',

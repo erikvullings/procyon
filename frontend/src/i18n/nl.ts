@@ -753,6 +753,7 @@ export const nl = {
     nextPage: 'Volgende pagina',
     loadingPage: 'Pagina laden…',
     loadingChapter: 'Hoofdstuk laden…',
+    convertingSlides: 'Diapositieven worden geconverteerd…',
     chapter: 'Hoofdstuk',
     selectSection: 'Sectie selecteren',
     goToPage: 'Ga naar pagina',

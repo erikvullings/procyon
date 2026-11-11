@@ -19000,6 +19000,7 @@
           "sessionId",
           "sourceRevision",
           "sourceBytes",
+          "slideCount",
           "firstPagePdf"
         ],
         "properties": {
@@ -19016,6 +19017,11 @@
             "type": "string",
             "format": "uuid",
             "description": "Opaque backend session identifier."
+          },
+          "slideCount": {
+            "type": "integer",
+            "description": "Total slide count discovered during preflight, so the viewer can show the deck size\n(and a converting indicator) before the complete multi-page PDF finishes rendering.",
+            "minimum": 0
           },
           "sourceBytes": {
             "type": "integer",

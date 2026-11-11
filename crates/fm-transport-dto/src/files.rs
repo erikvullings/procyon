@@ -645,6 +645,9 @@ pub struct OpenPptxPreviewResponseDto {
     pub source_revision: String,
     /// Source package bytes at session creation.
     pub source_bytes: u64,
+    /// Total slide count discovered during preflight, so the viewer can show the deck size
+    /// (and a converting indicator) before the complete multi-page PDF finishes rendering.
+    pub slide_count: usize,
     /// Bounded single-page PDF shown while the complete presentation renders.
     pub first_page_pdf: Vec<u8>,
 }

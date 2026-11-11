@@ -760,6 +760,7 @@ export const de = {
     nextPage: 'Nächste Seite',
     loadingPage: 'Seite wird geladen…',
     loadingChapter: 'Kapitel wird geladen…',
+    convertingSlides: 'Folien werden konvertiert…',
     chapter: 'Kapitel',
     selectSection: 'Abschnitt auswählen',
     goToPage: 'Zu Seite springen',

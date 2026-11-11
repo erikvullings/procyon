@@ -745,6 +745,7 @@ export const en = {
     nextPage: 'Next page',
     loadingPage: 'Loading page…',
     loadingChapter: 'Loading chapter…',
+    convertingSlides: 'Converting remaining slides…',
     chapter: 'Chapter',
     selectSection: 'Select section',
     goToPage: 'Go to page',

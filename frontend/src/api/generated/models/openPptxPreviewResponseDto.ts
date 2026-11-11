@@ -15,6 +15,12 @@ export interface OpenPptxPreviewResponseDto {
   /** Opaque backend session identifier. */
   sessionId: string;
   /**
+     * Total slide count discovered during preflight, so the viewer can show the deck size
+     * (and a converting indicator) before the complete multi-page PDF finishes rendering.
+     * @minimum 0
+     */
+  slideCount: number;
+  /**
      * Source package bytes at session creation.
      * @minimum 0
      */

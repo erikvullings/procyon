@@ -751,6 +751,7 @@ export const es = {
     nextPage: 'Página siguiente',
     loadingPage: 'Cargando página…',
     loadingChapter: 'Cargando capítulo…',
+    convertingSlides: 'Convirtiendo diapositivas…',
     chapter: 'Capítulo',
     selectSection: 'Seleccionar sección',
     goToPage: 'Ir a la página',
