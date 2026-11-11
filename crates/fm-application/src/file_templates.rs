@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use fm_settings::Settings;
+use fm_settings::FileTemplate;
 use fm_transport_dto::{FileTemplateEntryDto, FileTemplateSourceDto};
 
 /// Most entries read from the template folder, after sorting by file name.
@@ -13,11 +13,11 @@ const MAX_FOLDER_TEMPLATE_BYTES: u64 = 64 * 1024;
 
 /// Builds the catalog: enabled app templates, then the folder's files, then plugin templates.
 pub(crate) fn catalog(
-    settings: &Settings,
+    file_templates: &[FileTemplate],
+    template_folder: Option<&str>,
     plugin_templates: Vec<FileTemplateEntryDto>,
 ) -> Vec<FileTemplateEntryDto> {
-    let app = settings
-        .file_templates
+    let app = file_templates
         .iter()
         .filter(|template| template.enabled)
         .map(|template| FileTemplateEntryDto {
@@ -28,9 +28,7 @@ pub(crate) fn catalog(
             source: FileTemplateSourceDto::App,
             source_name: None,
         });
-    let folder = settings
-        .template_folder
-        .as_deref()
+    let folder = template_folder
         .map(|folder| folder_templates(&expand_home(folder)))
         .unwrap_or_default();
     app.chain(folder).chain(plugin_templates).collect()
@@ -137,14 +135,10 @@ mod tests {
     fn catalog_orders_app_then_folder_then_plugin_and_skips_disabled_app_templates() {
         let directory = tempfile::tempdir().expect("temp directory");
         std::fs::write(directory.path().join("from-folder.txt"), "F").expect("write");
-        let mut file_templates = Settings::default().file_templates;
+        let mut file_templates = fm_settings::default_file_templates();
         file_templates.truncate(2);
         file_templates[1].enabled = false;
-        let settings = Settings {
-            template_folder: Some(directory.path().to_string_lossy().into_owned()),
-            file_templates,
-            ..Settings::default()
-        };
+        let folder = directory.path().to_string_lossy().into_owned();
         let plugin = FileTemplateEntryDto {
             id: "plugin:example.p:t".into(),
             label: "Plugin".into(),
@@ -154,7 +148,7 @@ mod tests {
             source_name: Some("Example".into()),
         };
 
-        let ids: Vec<String> = catalog(&settings, vec![plugin])
+        let ids: Vec<String> = catalog(&file_templates, Some(&folder), vec![plugin])
             .into_iter()
             .map(|entry| entry.id)
             .collect();

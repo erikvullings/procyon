@@ -2357,12 +2357,16 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     openNewFromTemplate: (location) => {
       shellState.dialogs.openNewFromTemplate(location);
       // The picker lists app, folder and plugin templates; the backend answers with all three.
+      // On failure the picker keeps offering the app templates from settings, and says so.
       void shellState.client.listFileTemplates().then(
         (entries) => {
           shellState.dialogs.setNewFromTemplateEntries(entries);
           m.redraw();
         },
-        () => undefined,
+        (error: unknown) => {
+          console.warn('Loading file templates failed', error);
+          toast({ html: t('newFromTemplate', 'loadFailed') });
+        },
       );
     },
     openFinderTagsDialog: (request) => shellState.dialogs.openFinderTagsDialog(request),

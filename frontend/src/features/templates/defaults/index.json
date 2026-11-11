@@ -1,0 +1,13 @@
+[
+  { "id": "text", "label": "Text file", "fileName": "New file.txt" },
+  { "id": "markdown", "label": "Markdown note", "fileName": "Note.md" },
+  { "id": "meeting", "label": "Meeting note", "fileName": "Meeting.md" },
+  { "id": "todo", "label": "To-do list", "fileName": "TODO.md" },
+  { "id": "shell", "label": "Bash script", "fileName": "script.sh" },
+  { "id": "python", "label": "Python script", "fileName": "script.py" },
+  { "id": "typescript", "label": "TypeScript module", "fileName": "module.ts" },
+  { "id": "csv", "label": "CSV table", "fileName": "data.csv" },
+  { "id": "gitignore", "label": "Git ignore", "fileName": ".gitignore" },
+  { "id": "html", "label": "HTML page", "fileName": "index.html" },
+  { "id": "json", "label": "JSON document", "fileName": "data.json" }
+]

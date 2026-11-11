@@ -53,8 +53,14 @@ small, delightful addition.
   `plugin:<plugin>:<id>`; the picker shows the source as a suffix tag. Picker loads the catalogue
   on open (`dialogs.setNewFromTemplateEntries`), falling back to settings templates. Built-ins
   extended: Meeting note, Python script, TypeScript module, CSV table, Git ignore; "Shell script"
-  relabelled "Bash script" (id unchanged). Frontend `DEFAULT_FILE_TEMPLATES` mirrors `fm-settings`.
+  relabelled "Bash script" (id unchanged). Defaults live in `frontend/src/features/templates/
+  defaults/` (`index.json` + one `<id>.tmpl` body per template), bundled by `fm-settings` and
+  loaded by the frontend via `import.meta.glob` (single source).
   Folder source reads the host's filesystem (desktop: local; server: the server host).
   Tests: Rust (catalog, folder scan, plugin manifest + discovery, settings sanitise), frontend
   (catalogue entries, source tags). Also fixed two pre-existing test breakages from b9d4f3c9
   (`querySelectorAll` selector; stale `autocapitalize` expectation).
+  Review follow-ups: the catalogue takes only templates and folder (no `Settings` clone); filename
+  check is `fm_domain::location::validate_name` in both settings and plugin manifests; a failed
+  catalogue load shows a toast (`newFromTemplate.loadFailed`) and falls back to app templates.
+  Accepted: folder file bodies are readable by any authenticated API client in server mode.

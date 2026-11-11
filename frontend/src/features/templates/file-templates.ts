@@ -1,67 +1,28 @@
 import type { FileTemplate, FileTemplateEntry } from '../../models';
+import defaultIndex from './defaults/index.json' with { type: 'json' };
 
-/** The templates the backend ships until the user edits the list (mirrors `fm-settings`). */
-export const DEFAULT_FILE_TEMPLATES: readonly FileTemplate[] = [
-  { id: 'text', label: 'Text file', fileName: 'New file.txt', body: '', enabled: true },
-  {
-    id: 'markdown',
-    label: 'Markdown note',
-    fileName: 'Note.md',
-    body: '# {name}\n\n{date}\n\n',
-    enabled: true,
-  },
-  {
-    id: 'meeting',
-    label: 'Meeting note',
-    fileName: 'Meeting.md',
-    body: '# Meeting {name}\n\nDate: {date}\n\n## Attendees\n\n- \n\n## Notes\n\n- \n\n## Actions\n\n- [ ] \n',
-    enabled: true,
-  },
-  {
-    id: 'todo',
-    label: 'To-do list',
-    fileName: 'TODO.md',
-    body: '# To do\n\n- [ ] \n- [ ] \n- [ ] \n',
-    enabled: true,
-  },
-  {
-    id: 'shell',
-    label: 'Bash script',
-    fileName: 'script.sh',
-    body: '#!/usr/bin/env bash\nset -euo pipefail\n\n',
-    enabled: true,
-  },
-  {
-    id: 'python',
-    label: 'Python script',
-    fileName: 'script.py',
-    body: '#!/usr/bin/env python3\n"""{name}."""\n\n\ndef main() -> None:\n    pass\n\n\nif __name__ == "__main__":\n    main()\n',
-    enabled: true,
-  },
-  {
-    id: 'typescript',
-    label: 'TypeScript module',
-    fileName: 'module.ts',
-    body: '// {name}\n\nexport {};\n',
-    enabled: true,
-  },
-  { id: 'csv', label: 'CSV table', fileName: 'data.csv', body: 'column1,column2\n', enabled: true },
-  {
-    id: 'gitignore',
-    label: 'Git ignore',
-    fileName: '.gitignore',
-    body: '.DS_Store\n',
-    enabled: true,
-  },
-  {
-    id: 'html',
-    label: 'HTML page',
-    fileName: 'index.html',
-    body: '<!doctype html>\n<html lang="en">\n<head>\n  <meta charset="utf-8">\n  <title>{name}</title>\n</head>\n<body>\n\n</body>\n</html>\n',
-    enabled: true,
-  },
-  { id: 'json', label: 'JSON document', fileName: 'data.json', body: '{\n}\n', enabled: true },
-];
+/** Every bundled body, keyed by its path (`./defaults/<id>.tmpl`), as raw text. */
+const defaultBodies = import.meta.glob<string>('./defaults/*.tmpl', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
+
+function defaultBody(id: string): string {
+  const body = defaultBodies[`./defaults/${id}.tmpl`];
+  if (body === undefined) throw new Error(`Missing default template body for "${id}"`);
+  return body;
+}
+
+/**
+ * The templates the backend ships until the user edits the list. `fm-settings` bundles the same
+ * `defaults/` files, so the two cannot drift.
+ */
+export const DEFAULT_FILE_TEMPLATES: readonly FileTemplate[] = defaultIndex.map((entry) => ({
+  ...entry,
+  body: defaultBody(entry.id),
+  enabled: true,
+}));
 
 /** The templates to offer: enabled ones, in their configured order. */
 export function enabledTemplates(templates: readonly FileTemplate[]): readonly FileTemplate[] {

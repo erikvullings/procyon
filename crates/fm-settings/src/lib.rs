@@ -410,64 +410,86 @@ pub struct FileTemplate {
     pub enabled: bool,
 }
 
+/// Bundled default templates, shared with the frontend, which loads the same files so the two
+/// lists cannot drift. `index.json` lists them in order; each body is `defaults/<id>.tmpl`.
+const DEFAULT_TEMPLATE_INDEX: &str =
+    include_str!("../../../frontend/src/features/templates/defaults/index.json");
+const DEFAULT_TEMPLATE_BODIES: &[(&str, &str)] = &[
+    (
+        "text",
+        include_str!("../../../frontend/src/features/templates/defaults/text.tmpl"),
+    ),
+    (
+        "markdown",
+        include_str!("../../../frontend/src/features/templates/defaults/markdown.tmpl"),
+    ),
+    (
+        "meeting",
+        include_str!("../../../frontend/src/features/templates/defaults/meeting.tmpl"),
+    ),
+    (
+        "todo",
+        include_str!("../../../frontend/src/features/templates/defaults/todo.tmpl"),
+    ),
+    (
+        "shell",
+        include_str!("../../../frontend/src/features/templates/defaults/shell.tmpl"),
+    ),
+    (
+        "python",
+        include_str!("../../../frontend/src/features/templates/defaults/python.tmpl"),
+    ),
+    (
+        "typescript",
+        include_str!("../../../frontend/src/features/templates/defaults/typescript.tmpl"),
+    ),
+    (
+        "csv",
+        include_str!("../../../frontend/src/features/templates/defaults/csv.tmpl"),
+    ),
+    (
+        "gitignore",
+        include_str!("../../../frontend/src/features/templates/defaults/gitignore.tmpl"),
+    ),
+    (
+        "html",
+        include_str!("../../../frontend/src/features/templates/defaults/html.tmpl"),
+    ),
+    (
+        "json",
+        include_str!("../../../frontend/src/features/templates/defaults/json.tmpl"),
+    ),
+];
+
+/// One entry of the bundled `index.json`.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DefaultTemplateEntry {
+    id: String,
+    label: String,
+    file_name: String,
+}
+
 /// The templates offered until the user edits the list.
 #[must_use]
 pub fn default_file_templates() -> Vec<FileTemplate> {
-    let template = |id: &str, label: &str, file_name: &str, body: &str| FileTemplate {
-        id: id.to_owned(),
-        label: label.to_owned(),
-        file_name: file_name.to_owned(),
-        body: body.to_owned(),
-        enabled: true,
-    };
-    vec![
-        template("text", "Text file", "New file.txt", ""),
-        template(
-            "markdown",
-            "Markdown note",
-            "Note.md",
-            "# {name}\n\n{date}\n\n",
-        ),
-        template(
-            "meeting",
-            "Meeting note",
-            "Meeting.md",
-            "# Meeting {name}\n\nDate: {date}\n\n## Attendees\n\n- \n\n## Notes\n\n- \n\n## Actions\n\n- [ ] \n",
-        ),
-        template(
-            "todo",
-            "To-do list",
-            "TODO.md",
-            "# To do\n\n- [ ] \n- [ ] \n- [ ] \n",
-        ),
-        template(
-            "shell",
-            "Bash script",
-            "script.sh",
-            "#!/usr/bin/env bash\nset -euo pipefail\n\n",
-        ),
-        template(
-            "python",
-            "Python script",
-            "script.py",
-            "#!/usr/bin/env python3\n\"\"\"{name}.\"\"\"\n\n\ndef main() -> None:\n    pass\n\n\nif __name__ == \"__main__\":\n    main()\n",
-        ),
-        template(
-            "typescript",
-            "TypeScript module",
-            "module.ts",
-            "// {name}\n\nexport {};\n",
-        ),
-        template("csv", "CSV table", "data.csv", "column1,column2\n"),
-        template("gitignore", "Git ignore", ".gitignore", ".DS_Store\n"),
-        template(
-            "html",
-            "HTML page",
-            "index.html",
-            "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\">\n  <title>{name}</title>\n</head>\n<body>\n\n</body>\n</html>\n",
-        ),
-        template("json", "JSON document", "data.json", "{\n}\n"),
-    ]
+    let entries: Vec<DefaultTemplateEntry> =
+        serde_json::from_str(DEFAULT_TEMPLATE_INDEX).unwrap_or_default();
+    entries
+        .into_iter()
+        .filter_map(|entry| {
+            let (_, body) = DEFAULT_TEMPLATE_BODIES
+                .iter()
+                .find(|(id, _)| *id == entry.id)?;
+            Some(FileTemplate {
+                id: entry.id,
+                label: entry.label,
+                file_name: entry.file_name,
+                body: (*body).to_owned(),
+                enabled: true,
+            })
+        })
+        .collect()
 }
 
 /// Trims the template folder and drops it when blank.
@@ -477,11 +499,6 @@ fn sanitize_template_folder(folder: &mut Option<String>) {
         .map(str::trim)
         .filter(|path| !path.is_empty())
         .map(str::to_owned);
-}
-
-/// Whether `name` is usable as a single new-file name.
-fn valid_template_file_name(name: &str) -> bool {
-    !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\', '\0'])
 }
 
 /// Trims labels and names, drops entries with a blank label, an unusable file name or a duplicate
@@ -509,7 +526,7 @@ fn sanitize_file_templates(templates: &mut Vec<FileTemplate>) {
         }
         if template.id.is_empty()
             || template.label.is_empty()
-            || !valid_template_file_name(&template.file_name)
+            || fm_domain::location::validate_name(&template.file_name).is_err()
             || seen.contains(&template.id)
         {
             return false;
@@ -1525,7 +1542,6 @@ mod tests {
         .expect("write fixture without fileTemplates");
         let loaded = SettingsStore::new(directory.path()).load().expect("load");
         assert_eq!(loaded.settings.file_templates, default_file_templates());
-        assert!(valid_template_file_name("TODO.md"));
     }
 
     #[test]
@@ -1551,6 +1567,20 @@ mod tests {
             })
             .expect("save");
         assert_eq!(store.load().expect("reload").settings.template_folder, None);
+    }
+
+    #[test]
+    fn bundled_default_templates_parse_in_full() {
+        let index: Vec<DefaultTemplateEntry> =
+            serde_json::from_str(DEFAULT_TEMPLATE_INDEX).expect("index.json parses");
+        assert_eq!(index.len(), DEFAULT_TEMPLATE_BODIES.len());
+        assert_eq!(default_file_templates().len(), index.len());
+        assert_eq!(default_file_templates().len(), 11);
+        assert!(
+            default_file_templates()
+                .iter()
+                .all(|template| template.enabled)
+        );
     }
 
     #[test]

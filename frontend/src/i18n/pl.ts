@@ -1188,6 +1188,7 @@ export const pl = {
   newFromTemplate: {
     folderSource: 'Katalog',
     pluginSource: 'Wtyczka',
+    loadFailed: 'Nie udało się wczytać listy szablonów. Wyświetlono tylko szablony aplikacji.',
     title: 'Nowy plik z szablonu',
     empty: 'Brak włączonych szablonów. Dodaj je lub włącz w Ustawienia → Terminal.',
     templates: 'Szablony',

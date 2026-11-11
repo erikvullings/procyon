@@ -3326,12 +3326,21 @@ impl FileManagerService {
     /// Templates for "New file from template" across app, folder and plugin sources (task 0312).
     #[must_use]
     pub fn list_file_templates(&self) -> Vec<fm_transport_dto::FileTemplateEntryDto> {
-        let settings = self
-            .settings
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .clone();
-        crate::file_templates::catalog(&settings, self.plugin_manager.plugin_file_templates())
+        let (file_templates, template_folder) = {
+            let settings = self
+                .settings
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            (
+                settings.file_templates.clone(),
+                settings.template_folder.clone(),
+            )
+        };
+        crate::file_templates::catalog(
+            &file_templates,
+            template_folder.as_deref(),
+            self.plugin_manager.plugin_file_templates(),
+        )
     }
 
     /// Lists discovered plugins, retaining malformed manifests as disabled records.

@@ -1562,6 +1562,7 @@ export const en = {
   newFromTemplate: {
     folderSource: 'Folder',
     pluginSource: 'Plugin',
+    loadFailed: 'Could not load the template list. Only the app templates are shown.',
     title: 'New File from Template',
     empty: 'No templates are enabled. Add or enable them under Settings → Terminal.',
     templates: 'Templates',

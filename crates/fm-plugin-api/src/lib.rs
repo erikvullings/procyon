@@ -533,13 +533,9 @@ pub fn parse_file_templates(
     let mut seen: Vec<&str> = Vec::new();
     for template in &templates {
         let id = template.id.trim();
-        let name = template.file_name.as_str();
-        let unsafe_name = name.trim().is_empty()
-            || matches!(name, "." | "..")
-            || name.contains(['/', '\\', '\0']);
         if id.is_empty()
             || template.label.trim().is_empty()
-            || unsafe_name
+            || fm_domain::location::validate_name(&template.file_name).is_err()
             || seen.contains(&id)
             || template.body.chars().count() > MAX_PLUGIN_TEMPLATE_BODY_CHARS
         {

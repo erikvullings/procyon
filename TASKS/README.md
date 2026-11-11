@@ -559,3 +559,4 @@ subtask block (0299–0303) and the earlier corpus-themes follow-ups.
   the filter and type-to-select; done, global in-memory, commit 0c11dd11)*
 - [x] 0319 Compact window toolbar *(frontend + settings — overflow menu, `compactToolbar` setting, sync-browsing on/off icons)*
 - [x] 0320 Archives inside archives *(backend + frontend — browse/read nested archives, zero-copy for stored ZIPs, edit one level deep with a save/discard prompt)*
+- [ ] 0321 LLM-assisted file creation *(backend + frontend, low — "New file with assistant…" drafts a file from a prompt via the configured LLM profile into an unsaved F4 buffer, chat in the F12 drawer; nothing hits disk without save)*

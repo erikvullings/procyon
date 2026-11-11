@@ -914,7 +914,7 @@
   white-space: pre-wrap;
   word-break: break-word;
   font-family: var(--fm-font-mono);
-  font-size: 0.85rem;
+  font-size: var(--fm-type-label);
   line-height: 1.4;
   color: var(--fm-text-secondary);
   background: var(--fm-surface-muted);

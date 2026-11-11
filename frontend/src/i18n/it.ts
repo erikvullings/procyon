@@ -1187,6 +1187,8 @@ export const it = {
   newFromTemplate: {
     folderSource: 'Cartella',
     pluginSource: 'Estensione',
+    loadFailed:
+      'Impossibile caricare l’elenco dei modelli. Vengono mostrati solo i modelli dell’app.',
     title: 'Nuovo file da modello',
     empty: 'Nessun modello attivato. Aggiungili o attivali in Impostazioni → Terminale.',
     templates: 'Modelli',

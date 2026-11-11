@@ -1192,6 +1192,8 @@ export const pt = {
   newFromTemplate: {
     folderSource: 'Pasta',
     pluginSource: 'Extensão',
+    loadFailed:
+      'Não foi possível carregar a lista de modelos. São mostrados apenas os modelos da aplicação.',
     title: 'Novo ficheiro a partir de modelo',
     empty: 'Nenhum modelo ativado. Adicione-os ou ative-os em Definições → Terminal.',
     templates: 'Modelos',

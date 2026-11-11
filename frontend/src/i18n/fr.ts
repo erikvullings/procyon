@@ -1193,6 +1193,8 @@ export const fr = {
   newFromTemplate: {
     folderSource: 'Dossier',
     pluginSource: 'Extension',
+    loadFailed:
+      'Impossible de charger la liste des modèles. Seuls les modèles de l’application sont affichés.',
     title: 'Nouveau fichier depuis un modèle',
     empty: 'Aucun modèle activé. Ajoutez-les ou activez-les dans Réglages → Terminal.',
     templates: 'Modèles',

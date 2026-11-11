@@ -1587,6 +1587,8 @@ export const nl = {
   newFromTemplate: {
     folderSource: 'Map',
     pluginSource: 'Plug-in',
+    loadFailed:
+      'De lijst met sjablonen kon niet worden geladen. Alleen de app-sjablonen worden getoond.',
     title: 'Nieuw bestand uit sjabloon',
     empty: 'Geen sjablonen ingeschakeld. Voeg ze toe of schakel ze in via Instellingen → Terminal.',
     templates: 'Sjablonen',

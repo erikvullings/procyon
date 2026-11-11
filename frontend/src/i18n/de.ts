@@ -1207,6 +1207,8 @@ export const de = {
   newFromTemplate: {
     folderSource: 'Ordner',
     pluginSource: 'Erweiterung',
+    loadFailed:
+      'Die Vorlagenliste konnte nicht geladen werden. Es werden nur die App-Vorlagen angezeigt.',
     title: 'Neue Datei aus Vorlage',
     empty:
       'Keine Vorlagen aktiviert. Fügen Sie sie unter Einstellungen → Terminal hinzu oder aktivieren Sie sie.',

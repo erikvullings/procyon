@@ -1191,6 +1191,8 @@ export const es = {
   newFromTemplate: {
     folderSource: 'Carpeta',
     pluginSource: 'Complemento',
+    loadFailed:
+      'No se pudo cargar la lista de plantillas. Solo se muestran las plantillas de la aplicación.',
     title: 'Nuevo archivo desde plantilla',
     empty: 'No hay plantillas activadas. Añádalas o actívelas en Ajustes → Terminal.',
     templates: 'Plantillas',
