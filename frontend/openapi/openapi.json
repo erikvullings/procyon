@@ -2040,6 +2040,85 @@
         }
       }
     },
+    "/api/v1/file-assistant/reply": {
+      "post": {
+        "summary": "Drafts the next reply of a file-assistant conversation through a saved LLM profile.",
+        "operationId": "draftFileAssistantReply",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileAssistantRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileAssistantReplyDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/file-assistant/reply/cancel": {
+      "post": {
+        "summary": "Cancels one running file-assistant reply.",
+        "operationId": "cancelFileAssistantReply",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelFileAssistantRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v1/file-diff": {
       "post": {
         "summary": "Diffs two files read-only: a line diff for text, the first differing offset for binary files\n(task 0256).",
@@ -10123,6 +10202,20 @@
           "fileCount": 42
         }
       },
+      "CancelFileAssistantRequestDto": {
+        "type": "object",
+        "description": "Requests cancellation of one running file-assistant request.",
+        "required": [
+          "requestId"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identity supplied when the request was started."
+          }
+        }
+      },
       "CancelKnowledgeAnswerRequestDto": {
         "type": "object",
         "description": "Requests cancellation of one running knowledge answer generation.",
@@ -13516,6 +13609,89 @@
             "description": "Provider-neutral location target."
           }
         }
+      },
+      "FileAssistantMessageDto": {
+        "type": "object",
+        "description": "One chat message in a file-assistant conversation.",
+        "required": [
+          "role",
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "Message text."
+          },
+          "role": {
+            "$ref": "#/components/schemas/FileAssistantRoleDto",
+            "description": "Author of the message."
+          }
+        }
+      },
+      "FileAssistantReplyDto": {
+        "type": "object",
+        "description": "The model's reply, with the file contents already unwrapped from any single code fence.",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Reply text, to be placed in the editor when the person accepts it."
+          }
+        }
+      },
+      "FileAssistantRequestDto": {
+        "type": "object",
+        "description": "Asks the file assistant for the next reply in a conversation.",
+        "required": [
+          "requestId",
+          "profileId",
+          "fileName",
+          "messages"
+        ],
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "description": "Name of the file being written. Only the name is sent to the model, never its contents."
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileAssistantMessageDto"
+            },
+            "description": "The conversation so far, ending with the person's latest message."
+          },
+          "profileId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Saved LLM profile that generates the reply."
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identity used to cancel this request."
+          }
+        },
+        "example": {
+          "requestId": "5b1b6b1e-9b1b-4b1b-8b1b-1b1b1b1b1b1b",
+          "profileId": "5b1b6b1e-9b1b-4b1b-8b1b-1b1b1b1b1b1c",
+          "fileName": "backup.sh",
+          "messages": [
+            {
+              "role": "user",
+              "content": "A script that archives ~/notes into a dated tarball"
+            }
+          ]
+        }
+      },
+      "FileAssistantRoleDto": {
+        "type": "string",
+        "description": "Who wrote one chat message.",
+        "enum": [
+          "user",
+          "assistant"
+        ]
       },
       "FileDiffOutcomeDto": {
         "type": "string",

@@ -2763,6 +2763,28 @@ pub(crate) fn list_file_templates(
     state.service.list_file_templates()
 }
 
+/// Drafts the next file-assistant reply through a saved LLM profile (task 0321).
+#[tauri::command]
+pub(crate) async fn draft_file_assistant_reply(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::FileAssistantRequestDto,
+) -> Result<fm_transport_dto::FileAssistantReplyDto, ApplicationErrorDto> {
+    state
+        .service
+        .draft_file_assistant_reply(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Cancels one running file-assistant reply.
+#[tauri::command]
+pub(crate) fn cancel_file_assistant_reply(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::CancelFileAssistantRequestDto,
+) {
+    state.service.cancel_file_assistant_reply(request);
+}
+
 /// Lists plugins through the shared discovery service.
 #[tauri::command]
 pub(crate) fn list_plugins(state: State<'_, AppState>) -> Vec<PluginDescriptorDto> {

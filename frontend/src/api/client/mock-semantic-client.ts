@@ -23,6 +23,8 @@ import type {
   ExecuteKnowledgeSearchRequest,
   ExportCorpusThemesRequest,
   ExportCorpusThemesResponse,
+  FileAssistantReply,
+  FileAssistantRequest,
   GenerateDocumentSummaryRequest,
   GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
@@ -1162,6 +1164,20 @@ export class MockSemanticClient implements SemanticClient {
         },
       ];
     });
+  }
+
+  draftFileAssistantReply(
+    request: FileAssistantRequest,
+    signal?: AbortSignal,
+  ): Promise<FileAssistantReply> {
+    return this.ctx.perform('draftFileAssistantReply', signal, () => {
+      const prompt = request.messages.at(-1)?.content ?? '';
+      return { text: `# ${request.fileName}\n\n${prompt}\n` };
+    });
+  }
+
+  cancelFileAssistantReply(_requestId: string): Promise<void> {
+    return Promise.resolve();
   }
 
   listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {

@@ -20,6 +20,7 @@ import type {
   BeginOneDriveAuthorizationResponseDto,
   CalculateFolderSizeRequestDto,
   CalculateFolderSizeResponseDto,
+  CancelFileAssistantRequestDto,
   CancelKnowledgeAnswerRequestDto,
   CancelKnowledgeSearchRequestDto,
   CheckpointSemanticModelMigrationRequestDto,
@@ -64,6 +65,8 @@ import type {
   ExportCorpusThemesRequestDto,
   ExportCorpusThemesResponseDto,
   ExportSemanticVocabularyResponseDto,
+  FileAssistantReplyDto,
+  FileAssistantRequestDto,
   FileTemplateEntryDto,
   FindLinkReplacementsRequestDto,
   FindLinkReplacementsResponseDto,
@@ -2741,6 +2744,123 @@ export const subscribeEvents = async ( options?: Parameters<typeof fetchMutator>
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type draftFileAssistantReplyResponse200 = {
+  data: FileAssistantReplyDto
+  status: 200
+}
+
+export type draftFileAssistantReplyResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type draftFileAssistantReplyResponse500 = {
+  data: ApplicationErrorDto
+  status: 500
+}
+
+export type draftFileAssistantReplyResponse503 = {
+  data: ApplicationErrorDto
+  status: 503
+}
+
+export type draftFileAssistantReplyResponseSuccess = (draftFileAssistantReplyResponse200) & {
+  headers: Headers;
+};
+export type draftFileAssistantReplyResponseError = (draftFileAssistantReplyResponse400 | draftFileAssistantReplyResponse500 | draftFileAssistantReplyResponse503) & {
+  headers: Headers;
+};
+
+export type draftFileAssistantReplyResponse = (draftFileAssistantReplyResponseSuccess | draftFileAssistantReplyResponseError)
+
+export const getDraftFileAssistantReplyUrl = () => {
+
+
+
+
+  return `/api/v1/file-assistant/reply`
+}
+
+/**
+ * @summary Drafts the next reply of a file-assistant conversation through a saved LLM profile.
+ */
+export const draftFileAssistantReply = async (fileAssistantRequestDto: FileAssistantRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<draftFileAssistantReplyResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<draftFileAssistantReplyResponse>(getDraftFileAssistantReplyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(fileAssistantRequestDto)
+  }
+);}
+
+
+
+export type cancelFileAssistantReplyResponse204 = {
+  data: void
+  status: 204
+}
+
+export type cancelFileAssistantReplyResponseSuccess = (cancelFileAssistantReplyResponse204) & {
+  headers: Headers;
+};
+;
+
+export type cancelFileAssistantReplyResponse = (cancelFileAssistantReplyResponseSuccess)
+
+export const getCancelFileAssistantReplyUrl = () => {
+
+
+
+
+  return `/api/v1/file-assistant/reply/cancel`
+}
+
+/**
+ * @summary Cancels one running file-assistant reply.
+ */
+export const cancelFileAssistantReply = async (cancelFileAssistantRequestDto: CancelFileAssistantRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<cancelFileAssistantReplyResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<cancelFileAssistantReplyResponse>(getCancelFileAssistantReplyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(cancelFileAssistantRequestDto)
   }
 );}
 

@@ -58,6 +58,8 @@ import type {
   ExecuteKnowledgeSearchRequest,
   ExportCorpusThemesRequest,
   ExportCorpusThemesResponse,
+  FileAssistantReply,
+  FileAssistantRequest,
   FileDiffOptions,
   FileDiffResult,
   FileRangeChunk,
@@ -1119,6 +1121,17 @@ export class MockFileManagerClient implements FileManagerClient {
   listLlmProfilePresets(signal?: AbortSignal): Promise<LlmProfilePreset[]> {
     return this.semanticClient.listLlmProfilePresets(signal);
   }
+  draftFileAssistantReply(
+    request: FileAssistantRequest,
+    signal?: AbortSignal,
+  ): Promise<FileAssistantReply> {
+    return this.semanticClient.draftFileAssistantReply(request, signal);
+  }
+
+  cancelFileAssistantReply(requestId: string): Promise<void> {
+    return this.semanticClient.cancelFileAssistantReply(requestId);
+  }
+
   listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {
     return this.semanticClient.listLlmProfiles(signal);
   }

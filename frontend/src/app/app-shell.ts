@@ -229,6 +229,7 @@ import {
 import type { RuntimeKind } from '../utilities/runtime';
 import { createWindowTitleSink, dedupeWindowTitleSink } from '../utilities/window-title-sink';
 import { createActionsWiring } from './actions-wiring';
+import { createAssistantWiring } from './assistant-wiring';
 import { createBasketWiring } from './basket-wiring';
 import { buildControllers } from './controller-registry';
 import { createDialogWiring } from './dialogs-wiring';
@@ -275,6 +276,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
   let actionsWiring: ReturnType<typeof createActionsWiring>;
   let previewWiring: ReturnType<typeof createPreviewWiring>;
   let knowledgeWiring: ReturnType<typeof createKnowledgeWiring>;
+  let assistantWiring: ReturnType<typeof createAssistantWiring>;
   let treeWiring: ReturnType<typeof createTreeWiring>;
   let settingsWiring: ReturnType<typeof createSettingsWiring>;
   let miscWiring: ReturnType<typeof createMiscWiring>;
@@ -349,6 +351,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
   actionsWiring = createActionsWiring(shellState);
   previewWiring = createPreviewWiring(shellState, core);
   knowledgeWiring = createKnowledgeWiring(shellState, core);
+  assistantWiring = createAssistantWiring(shellState, core);
   treeWiring = createTreeWiring(shellState, core);
   settingsWiring = createSettingsWiring(shellState, core);
   miscWiring = createMiscWiring(shellState, core);
@@ -1056,6 +1059,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     }
     shellState.knowledgeSearchByTab.delete(key);
     shellState.themesByTab.delete(key);
+    assistantWiring.forget(shellState.client, key);
     shellState.navigation.abort(paneId, tabId);
     shellState.directories.delete(key);
     shellState.selections.delete(key);
@@ -1120,6 +1124,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       themesTab.key = targetKey;
       themesTab.paneId = targetPaneId;
       shellState.themesByTab.set(targetKey, themesTab);
+    }
+    const assistantTab = shellState.assistantByTab.get(sourceKey);
+    if (assistantTab !== undefined) {
+      shellState.assistantByTab.delete(sourceKey);
+      assistantTab.key = targetKey;
+      assistantTab.paneId = targetPaneId;
+      shellState.assistantByTab.set(targetKey, assistantTab);
     }
     shellState.navigation.moveTab(sourcePaneId, targetPaneId, tabId);
     const quickFilterDraft = shellState.appState?.quickFilterDrafts.byTabKey[sourceKey];
@@ -2077,6 +2088,21 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         }
       }
       for (const [key, entry] of movedThemes) shellState.themesByTab.set(key, entry);
+      const movedAssistant = [
+        ...[paneA, paneB].flatMap((pane, index) => {
+          const paneId = index === 0 ? paneAId : paneBId;
+          const otherPaneId = index === 0 ? paneBId : paneAId;
+          return pane.tabOrder.flatMap((tabId) => {
+            const entry = shellState.assistantByTab.get(tabKey(paneId, tabId));
+            if (entry === undefined) return [];
+            shellState.assistantByTab.delete(entry.key);
+            entry.key = tabKey(otherPaneId, tabId);
+            entry.paneId = otherPaneId;
+            return [entry] as const;
+          });
+        }),
+      ];
+      for (const entry of movedAssistant) shellState.assistantByTab.set(entry.key, entry);
       // No backend command swaps a whole tab set atomically (task 0128 Agent Notes) - this
       // mutates the local projection directly, the same optimistic-update pattern
       // `activateTab` uses, rather than round-tripping through `dispatchWorkspaceCommand`.
@@ -2450,6 +2476,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     getImageMapPane: imageMapWiring.imageMapPane,
     getKnowledgeSearchByTab: () => shellState.knowledgeSearchByTab,
     getThemesByTab: () => shellState.themesByTab,
+    getAssistantByTab: () => shellState.assistantByTab,
+    openAssistant: (paneId) => void assistantWiring.openAssistant(paneId),
+    assistantActions: {
+      send: (key, draft) => void assistantWiring.send(shellState.client, key, draft),
+      stop: (key) => assistantWiring.stop(shellState.client, key),
+      insert: (key, index) => assistantWiring.insert(key, index),
+      setProfile: (key, profileId) => assistantWiring.setProfile(key, profileId),
+    },
     getKnowledgeAnswerRevision: () => shellState.knowledgeAnswerRevision,
     setConnections: (conns) => {
       shellState.connections = conns;

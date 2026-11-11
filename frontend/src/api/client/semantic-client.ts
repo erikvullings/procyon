@@ -23,6 +23,8 @@ import type {
   ExecuteKnowledgeSearchRequest,
   ExportCorpusThemesRequest,
   ExportCorpusThemesResponse,
+  FileAssistantReply,
+  FileAssistantRequest,
   GenerateDocumentSummaryRequest,
   GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
@@ -314,6 +316,15 @@ export interface SemanticClient {
   listLlmProfilePresets(signal?: AbortSignal): Promise<LlmProfilePreset[]>;
 
   listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]>;
+
+  /** Drafts the next reply of a file-assistant chat through a saved profile (task 0321). */
+  draftFileAssistantReply(
+    request: FileAssistantRequest,
+    signal?: AbortSignal,
+  ): Promise<FileAssistantReply>;
+
+  /** Stops a running file-assistant reply. A reply that was already returned is unaffected. */
+  cancelFileAssistantReply(requestId: string): Promise<void>;
 
   listSavedRagConversations(
     workspaceId: WorkspaceId,

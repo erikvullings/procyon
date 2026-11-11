@@ -24,6 +24,7 @@ mod document_conversion;
 pub mod document_summary;
 mod docx_preview;
 mod error;
+mod file_assistant;
 mod file_diff;
 mod file_editor;
 mod file_templates;

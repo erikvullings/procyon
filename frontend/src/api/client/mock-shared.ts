@@ -218,6 +218,7 @@ export type MockClientMethod =
   | 'findLinkReplacements'
   | 'listLlmProfilePresets'
   | 'listLlmProfiles'
+  | 'draftFileAssistantReply'
   | 'createLlmProfile'
   | 'updateLlmProfile'
   | 'deleteLlmProfile'

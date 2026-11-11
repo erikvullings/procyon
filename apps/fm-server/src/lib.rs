@@ -409,6 +409,12 @@ fn api_router() -> OpenApiRouter<AppState> {
             routes::knowledge::cancel_knowledge_search
         ))
         .routes(utoipa_axum::routes!(
+            routes::file_assistant::draft_file_assistant_reply
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::file_assistant::cancel_file_assistant_reply
+        ))
+        .routes(utoipa_axum::routes!(
             routes::knowledge::resolve_knowledge_source
         ))
         .routes(utoipa_axum::routes!(

@@ -15,6 +15,7 @@ import type { Theme } from 'mithril-materialized';
 
 import type { FileManagerClient } from '../api/client/file-manager-client';
 import type { ActionCommandController } from '../features/actions/action-command-controller';
+import type { AssistantTabEntry } from '../features/assistant/assistant-tab-state';
 import type { ChangeAttributesRequest } from '../features/attributes/change-attributes-dialog';
 import type { ChecksumController } from '../features/checksums/checksum-controller';
 import type { ChecksumState, DuplicateState } from '../features/checksums/checksum-state';
@@ -355,6 +356,8 @@ export function createShellState(client: FileManagerClient) {
     knowledgeSearchByTab: new Map<string, KnowledgeSearchTabEntry>(),
     themesByTab: new Map<string, ThemesTabEntry>(),
     themesOpening: false,
+    assistantByTab: new Map<string, AssistantTabEntry>(),
+    assistantOpening: false,
     knowledgeSearchOpening: false,
     editorByPane: new Map<
       PaneId,

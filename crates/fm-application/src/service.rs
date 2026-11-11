@@ -230,6 +230,7 @@ pub struct FileManagerService {
     workspaces: WorkspaceService<JsonFileWorkspaceRepository>,
     connections: ConnectionFacade,
     llm_profiles: LlmProfileService,
+    file_assistant: crate::file_assistant::FileAssistantService,
     onedrive: crate::onedrive::OneDriveAuthorizationService<JsonFileConnectionRepository>,
     remote_terminals: RemoteTerminalService,
     directories: DirectoryService,
@@ -617,6 +618,7 @@ impl FileManagerService {
             )),
             connections: ConnectionFacade::new(connection_service, ssh_connections),
             llm_profiles,
+            file_assistant: crate::file_assistant::FileAssistantService::default(),
             onedrive,
             remote_terminals,
             directories,
@@ -3341,6 +3343,26 @@ impl FileManagerService {
             template_folder.as_deref(),
             self.plugin_manager.plugin_file_templates(),
         )
+    }
+
+    /// Drafts the next file-assistant reply through a saved LLM profile (task 0321). The reply is
+    /// returned to the caller; nothing is written to disk here.
+    pub async fn draft_file_assistant_reply(
+        &self,
+        request: fm_transport_dto::FileAssistantRequestDto,
+    ) -> Result<fm_transport_dto::FileAssistantReplyDto, ApplicationError> {
+        self.file_assistant
+            .reply(&self.llm_profiles, request)
+            .await
+            .map_err(crate::file_assistant::error_to_application)
+    }
+
+    /// Cancels one running file-assistant reply. Returns whether it was still running.
+    pub fn cancel_file_assistant_reply(
+        &self,
+        request: fm_transport_dto::CancelFileAssistantRequestDto,
+    ) -> bool {
+        self.file_assistant.cancel(request.request_id)
     }
 
     /// Lists discovered plugins, retaining malformed manifests as disabled records.

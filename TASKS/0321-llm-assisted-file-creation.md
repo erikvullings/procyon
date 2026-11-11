@@ -1,6 +1,6 @@
-# 0321 LLM-assisted file creation (draft a new file from a prompt)
+# 0321 LLM-assisted file creation (chat that drafts a file)
 
-Status: planned
+Status: in_progress (v1 implemented; see Agent Notes for what is missing)
 Priority: low
 Subsystem: backend + frontend
 Depends on: 0184, 0186, 0126, 0086, 0099, 0312, 0045
@@ -11,39 +11,42 @@ backs up ~/notes to a dated tarball". The configured OpenAI-compatible LLM profi
 RAG uses) can draft it. The draft must never reach disk without the user reviewing it.
 
 ## Acceptance Criteria
-- Entry point: "New file with assistant…" in the New-from-template dialog and the palette. It opens
-  an "Assistant" tab in the F12 terminal drawer (0126) for the current folder.
-- The user types a prompt and an optional file name. The model streams a draft into a new,
-  unsaved buffer in the F4 editor (0086/0099). The chat tab shows progress and the profile in use.
-- Nothing is written to disk by the assistant. Saving uses the ordinary create-file operation
-  (never overwrites; conflict flow 0045). Discarding the buffer leaves no file.
-- No file contents from disk are sent. Only the prompt and the chosen folder name go to the model.
-- The header shows the profile name and its endpoint locality (`LlmEndpointLocalityDto`). The first
-  use of a remote profile asks the user to confirm that prompts leave the machine.
-- No profile configured: the action stays visible but disabled, with a hint that links to LLM
-  settings. Nothing is called.
-- Stop cancels the stream. Output is capped (64 KiB, the template body limit) and the request has a
-  timeout. If the whole reply is one fenced code block, the fence lines are removed.
-- Cross-host parity: browser and Tauri hosts behave the same. Provider calls happen only in the Rust
-  backend; the frontend never talks to the LLM endpoint.
+- From the editor of a file, an "Assistant" button opens a chat in a new tab of the opposite pane.
+  If the editor is in the left pane, the chat opens in the right pane, and vice versa.
+- The person writes messages; the reply is shown in the chat. "Use in editor" places the reply
+  into the editor of the source pane. Nothing is written to disk by the assistant; saving uses the
+  editor's normal save (conflict flow 0045).
+- Only the file's name and the chat go to the model. The file's contents are never sent.
+- Profile: the chat has a profile picker, defaulting to the first saved profile (as RAG does).
+  No profile: the chat says so and sends nothing.
+- Stop cancels the request. A reply that arrives after Stop is discarded.
+- The reply is capped at 64 KiB and a single fenced code block is unwrapped.
+- Cross-host parity: browser and Tauri hosts use the same backend call. Provider calls happen only
+  in the Rust backend; the frontend never talks to the LLM endpoint.
 
 ## Out of scope (v1)
-- Multi-turn refinement, editing an existing file, attaching files or folders as context, tool use.
-  Attaching the current file is a natural v2 with its own privacy prompt.
+- Streaming (the reply arrives whole), multi-turn refinement of an existing file's contents,
+  attaching the current file as context, tool use, and an entry point in the New-from-template
+  picker (the assistant is reached from an open editor only).
 
 ## Implementation Notes
-- Backend: a new `fm-application` capability service (e.g. `file_assist`) that resolves the active
-  profile and reuses the streaming chat path in `llm_profiles.rs` (`stream_chat`, which already takes
-  a `CancellationToken`). Keep `FileManagerService` a thin delegate (CLAUDE.md).
-- Transport: a streaming endpoint (SSE in `fm-server`, a channel in Tauri), like the other long-running
-  jobs. DTOs in `fm-transport-dto`; regenerate OpenAPI and the Orval client.
-- Frontend: the drawer gets an Assistant tab; the editor opens the draft as an unsaved buffer.
-  The state lives in the Meiosis tree, not in the component.
+- Backend: `fm-application/src/file_assistant.rs` (`FileAssistantService`): validates the request,
+  builds the prompts, calls `LlmProfileService::generate` (which enforces endpoint policy and cloud
+  consent), unwraps a single fence, and keeps a cancellation registry keyed by request id.
+- Transport: `POST /api/v1/file-assistant/reply` and `.../reply/cancel` in `fm-server`; Tauri
+  commands `draft_file_assistant_reply` and `cancel_file_assistant_reply`. DTOs in
+  `fm-transport-dto/src/file_assistant.rs`. OpenAPI and the Orval client regenerated.
+- Frontend: `SemanticClient` methods on all adapters; the chat is a tab keyed like the Themes tab
+  (`shellState.assistantByTab`), opened by `app/assistant-wiring.ts` through the workspace's
+  `addTransientTab` command in the opposite pane. The editor header gets the button.
 
 ## Open questions
-1. Chat in the drawer (proposed) or a docked side panel next to the editor?
-2. Confirm-on-first-use for remote profiles, or a per-profile "allow prompts to leave this machine"
-   setting?
+1. Remote profiles: the backend refuses cloud endpoints without prior consent, but the chat only
+   shows a generic failure. A first-use prompt that names the host is still missing.
+2. Streaming replies and Stop mid-stream (v1 is whole-reply, so Stop discards the reply).
 
 ## Agent Notes
 - 2026-11-11 claude: Drafted from the discussion; not started.
+- 2026-11-11 claude: v1 implemented as the spec's AC describe, with these deviations: whole reply
+  instead of streaming; the chat is a tab in the other pane (not the F12 drawer), as requested;
+  no picker entry point yet; consent failures show the generic "could not reply" message.

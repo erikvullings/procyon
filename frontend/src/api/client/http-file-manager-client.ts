@@ -59,6 +59,8 @@ import type {
   ExecuteKnowledgeSearchRequest,
   ExportCorpusThemesRequest,
   ExportCorpusThemesResponse,
+  FileAssistantReply,
+  FileAssistantRequest,
   FileDiffOptions,
   FileDiffResult,
   Location as FileLocation,
@@ -300,6 +302,8 @@ import {
   getDuplicateScan as requestDuplicateScanGet,
   startDuplicateScan as requestDuplicateScanStart,
   getEntryMetadata as requestEntryMetadata,
+  cancelFileAssistantReply as requestFileAssistantCancel,
+  draftFileAssistantReply as requestFileAssistantReply,
   getFileIcon as requestFileIcon,
   listFileTemplates as requestFileTemplates,
   getFinderTags as requestFinderTags,
@@ -2709,6 +2713,32 @@ export class HttpFileManagerClient implements FileManagerClient {
     if (response.status !== 200)
       throw unexpectedResponseError('listLlmProfilePresets', response.status);
     return response.data;
+  }
+
+  async draftFileAssistantReply(
+    request: FileAssistantRequest,
+    signal?: AbortSignal,
+  ): Promise<FileAssistantReply> {
+    const response = await requestFileAssistantReply(
+      {
+        requestId: request.requestId,
+        profileId: request.profileId,
+        fileName: request.fileName,
+        messages: request.messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+        })),
+      },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw unexpectedResponseError('draftFileAssistantReply', response.status);
+    }
+    return response.data;
+  }
+
+  async cancelFileAssistantReply(requestId: string): Promise<void> {
+    await requestFileAssistantCancel({ requestId });
   }
 
   async listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {

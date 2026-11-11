@@ -17,6 +17,7 @@ pub mod disk_usage;
 pub mod document_summary;
 pub mod entry;
 pub mod error;
+pub mod file_assistant;
 pub mod file_diff;
 pub mod files;
 pub mod finder_tags;
@@ -117,6 +118,10 @@ pub use entry::{
     MediaMetadataDto, OwnershipInfoDto, PermissionsInfoDto,
 };
 pub use error::{ApplicationErrorCode, ApplicationErrorDto};
+pub use file_assistant::{
+    CancelFileAssistantRequestDto, FileAssistantMessageDto, FileAssistantReplyDto,
+    FileAssistantRequestDto, FileAssistantRoleDto,
+};
 pub use file_diff::{
     DiffFilesRequestDto, DiffFilesResponseDto, DiffRowDto, DiffRowKindDto, DiffSegmentDto,
     FileDiffOutcomeDto,

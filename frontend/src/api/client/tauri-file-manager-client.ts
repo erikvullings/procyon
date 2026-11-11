@@ -69,6 +69,8 @@ import type {
   ExecuteKnowledgeSearchRequest,
   ExportCorpusThemesRequest,
   ExportCorpusThemesResponse,
+  FileAssistantReply,
+  FileAssistantRequest,
   FileDiffOptions,
   FileDiffResult,
   FileRangeChunk,
@@ -1710,6 +1712,24 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   listLlmProfilePresets(_signal?: AbortSignal): Promise<LlmProfilePreset[]> {
     return invoke<LlmProfilePreset[]>('list_llm_profile_presets');
+  }
+
+  draftFileAssistantReply(
+    request: FileAssistantRequest,
+    _signal?: AbortSignal,
+  ): Promise<FileAssistantReply> {
+    return invoke<FileAssistantReply>('draft_file_assistant_reply', {
+      request: {
+        requestId: request.requestId,
+        profileId: request.profileId,
+        fileName: request.fileName,
+        messages: request.messages,
+      },
+    });
+  }
+
+  cancelFileAssistantReply(requestId: string): Promise<void> {
+    return invoke<void>('cancel_file_assistant_reply', { request: { requestId } });
   }
 
   listLlmProfiles(_signal?: AbortSignal): Promise<LlmProfile[]> {
