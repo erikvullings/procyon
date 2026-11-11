@@ -383,25 +383,32 @@ fn preflight_package_with_expanded_limit(
             if let Some(format) = raster_image_format(&name) {
                 let mut data = Vec::with_capacity(entry.size() as usize);
                 entry.read_to_end(&mut data).map_err(invalid_pptx)?;
-                let (width, height) =
-                    image::ImageReader::with_format(std::io::Cursor::new(data), format)
-                        .into_dimensions()
-                        .map_err(invalid_pptx)?;
-                let pixels = u64::from(width) * u64::from(height);
-                if pixels > MAX_PPTX_SINGLE_IMAGE_PIXELS {
-                    return Err(pixel_budget_error(
-                        "per-image decoded pixels",
-                        MAX_PPTX_SINGLE_IMAGE_PIXELS,
-                    ));
-                }
-                image_pixels = image_pixels.checked_add(pixels).ok_or_else(|| {
-                    pixel_budget_error("total decoded image pixels", MAX_PPTX_TOTAL_IMAGE_PIXELS)
-                })?;
-                if image_pixels > MAX_PPTX_TOTAL_IMAGE_PIXELS {
-                    return Err(pixel_budget_error(
-                        "total decoded image pixels",
-                        MAX_PPTX_TOTAL_IMAGE_PIXELS,
-                    ));
+                // A package can mislabel an image's codec (for example a JPEG stored with a `.png`
+                // name). Reading its dimensions with the name-derived format and then aborting the
+                // whole preview would make a single oddball picture render nothing at all - the
+                // "damaged or malformed" failure seen on otherwise-openable decks. Read dimensions
+                // best-effort - declared format first, then the format the bytes actually advertise
+                // - and only enforce the per-image pixel budget when some decoder can size the image.
+                if let Some((width, height)) = image_dimensions_lenient(&data, format) {
+                    let pixels = u64::from(width) * u64::from(height);
+                    if pixels > MAX_PPTX_SINGLE_IMAGE_PIXELS {
+                        return Err(pixel_budget_error(
+                            "per-image decoded pixels",
+                            MAX_PPTX_SINGLE_IMAGE_PIXELS,
+                        ));
+                    }
+                    image_pixels = image_pixels.checked_add(pixels).ok_or_else(|| {
+                        pixel_budget_error(
+                            "total decoded image pixels",
+                            MAX_PPTX_TOTAL_IMAGE_PIXELS,
+                        )
+                    })?;
+                    if image_pixels > MAX_PPTX_TOTAL_IMAGE_PIXELS {
+                        return Err(pixel_budget_error(
+                            "total decoded image pixels",
+                            MAX_PPTX_TOTAL_IMAGE_PIXELS,
+                        ));
+                    }
                 }
             }
         }
@@ -430,6 +437,23 @@ fn raster_image_format(name: &str) -> Option<image::ImageFormat> {
         "webp" => Some(image::ImageFormat::WebP),
         _ => None,
     }
+}
+
+/// Best-effort pixel dimensions for a preflight budget check: try the codec the package names,
+/// then fall back to the codec the bytes actually advertise (a mislabeled image), returning
+/// `None` only when no decoder can size the image - so its budget is skipped rather than
+/// aborting the whole preview over one oddball picture.
+fn image_dimensions_lenient(data: &[u8], declared: image::ImageFormat) -> Option<(u32, u32)> {
+    image::ImageReader::with_format(std::io::Cursor::new(data), declared)
+        .into_dimensions()
+        .ok()
+        .or_else(|| {
+            image::guess_format(data).ok().and_then(|real| {
+                image::ImageReader::with_format(std::io::Cursor::new(data), real)
+                    .into_dimensions()
+                    .ok()
+            })
+        })
 }
 
 fn validate_xml(
