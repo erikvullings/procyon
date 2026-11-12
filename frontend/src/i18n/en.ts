@@ -414,6 +414,7 @@ export const en = {
     unavailableInBrowser: 'Unavailable in the browser',
     plugins: 'Plugins',
     semantic: 'Semantic (RAG)',
+    llm: 'LLM (AI)',
     updates: 'Updates',
     automaticUpdateChecks: 'Automatically check for updates',
     automaticUpdateChecksHint:
@@ -2133,6 +2134,7 @@ export const en = {
     unreachable: 'The AI service of profile "{name}" could not be reached.',
   },
   llmRoles: {
+    advanced: 'Use different endpoints or models per feature',
     endpoint: 'Endpoint',
     title: 'Roles',
     intro: 'Choose which endpoint and model handle each feature. Local endpoints need no consent.',

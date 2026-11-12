@@ -35,9 +35,11 @@ import type {
   KnowledgeSearchPlan,
   KnowledgeSearchResult,
   LlmProfile,
+  LlmRoleAssignment,
   Location,
 } from '../../models';
 import { defaultKnowledgeSearchOptions } from '../../models';
+import { preferredProfile } from '../../models/llm-roles';
 import { lastPathSegment } from '../navigation/navigation';
 import { copyText } from '../preview/clipboard';
 import { SemanticFolderEnrolmentPrompt } from '../settings/semantic-library-management';
@@ -170,6 +172,8 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
    * `answerGeneration` is on screen, and it never influences retrieval.
    */
   let answerProfiles: readonly LlmProfile[] = [];
+  // The chat role's assignment; the answer profile starts on it when it is still saved (0322).
+  let chatAssignment: LlmRoleAssignment | null = null;
   /** Whether each profile's model exists on its AI service; checked whenever profiles load. */
   const modelStatuses = new Map<string, ProfileModelStatus>();
   let answerProfilesFailed = false;
@@ -690,9 +694,11 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     try {
       const reported = await attrs.client.getKnowledgeCapabilities();
       const profiles = reported.answerGeneration ? await attrs.client.listLlmProfiles() : [];
+      const chat = reported.answerGeneration ? await chatRoleOf(attrs) : null;
       if (generation !== requestedGeneration || loadedProfileRevision !== requestedRevision) return;
       capabilities = reported;
       answerProfiles = profiles;
+      chatAssignment = chat;
       answerProfilesFailed = false;
       void verifyAnswerProfiles(attrs, requestedGeneration);
     } catch {
@@ -741,7 +747,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
    * Settings first, and activation is where cloud consent is given.
    */
   function answerProfile(): LlmProfile | undefined {
-    return answerProfiles[0];
+    return preferredProfile(answerProfiles, chatAssignment);
   }
 
   /** Whether asking without inspected results can first search for the question. */
@@ -1740,3 +1746,12 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
 
 /** Compatibility export for task 0206 callers while the pane replaces the former modal. */
 export const KnowledgeSearchDialog = KnowledgeSearchPane;
+
+/** The chat role's assignment, or none when roles cannot be read; search never depends on it. */
+async function chatRoleOf(attrs: KnowledgeSearchDialogAttrs): Promise<LlmRoleAssignment | null> {
+  try {
+    return (await attrs.client.listLlmRoles()).chat ?? null;
+  } catch {
+    return null;
+  }
+}

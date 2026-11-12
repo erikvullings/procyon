@@ -56,3 +56,14 @@ export function roleStatus(
   }
   return 'ready';
 }
+
+/**
+ * The profile a chat-style feature should start with: the chat role's endpoint when it still exists,
+ * otherwise the first saved profile.
+ */
+export function preferredProfile(
+  profiles: readonly LlmProfile[],
+  chat: LlmRoleAssignment | null | undefined,
+): LlmProfile | undefined {
+  return profiles.find((profile) => profile.id === chat?.profileId) ?? profiles[0];
+}

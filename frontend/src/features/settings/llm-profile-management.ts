@@ -16,6 +16,8 @@ import { endpointIsLocal } from '../../models/llm-roles';
 export interface LlmProfileManagementAttrs {
   readonly client: SemanticClient;
   readonly onSaveHandlerChange?: (handler: (() => Promise<boolean>) | undefined) => void;
+  /** Called after an endpoint, its consent, or the active endpoint changes (0322). */
+  readonly onChanged?: () => void;
 }
 
 interface EditorState {
@@ -323,7 +325,8 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     }
   }
 
-  async function save(client: SemanticClient): Promise<boolean> {
+  async function save(attrs: LlmProfileManagementAttrs): Promise<boolean> {
+    const client = attrs.client;
     if (editor === undefined || !dirty) return true;
     const payload: SaveLlmProfileRequest = {
       ...editor.request,
@@ -352,6 +355,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
       else profiles = profiles.map((profile) => (profile.id === saved.id ? saved : profile));
       selectProfile(saved);
       discoverModels(client, saved);
+      attrs.onChanged?.();
       message = t('llmProfiles', 'saved');
       return true;
     } catch (reason) {
@@ -381,7 +385,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
 
   return {
     oninit: ({ attrs }) => {
-      attrs.onSaveHandlerChange?.(() => save(attrs.client));
+      attrs.onSaveHandlerChange?.(() => save(attrs));
       void load(attrs.client);
     },
     onremove: ({ attrs }) => attrs.onSaveHandlerChange?.(undefined),
@@ -779,6 +783,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                         ...profiles.filter((profile) => profile.id !== activated.id),
                       ];
                       selectProfile(activated);
+                      attrs.onChanged?.();
                       message = t('llmProfiles', 'activated');
                     }),
                 },
@@ -840,6 +845,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                         credentialDisposition: deleteDisposition,
                       });
                       profiles = profiles.filter((profile) => profile.id !== active.id);
+                      attrs.onChanged?.();
                       const preset = presets[0];
                       selectedId = undefined;
                       if (preset !== undefined) {

@@ -416,6 +416,7 @@ export const nl = {
     unavailableInBrowser: 'Niet beschikbaar in de browser',
     plugins: 'Plug-ins',
     semantic: 'Semantiek (RAG)',
+    llm: 'LLM (AI)',
     updates: 'Updates',
     automaticUpdateChecks: 'Automatisch controleren op updates',
     automaticUpdateChecksHint:
@@ -2167,6 +2168,7 @@ export const nl = {
     unreachable: 'De AI-dienst van profiel "{name}" is niet bereikbaar.',
   },
   llmRoles: {
+    advanced: 'Andere eindpunten of modellen per functie gebruiken',
     endpoint: 'Eindpunt',
     title: 'Rollen',
     intro:

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { LlmProfile } from './llm-profile';
-import { canAssignRole, endpointIsLocal, type RoleStatus, roleStatus } from './llm-roles';
+import {
+  canAssignRole,
+  endpointIsLocal,
+  preferredProfile,
+  type RoleStatus,
+  roleStatus,
+} from './llm-roles';
 
 function profile(overrides: Partial<LlmProfile> & Pick<LlmProfile, 'id'>): LlmProfile {
   return {
@@ -88,5 +94,24 @@ describe('roleStatus', () => {
     expect(
       roleStatus(assignment('cloud', true), 'embeddings', [profile({ id: 'local' }), consented]),
     ).toBe('ready');
+  });
+});
+
+describe('preferredProfile', () => {
+  const first = profile({ id: 'first' });
+  const second = profile({ id: 'second' });
+  const chat = (profileId: string) => ({ profileId, model: 'm', allowCloud: false });
+
+  it('prefers the profile bound to the chat role', () => {
+    expect(preferredProfile([first, second], chat('second'))?.id).toBe('second');
+  });
+
+  it('falls back to the first saved profile when the role is unassigned or stale', () => {
+    expect(preferredProfile([first, second], null)?.id).toBe('first');
+    expect(preferredProfile([first, second], chat('gone'))?.id).toBe('first');
+  });
+
+  it('returns undefined when there are no profiles', () => {
+    expect(preferredProfile([], chat('x'))).toBeUndefined();
   });
 });
