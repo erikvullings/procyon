@@ -1204,6 +1204,9 @@ export const pt = {
     noProfiles: 'Adiciona um perfil de LLM nas definições para usar o assistente.',
     noOtherPane: 'Abre um segundo painel para mostrar o assistente.',
     failed: 'O assistente não conseguiu responder. Verifica o perfil de LLM e o consentimento.',
+    consentRequired:
+      'Este endpoint precisa de consentimento nas Definições antes de o assistente o poder usar.',
+    openSettings: 'Abrir definições de IA',
     you: 'Tu',
     assistant: 'Assistente',
     empty:
@@ -1771,7 +1774,34 @@ export const pt = {
       'O modelo «{model}» do perfil de IA «{name}» não está disponível no serviço de IA. Instale-o (no Ollama: ollama pull {model}) ou escolha outro modelo no perfil de IA.',
     unreachable: 'Não foi possível contactar o serviço de IA do perfil «{name}».',
   },
+  llmRoles: {
+    endpoint: 'Ponto final',
+    title: 'Funções',
+    intro:
+      'Escolha qual endpoint e modelo tratam cada funcionalidade. Endpoints locais não precisam de consentimento.',
+    chat: 'Chat e resumos',
+    embeddings: 'Pesquisa semântica (embeddings)',
+    unassigned: 'Não atribuído',
+    model: 'Modelo',
+    allowCloud: 'Permitir uso na nuvem para indexação',
+    cloudHint:
+      'O conteúdo dos documentos é enviado para este endpoint na nuvem durante a indexação. Ative apenas se aceitar isso.',
+    save: 'Guardar função',
+    clear: 'Limpar',
+    saved: 'Função guardada.',
+    loadFailed: 'Não foi possível carregar as funções.',
+    statusUnassigned: 'Nenhum endpoint atribuído.',
+    statusMissingProfile: 'O endpoint atribuído já não existe.',
+    statusCloudNotAllowed:
+      'É preciso permitir o uso na nuvem antes de esta função usar um endpoint na nuvem.',
+    statusNeedsConsent:
+      'Este endpoint precisa de consentimento nas Definições: abra-o acima e guarde com consentimento.',
+    statusReady: 'Pronto.',
+  },
+
   llmProfiles: {
+    consentRequired:
+      'Permitir uso na nuvem: confirme o consentimento antes de guardar um endpoint na nuvem.',
     title: 'Resumos e respostas de IA',
     description:
       'Ligue um modelo para escrever resumos de documentos e responder a perguntas com base nos seus ficheiros. Guarde as ligações como perfis e escolha um predefinido. Um modelo local é executado no seu dispositivo; um serviço na nuvem recebe perguntas e excertos. A pesquisa semântica funciona sem perfil.',
@@ -2710,6 +2740,10 @@ export const pt = {
     llmProfileInvalid: 'As definições do perfil de IA não são válidas.',
     cloudConsentRequired:
       'É necessário o seu consentimento antes de usar o serviço na nuvem {host}.',
+    llmRoleNotAssigned:
+      'Nenhum endpoint de IA está atribuído a esta função. Atribua um nas Definições.',
+    llmCloudEmbeddingNotAllowed:
+      'É preciso permitir o uso na nuvem para esta função antes de usar o seu endpoint.',
     llmModelUnavailable:
       'O modelo de IA configurado não está disponível. Verifique se está instalado (no Ollama: «ollama pull <modelo>») ou escolha outro modelo no perfil de IA.',
     llmAuthentication:

@@ -12,6 +12,8 @@ export interface AssistantTabAttrs {
   readonly onStop: () => void;
   readonly onProfile: (profileId: string) => void;
   readonly onInsert: (index: number) => void;
+  /** Opens the AI settings where consent is given; absent when Settings is unavailable. */
+  readonly onOpenSettings?: () => void;
 }
 
 /** The file-assistant chat shown in a pane (task 0321). The draft is local UI state only. */
@@ -84,6 +86,12 @@ export const AssistantTab: FactoryComponent<AssistantTabAttrs> = () => {
             : undefined,
         ),
         entry.error ? m('.fm-assistant-error', { role: 'alert' }, entry.error) : undefined,
+        entry.needsConsent && attrs.onOpenSettings
+          ? m(FlatButton, {
+              label: t('assistant', 'openSettings'),
+              onclick: () => attrs.onOpenSettings?.(),
+            })
+          : undefined,
         m(
           'form.fm-assistant-composer',
           {

@@ -96,6 +96,7 @@ export function createAssistantWiring(shellState: ShellState, core: AssistantCor
     entry.pendingRequestId = requestId;
     entry.streamedText = undefined;
     entry.error = undefined;
+    entry.needsConsent = undefined;
     m.redraw();
     const finish = (): void => {
       entry.pendingRequestId = undefined;
@@ -115,6 +116,10 @@ export function createAssistantWiring(shellState: ShellState, core: AssistantCor
             entry.streamedText = (entry.streamedText ?? '') + event.text;
           } else if (event.type === 'done') {
             entry.messages = [...entry.messages, { role: 'assistant', content: event.text }];
+            finish();
+          } else if (event.reason === 'consentRequired') {
+            entry.needsConsent = true;
+            entry.error = t('assistant', 'consentRequired');
             finish();
           } else {
             entry.error = t('assistant', 'failed');

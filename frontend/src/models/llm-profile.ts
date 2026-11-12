@@ -10,8 +10,14 @@ export type {
   LlmProfileExportDto as LlmProfileExport,
   LlmProfilePresetDto as LlmProfilePreset,
   LlmProfileTestResultDto as LlmProfileTestResult,
+  LlmRoleAssignmentDto as LlmRoleAssignment,
+  LlmRolesDto as LlmRoles,
   LlmTestErrorCategoryDto as LlmTestErrorCategory,
   LlmTlsPolicyDto as LlmTlsPolicy,
   OrphanLlmCredentialDispositionDto as OrphanLlmCredentialDisposition,
   SaveLlmProfileRequestDto as SaveLlmProfileRequest,
+  SaveLlmRoleRequestDto as SaveLlmRoleRequest,
 } from '../api/generated/models';
+
+/** A feature that uses a model: chat, or semantic embeddings (task 0322). */
+export type LlmRole = 'chat' | 'embeddings';

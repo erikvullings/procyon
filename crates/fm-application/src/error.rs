@@ -309,6 +309,16 @@ impl From<LlmProfileError> for ApplicationError {
                 Rejection::new(reason::LLM_PROFILE_INVALID, "LLM profile failed validation").into()
             }
             LlmProfileError::PolicyDenied => Self::PermissionDenied,
+            LlmProfileError::RoleNotAssigned => Rejection::new(
+                reason::LLM_ROLE_NOT_ASSIGNED,
+                "no AI endpoint is assigned to this role",
+            )
+            .into(),
+            LlmProfileError::CloudEmbeddingNotAllowed => Rejection::new(
+                reason::LLM_CLOUD_EMBEDDING_NOT_ALLOWED,
+                "cloud use must be allowed for this role before its endpoint can be used",
+            )
+            .into(),
             LlmProfileError::ConsentRequired(host) => Rejection::new(
                 reason::CLOUD_CONSENT_REQUIRED,
                 format!("cloud consent is required before using {host}"),

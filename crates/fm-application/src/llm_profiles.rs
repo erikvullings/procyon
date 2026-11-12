@@ -18,8 +18,8 @@ use fm_settings::{SettingsStore, VersionedDocument};
 use fm_transport_dto::{
     LlmAdvancedSettingsDto, LlmApiCapabilityDto, LlmEndpointLocalityDto, LlmModelLimitsDto,
     LlmPresetDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto,
-    LlmTestErrorCategoryDto, LlmTlsPolicyDto, OrphanLlmCredentialDispositionDto,
-    SaveLlmProfileRequestDto,
+    LlmRoleAssignmentDto, LlmRoleDto, LlmRolesDto, LlmTestErrorCategoryDto, LlmTlsPolicyDto,
+    OrphanLlmCredentialDispositionDto, SaveLlmProfileRequestDto, SaveLlmRoleRequestDto,
 };
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -29,7 +29,7 @@ use tokio_util::sync::CancellationToken;
 use url::{Host, Url};
 use uuid::Uuid;
 
-const PROFILE_SCHEMA_VERSION: u32 = 4;
+const PROFILE_SCHEMA_VERSION: u32 = 5;
 const TEST_PROMPT: &str = "Reply with OK.";
 const MAX_STREAM_BYTES: usize = 256 * 1024;
 /// Hard application bounds, independent of editable profile or provider metadata.
@@ -762,6 +762,51 @@ impl StreamedContent<'_> {
     }
 }
 
+/// A feature that needs a model. Only the roles with a consumer today are listed; image
+/// generation and natural-language search are reserved in the settings model (task 0322).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LlmRole {
+    Chat,
+    Embeddings,
+}
+
+/// One role's binding: an endpoint profile, the model to use on it, and whether a cloud endpoint
+/// may serve the role.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoleAssignment {
+    pub profile_id: Uuid,
+    pub model: String,
+    #[serde(default)]
+    pub allow_cloud: bool,
+}
+
+/// The role bindings that are configured globally.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmRoles {
+    #[serde(default)]
+    pub chat: Option<RoleAssignment>,
+    #[serde(default)]
+    pub embeddings: Option<RoleAssignment>,
+}
+
+/// A role binding requested by the person.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RoleAssignmentInput {
+    pub profile_id: Uuid,
+    pub model: String,
+    pub allow_cloud: bool,
+}
+
+/// A role binding that passed endpoint, consent and cloud-permission checks.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LlmResolvedRole {
+    pub profile: LlmProfile,
+    pub model: String,
+}
+
 /// Durable profile collection.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -770,6 +815,8 @@ struct LlmProfilesDocument {
     #[serde(default)]
     active_profile_id: Option<Uuid>,
     profiles: Vec<LlmProfile>,
+    #[serde(default)]
+    roles: LlmRoles,
 }
 
 impl Default for LlmProfilesDocument {
@@ -778,6 +825,47 @@ impl Default for LlmProfilesDocument {
             schema_version: PROFILE_SCHEMA_VERSION,
             active_profile_id: None,
             profiles: Vec::new(),
+            roles: LlmRoles::default(),
+        }
+    }
+}
+
+/// Schema 4 had one active profile; it becomes both the chat and the embeddings role (task
+/// 0322, scenario A). Embeddings stay local-only until the person enables the cloud flag.
+fn legacy_roles(value: &Value) -> Value {
+    let Some(active) = value
+        .get("activeProfileId")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+    else {
+        return json!({});
+    };
+    let model = value
+        .get("profiles")
+        .and_then(Value::as_array)
+        .and_then(|profiles| {
+            profiles
+                .iter()
+                .find(|profile| profile.get("id").and_then(Value::as_str) == Some(active.as_str()))
+        })
+        .and_then(|profile| profile.get("model"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    let assignment = json!({ "profileId": active, "model": model, "allowCloud": false });
+    json!({ "chat": assignment.clone(), "embeddings": assignment })
+}
+
+impl LlmProfilesDocument {
+    /// Drops role bindings whose profile no longer exists, for example after an external edit.
+    fn prune_dangling_roles(&mut self) {
+        let ids: BTreeSet<Uuid> = self.profiles.iter().map(|profile| profile.id).collect();
+        for role in [&mut self.roles.chat, &mut self.roles.embeddings] {
+            if role
+                .as_ref()
+                .is_some_and(|binding| !ids.contains(&binding.profile_id))
+            {
+                *role = None;
+            }
         }
     }
 }
@@ -802,7 +890,7 @@ impl VersionedDocument for LlmProfilesDocument {
             2 => {
                 value["activeProfileId"] = Value::Null;
             }
-            3 => {}
+            3 | 4 => {}
             PROFILE_SCHEMA_VERSION => return Ok(value),
             _ => return Err(LlmProfileError::InvalidConfiguration),
         }
@@ -823,6 +911,9 @@ impl VersionedDocument for LlmProfilesDocument {
                 profile["consentedHost"] = exact.map_or(Value::Null, Value::String);
             }
         }
+        if version <= 4 {
+            value["roles"] = legacy_roles(&value);
+        }
         Ok(value)
     }
 
@@ -842,6 +933,15 @@ impl VersionedDocument for LlmProfilesDocument {
             .is_some_and(|active| !ids.contains(&active))
         {
             return Err(LlmProfileError::InvalidConfiguration);
+        }
+        for assignment in [&self.roles.chat, &self.roles.embeddings]
+            .into_iter()
+            .flatten()
+        {
+            // A dangling profile reference is pruned on load; only a blank model is invalid.
+            if assignment.model.trim().is_empty() {
+                return Err(LlmProfileError::InvalidConfiguration);
+            }
         }
         Ok(())
     }
@@ -864,10 +964,11 @@ impl LlmProfileService {
         transport: Arc<dyn LlmProbeTransport>,
         host_policy: LlmHostPolicy,
     ) -> Result<Self, LlmProfileError> {
-        let profiles = settings
+        let mut profiles = settings
             .load_document::<LlmProfilesDocument>()
             .map_err(|_| LlmProfileError::Persistence)?
             .unwrap_or_default();
+        profiles.prune_dangling_roles();
         Ok(Self {
             settings,
             profiles: Mutex::new(profiles),
@@ -919,6 +1020,11 @@ impl LlmProfileService {
         .into_iter()
         .map(|(preset, name, base_url)| preset_draft(preset, name, base_url))
         .collect()
+    }
+
+    /// The configured role bindings, unchanged by reads.
+    pub fn roles(&self) -> Result<LlmRoles, LlmProfileError> {
+        Ok(self.lock()?.roles.clone())
     }
 
     pub fn list(&self) -> Result<Vec<LlmProfile>, LlmProfileError> {
@@ -1050,12 +1156,23 @@ impl LlmProfileService {
                 .ok_or(LlmProfileError::NotFound)?;
             let profile = document.profiles.remove(index);
             let previous_active = document.active_profile_id;
+            let previous_roles = document.roles.clone();
             if document.active_profile_id == Some(id) {
                 document.active_profile_id = document.profiles.first().map(|profile| profile.id);
+            }
+            let roles = &mut document.roles;
+            for role in [&mut roles.chat, &mut roles.embeddings] {
+                if role
+                    .as_ref()
+                    .is_some_and(|binding| binding.profile_id == id)
+                {
+                    *role = None;
+                }
             }
             if let Err(error) = self.persist(&document) {
                 document.profiles.insert(index, profile);
                 document.active_profile_id = previous_active;
+                document.roles = previous_roles;
                 return Err(error);
             }
             profile
@@ -1116,6 +1233,99 @@ impl LlmProfileService {
         document.active_profile_id = Some(id);
         self.persist(&document)?;
         Ok(profile)
+    }
+
+    /// Records the person's consent for the endpoint's exact host. Local endpoints need none.
+    pub fn grant_endpoint_consent(&self, id: Uuid) -> Result<LlmProfile, LlmProfileError> {
+        let mut document = self.lock()?;
+        let profile = document
+            .profiles
+            .iter_mut()
+            .find(|profile| profile.id == id)
+            .ok_or(LlmProfileError::NotFound)?;
+        let endpoint = normalize_endpoint(&profile.base_url)?;
+        if endpoint.locality == EndpointLocality::Cloud {
+            profile.consented_host = Some(endpoint.base_url);
+        }
+        let saved = profile.clone();
+        self.persist(&document)?;
+        Ok(saved)
+    }
+
+    /// Binds a role to an endpoint and model, or clears it. A cloud endpoint is refused for the
+    /// embeddings role until the person allows cloud use for that role.
+    pub fn set_role(
+        &self,
+        role: LlmRole,
+        assignment: Option<RoleAssignmentInput>,
+    ) -> Result<(), LlmProfileError> {
+        let mut document = self.lock()?;
+        let next = match assignment {
+            None => None,
+            Some(input) => {
+                if input.model.trim().is_empty() {
+                    return Err(LlmProfileError::InvalidConfiguration);
+                }
+                let profile = document
+                    .profiles
+                    .iter()
+                    .find(|profile| profile.id == input.profile_id)
+                    .ok_or(LlmProfileError::NotFound)?;
+                let endpoint = normalize_endpoint(&profile.base_url)?;
+                if role == LlmRole::Embeddings
+                    && endpoint.locality == EndpointLocality::Cloud
+                    && !input.allow_cloud
+                {
+                    return Err(LlmProfileError::CloudEmbeddingNotAllowed);
+                }
+                Some(RoleAssignment {
+                    profile_id: input.profile_id,
+                    model: input.model,
+                    allow_cloud: input.allow_cloud,
+                })
+            }
+        };
+        let previous = document.roles.clone();
+        match role {
+            LlmRole::Chat => document.roles.chat = next,
+            LlmRole::Embeddings => document.roles.embeddings = next,
+        }
+        if let Err(error) = self.persist(&document) {
+            document.roles = previous;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    /// Returns the endpoint and model for a role if policy, consent and cloud permission allow
+    /// it. Never prompts; a missing consent is reported so the caller can direct the person to
+    /// Settings.
+    pub fn resolve_role(&self, role: LlmRole) -> Result<LlmResolvedRole, LlmProfileError> {
+        let document = self.lock()?;
+        let assignment = match role {
+            LlmRole::Chat => document.roles.chat.as_ref(),
+            LlmRole::Embeddings => document.roles.embeddings.as_ref(),
+        }
+        .ok_or(LlmProfileError::RoleNotAssigned)?;
+        let profile = document
+            .profiles
+            .iter()
+            .find(|profile| profile.id == assignment.profile_id)
+            .ok_or(LlmProfileError::NotFound)?;
+        let endpoint = normalize_endpoint(&profile.base_url)?;
+        self.enforce_policy(&endpoint, profile.advanced.tls_policy)?;
+        if endpoint.locality == EndpointLocality::Cloud {
+            if role == LlmRole::Embeddings && !assignment.allow_cloud {
+                return Err(LlmProfileError::CloudEmbeddingNotAllowed);
+            }
+            if profile.consented_host.as_deref() != Some(endpoint.base_url.as_str()) {
+                return Err(LlmProfileError::ConsentRequired(endpoint.host));
+            }
+        }
+        Ok(LlmResolvedRole {
+            profile: profile.clone(),
+            model: assignment.model.clone(),
+        })
     }
 
     pub async fn test(
@@ -2024,7 +2234,7 @@ fn bounded_model_ids(models: Vec<String>) -> Vec<String> {
 }
 
 /// Typed generation-profile failure with no response or secret content.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum LlmProfileError {
     #[error("invalid LLM profile configuration")]
     InvalidConfiguration,
@@ -2038,6 +2248,10 @@ pub enum LlmProfileError {
     PolicyDenied,
     #[error("cloud consent required for host {0}")]
     ConsentRequired(String),
+    #[error("no endpoint is assigned to this role")]
+    RoleNotAssigned,
+    #[error("this role may not use a cloud endpoint until cloud use is allowed")]
+    CloudEmbeddingNotAllowed,
     #[error("LLM authentication failed")]
     Authentication,
     #[error("LLM model is unavailable")]
@@ -2061,8 +2275,11 @@ impl LlmProfileError {
             Self::InvalidConfiguration | Self::NotFound | Self::Credential | Self::Persistence => {
                 LlmTestErrorCategory::InvalidConfiguration
             }
-            Self::PolicyDenied => LlmTestErrorCategory::PolicyDenied,
+            Self::PolicyDenied | Self::CloudEmbeddingNotAllowed => {
+                LlmTestErrorCategory::PolicyDenied
+            }
             Self::ConsentRequired(_) => LlmTestErrorCategory::ConsentRequired,
+            Self::RoleNotAssigned => LlmTestErrorCategory::InvalidConfiguration,
             Self::Authentication => LlmTestErrorCategory::Authentication,
             Self::ModelUnavailable => LlmTestErrorCategory::ModelUnavailable,
             Self::Timeout => LlmTestErrorCategory::Timeout,
@@ -2075,6 +2292,36 @@ impl LlmProfileError {
 }
 
 // --- Conversions (folded from `llm_profile_mapping`) ---
+
+fn assignment_to_dto(assignment: RoleAssignment) -> LlmRoleAssignmentDto {
+    LlmRoleAssignmentDto {
+        profile_id: assignment.profile_id,
+        model: assignment.model,
+        allow_cloud: assignment.allow_cloud,
+    }
+}
+
+pub(crate) fn roles_to_dto(roles: LlmRoles) -> LlmRolesDto {
+    LlmRolesDto {
+        chat: roles.chat.map(assignment_to_dto),
+        embeddings: roles.embeddings.map(assignment_to_dto),
+    }
+}
+
+pub(crate) fn role_from_dto(role: LlmRoleDto) -> LlmRole {
+    match role {
+        LlmRoleDto::Chat => LlmRole::Chat,
+        LlmRoleDto::Embeddings => LlmRole::Embeddings,
+    }
+}
+
+pub(crate) fn role_input_from_dto(request: SaveLlmRoleRequestDto) -> RoleAssignmentInput {
+    RoleAssignmentInput {
+        profile_id: request.profile_id,
+        model: request.model,
+        allow_cloud: request.allow_cloud,
+    }
+}
 
 pub(crate) fn model_limits_to_dto(limits: LlmModelLimits) -> LlmModelLimitsDto {
     LlmModelLimitsDto {
@@ -2655,6 +2902,7 @@ mod tests {
             schema_version: 1,
             active_profile_id: None,
             profiles: vec![profile],
+            roles: LlmRoles::default(),
         })
         .unwrap();
         let legacy = value["profiles"][0].as_object_mut().unwrap();
@@ -2690,6 +2938,7 @@ mod tests {
             schema_version: 2,
             active_profile_id: None,
             profiles: vec![first.clone(), second.clone()],
+            roles: LlmRoles::default(),
         })
         .unwrap();
         value.as_object_mut().unwrap().remove("activeProfileId");
@@ -2758,6 +3007,220 @@ mod tests {
         assert_eq!(body["messages"][1]["images"][0], "AQID");
         assert_eq!(body["format"], "json");
         assert_eq!(body["options"]["num_ctx"], 8_192);
+    }
+
+    #[test]
+    fn version_four_active_profile_migrates_to_chat_and_embeddings_roles() {
+        let profile = profile_from_draft(
+            Uuid::new_v4(),
+            draft(LlmPreset::Ollama, "http://localhost:11434"),
+            None,
+        );
+        let mut value = serde_json::to_value(LlmProfilesDocument {
+            schema_version: 4,
+            active_profile_id: Some(profile.id),
+            profiles: vec![profile.clone()],
+            roles: LlmRoles::default(),
+        })
+        .unwrap();
+        value.as_object_mut().unwrap().remove("roles");
+
+        let migrated = LlmProfilesDocument::migrate(value, 4).unwrap();
+        let document: LlmProfilesDocument = serde_json::from_value(migrated).unwrap();
+
+        document.validate().unwrap();
+        let expected = RoleAssignment {
+            profile_id: profile.id,
+            model: profile.model.clone(),
+            allow_cloud: false,
+        };
+        assert_eq!(document.roles.chat, Some(expected.clone()));
+        assert_eq!(document.roles.embeddings, Some(expected));
+    }
+
+    #[test]
+    fn version_four_without_active_profile_migrates_to_unassigned_roles() {
+        let profile = profile_from_draft(
+            Uuid::new_v4(),
+            draft(LlmPreset::Ollama, "http://localhost:11434"),
+            None,
+        );
+        let mut value = serde_json::to_value(LlmProfilesDocument {
+            schema_version: 4,
+            active_profile_id: None,
+            profiles: vec![profile],
+            roles: LlmRoles::default(),
+        })
+        .unwrap();
+        value.as_object_mut().unwrap().remove("roles");
+
+        let migrated = LlmProfilesDocument::migrate(value, 4).unwrap();
+        let document: LlmProfilesDocument = serde_json::from_value(migrated).unwrap();
+
+        assert_eq!(document.roles, LlmRoles::default());
+    }
+
+    #[tokio::test]
+    async fn cloud_embeddings_role_requires_the_allow_cloud_flag() {
+        let (service, _, _) = service(LlmHostPolicy::desktop());
+        let profile = service
+            .create(draft(
+                LlmPreset::OpenAiCompatible,
+                "https://api.example.test",
+            ))
+            .await
+            .unwrap();
+        service
+            .grant_endpoint_consent(profile.id)
+            .expect("consent for the saved cloud host");
+
+        let blocked = service.set_role(
+            LlmRole::Embeddings,
+            Some(RoleAssignmentInput {
+                profile_id: profile.id,
+                model: "embed-model".to_owned(),
+                allow_cloud: false,
+            }),
+        );
+        assert_eq!(blocked, Err(LlmProfileError::CloudEmbeddingNotAllowed));
+
+        service
+            .set_role(
+                LlmRole::Embeddings,
+                Some(RoleAssignmentInput {
+                    profile_id: profile.id,
+                    model: "embed-model".to_owned(),
+                    allow_cloud: true,
+                }),
+            )
+            .unwrap();
+        let resolved = service.resolve_role(LlmRole::Embeddings).unwrap();
+        assert_eq!(resolved.model, "embed-model");
+        assert_eq!(resolved.profile.id, profile.id);
+    }
+
+    #[tokio::test]
+    async fn cloud_chat_role_needs_consent_for_the_saved_host() {
+        let (service, _, _) = service(LlmHostPolicy::desktop());
+        let profile = service
+            .create(draft(
+                LlmPreset::OpenAiCompatible,
+                "https://api.example.test",
+            ))
+            .await
+            .unwrap();
+        service
+            .set_role(
+                LlmRole::Chat,
+                Some(RoleAssignmentInput {
+                    profile_id: profile.id,
+                    model: profile.model.clone(),
+                    allow_cloud: false,
+                }),
+            )
+            .unwrap();
+
+        assert_eq!(
+            service.resolve_role(LlmRole::Chat),
+            Err(LlmProfileError::ConsentRequired(
+                "api.example.test".to_owned()
+            ))
+        );
+        service.grant_endpoint_consent(profile.id).unwrap();
+        assert_eq!(
+            service.resolve_role(LlmRole::Chat).unwrap().profile.id,
+            profile.id
+        );
+    }
+
+    #[tokio::test]
+    async fn local_chat_role_needs_no_consent_and_unset_role_is_reported() {
+        let (service, _, _) = service(LlmHostPolicy::desktop());
+        assert_eq!(
+            service.resolve_role(LlmRole::Chat),
+            Err(LlmProfileError::RoleNotAssigned)
+        );
+        let profile = service
+            .create(draft(LlmPreset::Ollama, "http://localhost:11434"))
+            .await
+            .unwrap();
+        service
+            .set_role(
+                LlmRole::Chat,
+                Some(RoleAssignmentInput {
+                    profile_id: profile.id,
+                    model: profile.model.clone(),
+                    allow_cloud: false,
+                }),
+            )
+            .unwrap();
+        assert_eq!(
+            service.resolve_role(LlmRole::Chat).unwrap().profile.id,
+            profile.id
+        );
+    }
+
+    #[test]
+    fn dangling_role_is_pruned_without_losing_the_profile_document() {
+        let profile = profile_from_draft(
+            Uuid::new_v4(),
+            draft(LlmPreset::Ollama, "http://localhost:11434"),
+            None,
+        );
+        let mut document = LlmProfilesDocument {
+            schema_version: PROFILE_SCHEMA_VERSION,
+            active_profile_id: Some(profile.id),
+            profiles: vec![profile.clone()],
+            roles: LlmRoles {
+                chat: Some(RoleAssignment {
+                    profile_id: Uuid::new_v4(),
+                    model: "gone".to_owned(),
+                    allow_cloud: false,
+                }),
+                embeddings: None,
+            },
+        };
+
+        document.validate().unwrap();
+        document.prune_dangling_roles();
+
+        document.validate().unwrap();
+        assert_eq!(document.roles.chat, None);
+        assert_eq!(document.profiles, vec![profile]);
+    }
+
+    #[tokio::test]
+    async fn host_change_invalidates_role_consent() {
+        let (service, _, _) = service(LlmHostPolicy::desktop());
+        let profile = service
+            .create(draft(
+                LlmPreset::OpenAiCompatible,
+                "https://api.example.test",
+            ))
+            .await
+            .unwrap();
+        service
+            .set_role(
+                LlmRole::Chat,
+                Some(RoleAssignmentInput {
+                    profile_id: profile.id,
+                    model: profile.model.clone(),
+                    allow_cloud: false,
+                }),
+            )
+            .unwrap();
+        service.grant_endpoint_consent(profile.id).unwrap();
+
+        let mut changed = draft(LlmPreset::OpenAiCompatible, "https://other.example.test");
+        changed.name = profile.name.clone();
+        service.update(profile.id, changed).await.unwrap();
+
+        assert_eq!(
+            service.resolve_role(LlmRole::Chat),
+            Err(LlmProfileError::ConsentRequired(
+                "other.example.test".to_owned()
+            ))
+        );
     }
 
     #[tokio::test]
@@ -2849,6 +3312,7 @@ mod tests {
             schema_version: 3,
             active_profile_id: Some(profile.id),
             profiles: vec![profile],
+            roles: LlmRoles::default(),
         })
         .unwrap();
         let migrated = LlmProfilesDocument::migrate(value, 3).unwrap();

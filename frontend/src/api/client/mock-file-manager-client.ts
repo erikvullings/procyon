@@ -111,6 +111,8 @@ import type {
   LlmProfileExport,
   LlmProfilePreset,
   LlmProfileTestResult,
+  LlmRole,
+  LlmRoles,
   LoadEditableFileRequest,
   Location,
   MoveSemanticDataRequest,
@@ -160,6 +162,7 @@ import type {
   SavedRagConversation,
   SaveEditableFileRequest,
   SaveLlmProfileRequest,
+  SaveLlmRoleRequest,
   SaveRagConversationRequest,
   ScanDiskUsageRequest,
   SearchInFileRequest,
@@ -1135,6 +1138,18 @@ export class MockFileManagerClient implements FileManagerClient {
 
   listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {
     return this.semanticClient.listLlmProfiles(signal);
+  }
+  listLlmRoles(signal?: AbortSignal): Promise<LlmRoles> {
+    return this.semanticClient.listLlmRoles(signal);
+  }
+  setLlmRole(role: LlmRole, request: SaveLlmRoleRequest, signal?: AbortSignal): Promise<LlmRoles> {
+    return this.semanticClient.setLlmRole(role, request, signal);
+  }
+  clearLlmRole(role: LlmRole, signal?: AbortSignal): Promise<LlmRoles> {
+    return this.semanticClient.clearLlmRole(role, signal);
+  }
+  grantLlmProfileConsent(profileId: string, signal?: AbortSignal): Promise<LlmProfile> {
+    return this.semanticClient.grantLlmProfileConsent(profileId, signal);
   }
   createLlmProfile(request: SaveLlmProfileRequest, signal?: AbortSignal): Promise<LlmProfile> {
     return this.semanticClient.createLlmProfile(request, signal);

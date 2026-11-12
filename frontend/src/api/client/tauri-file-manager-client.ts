@@ -122,6 +122,8 @@ import type {
   LlmProfileExport,
   LlmProfilePreset,
   LlmProfileTestResult,
+  LlmRole,
+  LlmRoles,
   LoadEditableFileRequest,
   Location,
   MoveSemanticDataRequest,
@@ -171,6 +173,7 @@ import type {
   SavedRagConversation,
   SaveEditableFileRequest,
   SaveLlmProfileRequest,
+  SaveLlmRoleRequest,
   SaveRagConversationRequest,
   ScanDiskUsageRequest,
   SearchInFileRequest,
@@ -1737,6 +1740,22 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   listLlmProfiles(_signal?: AbortSignal): Promise<LlmProfile[]> {
     return invoke<LlmProfile[]>('list_llm_profiles');
+  }
+
+  listLlmRoles(_signal?: AbortSignal): Promise<LlmRoles> {
+    return invoke<LlmRoles>('list_llm_roles');
+  }
+
+  setLlmRole(role: LlmRole, request: SaveLlmRoleRequest, _signal?: AbortSignal): Promise<LlmRoles> {
+    return invoke<LlmRoles>('set_llm_role', { role, request });
+  }
+
+  clearLlmRole(role: LlmRole, _signal?: AbortSignal): Promise<LlmRoles> {
+    return invoke<LlmRoles>('clear_llm_role', { role });
+  }
+
+  grantLlmProfileConsent(profileId: string, _signal?: AbortSignal): Promise<LlmProfile> {
+    return invoke<LlmProfile>('grant_llm_profile_consent', { profileId });
   }
 
   createLlmProfile(request: SaveLlmProfileRequest, _signal?: AbortSignal): Promise<LlmProfile> {

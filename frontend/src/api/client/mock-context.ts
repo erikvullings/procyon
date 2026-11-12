@@ -22,6 +22,7 @@ import type {
   KnowledgeSearchPlan,
   ListDirectoryRequest,
   LlmProfile,
+  LlmRoles,
   Location,
   OneDriveAuthorizationAttempt,
   OpenStructuredViewRequest,
@@ -250,6 +251,9 @@ export class MockContext {
 
   /** Mirrors the backend: the first profile saved becomes active until another is activated. */
   activeLlmProfileId: string | undefined;
+
+  /** Role bindings (task 0322); cleared when a bound profile is deleted, as the backend does. */
+  llmRoles: LlmRoles = { chat: null, embeddings: null };
 
   oneDriveAuthorizationSequence = 0;
 

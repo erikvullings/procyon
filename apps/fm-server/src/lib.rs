@@ -351,6 +351,12 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(
             routes::llm_profile::activate_llm_profile
         ))
+        .routes(utoipa_axum::routes!(
+            routes::llm_profile::grant_llm_profile_consent
+        ))
+        .routes(utoipa_axum::routes!(routes::llm_profile::list_llm_roles))
+        .routes(utoipa_axum::routes!(routes::llm_profile::set_llm_role))
+        .routes(utoipa_axum::routes!(routes::llm_profile::clear_llm_role))
         .routes(utoipa_axum::routes!(routes::llm_profile::test_llm_profile))
         .routes(utoipa_axum::routes!(
             routes::llm_profile::discover_llm_profile_models

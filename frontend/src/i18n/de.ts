@@ -1219,6 +1219,9 @@ export const de = {
     noProfiles: 'Füge in den Einstellungen ein LLM-Profil hinzu, um den Assistenten zu nutzen.',
     noOtherPane: 'Öffne einen zweiten Bereich, um den Assistenten anzuzeigen.',
     failed: 'Der Assistent konnte nicht antworten. Prüfe das LLM-Profil und seine Zustimmung.',
+    consentRequired:
+      'Dieser Endpunkt benötigt eine Zustimmung in den Einstellungen, bevor der Assistent ihn nutzen kann.',
+    openSettings: 'KI-Einstellungen öffnen',
     you: 'Du',
     assistant: 'Assistent',
     empty:
@@ -1788,7 +1791,34 @@ export const de = {
       'Das Modell „{model}“ des KI-Profils „{name}“ ist beim KI-Dienst nicht verfügbar. Installieren Sie es (bei Ollama: ollama pull {model}) oder wählen Sie im KI-Profil ein anderes Modell.',
     unreachable: 'Der KI-Dienst des Profils „{name}“ ist nicht erreichbar.',
   },
+  llmRoles: {
+    endpoint: 'Endpunkt',
+    title: 'Rollen',
+    intro:
+      'Lege fest, welcher Endpunkt und welches Modell jede Funktion übernimmt. Lokale Endpunkte brauchen keine Zustimmung.',
+    chat: 'Chat und Zusammenfassungen',
+    embeddings: 'Semantische Suche (Embeddings)',
+    unassigned: 'Nicht zugewiesen',
+    model: 'Modell',
+    allowCloud: 'Cloud-Nutzung für die Indizierung erlauben',
+    cloudHint:
+      'Dokumentinhalte werden beim Indizieren von Dateien an diesen Cloud-Endpunkt gesendet. Aktiviere dies nur, wenn du das akzeptierst.',
+    save: 'Rolle speichern',
+    clear: 'Leeren',
+    saved: 'Rolle gespeichert.',
+    loadFailed: 'Rollen konnten nicht geladen werden.',
+    statusUnassigned: 'Kein Endpunkt zugewiesen.',
+    statusMissingProfile: 'Der zugewiesene Endpunkt existiert nicht mehr.',
+    statusCloudNotAllowed:
+      'Cloud-Nutzung muss erlaubt sein, bevor diese Rolle einen Cloud-Endpunkt nutzen kann.',
+    statusNeedsConsent:
+      'Dieser Endpunkt benötigt eine Zustimmung in den Einstellungen: öffne ihn oben und speichere mit Zustimmung.',
+    statusReady: 'Bereit.',
+  },
+
   llmProfiles: {
+    consentRequired:
+      'Cloud-Nutzung erlauben: Zustimmung bestätigen, bevor ein Cloud-Endpunkt gespeichert wird.',
     title: 'KI-Zusammenfassungen und -Antworten',
     description:
       'Verbinden Sie ein Modell, um Dokumentzusammenfassungen zu schreiben und Fragen anhand Ihrer Dateien zu beantworten. Speichern Sie Verbindungen als Profile und wählen Sie ein Standardprofil. Ein lokales Modell läuft auf Ihrem Gerät; ein Cloud-Dienst erhält Fragen und Auszüge. Die semantische Suche funktioniert auch ohne Profil.',
@@ -2733,6 +2763,10 @@ export const de = {
     llmProfileInvalid: 'Die Einstellungen des KI-Profils sind ungültig.',
     cloudConsentRequired:
       'Vor der Nutzung des Cloud-Dienstes {host} ist Ihre Zustimmung erforderlich.',
+    llmRoleNotAssigned:
+      'Diesem Rollenbereich ist kein KI-Endpunkt zugewiesen. Weise in den Einstellungen einen zu.',
+    llmCloudEmbeddingNotAllowed:
+      'Cloud-Nutzung muss für diese Rolle erlaubt sein, bevor ihr Endpunkt genutzt werden kann.',
     llmModelUnavailable:
       'Das konfigurierte KI-Modell ist nicht verfügbar. Prüfen Sie, ob es installiert ist (bei Ollama: „ollama pull <Modell>“), oder wählen Sie im KI-Profil ein anderes Modell.',
     llmAuthentication:

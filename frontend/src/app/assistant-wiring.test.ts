@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FileManagerClient } from '../api/client/file-manager-client';
 import type { AssistantTabEntry } from '../features/assistant/assistant-tab-state';
+import { t } from '../i18n';
 import type { FileAssistantEvent, FileAssistantRequest, LlmProfile } from '../models';
 import { createAssistantWiring } from './assistant-wiring';
 import type { ShellState } from './shell-state';
@@ -111,6 +112,43 @@ describe('file assistant wiring', () => {
     expect(entry.error).toBeTruthy();
     expect(entry.messages.map((message) => message.role)).toEqual(['user']);
     expect(entry.pendingRequestId).toBeUndefined();
+  });
+
+  it('asks for consent in Settings instead of prompting when the endpoint needs it', async () => {
+    const client = {
+      streamFileAssistantReply: vi.fn(
+        (_request: FileAssistantRequest, onEvent: (event: FileAssistantEvent) => void) => {
+          onEvent({ type: 'failed', reason: 'consentRequired' });
+          return Promise.resolve();
+        },
+      ),
+    };
+    const { shell, entry } = fakeShell(client);
+    const wiring = createAssistantWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.send(client as unknown as FileManagerClient, entry.key, 'x');
+
+    expect(entry.needsConsent).toBe(true);
+    expect(entry.error).toBe(t('assistant', 'consentRequired'));
+  });
+
+  it('clears the consent prompt when the next request starts', async () => {
+    const client = {
+      streamFileAssistantReply: vi.fn(
+        (_request: FileAssistantRequest, onEvent: (event: FileAssistantEvent) => void) => {
+          onEvent({ type: 'failed', reason: 'consentRequired' });
+          return Promise.resolve();
+        },
+      ),
+    };
+    const { shell, entry } = fakeShell(client);
+    const wiring = createAssistantWiring(shell, { replaceWorkspace: vi.fn() });
+    await wiring.send(client as unknown as FileManagerClient, entry.key, 'x');
+    client.streamFileAssistantReply.mockImplementation(() => new Promise<void>(() => {}));
+
+    void wiring.send(client as unknown as FileManagerClient, entry.key, 'again');
+
+    expect(entry.needsConsent).toBeUndefined();
   });
 
   it('records a sanitized error when the transport rejects', async () => {

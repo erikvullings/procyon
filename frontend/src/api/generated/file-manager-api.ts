@@ -127,6 +127,7 @@ import type {
   LlmProfileExportDto,
   LlmProfilePresetDto,
   LlmProfileTestResultDto,
+  LlmRolesDto,
   LoadEditableFileRequestDto,
   LoadEditableFileResponseDto,
   MoveSemanticDataRequestDto,
@@ -198,6 +199,7 @@ import type {
   SaveEditableFileRequestDto,
   SaveEditableFileResponseDto,
   SaveLlmProfileRequestDto,
+  SaveLlmRoleRequestDto,
   SaveRagConversationRequestDto,
   SavedRagConversationDto,
   ScanDiskUsageRequestDto,
@@ -5790,6 +5792,46 @@ export const cloneLlmProfile = async (profileId: string, options?: Parameters<ty
 
 
 
+export type grantLlmProfileConsentResponse200 = {
+  data: LlmProfileDto
+  status: 200
+}
+
+export type grantLlmProfileConsentResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type grantLlmProfileConsentResponseSuccess = (grantLlmProfileConsentResponse200) & {
+  headers: Headers;
+};
+export type grantLlmProfileConsentResponseError = (grantLlmProfileConsentResponse404) & {
+  headers: Headers;
+};
+
+export type grantLlmProfileConsentResponse = (grantLlmProfileConsentResponseSuccess | grantLlmProfileConsentResponseError)
+
+export const getGrantLlmProfileConsentUrl = (profileId: string,) => {
+
+
+
+
+  return `/api/v1/llm-profiles/${profileId}/consent`
+}
+
+export const grantLlmProfileConsent = async (profileId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<grantLlmProfileConsentResponse> => {
+
+  return fetchMutator<grantLlmProfileConsentResponse>(getGrantLlmProfileConsentUrl(profileId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
 export type exportLlmProfileResponse200 = {
   data: LlmProfileExportDto
   status: 200
@@ -5903,6 +5945,127 @@ export const testLlmProfile = async (profileId: string, options?: Parameters<typ
   {
     ...options,
     method: 'POST'
+
+
+  }
+);}
+
+
+
+export type listLlmRolesResponse200 = {
+  data: LlmRolesDto
+  status: 200
+}
+
+export type listLlmRolesResponseSuccess = (listLlmRolesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listLlmRolesResponse = (listLlmRolesResponseSuccess)
+
+export const getListLlmRolesUrl = () => {
+
+
+
+
+  return `/api/v1/llm-roles`
+}
+
+export const listLlmRoles = async ( options?: Parameters<typeof fetchMutator>[1]): Promise<listLlmRolesResponse> => {
+
+  return fetchMutator<listLlmRolesResponse>(getListLlmRolesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type setLlmRoleResponse200 = {
+  data: LlmRolesDto
+  status: 200
+}
+
+export type setLlmRoleResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type setLlmRoleResponseSuccess = (setLlmRoleResponse200) & {
+  headers: Headers;
+};
+export type setLlmRoleResponseError = (setLlmRoleResponse400) & {
+  headers: Headers;
+};
+
+export type setLlmRoleResponse = (setLlmRoleResponseSuccess | setLlmRoleResponseError)
+
+export const getSetLlmRoleUrl = (role: string,) => {
+
+
+
+
+  return `/api/v1/llm-roles/${role}`
+}
+
+export const setLlmRole = async (role: string,
+    saveLlmRoleRequestDto: SaveLlmRoleRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<setLlmRoleResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<setLlmRoleResponse>(getSetLlmRoleUrl(role),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(saveLlmRoleRequestDto)
+  }
+);}
+
+
+
+export type clearLlmRoleResponse200 = {
+  data: LlmRolesDto
+  status: 200
+}
+
+export type clearLlmRoleResponseSuccess = (clearLlmRoleResponse200) & {
+  headers: Headers;
+};
+;
+
+export type clearLlmRoleResponse = (clearLlmRoleResponseSuccess)
+
+export const getClearLlmRoleUrl = (role: string,) => {
+
+
+
+
+  return `/api/v1/llm-roles/${role}`
+}
+
+export const clearLlmRole = async (role: string, options?: Parameters<typeof fetchMutator>[1]): Promise<clearLlmRoleResponse> => {
+
+  return fetchMutator<clearLlmRoleResponse>(getClearLlmRoleUrl(role),
+  {
+    ...options,
+    method: 'DELETE'
 
 
   }

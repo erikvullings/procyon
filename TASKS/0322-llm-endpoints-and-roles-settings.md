@@ -1,6 +1,6 @@
 # 0322 LLM endpoints and roles in Settings, consent at configuration
 
-Status: open
+Status: in progress (roles, migration, consent and cloud-embedding gate done; Settings relocation and three-scenario UI open)
 Priority: medium
 Subsystem: backend, frontend, settings
 Depends on: 0184, 0243
@@ -50,3 +50,31 @@ all need an LLM.
 
 ## Agent Notes
 - 2026-11-12 claude: Created from design discussion. Not started.
+- 2026-11-12 claude: Implemented the backend and transport slice. `LlmProfilesDocument` schema 5 adds
+  `roles` (chat, embeddings: profile, model, allowCloud). Schema 4 migrates the active profile into
+  both roles with allowCloud false, so cloud embeddings stay blocked until the person allows them.
+  `set_role` refuses a cloud endpoint for embeddings without the flag; `resolve_role` returns the
+  endpoint and model or `ConsentRequired`/`CloudEmbeddingNotAllowed` and never prompts;
+  `grant_endpoint_consent` records consent for the saved host; deleting a profile clears its roles.
+  Routes `GET/PUT/DELETE /api/v1/llm-roles[/{role}]` and `POST /api/v1/llm-profiles/{id}/consent`,
+  Tauri commands and the HTTP/Tauri/mock adapters. Tests cover migration, cloud-embedding gate,
+  chat consent, host-change invalidation and local endpoints (llm_profiles.rs).
+- 2026-11-12 claude: Frontend: `llm-role-management.ts` renders the roles section (endpoint, model,
+  allow-cloud flag for embeddings) under the endpoint editor. Saving a cloud host requires the consent
+  switch and grants consent after the save; `models/llm-roles.ts` holds the pure rules, tested.
+- 2026-11-12 claude: Open. (1) "Settings > LLM (AI)" is still a sub-section of Semantic settings; it
+  is not yet a top-level page. (2) The UI shows the full role form; the simple/advanced split
+  (scenario A vs B vs C) is not built. (3) Only chat and embeddings roles exist; image generation and
+  natural-language search are not reserved in the UI. (4) No consumer reads the embeddings role yet:
+  semantic indexing remains local and does not call the endpoint, so the cloud-embedding gate has no
+  caller. (5) RAG and the file assistant still use the saved profile chosen at call time, not the chat
+  role. (6) Index metadata does not yet record the embeddings role, so a model change does not
+  trigger reindexing. (7) Roles are stored globally (the recommended option); the per-workspace
+  question is unresolved.
+- 2026-11-12 claude: Code review fixes: consent resets when the host changes in the editor; a
+  dangling role is pruned on load instead of failing the whole document. Open from review: roles
+  status is loaded once on mount, so it is stale after a save or consent (refresh needed); a consent
+  grant that fails after a successful save leaves the profile saved without consent; no HTTP route
+  tests for `/api/v1/llm-roles`; the frontend `endpointIsLocal` duplicates the backend locality rules
+  (the draft should carry the backend's classification); the roles section refetches profiles.
+

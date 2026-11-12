@@ -1574,6 +1574,8 @@ export const en = {
     noProfiles: 'Add an LLM profile in settings to use the assistant.',
     noOtherPane: 'Open a second pane to show the assistant.',
     failed: 'The assistant could not reply. Check the LLM profile and its consent.',
+    consentRequired: 'This endpoint needs consent in Settings before the assistant can use it.',
+    openSettings: 'Open AI settings',
     you: 'You',
     assistant: 'Assistant',
     empty:
@@ -2130,7 +2132,31 @@ export const en = {
       'The model "{model}" of AI profile "{name}" is not available on the AI service. Install it (for Ollama: ollama pull {model}) or choose another model in the AI profile.',
     unreachable: 'The AI service of profile "{name}" could not be reached.',
   },
+  llmRoles: {
+    endpoint: 'Endpoint',
+    title: 'Roles',
+    intro: 'Choose which endpoint and model handle each feature. Local endpoints need no consent.',
+    chat: 'Chat and summaries',
+    embeddings: 'Semantic search (embeddings)',
+    unassigned: 'Not assigned',
+    model: 'Model',
+    allowCloud: 'Allow cloud use for indexing',
+    cloudHint:
+      'Document content is sent to this cloud endpoint while files are indexed. Turn this on only if you accept that.',
+    save: 'Save role',
+    clear: 'Clear',
+    saved: 'Role saved.',
+    loadFailed: 'Could not load roles.',
+    statusUnassigned: 'No endpoint assigned.',
+    statusMissingProfile: 'The assigned endpoint no longer exists.',
+    statusCloudNotAllowed: 'Cloud use must be allowed before this role can use a cloud endpoint.',
+    statusNeedsConsent:
+      'This endpoint needs consent in Settings: open it above, and save with consent.',
+    statusReady: 'Ready.',
+  },
+
   llmProfiles: {
+    consentRequired: 'Allow cloud use: confirm consent before saving a cloud endpoint.',
     title: 'AI summaries and answers',
     description:
       'Connect a model to write document summaries and answer questions using your files. Save connections as profiles and choose a default. A local model runs on your device; a cloud service receives questions and excerpts. Semantic search works without a profile.',
@@ -2649,6 +2675,9 @@ export const en = {
     connectionFailed: 'Connecting failed: {detail}',
     llmProfileInvalid: 'The AI profile settings are not valid.',
     cloudConsentRequired: 'Your consent is required before using the cloud service {host}.',
+    llmRoleNotAssigned: 'No AI endpoint is assigned to this role. Assign one in Settings.',
+    llmCloudEmbeddingNotAllowed:
+      'Cloud use must be allowed for this role before its endpoint can be used.',
     llmModelUnavailable:
       'The configured AI model is not available. Check that it is installed (for Ollama: run "ollama pull <model>") or choose another model in the AI profile.',
     llmAuthentication:

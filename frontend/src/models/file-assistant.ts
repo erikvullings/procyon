@@ -17,7 +17,12 @@ export interface FileAssistantRequest {
 }
 
 /** Why a reply ended without text. `cancelled` means the person stopped it. */
-export type FileAssistantFailure = 'invalidRequest' | 'unavailable' | 'empty' | 'cancelled';
+export type FileAssistantFailure =
+  | 'invalidRequest'
+  | 'unavailable'
+  | 'consentRequired'
+  | 'empty'
+  | 'cancelled';
 
 /**
  * One streamed event: fragments as they arrive, then exactly one `done` (the whole reply, ready to

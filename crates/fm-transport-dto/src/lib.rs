@@ -185,8 +185,8 @@ pub use llm_profile::{
     ActivateLlmProfileRequestDto, DeleteLlmProfileRequestDto, LlmAdvancedSettingsDto,
     LlmApiCapabilityDto, LlmCredentialInputDto, LlmEndpointLocalityDto, LlmModelLimitsDto,
     LlmPresetDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto,
-    LlmTestErrorCategoryDto, LlmTlsPolicyDto, OrphanLlmCredentialDispositionDto,
-    SaveLlmProfileRequestDto,
+    LlmRoleAssignmentDto, LlmRoleDto, LlmRolesDto, LlmTestErrorCategoryDto, LlmTlsPolicyDto,
+    OrphanLlmCredentialDispositionDto, SaveLlmProfileRequestDto, SaveLlmRoleRequestDto,
 };
 pub use location::LocationDto;
 pub use metadata_tokens::{

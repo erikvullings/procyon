@@ -44,24 +44,24 @@ use fm_transport_dto::{
     HostKeyProbeDto, ImportSemanticLocalModelRequestDto, ImportSemanticVocabularyRequestDto,
     InstallSemanticWorkerPatchRequestDto, InvokeActionRequestDto, LinkOptionsDto,
     LinkOptionsRequestDto, ListDirectoryChildrenRequest, ListDirectoryRequest, LlmModelLimitsDto,
-    LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, LocationDto,
-    MoveSemanticDataRequestDto, NavigateRequest, OneDriveAuthorizationAttemptDto,
-    OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto,
-    OpenPptxPreviewResponseDto, OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
-    OperationDto, OperationQueueStatusDto, PlanSemanticExclusionRequestDto,
-    PlanSemanticModelMigrationRequestDto, PluginDescriptorDto, PluginLogEntryDto, PluginStatusDto,
-    PptxPreviewSessionRequestDto, PreviewDocumentSummaryRequestDto,
-    PreviewSemanticEnrolmentRequestDto, ReadDocxPreviewResourceRequestDto,
-    ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
-    ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
+    LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, LlmRoleDto,
+    LlmRolesDto, LocationDto, MoveSemanticDataRequestDto, NavigateRequest,
+    OneDriveAuthorizationAttemptDto, OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto,
+    OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto, OpenStructuredViewRequestDto,
+    OpenStructuredViewResponseDto, OperationDto, OperationQueueStatusDto,
+    PlanSemanticExclusionRequestDto, PlanSemanticModelMigrationRequestDto, PluginDescriptorDto,
+    PluginLogEntryDto, PluginStatusDto, PptxPreviewSessionRequestDto,
+    PreviewDocumentSummaryRequestDto, PreviewSemanticEnrolmentRequestDto,
+    ReadDocxPreviewResourceRequestDto, ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto,
+    ReadFileRangeResponseDto, ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
     ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
     ReadStructuredRowsResponseDto, RemoveApplicationDockIconRequestDto,
     RemoveApplicationDockIconResponseDto, RenderChecksumFileRequestDto,
     ResolveArchiveEditRequestDto, ResolveOperationConflictRequestDto,
     ResumeSemanticCleanupRequestDto, ReviewConceptCandidateRequestDto, RuntimeCapabilitiesDto,
     SaveChecksumFileRequestDto, SaveChecksumFileResponseDto, SaveLlmProfileRequestDto,
-    ScanDiskUsageRequestDto, SearchInFileRequestDto, SearchInFileResponseDto,
-    SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto,
+    SaveLlmRoleRequestDto, ScanDiskUsageRequestDto, SearchInFileRequestDto,
+    SearchInFileResponseDto, SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto,
     SemanticComponentCapabilitiesDto, SemanticComponentErrorDto, SemanticComponentStatusDto,
     SemanticDataMoveReceiptDto, SemanticEnrolmentPreviewDto, SemanticExclusionPlanDto,
     SemanticFolderStatusDto, SemanticIndexRemovalPlanDto, SemanticIndexRemovalReceiptDto,
@@ -3486,6 +3486,54 @@ pub(crate) fn export_llm_profile(
     state
         .service
         .export_llm_profile(profile_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Lists the role bindings (chat, embeddings).
+#[tauri::command]
+pub(crate) fn list_llm_roles(
+    state: State<'_, AppState>,
+) -> Result<LlmRolesDto, ApplicationErrorDto> {
+    state
+        .service
+        .list_llm_roles()
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Binds a role to an endpoint and model.
+#[tauri::command]
+pub(crate) fn set_llm_role(
+    state: State<'_, AppState>,
+    role: LlmRoleDto,
+    request: SaveLlmRoleRequestDto,
+) -> Result<LlmRolesDto, ApplicationErrorDto> {
+    state
+        .service
+        .set_llm_role(role, request)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Clears a role binding.
+#[tauri::command]
+pub(crate) fn clear_llm_role(
+    state: State<'_, AppState>,
+    role: LlmRoleDto,
+) -> Result<LlmRolesDto, ApplicationErrorDto> {
+    state
+        .service
+        .clear_llm_role(role)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Records consent for a profile's cloud host from the endpoint editor.
+#[tauri::command]
+pub(crate) fn grant_llm_profile_consent(
+    state: State<'_, AppState>,
+    profile_id: Uuid,
+) -> Result<LlmProfileDto, ApplicationErrorDto> {
+    state
+        .service
+        .grant_llm_profile_consent(profile_id)
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 

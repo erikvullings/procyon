@@ -48,6 +48,8 @@ import type {
   LlmProfileExport,
   LlmProfilePreset,
   LlmProfileTestResult,
+  LlmRole,
+  LlmRoles,
   MoveSemanticDataRequest,
   ParseKnowledgeQueryRequest,
   PlanKnowledgeSearchRequest,
@@ -64,6 +66,7 @@ import type {
   ReviewConceptCandidateRequest,
   SavedRagConversation,
   SaveLlmProfileRequest,
+  SaveLlmRoleRequest,
   SaveRagConversationRequest,
   SemanticComponentCapabilities,
   SemanticComponentStatus,
@@ -104,6 +107,12 @@ export interface SemanticClient {
     signal?: AbortSignal,
   ): Promise<SemanticInstallReceipt>;
 
+  /** Binds a role to an endpoint, model and cloud permission; the result is all role bindings. */
+  setLlmRole(role: LlmRole, request: SaveLlmRoleRequest, signal?: AbortSignal): Promise<LlmRoles>;
+  clearLlmRole(role: LlmRole, signal?: AbortSignal): Promise<LlmRoles>;
+  listLlmRoles(signal?: AbortSignal): Promise<LlmRoles>;
+  /** Records consent for the profile's current cloud host, from the endpoint editor. */
+  grantLlmProfileConsent(profileId: string, signal?: AbortSignal): Promise<LlmProfile>;
   activateLlmProfile(
     profileId: string,
     consent: boolean,

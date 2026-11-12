@@ -48,6 +48,8 @@ import type {
   LlmProfileExport,
   LlmProfilePreset,
   LlmProfileTestResult,
+  LlmRole,
+  LlmRoles,
   MoveSemanticDataRequest,
   ParseKnowledgeQueryRequest,
   PlanKnowledgeSearchRequest,
@@ -65,6 +67,7 @@ import type {
   ReviewConceptCandidateRequest,
   SavedRagConversation,
   SaveLlmProfileRequest,
+  SaveLlmRoleRequest,
   SaveRagConversationRequest,
   SemanticComponentCapabilities,
   SemanticComponentStatus,
@@ -1172,6 +1175,11 @@ export class MockSemanticClient implements SemanticClient {
     signal?: AbortSignal,
   ): Promise<void> {
     return this.ctx.perform('streamFileAssistantReply', signal, () => {
+      const profile = this.ctx.llmProfiles.get(request.profileId);
+      if (profile?.locality === 'cloud' && profile.consentedHost == null) {
+        onEvent({ type: 'failed', reason: 'consentRequired' });
+        return;
+      }
       const prompt = request.messages.at(-1)?.content ?? '';
       const text = `# ${request.fileName}\n\n${prompt}\n`;
       for (const fragment of text.match(/[\s\S]{1,12}/gu) ?? []) {
@@ -1246,6 +1254,11 @@ export class MockSemanticClient implements SemanticClient {
     return this.ctx.perform('deleteLlmProfile', signal, () => {
       this.ctx.requireLlmProfile(profileId);
       this.ctx.llmProfiles.delete(profileId);
+      for (const role of ['chat', 'embeddings'] as const) {
+        if (this.ctx.llmRoles[role]?.profileId === profileId) {
+          this.ctx.llmRoles = { ...this.ctx.llmRoles, [role]: null };
+        }
+      }
       if (this.ctx.activeLlmProfileId === profileId) {
         this.ctx.activeLlmProfileId = this.ctx.llmProfiles.keys().next().value;
       }
@@ -1282,6 +1295,53 @@ export class MockSemanticClient implements SemanticClient {
         capabilities: profile.capabilities,
         redactFilenames: profile.redactFilenames,
       });
+    });
+  }
+
+  listLlmRoles(signal?: AbortSignal): Promise<LlmRoles> {
+    return this.ctx.perform('listLlmRoles', signal, () => structuredClone(this.ctx.llmRoles));
+  }
+
+  setLlmRole(role: LlmRole, request: SaveLlmRoleRequest, signal?: AbortSignal): Promise<LlmRoles> {
+    return this.ctx.perform('setLlmRole', signal, () => {
+      const profile = this.ctx.requireLlmProfile(request.profileId);
+      if (request.model.trim() === '') {
+        throw new MockClientError('invalidRequest', 'A model is required');
+      }
+      if (profile.locality === 'cloud' && role === 'embeddings' && !request.allowCloud) {
+        throw new MockClientError('invalidRequest', 'Cloud use is not allowed for this role', {
+          reason: 'llmCloudEmbeddingNotAllowed',
+        });
+      }
+      this.ctx.llmRoles = {
+        ...this.ctx.llmRoles,
+        [role]: {
+          profileId: request.profileId,
+          model: request.model,
+          allowCloud: request.allowCloud,
+        },
+      };
+      return structuredClone(this.ctx.llmRoles);
+    });
+  }
+
+  clearLlmRole(role: LlmRole, signal?: AbortSignal): Promise<LlmRoles> {
+    return this.ctx.perform('clearLlmRole', signal, () => {
+      this.ctx.llmRoles = { ...this.ctx.llmRoles, [role]: null };
+      return structuredClone(this.ctx.llmRoles);
+    });
+  }
+
+  grantLlmProfileConsent(profileId: string, signal?: AbortSignal): Promise<LlmProfile> {
+    return this.ctx.perform('grantLlmProfileConsent', signal, () => {
+      const profile = this.ctx.requireLlmProfile(profileId);
+      const granted: LlmProfile = {
+        ...profile,
+        consentedHost:
+          profile.locality === 'cloud' ? new URL(profile.baseUrl).href.replace(/\/$/u, '') : null,
+      };
+      this.ctx.llmProfiles.set(profileId, granted);
+      return structuredClone(granted);
     });
   }
 

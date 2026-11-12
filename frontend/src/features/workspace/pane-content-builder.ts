@@ -1111,6 +1111,7 @@ export function createPaneContentBuilder(
               onProfile: (profileId: string) =>
                 context.assistantActions?.setProfile(assistant.key, profileId),
               onInsert: (index: number) => context.assistantActions?.insert(assistant.key, index),
+              onOpenSettings: () => context.openKnowledgeAnswerSettings?.(),
             }),
           }
         : pluginPanel?.tabId === tab?.id || context.getEditorByPane().has(paneId)

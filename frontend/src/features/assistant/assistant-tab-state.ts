@@ -33,6 +33,8 @@ export interface AssistantTabEntry {
   /** The reply as far as it has streamed; replaced by the final text when the reply is done. */
   streamedText?: string | undefined;
   error?: string | undefined;
+  /** The chat endpoint needs consent in Settings; the chat links there instead of prompting. */
+  needsConsent?: boolean | undefined;
 }
 
 /** The pane that is not `paneId`, in workspace order: where the chat opens. */

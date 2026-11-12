@@ -4370,6 +4370,45 @@
         }
       }
     },
+    "/api/v1/llm-profiles/{profileId}/consent": {
+      "post": {
+        "operationId": "grantLlmProfileConsent",
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "description": "Profile whose cloud host the person approved",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile with consent recorded for its host",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmProfileDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Profile not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/llm-profiles/{profileId}/export": {
       "get": {
         "operationId": "exportLlmProfile",
@@ -4483,6 +4522,97 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/llm-roles": {
+      "get": {
+        "operationId": "listLlmRoles",
+        "responses": {
+          "200": {
+            "description": "Configured role bindings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmRolesDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/llm-roles/{role}": {
+      "put": {
+        "operationId": "setLlmRole",
+        "parameters": [
+          {
+            "name": "role",
+            "in": "path",
+            "description": "Role: chat or embeddings",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveLlmRoleRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated role bindings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmRolesDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid role binding or cloud use not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "clearLlmRole",
+        "parameters": [
+          {
+            "name": "role",
+            "in": "path",
+            "description": "Role: chat or embeddings",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated role bindings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmRolesDto"
                 }
               }
             }
@@ -13651,6 +13781,7 @@
         "enum": [
           "invalidRequest",
           "unavailable",
+          "consentRequired",
           "empty",
           "cancelled"
         ]
@@ -18051,6 +18182,53 @@
           }
         }
       },
+      "LlmRoleAssignmentDto": {
+        "type": "object",
+        "description": "One role's endpoint, model and cloud permission.",
+        "required": [
+          "profileId",
+          "model",
+          "allowCloud"
+        ],
+        "properties": {
+          "allowCloud": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "profileId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "LlmRolesDto": {
+        "type": "object",
+        "description": "The configured role bindings. An absent role is not assigned.",
+        "properties": {
+          "chat": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LlmRoleAssignmentDto"
+              }
+            ]
+          },
+          "embeddings": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LlmRoleAssignmentDto"
+              }
+            ]
+          }
+        }
+      },
       "LlmTestErrorCategoryDto": {
         "type": "string",
         "enum": [
@@ -22288,6 +22466,27 @@
           },
           "redactFilenames": {
             "type": "boolean"
+          }
+        }
+      },
+      "SaveLlmRoleRequestDto": {
+        "type": "object",
+        "description": "Request to bind a role to an endpoint and model.",
+        "required": [
+          "profileId",
+          "model",
+          "allowCloud"
+        ],
+        "properties": {
+          "allowCloud": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "profileId": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },

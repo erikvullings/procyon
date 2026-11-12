@@ -35,9 +35,13 @@ pub(crate) enum FileAssistantError {
     /// The request violates a bounded contract.
     #[error("invalid file assistant request: {0}")]
     InvalidRequest(String),
-    /// The profile is missing, needs consent, or the provider failed.
+    /// The profile is missing or the provider failed.
     #[error("the file assistant is unavailable")]
     Unavailable,
+    /// The chat endpoint is a cloud host the person has not consented to. Consent is granted
+    /// in Settings; the assistant never prompts for it.
+    #[error("the file assistant's endpoint needs consent in Settings")]
+    ConsentRequired,
     /// The model returned no usable text.
     #[error("the file assistant returned no text")]
     Empty,
@@ -51,6 +55,7 @@ impl From<FileAssistantError> for FileAssistantFailureDto {
         match error {
             FileAssistantError::InvalidRequest(_) => Self::InvalidRequest,
             FileAssistantError::Unavailable => Self::Unavailable,
+            FileAssistantError::ConsentRequired => Self::ConsentRequired,
             FileAssistantError::Empty => Self::Empty,
             FileAssistantError::Cancelled => Self::Cancelled,
         }
@@ -149,6 +154,9 @@ impl FileAssistantService {
         let text = match outcome {
             Ok(text) => text,
             Err(LlmProfileError::Cancelled) => return Err(FileAssistantError::Cancelled),
+            Err(LlmProfileError::ConsentRequired(_)) => {
+                return Err(FileAssistantError::ConsentRequired);
+            }
             Err(_) => return Err(FileAssistantError::Unavailable),
         };
         let text = unwrap_single_fence(text.trim());
@@ -305,6 +313,7 @@ mod tests {
         Streamed(Vec<String>, String),
         Cancelled,
         Transport,
+        ConsentRequired,
     }
 
     struct FakeGenerator {
@@ -335,6 +344,9 @@ mod tests {
                 }
                 Outcome::Cancelled => Err(LlmProfileError::Cancelled),
                 Outcome::Transport => Err(LlmProfileError::Transport),
+                Outcome::ConsentRequired => Err(LlmProfileError::ConsentRequired(
+                    "api.example.test".to_owned(),
+                )),
             }
         }
     }
@@ -466,6 +478,15 @@ mod tests {
         assert_eq!(
             events(&service, &fake(Outcome::Transport), request("a.txt", "x")).await,
             vec![failed(FileAssistantFailureDto::Unavailable)]
+        );
+        assert_eq!(
+            events(
+                &service,
+                &fake(Outcome::ConsentRequired),
+                request("a.txt", "x")
+            )
+            .await,
+            vec![failed(FileAssistantFailureDto::ConsentRequired)]
         );
         assert_eq!(
             events(

@@ -1599,6 +1599,9 @@ export const nl = {
     noProfiles: 'Voeg in de instellingen een LLM-profiel toe om de assistent te gebruiken.',
     noOtherPane: 'Open een tweede paneel om de assistent te tonen.',
     failed: 'De assistent kon niet antwoorden. Controleer het LLM-profiel en de toestemming.',
+    consentRequired:
+      'Dit eindpunt heeft toestemming nodig in Instellingen voordat de assistent het kan gebruiken.',
+    openSettings: 'AI-instellingen openen',
     you: 'Jij',
     assistant: 'Assistent',
     empty:
@@ -2163,7 +2166,34 @@ export const nl = {
       'Het model "{model}" van AI-profiel "{name}" is niet beschikbaar bij de AI-dienst. Installeer het (bij Ollama: ollama pull {model}) of kies een ander model in het AI-profiel.',
     unreachable: 'De AI-dienst van profiel "{name}" is niet bereikbaar.',
   },
+  llmRoles: {
+    endpoint: 'Eindpunt',
+    title: 'Rollen',
+    intro:
+      'Kies welk eindpunt en model elke functie gebruikt. Lokale eindpunten vragen geen toestemming.',
+    chat: 'Chat en samenvattingen',
+    embeddings: 'Semantisch zoeken (embeddings)',
+    unassigned: 'Niet toegewezen',
+    model: 'Model',
+    allowCloud: 'Cloudgebruik toestaan voor indexeren',
+    cloudHint:
+      'Documentinhoud wordt tijdens het indexeren naar dit cloud-eindpunt gestuurd. Zet dit alleen aan als je dat accepteert.',
+    save: 'Rol opslaan',
+    clear: 'Wissen',
+    saved: 'Rol opgeslagen.',
+    loadFailed: 'Rollen konden niet worden geladen.',
+    statusUnassigned: 'Geen eindpunt toegewezen.',
+    statusMissingProfile: 'Het toegewezen eindpunt bestaat niet meer.',
+    statusCloudNotAllowed:
+      'Cloudgebruik moet worden toegestaan voordat deze rol een cloud-eindpunt kan gebruiken.',
+    statusNeedsConsent:
+      'Dit eindpunt heeft toestemming nodig in Instellingen: open het hierboven en sla op met toestemming.',
+    statusReady: 'Gereed.',
+  },
+
   llmProfiles: {
+    consentRequired:
+      'Cloudgebruik toestaan: bevestig toestemming voordat je een cloud-eindpunt opslaat.',
     title: 'AI-samenvattingen en antwoorden',
     description:
       'Verbind een model dat documentsamenvattingen schrijft en vragen beantwoordt met informatie uit je bestanden. Bewaar verbindingen als profielen en kies een standaardprofiel. Een lokaal model werkt op je apparaat; een clouddienst ontvangt vragen en fragmenten. Semantisch zoeken werkt ook zonder profiel.',
@@ -2703,6 +2733,10 @@ export const nl = {
     llmProfileInvalid: 'De instellingen van het AI-profiel zijn niet geldig.',
     cloudConsentRequired:
       'Je toestemming is vereist voordat de cloudservice {host} wordt gebruikt.',
+    llmRoleNotAssigned:
+      'Aan deze rol is geen AI-eindpunt toegewezen. Wijs er een toe in Instellingen.',
+    llmCloudEmbeddingNotAllowed:
+      'Cloudgebruik moet voor deze rol zijn toegestaan voordat het eindpunt kan worden gebruikt.',
     llmModelUnavailable:
       'Het ingestelde AI-model is niet beschikbaar. Controleer of het geïnstalleerd is (bij Ollama: "ollama pull <model>") of kies een ander model in het AI-profiel.',
     llmAuthentication:

@@ -78,6 +78,10 @@ pub mod reason {
     pub const CLOUD_CONSENT_REQUIRED: &str = "cloudConsentRequired";
     /// The configured LLM model is unavailable.
     pub const LLM_MODEL_UNAVAILABLE: &str = "llmModelUnavailable";
+    /// No endpoint is assigned to the requested AI role.
+    pub const LLM_ROLE_NOT_ASSIGNED: &str = "llmRoleNotAssigned";
+    /// The embeddings role may not use a cloud endpoint until cloud use is allowed for it.
+    pub const LLM_CLOUD_EMBEDDING_NOT_ALLOWED: &str = "llmCloudEmbeddingNotAllowed";
     /// The LLM request timed out.
     pub const LLM_TIMEOUT: &str = "llmTimeout";
     /// The LLM TLS policy rejected the endpoint.

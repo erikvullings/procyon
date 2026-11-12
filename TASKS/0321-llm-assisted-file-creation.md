@@ -50,8 +50,8 @@ RAG uses) can draft it. The draft must never reach disk without the user reviewi
   `addTransientTab` command in the opposite pane. The editor header gets the button.
 
 ## Open questions
-1. Remote profiles: the backend refuses cloud endpoints without prior consent, but the chat only
-   shows a generic failure. A first-use prompt that names the host is still missing.
+1. Remote profiles: resolved in 0322. The assistant never prompts; a cloud endpoint without consent
+   reports `consentRequired`, shows "needs consent in Settings" and an "Open AI settings" button.
 
 ## Agent Notes
 - 2026-11-11 claude: Drafted from the discussion; not started.
@@ -63,3 +63,7 @@ RAG uses) can draft it. The draft must never reach disk without the user reviewi
   empty (the draft reaches disk only when accepted and saved). Tests: Rust (streamed fragments,
   reasoning hidden from fragments, SSE line splitting, callback path), frontend (NDJSON parsing,
   wiring stream/stop/failure, picker draft). Not checked in the browser pane or a real host.
+- 2026-11-12 claude: Closed open question 1. `FileAssistantError::ConsentRequired` maps to the
+  `consentRequired` failure (DTO and OpenAPI regenerated); the chat shows the Settings message and
+  opens the AI settings from it. Tests: file_assistant.rs (failure mapping) and assistant-wiring.test.ts
+  (message, flag cleared on the next request). Still not checked in the browser pane or a real host.

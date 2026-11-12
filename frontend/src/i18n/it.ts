@@ -1199,6 +1199,9 @@ export const it = {
     noProfiles: 'Aggiungi un profilo LLM nelle impostazioni per usare l’assistente.',
     noOtherPane: 'Apri un secondo riquadro per mostrare l’assistente.',
     failed: 'L’assistente non ha potuto rispondere. Controlla il profilo LLM e il consenso.',
+    consentRequired:
+      "Questo endpoint richiede il consenso nelle Impostazioni prima che l'assistente possa usarlo.",
+    openSettings: 'Apri impostazioni IA',
     you: 'Tu',
     assistant: 'Assistente',
     empty:
@@ -1766,7 +1769,34 @@ export const it = {
       'Il modello «{model}» del profilo IA «{name}» non è disponibile sul servizio di IA. Installalo (con Ollama: ollama pull {model}) oppure scegli un altro modello nel profilo IA.',
     unreachable: 'Impossibile raggiungere il servizio di IA del profilo «{name}».',
   },
+  llmRoles: {
+    endpoint: 'Punto finale',
+    title: 'Ruoli',
+    intro:
+      'Scegli quale endpoint e modello gestiscono ogni funzione. Gli endpoint locali non richiedono consenso.',
+    chat: 'Chat e riassunti',
+    embeddings: 'Ricerca semantica (embedding)',
+    unassigned: 'Non assegnato',
+    model: 'Modello',
+    allowCloud: "Consenti l'uso nel cloud per l'indicizzazione",
+    cloudHint:
+      "Il contenuto dei documenti viene inviato a questo endpoint cloud durante l'indicizzazione. Attivalo solo se lo accetti.",
+    save: 'Salva ruolo',
+    clear: 'Cancella',
+    saved: 'Ruolo salvato.',
+    loadFailed: 'Impossibile caricare i ruoli.',
+    statusUnassigned: 'Nessun endpoint assegnato.',
+    statusMissingProfile: "L'endpoint assegnato non esiste più.",
+    statusCloudNotAllowed:
+      "Occorre consentire l'uso nel cloud prima che questo ruolo possa usare un endpoint cloud.",
+    statusNeedsConsent:
+      'Questo endpoint richiede il consenso nelle Impostazioni: aprilo sopra e salva con consenso.',
+    statusReady: 'Pronto.',
+  },
+
   llmProfiles: {
+    consentRequired:
+      "Consenti l'uso nel cloud: conferma il consenso prima di salvare un endpoint cloud.",
     title: 'Riepiloghi e risposte con IA',
     description:
       'Collega un modello per scrivere riepiloghi dei documenti e rispondere a domande usando i tuoi file. Salva le connessioni come profili e scegli un profilo predefinito. Un modello locale funziona sul tuo dispositivo; un servizio cloud riceve domande ed estratti. La ricerca semantica funziona anche senza profilo.',
@@ -2695,6 +2725,10 @@ export const it = {
     connectionFailed: 'Connessione non riuscita: {detail}',
     llmProfileInvalid: 'Le impostazioni del profilo IA non sono valide.',
     cloudConsentRequired: 'Serve il tuo consenso prima di usare il servizio cloud {host}.',
+    llmRoleNotAssigned:
+      'Nessun endpoint IA è assegnato a questo ruolo. Assegnane uno nelle Impostazioni.',
+    llmCloudEmbeddingNotAllowed:
+      "L'uso nel cloud deve essere consentito per questo ruolo prima di poter usare il suo endpoint.",
     llmModelUnavailable:
       'Il modello di IA configurato non è disponibile. Verifica che sia installato (con Ollama: «ollama pull <modello>») oppure scegli un altro modello nel profilo IA.',
     llmAuthentication:

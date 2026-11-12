@@ -36,19 +36,19 @@ use fm_transport_dto::{
     GenerateSyncPlanRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
     InterruptedTransfersDto, InvokeActionRequestDto, LinkOptionsDto, LinkOptionsRequestDto,
     ListDirectoryRequest, LlmModelLimitsDto, LlmProfileDto, LlmProfileExportDto,
-    LlmProfilePresetDto, LlmProfileTestResultDto, NavigateRequest, OperationDto,
-    PluginDescriptorDto, PluginLogEntryDto, PreviewRagRequestDto, RagPreviewDto, RagScopeDto,
-    RagScopeKindDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
+    LlmProfilePresetDto, LlmProfileTestResultDto, LlmRoleDto, LlmRolesDto, NavigateRequest,
+    OperationDto, PluginDescriptorDto, PluginLogEntryDto, PreviewRagRequestDto, RagPreviewDto,
+    RagScopeDto, RagScopeKindDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
     RemoveApplicationDockIconRequestDto, RemoveApplicationDockIconResponseDto,
     RenderChecksumFileRequestDto, ResolveOperationConflictRequestDto, ResolveRagCitationRequestDto,
     ResolvedRagCitationDto, RuntimeCapabilitiesDto, RuntimeKindDto, SaveLlmProfileRequestDto,
-    SaveRagConversationRequestDto, SavedRagConversationDto, SearchInFileRequestDto,
-    SearchInFileResponseDto, SetPaneActivityRequest, SettingsDto, SpotlightCommentDto,
-    StartChecksumRequestDto, StartChecksumResponseDto, StartComparisonRequestDto,
-    StartComparisonResponseDto, StartDuplicateScanRequestDto, StartDuplicateScanResponseDto,
-    StartOperationRequestDto, StartSearchRequestDto, StartSearchResponseDto, SyncPlanDto,
-    UpdateConnectionRequestDto, VerificationReportDto, VerifyChecksumFileRequestDto,
-    WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
+    SaveLlmRoleRequestDto, SaveRagConversationRequestDto, SavedRagConversationDto,
+    SearchInFileRequestDto, SearchInFileResponseDto, SetPaneActivityRequest, SettingsDto,
+    SpotlightCommentDto, StartChecksumRequestDto, StartChecksumResponseDto,
+    StartComparisonRequestDto, StartComparisonResponseDto, StartDuplicateScanRequestDto,
+    StartDuplicateScanResponseDto, StartOperationRequestDto, StartSearchRequestDto,
+    StartSearchResponseDto, SyncPlanDto, UpdateConnectionRequestDto, VerificationReportDto,
+    VerifyChecksumFileRequestDto, WorkspaceCommandDto, WorkspaceDto, WorkspaceSummaryDto,
 };
 use fm_vfs::ProviderRegistry;
 use fm_vfs_local::LocalFileSystemProvider;
@@ -81,7 +81,8 @@ use crate::llm_profiles::{
 };
 use crate::llm_profiles::{
     disposition_from_dto, draft_from_dto, model_limits_to_dto, preset_to_profile_dto,
-    profile_to_dto, profile_to_export_dto, test_result_to_dto,
+    profile_to_dto, profile_to_export_dto, role_from_dto, role_input_from_dto, roles_to_dto,
+    test_result_to_dto,
 };
 use crate::operation_history::{ApplicationOperationObserver, OperationHistory};
 use crate::operation_planner::OperationPlanner;
@@ -4769,6 +4770,33 @@ impl FileManagerService {
     /// Exports only non-secret reusable configuration.
     pub fn export_llm_profile(&self, id: Uuid) -> Result<LlmProfileExportDto, ApplicationError> {
         Ok(profile_to_export_dto(self.llm_profiles.export_profile(id)?))
+    }
+
+    /// Lists the role bindings (chat, embeddings).
+    pub fn list_llm_roles(&self) -> Result<LlmRolesDto, ApplicationError> {
+        Ok(roles_to_dto(self.llm_profiles.roles()?))
+    }
+
+    /// Binds a role to an endpoint and model.
+    pub fn set_llm_role(
+        &self,
+        role: LlmRoleDto,
+        request: SaveLlmRoleRequestDto,
+    ) -> Result<LlmRolesDto, ApplicationError> {
+        self.llm_profiles
+            .set_role(role_from_dto(role), Some(role_input_from_dto(request)))?;
+        self.list_llm_roles()
+    }
+
+    /// Clears a role binding.
+    pub fn clear_llm_role(&self, role: LlmRoleDto) -> Result<LlmRolesDto, ApplicationError> {
+        self.llm_profiles.set_role(role_from_dto(role), None)?;
+        self.list_llm_roles()
+    }
+
+    /// Records the person's consent for a profile's cloud host, from the endpoint editor.
+    pub fn grant_llm_profile_consent(&self, id: Uuid) -> Result<LlmProfileDto, ApplicationError> {
+        profile_to_dto(self.llm_profiles.grant_endpoint_consent(id)?).map_err(Into::into)
     }
 
     /// Activates a profile, recording explicit consent for its normalized

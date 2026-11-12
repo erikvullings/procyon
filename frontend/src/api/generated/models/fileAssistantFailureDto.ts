@@ -12,6 +12,7 @@ export type FileAssistantFailureDto = typeof FileAssistantFailureDto[keyof typeo
 export const FileAssistantFailureDto = {
   invalidRequest: 'invalidRequest',
   unavailable: 'unavailable',
+  consentRequired: 'consentRequired',
   empty: 'empty',
   cancelled: 'cancelled',
 } as const;

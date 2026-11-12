@@ -113,6 +113,8 @@ import type {
   LlmProfileExport,
   LlmProfilePreset,
   LlmProfileTestResult,
+  LlmRole,
+  LlmRoles,
   LoadEditableFileRequest,
   Location,
   MoveSemanticDataRequest,
@@ -163,6 +165,7 @@ import type {
   SavedRagConversation,
   SaveEditableFileRequest,
   SaveLlmProfileRequest,
+  SaveLlmRoleRequest,
   SaveRagConversationRequest,
   ScanDiskUsageRequest,
   SearchInFileRequest,
@@ -338,6 +341,7 @@ import {
   findLinkReplacements as requestLinkReplacementsFind,
   activateLlmProfile as requestLlmProfileActivation,
   cloneLlmProfile as requestLlmProfileClone,
+  grantLlmProfileConsent as requestLlmProfileConsent,
   createLlmProfile as requestLlmProfileCreation,
   deleteLlmProfile as requestLlmProfileDeletion,
   discoverLlmProfileDraftModels as requestLlmProfileDraftModelDiscovery,
@@ -348,6 +352,9 @@ import {
   listLlmProfiles as requestLlmProfiles,
   testLlmProfile as requestLlmProfileTest,
   updateLlmProfile as requestLlmProfileUpdate,
+  clearLlmRole as requestLlmRoleClear,
+  setLlmRole as requestLlmRoleSet,
+  listLlmRoles as requestLlmRoles,
   loadEditableFile as requestLoadEditableFile,
   resolveMetadataTokens as requestMetadataTokens,
   cancelMusicDuplicateScan as requestMusicDuplicateScanCancel,
@@ -2800,6 +2807,42 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) throw unexpectedResponseError('exportLlmProfile', response.status);
+    return response.data;
+  }
+
+  async listLlmRoles(signal?: AbortSignal): Promise<LlmRoles> {
+    const response = await requestLlmRoles(signal === undefined ? undefined : { signal });
+    if (response.status !== 200) throw unexpectedResponseError('listLlmRoles', response.status);
+    return response.data;
+  }
+
+  async setLlmRole(
+    role: LlmRole,
+    request: SaveLlmRoleRequest,
+    signal?: AbortSignal,
+  ): Promise<LlmRoles> {
+    const response = await requestLlmRoleSet(
+      role,
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) throw unexpectedResponseError('setLlmRole', response.status);
+    return response.data;
+  }
+
+  async clearLlmRole(role: LlmRole, signal?: AbortSignal): Promise<LlmRoles> {
+    const response = await requestLlmRoleClear(role, signal === undefined ? undefined : { signal });
+    if (response.status !== 200) throw unexpectedResponseError('clearLlmRole', response.status);
+    return response.data;
+  }
+
+  async grantLlmProfileConsent(profileId: string, signal?: AbortSignal): Promise<LlmProfile> {
+    const response = await requestLlmProfileConsent(
+      profileId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw unexpectedResponseError('grantLlmProfileConsent', response.status);
     return response.data;
   }
 

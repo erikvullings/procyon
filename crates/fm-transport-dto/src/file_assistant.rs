@@ -51,8 +51,10 @@ pub struct FileAssistantRequestDto {
 pub enum FileAssistantFailureDto {
     /// The request violates a bounded contract.
     InvalidRequest,
-    /// The profile is missing, needs consent, or the provider failed.
+    /// The profile is missing or the provider failed.
     Unavailable,
+    /// The chat endpoint needs the person's consent in Settings before it can be used.
+    ConsentRequired,
     /// The model returned no usable text.
     Empty,
     /// The person stopped the request.
