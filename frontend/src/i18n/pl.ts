@@ -337,6 +337,7 @@ export const pl = {
     filesAndOperations: 'Pliki i operacje',
     rememberFolderViews: 'Zapamiętuj widok (sortowanie, kolumny, tryb) każdego folderu',
     semantic: 'Semantyka (RAG)',
+    llm: 'LLM (AI)',
     settingsSections: 'Sekcje ustawień',
     semanticEnableHint:
       'Zainstaluj i włącz komponenty semantyczne przed skonfigurowaniem bibliotek, słowników i profili generowania.',
@@ -1767,6 +1768,7 @@ export const pl = {
     unreachable: 'Nie można połączyć się z usługą AI profilu „{name}”.',
   },
   llmRoles: {
+    advanced: 'Używaj innych punktów końcowych lub modeli dla każdej funkcji',
     endpoint: 'Punkt końcowy',
     title: 'Role',
     intro:

@@ -226,6 +226,7 @@ export type MockClientMethod =
   | 'exportLlmProfile'
   | 'activateLlmProfile'
   | 'listLlmRoles'
+  | 'classifyLlmEndpoint'
   | 'setLlmRole'
   | 'clearLlmRole'
   | 'grantLlmProfileConsent'

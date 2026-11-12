@@ -339,6 +339,7 @@ export const fr = {
     filesAndOperations: 'Fichiers et opérations',
     rememberFolderViews: "Mémoriser l'affichage (tri, colonnes, mode) de chaque dossier",
     semantic: 'Sémantique (RAG)',
+    llm: 'LLM (IA)',
     settingsSections: 'Sections des paramètres',
     semanticEnableHint:
       'Installez et activez les composants sémantiques avant de configurer les bibliothèques, les vocabulaires et les profils de génération.',
@@ -1777,6 +1778,7 @@ export const fr = {
     unreachable: 'Le service d’IA du profil « {name} » est injoignable.',
   },
   llmRoles: {
+    advanced: 'Utiliser d’autres points ou modèles par fonctionnalité',
     endpoint: 'Point de terminaison',
     title: 'Rôles',
     intro:

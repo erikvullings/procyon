@@ -337,6 +337,7 @@ export const it = {
     filesAndOperations: 'File e operazioni',
     rememberFolderViews: 'Ricorda la vista (ordinamento, colonne, modalità) di ogni cartella',
     semantic: 'Semantica (RAG)',
+    llm: 'LLM (IA)',
     settingsSections: 'Sezioni delle impostazioni',
     semanticEnableHint:
       'Installa e abilita i componenti semantici prima di configurare librerie, vocabolari e profili di generazione.',
@@ -1770,6 +1771,7 @@ export const it = {
     unreachable: 'Impossibile raggiungere il servizio di IA del profilo «{name}».',
   },
   llmRoles: {
+    advanced: 'Usa endpoint o modelli diversi per ogni funzione',
     endpoint: 'Punto finale',
     title: 'Ruoli',
     intro:

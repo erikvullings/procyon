@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LlmProfile } from './llm-profile';
-import { canAssignRole, endpointIsLocal, type RoleStatus, roleStatus } from './llm-roles';
+import { canAssignRole, preferredProfile, type RoleStatus, roleStatus } from './llm-roles';
 
 function profile(overrides: Partial<LlmProfile> & Pick<LlmProfile, 'id'>): LlmProfile {
   return {
@@ -31,23 +31,6 @@ const cloud = profile({
   id: 'cloud',
   baseUrl: 'https://api.example.test',
   locality: 'cloud',
-});
-
-describe('endpointIsLocal', () => {
-  it.each([
-    ['http://localhost:11434', true],
-    ['http://127.0.0.1:1234', true],
-    ['http://[::1]:8000', true],
-    ['http://192.168.1.20:8000', true],
-    ['http://10.0.0.5', true],
-    ['http://172.20.1.1', true],
-    ['http://printer.local', true],
-    ['https://api.example.test', false],
-    ['https://172.32.0.1', false],
-    ['not a url', false],
-  ])('classifies %s as local=%s', (url, local) => {
-    expect(endpointIsLocal(url)).toBe(local);
-  });
 });
 
 describe('canAssignRole', () => {
@@ -88,5 +71,24 @@ describe('roleStatus', () => {
     expect(
       roleStatus(assignment('cloud', true), 'embeddings', [profile({ id: 'local' }), consented]),
     ).toBe('ready');
+  });
+});
+
+describe('preferredProfile', () => {
+  const first = profile({ id: 'first' });
+  const second = profile({ id: 'second' });
+  const chat = (profileId: string) => ({ profileId, model: 'm', allowCloud: false });
+
+  it('prefers the profile bound to the chat role', () => {
+    expect(preferredProfile([first, second], chat('second'))?.id).toBe('second');
+  });
+
+  it('falls back to the first saved profile when the role is unassigned or stale', () => {
+    expect(preferredProfile([first, second], null)?.id).toBe('first');
+    expect(preferredProfile([first, second], chat('gone'))?.id).toBe('first');
+  });
+
+  it('returns undefined when there are no profiles', () => {
+    expect(preferredProfile([], chat('x'))).toBeUndefined();
   });
 });

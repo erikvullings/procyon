@@ -108,6 +108,7 @@ import type {
   LinkOptionsRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequest,
+  LlmEndpointLocality,
   LlmModelLimits,
   LlmProfile,
   LlmProfileExport,
@@ -339,6 +340,7 @@ import {
   startLinkDoctorScan as requestLinkDoctorScanStart,
   getLinkOptions as requestLinkOptions,
   findLinkReplacements as requestLinkReplacementsFind,
+  classifyLlmEndpoint as requestLlmEndpointClassification,
   activateLlmProfile as requestLlmProfileActivation,
   cloneLlmProfile as requestLlmProfileClone,
   grantLlmProfileConsent as requestLlmProfileConsent,
@@ -2807,6 +2809,16 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) throw unexpectedResponseError('exportLlmProfile', response.status);
+    return response.data;
+  }
+
+  async classifyLlmEndpoint(baseUrl: string, signal?: AbortSignal): Promise<LlmEndpointLocality> {
+    const response = await requestLlmEndpointClassification(
+      { baseUrl },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw unexpectedResponseError('classifyLlmEndpoint', response.status);
     return response.data;
   }
 
