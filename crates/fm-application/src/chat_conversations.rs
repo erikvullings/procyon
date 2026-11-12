@@ -1,8 +1,12 @@
-//! Saved chat conversations (task 0324): a versioned document in the settings data root, grouped
-//! by workspace. Conversations never leave the machine; only a reply request sends their messages
-//! to the chat endpoint, and that is done by [`crate::chat`].
+//! Saved chat conversations (task 0324). Each conversation is one versioned document in its own
+//! directory, `chat-conversations/<workspace>/<conversation>/conversation.json` under the settings
+//! data root. A change rewrites only that conversation's file. Conversations never leave the
+//! machine except in a reply request, which [`crate::chat`] sends.
 
 use std::collections::BTreeMap;
+use std::ffi::OsStr;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use chrono::{SecondsFormat, Utc};
@@ -17,8 +21,10 @@ use uuid::Uuid;
 
 use crate::error::ApplicationError;
 
-/// Schema of the conversations document written by this build.
+/// Schema of one conversation document written by this build.
 const DOCUMENT_SCHEMA_VERSION: u32 = 1;
+/// Directory under the settings data root that holds every workspace's conversations.
+const STORE_DIRECTORY: &str = "chat-conversations";
 /// Longest title, in characters.
 pub(crate) const MAX_TITLE_CHARS: usize = 200;
 /// Characters of the first message that become the title when none was set.
@@ -79,28 +85,19 @@ pub(crate) struct ChatConversation {
     pub messages: Vec<ChatMessage>,
 }
 
-/// The whole chat store: conversations per workspace.
+/// The versioned file that holds one conversation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ChatConversationsDocument {
+struct ConversationDocument {
     schema_version: u32,
-    #[serde(default)]
-    workspaces: BTreeMap<Uuid, Vec<ChatConversation>>,
+    #[serde(flatten)]
+    conversation: ChatConversation,
 }
 
-impl Default for ChatConversationsDocument {
-    fn default() -> Self {
-        Self {
-            schema_version: DOCUMENT_SCHEMA_VERSION,
-            workspaces: BTreeMap::new(),
-        }
-    }
-}
-
-impl VersionedDocument for ChatConversationsDocument {
+impl VersionedDocument for ConversationDocument {
     type MigrationError = ChatConversationError;
 
-    const FILE_NAME: &'static str = "chat-conversations.json";
+    const FILE_NAME: &'static str = "conversation.json";
     const CURRENT_SCHEMA_VERSION: u32 = DOCUMENT_SCHEMA_VERSION;
 
     fn migrate(value: Value, version: u32) -> Result<Value, Self::MigrationError> {
@@ -111,12 +108,7 @@ impl VersionedDocument for ChatConversationsDocument {
     }
 
     fn validate(&self) -> Result<(), Self::MigrationError> {
-        let titles_fit = self
-            .workspaces
-            .values()
-            .flatten()
-            .all(|conversation| conversation.title.chars().count() <= MAX_TITLE_CHARS);
-        if titles_fit {
+        if self.conversation.title.chars().count() <= MAX_TITLE_CHARS {
             Ok(())
         } else {
             Err(ChatConversationError::Invalid("a stored title is too long"))
@@ -124,34 +116,36 @@ impl VersionedDocument for ChatConversationsDocument {
     }
 }
 
-/// Thread-safe store of chat conversations.
+/// Conversations by workspace, then by id.
+type Conversations = BTreeMap<Uuid, BTreeMap<Uuid, ChatConversation>>;
+
+/// Thread-safe store of chat conversations. Every loaded conversation is held in memory; a change
+/// is saved to that conversation's own file before the memory copy is replaced.
 pub(crate) struct ChatConversationService {
-    settings: SettingsStore,
-    document: Mutex<ChatConversationsDocument>,
-    /// False when the saved document could not be read. Nothing is written then, so a failed
-    /// read can never overwrite the conversations that are still on disk.
+    root: PathBuf,
+    conversations: Mutex<Conversations>,
+    /// False when the store directory could not be read. Nothing is written then, so a failed read
+    /// can never lead to a save over conversations that are still on disk.
     writable: bool,
 }
 
 impl ChatConversationService {
-    /// Opens the saved conversations.
-    pub(crate) fn new(settings: SettingsStore) -> Result<Self, ChatConversationError> {
-        let document = settings
-            .load_document::<ChatConversationsDocument>()
-            .map_err(|_| ChatConversationError::Persistence)?
-            .unwrap_or_default();
+    /// Loads every readable conversation under the settings data root.
+    pub(crate) fn new(settings: &SettingsStore) -> Result<Self, ChatConversationError> {
+        let root = settings.directory().join(STORE_DIRECTORY);
+        let conversations = load_all(&root)?;
         Ok(Self {
-            settings,
-            document: Mutex::new(document),
+            root,
+            conversations: Mutex::new(conversations),
             writable: true,
         })
     }
 
-    /// A read-only empty store, used when the saved document could not be read.
-    pub(crate) fn unavailable(settings: SettingsStore) -> Self {
+    /// A read-only empty store, used when the store directory could not be read.
+    pub(crate) fn unavailable(settings: &SettingsStore) -> Self {
         Self {
-            settings,
-            document: Mutex::new(ChatConversationsDocument::default()),
+            root: settings.directory().join(STORE_DIRECTORY),
+            conversations: Mutex::new(BTreeMap::new()),
             writable: false,
         }
     }
@@ -161,11 +155,10 @@ impl ChatConversationService {
         &self,
         workspace: Uuid,
     ) -> Result<Vec<ChatConversation>, ChatConversationError> {
-        let document = self.lock()?;
-        let mut conversations = document
-            .workspaces
+        let all = self.lock()?;
+        let mut conversations: Vec<ChatConversation> = all
             .get(&workspace)
-            .cloned()
+            .map(|conversations| conversations.values().cloned().collect())
             .unwrap_or_default();
         conversations.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
         Ok(conversations)
@@ -177,8 +170,11 @@ impl ChatConversationService {
         workspace: Uuid,
         id: Uuid,
     ) -> Result<ChatConversation, ChatConversationError> {
-        let document = self.lock()?;
-        find(&document, workspace, id).cloned()
+        let all = self.lock()?;
+        all.get(&workspace)
+            .and_then(|conversations| conversations.get(&id))
+            .cloned()
+            .ok_or(ChatConversationError::NotFound)
     }
 
     /// Starts an empty conversation in a workspace.
@@ -186,20 +182,19 @@ impl ChatConversationService {
         &self,
         workspace: Uuid,
     ) -> Result<ChatConversation, ChatConversationError> {
+        self.require_writable()?;
         let conversation = ChatConversation {
             id: Uuid::new_v4(),
             title: String::new(),
             updated_at: now(),
             messages: Vec::new(),
         };
-        self.mutate(|document| {
-            document
-                .workspaces
-                .entry(workspace)
-                .or_default()
-                .push(conversation.clone());
-            Ok(conversation)
-        })
+        let mut all = self.lock()?;
+        save(&self.root, workspace, &conversation)?;
+        all.entry(workspace)
+            .or_default()
+            .insert(conversation.id, conversation.clone());
+        Ok(conversation)
     }
 
     /// Sets the title. Blank clears it, so the list shows the placeholder again.
@@ -213,8 +208,7 @@ impl ChatConversationService {
         if title.chars().count() > MAX_TITLE_CHARS {
             return Err(ChatConversationError::Invalid("the title is too long"));
         }
-        self.mutate(|document| {
-            let conversation = find_mut(document, workspace, id)?;
+        self.update(workspace, id, |conversation| {
             conversation.title = title.to_owned();
             Ok(conversation.clone())
         })
@@ -222,18 +216,23 @@ impl ChatConversationService {
 
     /// Deletes a conversation and everything saved in it.
     pub(crate) fn delete(&self, workspace: Uuid, id: Uuid) -> Result<(), ChatConversationError> {
-        self.mutate(|document| {
-            let conversations = document
-                .workspaces
-                .get_mut(&workspace)
-                .ok_or(ChatConversationError::NotFound)?;
-            let before = conversations.len();
-            conversations.retain(|conversation| conversation.id != id);
-            if conversations.len() == before {
-                return Err(ChatConversationError::NotFound);
-            }
-            Ok(())
-        })
+        self.require_writable()?;
+        let mut all = self.lock()?;
+        if !all
+            .get(&workspace)
+            .is_some_and(|conversations| conversations.contains_key(&id))
+        {
+            return Err(ChatConversationError::NotFound);
+        }
+        match fs::remove_dir_all(conversation_dir(&self.root, workspace, id)) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err(ChatConversationError::Persistence),
+        }
+        if let Some(conversations) = all.get_mut(&workspace) {
+            conversations.remove(&id);
+        }
+        Ok(())
     }
 
     /// Appends one message. The first message of an untitled conversation sets its title.
@@ -243,8 +242,7 @@ impl ChatConversationService {
         id: Uuid,
         message: ChatMessage,
     ) -> Result<ChatConversation, ChatConversationError> {
-        self.mutate(|document| {
-            let conversation = find_mut(document, workspace, id)?;
+        self.update(workspace, id, |conversation| {
             if conversation.title.is_empty() && message.role == ChatRole::User {
                 conversation.title = message
                     .content
@@ -261,63 +259,98 @@ impl ChatConversationService {
         })
     }
 
-    /// Applies one change and saves it. A failed save leaves the in-memory store unchanged.
-    fn mutate<T>(
+    /// Applies a change to one conversation and saves that conversation only. A failed save leaves
+    /// the in-memory copy unchanged.
+    fn update<T>(
         &self,
-        change: impl FnOnce(&mut ChatConversationsDocument) -> Result<T, ChatConversationError>,
+        workspace: Uuid,
+        id: Uuid,
+        change: impl FnOnce(&mut ChatConversation) -> Result<T, ChatConversationError>,
     ) -> Result<T, ChatConversationError> {
-        if !self.writable {
-            return Err(ChatConversationError::Persistence);
-        }
-        let mut document = self.lock()?;
-        let previous = document.clone();
-        let outcome = change(&mut document)?;
-        if self.settings.save_document(&*document).is_err() {
-            *document = previous;
-            return Err(ChatConversationError::Persistence);
-        }
+        self.require_writable()?;
+        let mut all = self.lock()?;
+        let stored = all
+            .get(&workspace)
+            .and_then(|conversations| conversations.get(&id))
+            .ok_or(ChatConversationError::NotFound)?;
+        let mut next = stored.clone();
+        let outcome = change(&mut next)?;
+        save(&self.root, workspace, &next)?;
+        all.entry(workspace).or_default().insert(id, next);
         Ok(outcome)
     }
 
-    fn lock(
-        &self,
-    ) -> Result<std::sync::MutexGuard<'_, ChatConversationsDocument>, ChatConversationError> {
-        self.document
+    fn require_writable(&self) -> Result<(), ChatConversationError> {
+        if self.writable {
+            Ok(())
+        } else {
+            Err(ChatConversationError::Persistence)
+        }
+    }
+
+    fn lock(&self) -> Result<std::sync::MutexGuard<'_, Conversations>, ChatConversationError> {
+        self.conversations
             .lock()
             .map_err(|_| ChatConversationError::Persistence)
     }
 }
 
-fn find(
-    document: &ChatConversationsDocument,
-    workspace: Uuid,
-    id: Uuid,
-) -> Result<&ChatConversation, ChatConversationError> {
-    document
-        .workspaces
-        .get(&workspace)
-        .and_then(|conversations| {
-            conversations
-                .iter()
-                .find(|conversation| conversation.id == id)
-        })
-        .ok_or(ChatConversationError::NotFound)
+fn conversation_dir(root: &Path, workspace: Uuid, id: Uuid) -> PathBuf {
+    root.join(workspace.to_string()).join(id.to_string())
 }
 
-fn find_mut(
-    document: &mut ChatConversationsDocument,
+/// Saves one conversation to its own file, creating its directory first.
+fn save(
+    root: &Path,
     workspace: Uuid,
-    id: Uuid,
-) -> Result<&mut ChatConversation, ChatConversationError> {
-    document
-        .workspaces
-        .get_mut(&workspace)
-        .and_then(|conversations| {
-            conversations
-                .iter_mut()
-                .find(|conversation| conversation.id == id)
+    conversation: &ChatConversation,
+) -> Result<(), ChatConversationError> {
+    let directory = conversation_dir(root, workspace, conversation.id);
+    fs::create_dir_all(&directory).map_err(|_| ChatConversationError::Persistence)?;
+    SettingsStore::new(&directory)
+        .save_document(&ConversationDocument {
+            schema_version: DOCUMENT_SCHEMA_VERSION,
+            conversation: conversation.clone(),
         })
-        .ok_or(ChatConversationError::NotFound)
+        .map_err(|_| ChatConversationError::Persistence)
+}
+
+/// Reads every conversation under `root`. A conversation whose file cannot be read is left out of
+/// the list and is never written, because writes only touch conversations loaded here.
+fn load_all(root: &Path) -> Result<Conversations, ChatConversationError> {
+    let mut all = Conversations::new();
+    let workspaces = match fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(all),
+        Err(_) => return Err(ChatConversationError::Persistence),
+    };
+    for workspace in workspaces.flatten() {
+        let Some(workspace_id) = parse_id(&workspace.file_name()) else {
+            continue;
+        };
+        let Ok(conversation_dirs) = fs::read_dir(workspace.path()) else {
+            continue;
+        };
+        for conversation_dir in conversation_dirs.flatten() {
+            let Some(id) = parse_id(&conversation_dir.file_name()) else {
+                continue;
+            };
+            let loaded =
+                SettingsStore::new(conversation_dir.path()).load_document::<ConversationDocument>();
+            if let Ok(Some(document)) = loaded
+                && document.conversation.id == id
+            {
+                all.entry(workspace_id)
+                    .or_default()
+                    .insert(id, document.conversation);
+            }
+        }
+    }
+    Ok(all)
+}
+
+fn parse_id(name: &OsStr) -> Option<Uuid> {
+    name.to_str().and_then(|text| Uuid::parse_str(text).ok())
 }
 
 fn now() -> String {
@@ -361,8 +394,8 @@ mod tests {
 
     use super::*;
 
-    fn store(directory: &std::path::Path) -> ChatConversationService {
-        ChatConversationService::new(SettingsStore::new(directory)).unwrap()
+    fn store(settings_directory: &Path) -> ChatConversationService {
+        ChatConversationService::new(&SettingsStore::new(settings_directory)).unwrap()
     }
 
     fn user(content: &str) -> ChatMessage {
@@ -383,6 +416,27 @@ mod tests {
         assert_eq!(service.list(first).unwrap().len(), 1);
         assert_eq!(service.list(first).unwrap()[0].id, a.id);
         assert!(service.get(second, a.id).is_err());
+    }
+
+    #[test]
+    fn each_conversation_is_saved_in_its_own_file() {
+        let directory = tempdir().unwrap();
+        let service = store(directory.path());
+        let workspace = Uuid::new_v4();
+        let first = service.create(workspace).unwrap().id;
+        let second = service.create(workspace).unwrap().id;
+        service.append(workspace, first, user("hello")).unwrap();
+        let root = directory.path().join(STORE_DIRECTORY);
+        assert!(
+            conversation_dir(&root, workspace, first)
+                .join("conversation.json")
+                .is_file()
+        );
+        assert!(
+            conversation_dir(&root, workspace, second)
+                .join("conversation.json")
+                .is_file()
+        );
     }
 
     #[test]
@@ -417,7 +471,7 @@ mod tests {
     }
 
     #[test]
-    fn delete_removes_only_that_conversation() {
+    fn delete_removes_only_that_conversation_and_its_file() {
         let directory = tempdir().unwrap();
         let service = store(directory.path());
         let workspace = Uuid::new_v4();
@@ -428,6 +482,8 @@ mod tests {
             service.delete(workspace, gone),
             Err(ChatConversationError::NotFound)
         );
+        let root = directory.path().join(STORE_DIRECTORY);
+        assert!(!conversation_dir(&root, workspace, gone).exists());
         let remaining: Vec<Uuid> = service
             .list(workspace)
             .unwrap()
@@ -470,11 +526,11 @@ mod tests {
     fn an_unreadable_store_refuses_writes() {
         let directory = tempdir().unwrap();
         let workspace = Uuid::new_v4();
-        // A file where the settings directory should be: the document can be neither read nor saved.
+        // A file where the settings directory should be: the store can be neither read nor saved.
         let blocker = directory.path().join("blocked");
         std::fs::write(&blocker, b"not a directory").unwrap();
         let blocked =
-            ChatConversationService::unavailable(SettingsStore::new(blocker.join("inner")));
+            ChatConversationService::unavailable(&SettingsStore::new(blocker.join("inner")));
         assert_eq!(
             blocked.create(workspace),
             Err(ChatConversationError::Persistence)
@@ -488,12 +544,17 @@ mod tests {
         let service = store(directory.path());
         let workspace = Uuid::new_v4();
         let kept = service.create(workspace).unwrap().id;
-        let original = std::fs::metadata(directory.path()).unwrap().permissions();
+        // The workspace directory is read-only, so a new conversation cannot be written into it.
+        let workspace_dir = directory
+            .path()
+            .join(STORE_DIRECTORY)
+            .join(workspace.to_string());
+        let original = std::fs::metadata(&workspace_dir).unwrap().permissions();
         let mut readonly = original.clone();
         readonly.set_readonly(true);
-        std::fs::set_permissions(directory.path(), readonly).unwrap();
+        std::fs::set_permissions(&workspace_dir, readonly).unwrap();
         let outcome = service.create(workspace);
-        std::fs::set_permissions(directory.path(), original).unwrap();
+        std::fs::set_permissions(&workspace_dir, original).unwrap();
         assert_eq!(outcome, Err(ChatConversationError::Persistence));
         let ids: Vec<Uuid> = service
             .list(workspace)
@@ -502,6 +563,35 @@ mod tests {
             .map(|conversation| conversation.id)
             .collect();
         assert_eq!(ids, vec![kept]);
+    }
+
+    #[test]
+    fn an_unreadable_conversation_is_left_out_and_never_overwritten() {
+        let directory = tempdir().unwrap();
+        let workspace = Uuid::new_v4();
+        let damaged = Uuid::new_v4();
+        let damaged_dir = directory
+            .path()
+            .join(STORE_DIRECTORY)
+            .join(workspace.to_string())
+            .join(damaged.to_string());
+        std::fs::create_dir_all(&damaged_dir).unwrap();
+        std::fs::write(damaged_dir.join("conversation.json"), b"{ not json").unwrap();
+
+        let service = store(directory.path());
+        let created = service.create(workspace).unwrap().id;
+
+        let ids: Vec<Uuid> = service
+            .list(workspace)
+            .unwrap()
+            .iter()
+            .map(|conversation| conversation.id)
+            .collect();
+        assert_eq!(ids, vec![created]);
+        assert_eq!(
+            std::fs::read(damaged_dir.join("conversation.json")).unwrap(),
+            b"{ not json"
+        );
     }
 
     #[test]

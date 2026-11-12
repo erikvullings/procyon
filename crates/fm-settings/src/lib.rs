@@ -931,6 +931,12 @@ impl SettingsStore {
         Ok(())
     }
 
+    /// The directory this store keeps its documents in.
+    #[must_use]
+    pub fn directory(&self) -> &Path {
+        &self.directory
+    }
+
     /// Returns the absolute path of an independently versioned sidecar document.
     #[must_use]
     pub fn document_path<D: VersionedDocument>(&self) -> PathBuf {

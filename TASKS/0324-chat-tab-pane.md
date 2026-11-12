@@ -34,9 +34,9 @@ but not change it.
 
 ## Agent Notes
 - 2026-11-12 claude: Created from design discussion. Not started.
-- 2026-11-12 claude: Implemented. Backend: `chat_conversations.rs` (versioned `chat-conversations.json`
-  in the settings root, grouped by workspace; a file that cannot be read makes the store read-only so
-  a save never overwrites it), `chat.rs` (reply through the chat role via
+- 2026-11-12 claude: Implemented. Backend: `chat_conversations.rs` (one versioned `conversation.json`
+  per conversation under `chat-conversations/<workspace>/<conversation>/` in the settings root; a change
+  rewrites only that file; a conversation file that cannot be read is left out and never overwritten), `chat.rs` (reply through the chat role via
   `LlmProfileService::generate_role_streamed`; saves the person's message first and the reply on
   completion; cancel keeps the person's message only), routes `/api/v1/workspaces/{id}/chat/conversations`
   and `/api/v1/chat/reply/{stream,cancel}`, Tauri commands. Frontend: `features/chat/` (pure rules and
@@ -45,5 +45,5 @@ but not change it.
   file (16 KB cap, 32 KB total per message). The preview shows exactly the text sent.
 - Gaps: the browser pane was not checked visually. Search results reach the chat only through the
   folder listing. Knowledge-answer conversations (`SavedRagConversation`) are a separate store with
-  retrieval scope and citations; consolidating them with this store is a later question. The whole
-  conversations document is rewritten on each change; fine for now, revisit if histories grow large.
+  retrieval scope and citations; consolidating them with this store is a later question. Each
+  conversation is its own file, so a message rewrites only its own conversation.

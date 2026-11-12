@@ -455,11 +455,9 @@ impl FileManagerService {
         });
         // Saved conversations are read on their own, so a damaged file never blocks settings.
         let chat_conversations =
-            crate::chat_conversations::ChatConversationService::new(settings_store.clone())
+            crate::chat_conversations::ChatConversationService::new(&settings_store)
                 .unwrap_or_else(|_| {
-                    crate::chat_conversations::ChatConversationService::unavailable(
-                        settings_store.clone(),
-                    )
+                    crate::chat_conversations::ChatConversationService::unavailable(&settings_store)
                 });
         let loaded = match settings_store.load() {
             Ok(loaded) => loaded,

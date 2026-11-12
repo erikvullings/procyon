@@ -339,7 +339,7 @@ mod tests {
 
     fn store() -> (tempfile::TempDir, ChatConversationService) {
         let directory = tempdir().unwrap();
-        let service = ChatConversationService::new(SettingsStore::new(directory.path())).unwrap();
+        let service = ChatConversationService::new(&SettingsStore::new(directory.path())).unwrap();
         (directory, service)
     }
 
