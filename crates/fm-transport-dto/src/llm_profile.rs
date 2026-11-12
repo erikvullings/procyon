@@ -186,6 +186,14 @@ pub struct SaveLlmRoleRequestDto {
     pub allow_cloud: bool,
 }
 
+/// Request to classify an endpoint URL as local or cloud before it is saved.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ClassifyLlmEndpointRequestDto {
+    pub base_url: String,
+}
+
 /// Activation request carrying explicit informed cloud consent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]

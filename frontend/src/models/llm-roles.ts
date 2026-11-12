@@ -11,30 +11,6 @@ export type RoleStatus =
   | 'needsConsent'
   | 'ready';
 
-const PRIVATE_IPV4 = [
-  /^127\./u,
-  /^10\./u,
-  /^192\.168\./u,
-  /^172\.(1[6-9]|2\d|3[01])\./u,
-  /^169\.254\./u,
-];
-
-/**
- * Classifies an endpoint as loopback or private LAN, which needs no consent prompt. An unparsable
- * URL counts as cloud so that it is never treated as local by accident.
- */
-export function endpointIsLocal(baseUrl: string): boolean {
-  let host: string;
-  try {
-    host = new URL(baseUrl).hostname.replace(/^\[|\]$/gu, '').toLowerCase();
-  } catch {
-    return false;
-  }
-  if (host === '::1' || host === 'localhost' || host.endsWith('.localhost')) return true;
-  if (host.endsWith('.local')) return true;
-  return PRIVATE_IPV4.some((pattern) => pattern.test(host));
-}
-
 /** Whether a profile may be assigned to a role, before consent is considered. */
 export function canAssignRole(profile: LlmProfile, role: LlmRole, allowCloud: boolean): boolean {
   if (profile.locality !== 'cloud') return true;

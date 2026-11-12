@@ -46,6 +46,7 @@ export * from './checksumEntryDto.ts';
 export * from './checksumEntryDtoChecksums.ts';
 export * from './checksumFileDto.ts';
 export * from './checksumPageDto.ts';
+export * from './classifyLlmEndpointRequestDto.ts';
 export * from './columnConfigurationDto.ts';
 export * from './comparisonCriteriaDto.ts';
 export * from './comparisonEntryDto.ts';

@@ -4,13 +4,7 @@ import { Switch } from 'mithril-materialized';
 import type { SemanticClient } from '../../api/client/semantic-client.ts';
 import { t } from '../../i18n';
 import type { LlmProfile, LlmRole, LlmRoleAssignment, LlmRoles } from '../../models';
-import {
-  canAssignRole,
-  endpointIsLocal,
-  LLM_ROLES,
-  type RoleStatus,
-  roleStatus,
-} from '../../models/llm-roles';
+import { canAssignRole, LLM_ROLES, type RoleStatus, roleStatus } from '../../models/llm-roles';
 import { errorMessage } from './llm-profile-management';
 
 export interface LlmRoleManagementAttrs {
@@ -171,7 +165,7 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
                   allowCloud: draft.allowCloud,
                 });
                 // The simple view keeps embeddings on the chat endpoint while that endpoint is local.
-                if (role === 'chat' && !advanced && endpointIsLocal(selected?.baseUrl ?? '')) {
+                if (role === 'chat' && !advanced && selected?.locality === 'loopback') {
                   roles = await attrs.client.setLlmRole('embeddings', {
                     profileId: draft.profileId,
                     model,

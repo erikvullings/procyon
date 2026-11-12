@@ -4,10 +4,10 @@ use axum::Json;
 use axum::extract::{Extension, Path, State};
 use axum::http::StatusCode;
 use fm_transport_dto::{
-    ActivateLlmProfileRequestDto, ApplicationErrorDto, DeleteLlmProfileRequestDto,
-    LlmModelLimitsDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto,
-    LlmProfileTestResultDto, LlmRoleDto, LlmRolesDto, SaveLlmProfileRequestDto,
-    SaveLlmRoleRequestDto,
+    ActivateLlmProfileRequestDto, ApplicationErrorDto, ClassifyLlmEndpointRequestDto,
+    DeleteLlmProfileRequestDto, LlmEndpointLocalityDto, LlmModelLimitsDto, LlmProfileDto,
+    LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, LlmRoleDto, LlmRolesDto,
+    SaveLlmProfileRequestDto, SaveLlmRoleRequestDto,
 };
 use tower_http::request_id::RequestId;
 use uuid::Uuid;
@@ -393,6 +393,30 @@ pub(crate) async fn grant_llm_profile_consent(
         state
             .service
             .grant_llm_profile_consent(profile_id)
+            .map_err(|error| ApiError::new(error, request_id))?,
+    ))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/llm-endpoints/classify",
+    operation_id = "classifyLlmEndpoint",
+    request_body = ClassifyLlmEndpointRequestDto,
+    responses(
+        (status = 200, description = "Local or cloud classification of the endpoint", body = LlmEndpointLocalityDto),
+        (status = 400, description = "Invalid endpoint URL", body = ApplicationErrorDto),
+    )
+)]
+pub(crate) async fn classify_llm_endpoint(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<ClassifyLlmEndpointRequestDto>,
+) -> Result<Json<LlmEndpointLocalityDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    Ok(Json(
+        state
+            .service
+            .classify_llm_endpoint(&request.base_url)
             .map_err(|error| ApiError::new(error, request_id))?,
     ))
 }

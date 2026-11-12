@@ -1,6 +1,6 @@
 # 0322 LLM endpoints and roles in Settings, consent at configuration
 
-Status: in progress (roles, migration, consent, cloud-embedding gate, own Settings section and simple/advanced view done; embeddings consumer and reindex deferred)
+Status: done (embeddings consumer moved to 0328)
 Priority: medium
 Subsystem: backend, frontend, settings
 Depends on: 0184, 0243
@@ -86,4 +86,10 @@ all need an LLM.
   (`apps/fm-server/tests/llm_role_routes.rs`). Still open: embeddings consumer (deferred to a later
   task, per the owner); index metadata and reindex on embeddings-model change; the endpoint-local
   classification is duplicated in TypeScript.
+- 2026-11-12 claude: Closed. Endpoint classification now comes from the backend
+  (`POST /api/v1/llm-endpoints/classify`) and private LAN counts as local, as the spec requires.
+  Server policy still keys host allow-listing on true loopback, so LAN endpoints remain under the
+  administrator's host list. The consent save is retry-safe: a saved profile is recorded before its
+  consent grant, and a failed grant leaves consent pending until it is granted. The embeddings
+  consumer and reindex rule moved to 0328.
 

@@ -297,6 +297,51 @@ describe('LlmProfileManagement', () => {
     expect(profile.hasCredential).toBe(true);
   });
 
+  it('retries a failed consent grant by updating the saved profile, not creating another', async () => {
+    const client = new MockFileManagerClient();
+    const createProfile = vi.spyOn(client, 'createLlmProfile');
+    const updateProfile = vi.spyOn(client, 'updateLlmProfile');
+    const grant = vi
+      .spyOn(client, 'grantLlmProfileConsent')
+      .mockRejectedValueOnce(new Error('consent store unavailable'));
+    let save: (() => Promise<boolean>) | undefined;
+    await mountLoaded(client, (handler) => {
+      save = handler;
+    });
+
+    const nameInput = fieldInput('Profile name');
+    const urlInput = fieldInput('Base URL');
+    if (nameInput === undefined || urlInput === undefined) throw new Error('fields not rendered');
+    nameInput.value = 'Cloud';
+    nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+    urlInput.value = 'https://api.example.test';
+    urlInput.dispatchEvent(new Event('input', { bubbles: true }));
+    m.redraw.sync();
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLInputElement>('.fm-llm-consent input')).not.toBeNull(),
+    );
+    const consentSwitch = root.querySelector<HTMLInputElement>('.fm-llm-consent input');
+    consentSwitch?.click();
+    m.redraw.sync();
+
+    expect(await save?.()).toBe(false);
+    expect(createProfile).toHaveBeenCalledOnce();
+    expect(grant).toHaveBeenCalledOnce();
+
+    // The profile was recorded before the grant failed: a retry never creates a second one, and
+    // it asks for consent again rather than saving silently.
+    expect(await save?.()).toBe(false);
+    expect(grant).toHaveBeenCalledOnce();
+    m.redraw.sync();
+    root.querySelector<HTMLInputElement>('.fm-llm-consent input')?.click();
+    m.redraw.sync();
+    expect(await save?.()).toBe(true);
+    expect(createProfile).toHaveBeenCalledOnce();
+    expect(updateProfile).not.toHaveBeenCalled();
+    expect(await client.listLlmProfiles()).toHaveLength(1);
+    expect(grant).toHaveBeenCalledTimes(2);
+  });
+
   it('invalidates consent if a saved cloud endpoint path changes on the same host', async () => {
     const client = new MockFileManagerClient();
     const draft = {

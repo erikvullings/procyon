@@ -43,17 +43,18 @@ use fm_transport_dto::{
     GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto, GetSemanticFolderStatusRequestDto,
     HostKeyProbeDto, ImportSemanticLocalModelRequestDto, ImportSemanticVocabularyRequestDto,
     InstallSemanticWorkerPatchRequestDto, InvokeActionRequestDto, LinkOptionsDto,
-    LinkOptionsRequestDto, ListDirectoryChildrenRequest, ListDirectoryRequest, LlmModelLimitsDto,
-    LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, LlmRoleDto,
-    LlmRolesDto, LocationDto, MoveSemanticDataRequestDto, NavigateRequest,
-    OneDriveAuthorizationAttemptDto, OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto,
-    OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto, OpenStructuredViewRequestDto,
-    OpenStructuredViewResponseDto, OperationDto, OperationQueueStatusDto,
-    PlanSemanticExclusionRequestDto, PlanSemanticModelMigrationRequestDto, PluginDescriptorDto,
-    PluginLogEntryDto, PluginStatusDto, PptxPreviewSessionRequestDto,
-    PreviewDocumentSummaryRequestDto, PreviewSemanticEnrolmentRequestDto,
-    ReadDocxPreviewResourceRequestDto, ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto,
-    ReadFileRangeResponseDto, ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
+    LinkOptionsRequestDto, ListDirectoryChildrenRequest, ListDirectoryRequest,
+    LlmEndpointLocalityDto, LlmModelLimitsDto, LlmProfileDto, LlmProfileExportDto,
+    LlmProfilePresetDto, LlmProfileTestResultDto, LlmRoleDto, LlmRolesDto, LocationDto,
+    MoveSemanticDataRequestDto, NavigateRequest, OneDriveAuthorizationAttemptDto,
+    OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto,
+    OpenPptxPreviewResponseDto, OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
+    OperationDto, OperationQueueStatusDto, PlanSemanticExclusionRequestDto,
+    PlanSemanticModelMigrationRequestDto, PluginDescriptorDto, PluginLogEntryDto, PluginStatusDto,
+    PptxPreviewSessionRequestDto, PreviewDocumentSummaryRequestDto,
+    PreviewSemanticEnrolmentRequestDto, ReadDocxPreviewResourceRequestDto,
+    ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
+    ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
     ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
     ReadStructuredRowsResponseDto, RemoveApplicationDockIconRequestDto,
     RemoveApplicationDockIconResponseDto, RenderChecksumFileRequestDto,
@@ -3486,6 +3487,18 @@ pub(crate) fn export_llm_profile(
     state
         .service
         .export_llm_profile(profile_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Classifies an endpoint URL as local or cloud, with the rule that governs consent.
+#[tauri::command]
+pub(crate) fn classify_llm_endpoint(
+    state: State<'_, AppState>,
+    base_url: String,
+) -> Result<LlmEndpointLocalityDto, ApplicationErrorDto> {
+    state
+        .service
+        .classify_llm_endpoint(&base_url)
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 

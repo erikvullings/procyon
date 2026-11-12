@@ -26,6 +26,7 @@ import type {
   CheckpointSemanticModelMigrationRequestDto,
   ChecksumFileDto,
   ChecksumPageDto,
+  ClassifyLlmEndpointRequestDto,
   ComparisonPageDto,
   CompleteSemanticModelMigrationRequestDto,
   ConfirmSemanticEnrolmentRequestDto,
@@ -122,6 +123,7 @@ import type {
   ListKnowledgeRootsRequestDto,
   ListOperationsParams,
   ListSavedRagConversationsRequestDto,
+  LlmEndpointLocalityDto,
   LlmModelLimitsDto,
   LlmProfileDto,
   LlmProfileExportDto,
@@ -5327,6 +5329,60 @@ return fetchMutator<resolveLinkTargetResponse>(getResolveLinkTargetUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(resolveLinkTargetRequestDto)
+  }
+);}
+
+
+
+export type classifyLlmEndpointResponse200 = {
+  data: LlmEndpointLocalityDto
+  status: 200
+}
+
+export type classifyLlmEndpointResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type classifyLlmEndpointResponseSuccess = (classifyLlmEndpointResponse200) & {
+  headers: Headers;
+};
+export type classifyLlmEndpointResponseError = (classifyLlmEndpointResponse400) & {
+  headers: Headers;
+};
+
+export type classifyLlmEndpointResponse = (classifyLlmEndpointResponseSuccess | classifyLlmEndpointResponseError)
+
+export const getClassifyLlmEndpointUrl = () => {
+
+
+
+
+  return `/api/v1/llm-endpoints/classify`
+}
+
+export const classifyLlmEndpoint = async (classifyLlmEndpointRequestDto: ClassifyLlmEndpointRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<classifyLlmEndpointResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<classifyLlmEndpointResponse>(getClassifyLlmEndpointUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(classifyLlmEndpointRequestDto)
   }
 );}
 
