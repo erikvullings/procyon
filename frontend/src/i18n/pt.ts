@@ -1211,6 +1211,7 @@ export const pt = {
     loadFailed: 'Não foi possível carregar os perfis de LLM.',
   },
   newFromTemplate: {
+    draftWithAssistant: 'Redigir com o assistente',
     folderSource: 'Pasta',
     pluginSource: 'Extensão',
     loadFailed:

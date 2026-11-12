@@ -9,6 +9,8 @@ export interface NewFromTemplateDialogAttrs {
   readonly open: boolean;
   readonly templates: readonly FileTemplateEntry[];
   readonly onCreate: (template: FileTemplateEntry, fileName: string) => void;
+  /** Creates an empty file under `fileName` and opens the assistant chat for it (task 0321). */
+  readonly onDraft: (fileName: string) => void;
   readonly onCancel: () => void;
 }
 
@@ -50,6 +52,12 @@ export const NewFromTemplateDialog: FactoryComponent<NewFromTemplateDialogAttrs>
     if (template === undefined || validateEntryName(fileName) !== undefined) return;
     blurActive();
     attrs.onCreate(template, fileName);
+  }
+
+  function draft(attrs: NewFromTemplateDialogAttrs): void {
+    if (selectedId === undefined || validateEntryName(fileName) !== undefined) return;
+    blurActive();
+    attrs.onDraft(fileName);
   }
 
   function cancel(attrs: NewFromTemplateDialogAttrs): void {
@@ -135,6 +143,11 @@ export const NewFromTemplateDialog: FactoryComponent<NewFromTemplateDialogAttrs>
         },
         buttons: [
           { label: t('button', 'cancel'), onclick: () => cancel(attrs) },
+          {
+            label: t('newFromTemplate', 'draftWithAssistant'),
+            disabled: !canCreate,
+            onclick: () => draft(attrs),
+          },
           {
             label: t('button', 'create'),
             disabled: !canCreate,

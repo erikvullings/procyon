@@ -1226,6 +1226,7 @@ export const de = {
     loadFailed: 'LLM-Profile konnten nicht geladen werden.',
   },
   newFromTemplate: {
+    draftWithAssistant: 'Mit Assistent entwerfen',
     folderSource: 'Ordner',
     pluginSource: 'Erweiterung',
     loadFailed:

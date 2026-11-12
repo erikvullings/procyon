@@ -81,31 +81,52 @@ export function createAssistantWiring(shellState: ShellState, core: AssistantCor
     }
   }
 
-  /** Sends the person's draft and appends the reply, unless the request was stopped meanwhile. */
+  /**
+   * Sends the person's draft and streams the reply into the chat. Events of a request that was
+   * stopped, or superseded, are ignored.
+   */
   async function send(client: FileManagerClient, key: string, draft: string): Promise<void> {
     const entry = shellState.assistantByTab.get(key);
     const text = draft.trim();
     if (entry === undefined || text === '' || entry.profileId === '') return;
     if (entry.pendingRequestId !== undefined) return;
     const requestId = crypto.randomUUID();
+    const isCurrent = (): boolean => entry.pendingRequestId === requestId;
     entry.messages = [...entry.messages, { role: 'user', content: text }];
     entry.pendingRequestId = requestId;
+    entry.streamedText = undefined;
     entry.error = undefined;
     m.redraw();
+    const finish = (): void => {
+      entry.pendingRequestId = undefined;
+      entry.streamedText = undefined;
+    };
     try {
-      const reply = await client.draftFileAssistantReply({
-        requestId,
-        profileId: entry.profileId,
-        fileName: entry.fileName,
-        messages: transcriptForRequest(entry.messages),
-      });
-      if (entry.pendingRequestId !== requestId) return;
-      entry.messages = [...entry.messages, { role: 'assistant', content: reply.text }];
+      await client.streamFileAssistantReply(
+        {
+          requestId,
+          profileId: entry.profileId,
+          fileName: entry.fileName,
+          messages: transcriptForRequest(entry.messages),
+        },
+        (event) => {
+          if (!isCurrent()) return;
+          if (event.type === 'delta') {
+            entry.streamedText = (entry.streamedText ?? '') + event.text;
+          } else if (event.type === 'done') {
+            entry.messages = [...entry.messages, { role: 'assistant', content: event.text }];
+            finish();
+          } else {
+            entry.error = t('assistant', 'failed');
+            finish();
+          }
+          m.redraw();
+        },
+      );
     } catch {
-      if (entry.pendingRequestId !== requestId) return;
-      entry.error = t('assistant', 'failed');
+      if (isCurrent()) entry.error = t('assistant', 'failed');
     } finally {
-      if (entry.pendingRequestId === requestId) entry.pendingRequestId = undefined;
+      if (isCurrent()) finish();
       m.redraw();
     }
   }
@@ -116,6 +137,7 @@ export function createAssistantWiring(shellState: ShellState, core: AssistantCor
     const requestId = entry?.pendingRequestId;
     if (entry === undefined || requestId === undefined) return;
     entry.pendingRequestId = undefined;
+    entry.streamedText = undefined;
     m.redraw();
     void client.cancelFileAssistantReply(requestId).catch(() => undefined);
   }

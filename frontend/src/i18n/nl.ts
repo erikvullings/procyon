@@ -1606,6 +1606,7 @@ export const nl = {
     loadFailed: 'LLM-profielen konden niet worden geladen.',
   },
   newFromTemplate: {
+    draftWithAssistant: 'Opstellen met assistent',
     folderSource: 'Map',
     pluginSource: 'Plug-in',
     loadFailed:

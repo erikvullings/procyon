@@ -69,7 +69,7 @@ import type {
   ExecuteKnowledgeSearchRequest,
   ExportCorpusThemesRequest,
   ExportCorpusThemesResponse,
-  FileAssistantReply,
+  FileAssistantEvent,
   FileAssistantRequest,
   FileDiffOptions,
   FileDiffResult,
@@ -1714,17 +1714,20 @@ export class TauriFileManagerClient implements FileManagerClient {
     return invoke<LlmProfilePreset[]>('list_llm_profile_presets');
   }
 
-  draftFileAssistantReply(
+  streamFileAssistantReply(
     request: FileAssistantRequest,
+    onEvent: (event: FileAssistantEvent) => void,
     _signal?: AbortSignal,
-  ): Promise<FileAssistantReply> {
-    return invoke<FileAssistantReply>('draft_file_assistant_reply', {
+  ): Promise<void> {
+    const events = new Channel<FileAssistantEvent>(onEvent);
+    return invoke<void>('stream_file_assistant_reply', {
       request: {
         requestId: request.requestId,
         profileId: request.profileId,
         fileName: request.fileName,
         messages: request.messages,
       },
+      events,
     });
   }
 

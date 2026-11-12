@@ -2882,7 +2882,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     },
     openEditorForCreatedFile: (location, name) => {
       const active = activeDirectory();
-      if (active === undefined) return;
+      if (active === undefined) return undefined;
       refetchAffectedPanes(active.paneId);
       // The editor loads `entry.location`, so it must be the new file's own
       // location (the directory under the cursor joined with its name), not the
@@ -2901,7 +2901,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         readOnly: false,
         metadataRevision: 0,
       });
+      return active.paneId;
     },
+    openAssistant: (paneId) => void assistantWiring.openAssistant(paneId),
     getFinderTagsLoader: () => shellState.finderTagsLoader,
     getRuntimeCapabilities: () => shellState.runtimeCapabilities,
     cancelAutoDismiss: opsWiring.cancelAutoDismiss,

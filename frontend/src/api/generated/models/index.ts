@@ -134,6 +134,8 @@ export * from './exportCorpusThemesRequestDto.ts';
 export * from './exportCorpusThemesResponseDto.ts';
 export * from './exportSemanticVocabularyResponseDto.ts';
 export * from './favouriteLocationDto.ts';
+export * from './fileAssistantEventDto.ts';
+export * from './fileAssistantFailureDto.ts';
 export * from './fileAssistantMessageDto.ts';
 export * from './fileAssistantReplyDto.ts';
 export * from './fileAssistantRequestDto.ts';

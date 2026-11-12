@@ -59,7 +59,7 @@ import type {
   ExecuteKnowledgeSearchRequest,
   ExportCorpusThemesRequest,
   ExportCorpusThemesResponse,
-  FileAssistantReply,
+  FileAssistantEvent,
   FileAssistantRequest,
   FileDiffOptions,
   FileDiffResult,
@@ -250,6 +250,7 @@ import { SseEventStream } from '../events/sse-event-stream';
 import {
   ApiError,
   desktopHostRequiredError,
+  postNdjson,
   resolveBaseUrl,
   unexpectedResponseError,
 } from '../fetch-mutator';
@@ -303,7 +304,6 @@ import {
   startDuplicateScan as requestDuplicateScanStart,
   getEntryMetadata as requestEntryMetadata,
   cancelFileAssistantReply as requestFileAssistantCancel,
-  draftFileAssistantReply as requestFileAssistantReply,
   getFileIcon as requestFileIcon,
   listFileTemplates as requestFileTemplates,
   getFinderTags as requestFinderTags,
@@ -2715,11 +2715,13 @@ export class HttpFileManagerClient implements FileManagerClient {
     return response.data;
   }
 
-  async draftFileAssistantReply(
+  async streamFileAssistantReply(
     request: FileAssistantRequest,
+    onEvent: (event: FileAssistantEvent) => void,
     signal?: AbortSignal,
-  ): Promise<FileAssistantReply> {
-    const response = await requestFileAssistantReply(
+  ): Promise<void> {
+    await postNdjson<FileAssistantEvent>(
+      '/api/v1/file-assistant/reply/stream',
       {
         requestId: request.requestId,
         profileId: request.profileId,
@@ -2729,12 +2731,9 @@ export class HttpFileManagerClient implements FileManagerClient {
           content: message.content,
         })),
       },
-      signal === undefined ? undefined : { signal },
+      onEvent,
+      signal,
     );
-    if (response.status !== 200) {
-      throw unexpectedResponseError('draftFileAssistantReply', response.status);
-    }
-    return response.data;
   }
 
   async cancelFileAssistantReply(requestId: string): Promise<void> {

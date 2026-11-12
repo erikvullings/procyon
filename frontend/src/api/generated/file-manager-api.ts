@@ -65,7 +65,7 @@ import type {
   ExportCorpusThemesRequestDto,
   ExportCorpusThemesResponseDto,
   ExportSemanticVocabularyResponseDto,
-  FileAssistantReplyDto,
+  FileAssistantEventDto,
   FileAssistantRequestDto,
   FileTemplateEntryDto,
   FindLinkReplacementsRequestDto,
@@ -273,6 +273,11 @@ import type {
 } from './models';
 
 import { fetchMutator } from '../fetch-mutator.ts';
+
+interface TypedResponse<T> extends Response {
+  json(): Promise<T>;
+}
+
 
 export type listActionsResponse200 = {
   data: ActionDescriptorDto[]
@@ -2749,73 +2754,6 @@ export const subscribeEvents = async ( options?: Parameters<typeof fetchMutator>
 
 
 
-export type draftFileAssistantReplyResponse200 = {
-  data: FileAssistantReplyDto
-  status: 200
-}
-
-export type draftFileAssistantReplyResponse400 = {
-  data: ApplicationErrorDto
-  status: 400
-}
-
-export type draftFileAssistantReplyResponse500 = {
-  data: ApplicationErrorDto
-  status: 500
-}
-
-export type draftFileAssistantReplyResponse503 = {
-  data: ApplicationErrorDto
-  status: 503
-}
-
-export type draftFileAssistantReplyResponseSuccess = (draftFileAssistantReplyResponse200) & {
-  headers: Headers;
-};
-export type draftFileAssistantReplyResponseError = (draftFileAssistantReplyResponse400 | draftFileAssistantReplyResponse500 | draftFileAssistantReplyResponse503) & {
-  headers: Headers;
-};
-
-export type draftFileAssistantReplyResponse = (draftFileAssistantReplyResponseSuccess | draftFileAssistantReplyResponseError)
-
-export const getDraftFileAssistantReplyUrl = () => {
-
-
-
-
-  return `/api/v1/file-assistant/reply`
-}
-
-/**
- * @summary Drafts the next reply of a file-assistant conversation through a saved LLM profile.
- */
-export const draftFileAssistantReply = async (fileAssistantRequestDto: FileAssistantRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<draftFileAssistantReplyResponse> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<draftFileAssistantReplyResponse>(getDraftFileAssistantReplyUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(fileAssistantRequestDto)
-  }
-);}
-
-
-
 export type cancelFileAssistantReplyResponse204 = {
   data: void
   status: 204
@@ -2861,6 +2799,58 @@ return fetchMutator<cancelFileAssistantReplyResponse>(getCancelFileAssistantRepl
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(cancelFileAssistantRequestDto)
+  }
+);}
+
+
+
+export type streamFileAssistantReplyResponse200 = {
+  stream: TypedResponse<FileAssistantEventDto>
+  status: 200
+}
+
+export type streamFileAssistantReplyResponseSuccess = (streamFileAssistantReplyResponse200) & {
+  headers: Headers;
+};
+;
+
+export type streamFileAssistantReplyResponse = (streamFileAssistantReplyResponseSuccess)
+
+export const getStreamFileAssistantReplyUrl = () => {
+
+
+
+
+  return `/api/v1/file-assistant/reply/stream`
+}
+
+/**
+ * @summary Streams the next reply of a file-assistant conversation as newline-delimited JSON events:
+fragments as they arrive, then exactly one `done` or `failed` event. Every outcome, including
+a refused request, arrives as an event on this 200 response.
+ */
+export const streamFileAssistantReply = async (fileAssistantRequestDto: FileAssistantRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<streamFileAssistantReplyResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<streamFileAssistantReplyResponse>(getStreamFileAssistantReplyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json',Accept: 'application/x-ndjson', ...getHeaders(options?.headers) },
+    body: JSON.stringify(fileAssistantRequestDto)
   }
 );}
 

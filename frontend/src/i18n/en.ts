@@ -1581,6 +1581,7 @@ export const en = {
     loadFailed: 'Could not load LLM profiles.',
   },
   newFromTemplate: {
+    draftWithAssistant: 'Draft with assistant',
     folderSource: 'Folder',
     pluginSource: 'Plugin',
     loadFailed: 'Could not load the template list. Only the app templates are shown.',

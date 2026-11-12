@@ -2040,64 +2040,6 @@
         }
       }
     },
-    "/api/v1/file-assistant/reply": {
-      "post": {
-        "summary": "Drafts the next reply of a file-assistant conversation through a saved LLM profile.",
-        "operationId": "draftFileAssistantReply",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/FileAssistantRequestDto"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FileAssistantReplyDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApplicationErrorDto"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApplicationErrorDto"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApplicationErrorDto"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/file-assistant/reply/cancel": {
       "post": {
         "summary": "Cancels one running file-assistant reply.",
@@ -2115,6 +2057,34 @@
         "responses": {
           "204": {
             "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/file-assistant/reply/stream": {
+      "post": {
+        "summary": "Streams the next reply of a file-assistant conversation as newline-delimited JSON events:\nfragments as they arrive, then exactly one `done` or `failed` event. Every outcome, including\na refused request, arrives as an event on this 200 response.",
+        "operationId": "streamFileAssistantReply",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileAssistantRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Newline-delimited JSON file-assistant events.",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileAssistantEventDto"
+                }
+              }
+            }
           }
         }
       }
@@ -13610,6 +13580,81 @@
           }
         }
       },
+      "FileAssistantEventDto": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "A fragment of the reply, in arrival order. Fragments are provisional.",
+            "required": [
+              "text",
+              "type"
+            ],
+            "properties": {
+              "text": {
+                "type": "string",
+                "description": "Text to append to what has arrived so far."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "delta"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The whole reply, unwrapped from any single code fence. It replaces the fragments.",
+            "required": [
+              "text",
+              "type"
+            ],
+            "properties": {
+              "text": {
+                "type": "string",
+                "description": "Reply text, to be placed in the editor when the person accepts it."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "done"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The reply ended without text; no `done` event follows.",
+            "required": [
+              "reason",
+              "type"
+            ],
+            "properties": {
+              "reason": {
+                "$ref": "#/components/schemas/FileAssistantFailureDto",
+                "description": "Why the reply ended."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "failed"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "One event of a streamed reply: fragments as they arrive, then exactly one final event."
+      },
+      "FileAssistantFailureDto": {
+        "type": "string",
+        "description": "Why a reply ended without text.",
+        "enum": [
+          "invalidRequest",
+          "unavailable",
+          "empty",
+          "cancelled"
+        ]
+      },
       "FileAssistantMessageDto": {
         "type": "object",
         "description": "One chat message in a file-assistant conversation.",
@@ -13625,19 +13670,6 @@
           "role": {
             "$ref": "#/components/schemas/FileAssistantRoleDto",
             "description": "Author of the message."
-          }
-        }
-      },
-      "FileAssistantReplyDto": {
-        "type": "object",
-        "description": "The model's reply, with the file contents already unwrapped from any single code fence.",
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "text": {
-            "type": "string",
-            "description": "Reply text, to be placed in the editor when the person accepts it."
           }
         }
       },

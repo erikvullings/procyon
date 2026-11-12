@@ -1212,6 +1212,7 @@ export const fr = {
     loadFailed: 'Impossible de charger les profils LLM.',
   },
   newFromTemplate: {
+    draftWithAssistant: 'Rédiger avec l’assistant',
     folderSource: 'Dossier',
     pluginSource: 'Extension',
     loadFailed:

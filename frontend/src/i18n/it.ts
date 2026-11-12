@@ -1206,6 +1206,7 @@ export const it = {
     loadFailed: 'Impossibile caricare i profili LLM.',
   },
   newFromTemplate: {
+    draftWithAssistant: 'Scrivi con l’assistente',
     folderSource: 'Cartella',
     pluginSource: 'Estensione',
     loadFailed:

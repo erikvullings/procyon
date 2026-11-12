@@ -119,8 +119,8 @@ pub use entry::{
 };
 pub use error::{ApplicationErrorCode, ApplicationErrorDto};
 pub use file_assistant::{
-    CancelFileAssistantRequestDto, FileAssistantMessageDto, FileAssistantReplyDto,
-    FileAssistantRequestDto, FileAssistantRoleDto,
+    CancelFileAssistantRequestDto, FileAssistantEventDto, FileAssistantFailureDto,
+    FileAssistantMessageDto, FileAssistantRequestDto, FileAssistantRoleDto,
 };
 pub use file_diff::{
     DiffFilesRequestDto, DiffFilesResponseDto, DiffRowDto, DiffRowKindDto, DiffSegmentDto,

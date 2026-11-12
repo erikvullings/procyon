@@ -23,7 +23,7 @@ import type {
   ExecuteKnowledgeSearchRequest,
   ExportCorpusThemesRequest,
   ExportCorpusThemesResponse,
-  FileAssistantReply,
+  FileAssistantEvent,
   FileAssistantRequest,
   GenerateDocumentSummaryRequest,
   GenerateKnowledgeAnswerRequest,
@@ -1166,13 +1166,18 @@ export class MockSemanticClient implements SemanticClient {
     });
   }
 
-  draftFileAssistantReply(
+  streamFileAssistantReply(
     request: FileAssistantRequest,
+    onEvent: (event: FileAssistantEvent) => void,
     signal?: AbortSignal,
-  ): Promise<FileAssistantReply> {
-    return this.ctx.perform('draftFileAssistantReply', signal, () => {
+  ): Promise<void> {
+    return this.ctx.perform('streamFileAssistantReply', signal, () => {
       const prompt = request.messages.at(-1)?.content ?? '';
-      return { text: `# ${request.fileName}\n\n${prompt}\n` };
+      const text = `# ${request.fileName}\n\n${prompt}\n`;
+      for (const fragment of text.match(/[\s\S]{1,12}/gu) ?? []) {
+        onEvent({ type: 'delta', text: fragment });
+      }
+      onEvent({ type: 'done', text });
     });
   }
 

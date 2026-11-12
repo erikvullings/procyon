@@ -16,7 +16,7 @@ afterEach(() => {
   root.remove();
 });
 
-function mount(open: boolean, onCreate = vi.fn(), onCancel = vi.fn()): void {
+function mount(open: boolean, onCreate = vi.fn(), onCancel = vi.fn(), onDraft = vi.fn()): void {
   m.mount(root, {
     view: () =>
       m(NewFromTemplateDialog, {
@@ -24,6 +24,7 @@ function mount(open: boolean, onCreate = vi.fn(), onCancel = vi.fn()): void {
         templates: appTemplateEntries(DEFAULT_FILE_TEMPLATES),
         onCreate,
         onCancel,
+        onDraft,
       }),
   });
   m.redraw.sync();
@@ -72,6 +73,7 @@ describe('NewFromTemplateDialog', () => {
           templates: entries,
           onCreate: vi.fn(),
           onCancel: vi.fn(),
+          onDraft: vi.fn(),
         }),
     });
     m.redraw.sync();
@@ -93,6 +95,23 @@ describe('NewFromTemplateDialog', () => {
       appTemplateEntries(DEFAULT_FILE_TEMPLATES)[0],
       'Meeting.txt',
     );
+  });
+
+  it('drafts with the assistant under the edited name, without creating the template', () => {
+    const onCreate = vi.fn();
+    const onDraft = vi.fn();
+    mount(true, onCreate, vi.fn(), onDraft);
+    const input = root.querySelector<HTMLInputElement>('#new-from-template-name');
+    if (!input) throw new Error('name input missing');
+    input.value = 'Draft.sh';
+    input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    m.redraw.sync();
+    const draft = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'Draft with assistant',
+    );
+    draft?.click();
+    expect(onDraft).toHaveBeenCalledWith('Draft.sh');
+    expect(onCreate).not.toHaveBeenCalled();
   });
 
   it('refuses an invalid name', () => {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FileManagerClient } from '../api/client/file-manager-client';
 import type { AssistantTabEntry } from '../features/assistant/assistant-tab-state';
-import type { FileAssistantRequest, LlmProfile } from '../models';
+import type { FileAssistantEvent, FileAssistantRequest, LlmProfile } from '../models';
 import { createAssistantWiring } from './assistant-wiring';
 import type { ShellState } from './shell-state';
 
@@ -47,13 +47,18 @@ afterEach(() => {
 });
 
 describe('file assistant wiring', () => {
-  it('appends the user message and the reply, then clears the pending request', async () => {
+  it('streams fragments into the chat, then appends the final reply and clears the request', async () => {
     const seen: FileAssistantRequest[] = [];
     const client = {
-      draftFileAssistantReply: vi.fn((request: FileAssistantRequest) => {
-        seen.push(request);
-        return Promise.resolve({ text: '#!/usr/bin/env bash\n' });
-      }),
+      streamFileAssistantReply: vi.fn(
+        (request: FileAssistantRequest, onEvent: (event: FileAssistantEvent) => void) => {
+          seen.push(request);
+          onEvent({ type: 'delta', text: '#!/usr' });
+          onEvent({ type: 'delta', text: '/bin/bash\n' });
+          onEvent({ type: 'done', text: '#!/usr/bin/env bash\n' });
+          return Promise.resolve();
+        },
+      ),
     };
     const { shell, entry } = fakeShell(client);
     const wiring = createAssistantWiring(shell, { replaceWorkspace: vi.fn() });
@@ -62,14 +67,55 @@ describe('file assistant wiring', () => {
 
     expect(seen[0]).toMatchObject({ requestId: 'req-1', profileId: 'p1', fileName: 'script.sh' });
     expect(seen[0]?.messages).toEqual([{ role: 'user', content: 'a backup script' }]);
-    expect(entry.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(entry.messages).toEqual([
+      { role: 'user', content: 'a backup script' },
+      { role: 'assistant', content: '#!/usr/bin/env bash\n' },
+    ]);
+    expect(entry.streamedText).toBeUndefined();
     expect(entry.pendingRequestId).toBeUndefined();
     expect(entry.error).toBeUndefined();
   });
 
+  it('keeps the fragments that arrived while the reply was pending', async () => {
+    const client = {
+      streamFileAssistantReply: vi.fn(
+        (_request: FileAssistantRequest, onEvent: (event: FileAssistantEvent) => void) => {
+          onEvent({ type: 'delta', text: 'partial' });
+          return new Promise<void>(() => undefined);
+        },
+      ),
+    };
+    const { shell, entry } = fakeShell(client);
+    const wiring = createAssistantWiring(shell, { replaceWorkspace: vi.fn() });
+
+    void wiring.send(client as unknown as FileManagerClient, entry.key, 'x');
+    await Promise.resolve();
+    expect(entry.streamedText).toBe('partial');
+    expect(entry.pendingRequestId).toBe('req-1');
+  });
+
   it('records a sanitized error when the reply fails', async () => {
     const client = {
-      draftFileAssistantReply: vi.fn(() => Promise.reject(new Error('boom'))),
+      streamFileAssistantReply: vi.fn(
+        (_request: FileAssistantRequest, onEvent: (event: FileAssistantEvent) => void) => {
+          onEvent({ type: 'failed', reason: 'unavailable' });
+          return Promise.resolve();
+        },
+      ),
+    };
+    const { shell, entry } = fakeShell(client);
+    const wiring = createAssistantWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.send(client as unknown as FileManagerClient, entry.key, 'x');
+
+    expect(entry.error).toBeTruthy();
+    expect(entry.messages.map((message) => message.role)).toEqual(['user']);
+    expect(entry.pendingRequestId).toBeUndefined();
+  });
+
+  it('records a sanitized error when the transport rejects', async () => {
+    const client = {
+      streamFileAssistantReply: vi.fn(() => Promise.reject(new Error('boom'))),
     };
     const { shell, entry } = fakeShell(client);
     const wiring = createAssistantWiring(shell, { replaceWorkspace: vi.fn() });
@@ -81,23 +127,28 @@ describe('file assistant wiring', () => {
     expect(entry.pendingRequestId).toBeUndefined();
   });
 
-  it('stop cancels the request and discards its late reply', async () => {
-    let resolveReply: (value: { text: string }) => void = () => undefined;
+  it('stop cancels the request and discards its late events', async () => {
+    let emit: (event: FileAssistantEvent) => void = () => undefined;
     const client = {
-      draftFileAssistantReply: vi.fn(
-        () => new Promise<{ text: string }>((resolve) => (resolveReply = resolve)),
+      streamFileAssistantReply: vi.fn(
+        (_request: FileAssistantRequest, onEvent: (event: FileAssistantEvent) => void) => {
+          emit = onEvent;
+          return new Promise<void>(() => undefined);
+        },
       ),
       cancelFileAssistantReply: vi.fn(() => Promise.resolve()),
     };
     const { shell, entry } = fakeShell(client);
     const wiring = createAssistantWiring(shell, { replaceWorkspace: vi.fn() });
 
-    const sending = wiring.send(client as unknown as FileManagerClient, entry.key, 'x');
+    void wiring.send(client as unknown as FileManagerClient, entry.key, 'x');
+    emit({ type: 'delta', text: 'half' });
     wiring.stop(client as unknown as FileManagerClient, entry.key);
-    resolveReply({ text: 'late' });
-    await sending;
+    emit({ type: 'delta', text: ' more' });
+    emit({ type: 'done', text: 'late' });
 
     expect(client.cancelFileAssistantReply).toHaveBeenCalledWith('req-1');
+    expect(entry.streamedText).toBeUndefined();
     expect(entry.messages.map((message) => message.role)).toEqual(['user']);
   });
 

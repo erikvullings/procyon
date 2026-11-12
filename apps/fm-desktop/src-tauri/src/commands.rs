@@ -2763,17 +2763,22 @@ pub(crate) fn list_file_templates(
     state.service.list_file_templates()
 }
 
-/// Drafts the next file-assistant reply through a saved LLM profile (task 0321).
+/// Streams the next file-assistant reply through a saved LLM profile (task 0321): fragments, then
+/// one final event on `events`. Every outcome arrives as an event, so the command itself succeeds.
 #[tauri::command]
-pub(crate) async fn draft_file_assistant_reply(
+pub(crate) async fn stream_file_assistant_reply(
     state: State<'_, AppState>,
     request: fm_transport_dto::FileAssistantRequestDto,
-) -> Result<fm_transport_dto::FileAssistantReplyDto, ApplicationErrorDto> {
+    events: Channel<fm_transport_dto::FileAssistantEventDto>,
+) -> Result<(), ApplicationErrorDto> {
     state
         .service
-        .draft_file_assistant_reply(request)
-        .await
-        .map_err(|error| error.into_dto(Uuid::new_v4()))
+        .stream_file_assistant_reply(request, &mut |event| {
+            // A closed channel means the window is gone; there is no one left to tell.
+            let _ = events.send(event);
+        })
+        .await;
+    Ok(())
 }
 
 /// Cancels one running file-assistant reply.

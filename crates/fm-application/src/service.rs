@@ -3345,16 +3345,16 @@ impl FileManagerService {
         )
     }
 
-    /// Drafts the next file-assistant reply through a saved LLM profile (task 0321). The reply is
-    /// returned to the caller; nothing is written to disk here.
-    pub async fn draft_file_assistant_reply(
+    /// Streams the next file-assistant reply through a saved LLM profile (task 0321): fragments as
+    /// they arrive, then one final event. Nothing is written to disk here.
+    pub async fn stream_file_assistant_reply(
         &self,
         request: fm_transport_dto::FileAssistantRequestDto,
-    ) -> Result<fm_transport_dto::FileAssistantReplyDto, ApplicationError> {
+        on_event: &mut (dyn FnMut(fm_transport_dto::FileAssistantEventDto) + Send),
+    ) {
         self.file_assistant
-            .reply(&self.llm_profiles, request)
-            .await
-            .map_err(crate::file_assistant::error_to_application)
+            .stream(&self.llm_profiles, request, on_event)
+            .await;
     }
 
     /// Cancels one running file-assistant reply. Returns whether it was still running.

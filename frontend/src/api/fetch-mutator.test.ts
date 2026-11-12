@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiError,
   fetchMutator,
+  postNdjson,
   setBaseUrlOverride,
   setSessionHeaderProvider,
   setUnauthorizedHandler,
@@ -199,5 +200,48 @@ describe('fetchMutator', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(abortError));
 
     await expect(fetchMutator('/api/v1/health', {})).rejects.toBe(abortError);
+  });
+});
+
+describe('postNdjson', () => {
+  it('hands each line to the caller as it completes, even when split across chunks', async () => {
+    const encoder = new TextEncoder();
+    const chunks = [
+      '{"type":"delta","text":"He"}\n{"type":"del',
+      'ta","text":"llo"}\r\n{"type":"done","text":"Hello"}',
+    ];
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+        controller.close();
+      },
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(body, { status: 200, headers: { 'content-type': 'application/x-ndjson' } }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const items: unknown[] = [];
+
+    await postNdjson('/api/v1/file-assistant/reply/stream', { requestId: 'r' }, (item) =>
+      items.push(item),
+    );
+
+    expect(items).toEqual([
+      { type: 'delta', text: 'He' },
+      { type: 'delta', text: 'llo' },
+      { type: 'done', text: 'Hello' },
+    ]);
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: 'POST' });
+  });
+
+  it('rejects with the API error when the request fails before the stream starts', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse(500, { code: 'internal', message: 'nope' })),
+    );
+
+    await expect(postNdjson('/api/v1/x', {}, () => undefined)).rejects.toBeInstanceOf(ApiError);
   });
 });

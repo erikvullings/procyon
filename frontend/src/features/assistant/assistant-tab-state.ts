@@ -30,6 +30,8 @@ export interface AssistantTabEntry {
   messages: AssistantChatMessage[];
   /** Identity of the request in flight, if any. */
   pendingRequestId?: string | undefined;
+  /** The reply as far as it has streamed; replaced by the final text when the reply is done. */
+  streamedText?: string | undefined;
   error?: string | undefined;
 }
 

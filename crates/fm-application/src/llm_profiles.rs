@@ -8,6 +8,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error as _;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -424,6 +425,25 @@ pub trait LlmProbeTransport: Send + Sync {
                 reasoning_seen: false,
             })
     }
+
+    /// Like [`Self::generate_chat_adaptive`], but reports each content fragment through
+    /// `on_delta` as it arrives. Transports that cannot read incrementally report the whole text
+    /// once.
+    async fn generate_chat_streamed(
+        &self,
+        request: &LlmProbeRequest,
+        generation: &LlmChatGeneration,
+        cancellation: &CancellationToken,
+        on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
+    ) -> Result<ChatOutcome, LlmProfileError> {
+        let outcome = self
+            .generate_chat_adaptive(request, generation, cancellation)
+            .await?;
+        if let ChatOutcome::Generated { text, .. } = &outcome {
+            on_delta(text);
+        }
+        Ok(outcome)
+    }
 }
 
 /// Reqwest implementation used by real hosts.
@@ -621,14 +641,26 @@ impl LlmProbeTransport for ReqwestLlmProbeTransport {
         generation: &LlmChatGeneration,
         cancellation: &CancellationToken,
     ) -> Result<ChatOutcome, LlmProfileError> {
+        self.generate_chat_streamed(request, generation, cancellation, &mut |_| {})
+            .await
+    }
+
+    async fn generate_chat_streamed(
+        &self,
+        request: &LlmProbeRequest,
+        generation: &LlmChatGeneration,
+        cancellation: &CancellationToken,
+        on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
+    ) -> Result<ChatOutcome, LlmProfileError> {
         if request.ollama_generation_url.is_some() {
-            return self
+            let text = self
                 .generate_chat(request, generation, cancellation)
-                .await
-                .map(|text| ChatOutcome::Generated {
-                    text,
-                    reasoning_seen: false,
-                });
+                .await?;
+            on_delta(&text);
+            return Ok(ChatOutcome::Generated {
+                text,
+                reasoning_seen: false,
+            });
         }
         if !generation.images.is_empty() {
             return Err(LlmProfileError::InvalidConfiguration);
@@ -645,7 +677,7 @@ impl LlmProbeTransport for ReqwestLlmProbeTransport {
             return Ok(ChatOutcome::Rejected);
         }
         classify_http_status(status)?;
-        let bytes = read_bounded_body(response, cancellation).await?;
+        let bytes = read_streamed_body(response, cancellation, on_delta).await?;
         let (text, reasoning_seen) = parse_streaming_chat_detailed(&bytes)?;
         Ok(ChatOutcome::Generated {
             text,
@@ -658,21 +690,75 @@ async fn read_bounded_body(
     response: reqwest::Response,
     cancellation: &CancellationToken,
 ) -> Result<Vec<u8>, LlmProfileError> {
+    read_streamed_body(response, cancellation, &mut |_| {}).await
+}
+
+/// Reads a bounded response body and reports the content fragments of its `data:` events as they
+/// complete. The whole body is still returned for the strict final parse.
+async fn read_streamed_body(
+    response: reqwest::Response,
+    cancellation: &CancellationToken,
+    on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
+) -> Result<Vec<u8>, LlmProfileError> {
     let mut stream = response.bytes_stream();
     let mut bytes = Vec::new();
+    let mut events = StreamedContent {
+        pending: Vec::new(),
+        on_delta,
+    };
     loop {
         let next = tokio::select! {
             () = cancellation.cancelled() => return Err(LlmProfileError::Cancelled),
             next = stream.next() => next,
         };
         let Some(chunk) = next else {
+            // A final line without its newline still counts.
+            events.push(b"\n");
             return Ok(bytes);
         };
         let chunk = chunk.map_err(map_reqwest)?;
         if bytes.len().saturating_add(chunk.len()) > MAX_STREAM_BYTES {
             return Err(LlmProfileError::MalformedResponse);
         }
+        events.push(&chunk);
         bytes.extend_from_slice(&chunk);
+    }
+}
+
+/// Splits streamed SSE bytes into lines and reports each `choices[].delta.content` fragment.
+/// Lines that do not parse are skipped here; the strict parse of the whole body decides validity.
+struct StreamedContent<'a> {
+    pending: Vec<u8>,
+    on_delta: &'a mut (dyn for<'b> FnMut(&'b str) + Send),
+}
+
+impl StreamedContent<'_> {
+    fn push(&mut self, chunk: &[u8]) {
+        self.pending.extend_from_slice(chunk);
+        while let Some(end) = self.pending.iter().position(|byte| *byte == b'\n') {
+            let line: Vec<u8> = self.pending.drain(..=end).collect();
+            if let Ok(line) = std::str::from_utf8(&line) {
+                self.report(line);
+            }
+        }
+    }
+
+    fn report(&mut self, line: &str) {
+        let Some(data) = line.trim().strip_prefix("data:") else {
+            return;
+        };
+        let Ok(value) = serde_json::from_str::<Value>(data.trim()) else {
+            return;
+        };
+        let fragments = value
+            .get("choices")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|choice| choice.get("delta")?.get("content")?.as_str());
+        for fragment in fragments.filter(|fragment| !fragment.is_empty()) {
+            (self.on_delta)(fragment);
+        }
     }
 }
 
@@ -1191,6 +1277,19 @@ impl LlmProfileService {
         generation: LlmChatGeneration,
         cancellation: &CancellationToken,
     ) -> Result<String, LlmProfileError> {
+        self.generate_streamed(id, generation, cancellation, &mut |_| {})
+            .await
+    }
+
+    /// Like [`Self::generate`], but reports each fragment of the answer through `on_delta` as it
+    /// arrives. Fragments are raw model output; reasoning is removed only from the final text.
+    pub async fn generate_streamed(
+        &self,
+        id: Uuid,
+        generation: LlmChatGeneration,
+        cancellation: &CancellationToken,
+        on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
+    ) -> Result<String, LlmProfileError> {
         let profile = self.profile(id)?;
         let endpoint = normalize_endpoint(&profile.base_url)?;
         self.enforce_policy(&endpoint, profile.advanced.tls_policy)?;
@@ -1231,6 +1330,11 @@ impl LlmProfileService {
         } else {
             candidates.push(ReasoningSwitch::Plain);
         }
+        let emitted = AtomicBool::new(false);
+        let mut report = |fragment: &str| {
+            emitted.store(true, Ordering::Relaxed);
+            on_delta(fragment);
+        };
         for switch in candidates {
             let attempt = LlmProbeRequest {
                 reasoning_switch: switch,
@@ -1238,15 +1342,17 @@ impl LlmProfileService {
             };
             let outcome = match self
                 .transport
-                .generate_chat_adaptive(&attempt, &bounded, cancellation)
+                .generate_chat_streamed(&attempt, &bounded, cancellation, &mut report)
                 .await
             {
                 // A model that is not loaded yet (local servers load it on first use, which can take
                 // longer than the request timeout) is usually ready by now; one more attempt spares
-                // the user from pressing the button twice.
-                Err(LlmProfileError::Timeout) if !cancellation.is_cancelled() => {
+                // the user from pressing the button twice. Only before any fragment was shown.
+                Err(LlmProfileError::Timeout)
+                    if !cancellation.is_cancelled() && !emitted.load(Ordering::Relaxed) =>
+                {
                     self.transport
-                        .generate_chat_adaptive(&attempt, &bounded, cancellation)
+                        .generate_chat_streamed(&attempt, &bounded, cancellation, &mut report)
                         .await?
                 }
                 other => other?,
@@ -3063,6 +3169,41 @@ mod tests {
                 .unwrap(),
             "OK"
         );
+    }
+
+    #[tokio::test]
+    async fn streamed_generation_reports_the_answer_through_the_callback() {
+        let (service, _, _) = service(LlmHostPolicy::desktop());
+        let profile = service
+            .create(draft(LlmPreset::OpenAiCompatible, "http://127.0.0.1:8000"))
+            .await
+            .unwrap();
+        let mut seen = Vec::new();
+        let answer = service
+            .generate_streamed(
+                profile.id,
+                tiny_generation(),
+                &CancellationToken::new(),
+                &mut |fragment: &str| seen.push(fragment.to_owned()),
+            )
+            .await
+            .unwrap();
+        assert_eq!(answer, "OK");
+        assert_eq!(seen, vec!["OK".to_owned()]);
+    }
+
+    #[test]
+    fn streamed_content_reports_complete_lines_across_chunks() {
+        let mut fragments = Vec::new();
+        let mut sink = |fragment: &str| fragments.push(fragment.to_owned());
+        let mut stream = StreamedContent {
+            pending: Vec::new(),
+            on_delta: &mut sink,
+        };
+        stream.push(b"data: {\"choices\":[{\"delta\":{\"content\":\"He\"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"reasoning_content\":\"x\"}}]}\n\nda");
+        stream.push(b"ta: {\"choices\":[{\"delta\":{\"content\":\"llo\"}}]}\r\n");
+        stream.push(b"data: not-json\n");
+        assert_eq!(fragments, vec!["He".to_owned(), "llo".to_owned()]);
     }
 
     fn tiny_generation() -> LlmChatGeneration {

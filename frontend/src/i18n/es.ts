@@ -1210,6 +1210,7 @@ export const es = {
     loadFailed: 'No se pudieron cargar los perfiles de LLM.',
   },
   newFromTemplate: {
+    draftWithAssistant: 'Redactar con el asistente',
     folderSource: 'Carpeta',
     pluginSource: 'Complemento',
     loadFailed:

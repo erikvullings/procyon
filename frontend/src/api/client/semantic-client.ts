@@ -23,7 +23,7 @@ import type {
   ExecuteKnowledgeSearchRequest,
   ExportCorpusThemesRequest,
   ExportCorpusThemesResponse,
-  FileAssistantReply,
+  FileAssistantEvent,
   FileAssistantRequest,
   GenerateDocumentSummaryRequest,
   GenerateKnowledgeAnswerRequest,
@@ -317,13 +317,14 @@ export interface SemanticClient {
 
   listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]>;
 
-  /** Drafts the next reply of a file-assistant chat through a saved profile (task 0321). */
-  draftFileAssistantReply(
+  /** Streams the next reply: `onEvent` gets fragments, then one `done` or `failed`. */
+  streamFileAssistantReply(
     request: FileAssistantRequest,
+    onEvent: (event: FileAssistantEvent) => void,
     signal?: AbortSignal,
-  ): Promise<FileAssistantReply>;
+  ): Promise<void>;
 
-  /** Stops a running file-assistant reply. A reply that was already returned is unaffected. */
+  /** Stops a running file-assistant reply; events that follow are not delivered to the caller. */
   cancelFileAssistantReply(requestId: string): Promise<void>;
 
   listSavedRagConversations(

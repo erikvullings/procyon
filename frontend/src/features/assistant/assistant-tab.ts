@@ -73,7 +73,15 @@ export const AssistantTab: FactoryComponent<AssistantTabAttrs> = () => {
                     : undefined,
                 ]),
               ),
-          pending ? m('p.fm-assistant-pending', t('assistant', 'thinking')) : undefined,
+          entry.streamedText
+            ? m('.fm-assistant-message.fm-assistant-message-assistant.fm-assistant-streaming', [
+                m('span.fm-assistant-author', t('assistant', 'assistant')),
+                m('pre.fm-assistant-text', entry.streamedText),
+              ])
+            : undefined,
+          pending && !entry.streamedText
+            ? m('p.fm-assistant-pending', t('assistant', 'thinking'))
+            : undefined,
         ),
         entry.error ? m('.fm-assistant-error', { role: 'alert' }, entry.error) : undefined,
         m(

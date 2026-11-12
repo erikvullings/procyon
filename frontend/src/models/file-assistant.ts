@@ -16,7 +16,14 @@ export interface FileAssistantRequest {
   readonly messages: readonly FileAssistantMessage[];
 }
 
-/** The model's reply: the text of the file, ready to place in the editor. */
-export interface FileAssistantReply {
-  readonly text: string;
-}
+/** Why a reply ended without text. `cancelled` means the person stopped it. */
+export type FileAssistantFailure = 'invalidRequest' | 'unavailable' | 'empty' | 'cancelled';
+
+/**
+ * One streamed event: fragments as they arrive, then exactly one `done` (the whole reply, ready to
+ * place in the editor) or one `failed`.
+ */
+export type FileAssistantEvent =
+  | { readonly type: 'delta'; readonly text: string }
+  | { readonly type: 'done'; readonly text: string }
+  | { readonly type: 'failed'; readonly reason: FileAssistantFailure };

@@ -1,19 +1,20 @@
 //! The file assistant (task 0321): a short chat that drafts the contents of one new text file
 //! through a saved LLM profile. Only the file's name and the conversation leave the host; the
-//! reply is returned to the caller and never written to disk here.
+//! reply is streamed back to the caller and never written to disk here.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
 use async_trait::async_trait;
 use fm_transport_dto::{
-    FileAssistantMessageDto, FileAssistantReplyDto, FileAssistantRequestDto, FileAssistantRoleDto,
+    FileAssistantEventDto, FileAssistantFailureDto, FileAssistantMessageDto,
+    FileAssistantRequestDto, FileAssistantRoleDto,
 };
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::error::ApplicationError;
-use crate::llm_profiles::{LlmChatGeneration, LlmProfileError, LlmProfileService};
+use crate::llm_profiles::{LlmChatGeneration, LlmProfileError, LlmProfileService, strip_reasoning};
 
 /// Most messages kept in one request, so a long chat cannot grow without bound.
 const MAX_MESSAGES: usize = 40;
@@ -45,27 +46,41 @@ pub(crate) enum FileAssistantError {
     Cancelled,
 }
 
+impl From<FileAssistantError> for FileAssistantFailureDto {
+    fn from(error: FileAssistantError) -> Self {
+        match error {
+            FileAssistantError::InvalidRequest(_) => Self::InvalidRequest,
+            FileAssistantError::Unavailable => Self::Unavailable,
+            FileAssistantError::Empty => Self::Empty,
+            FileAssistantError::Cancelled => Self::Cancelled,
+        }
+    }
+}
+
 /// The generation capability the assistant needs. Implemented by [`LlmProfileService`]; tests
 /// supply a fake.
 #[async_trait]
 pub(crate) trait AssistantGenerator: Send + Sync {
-    async fn generate(
+    async fn generate_streamed(
         &self,
         profile_id: Uuid,
         generation: LlmChatGeneration,
         cancellation: &CancellationToken,
+        on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
     ) -> Result<String, LlmProfileError>;
 }
 
 #[async_trait]
 impl AssistantGenerator for LlmProfileService {
-    async fn generate(
+    async fn generate_streamed(
         &self,
         profile_id: Uuid,
         generation: LlmChatGeneration,
         cancellation: &CancellationToken,
+        on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
     ) -> Result<String, LlmProfileError> {
-        LlmProfileService::generate(self, profile_id, generation, cancellation).await
+        LlmProfileService::generate_streamed(self, profile_id, generation, cancellation, on_delta)
+            .await
     }
 }
 
@@ -76,17 +91,47 @@ pub(crate) struct FileAssistantService {
 }
 
 impl FileAssistantService {
-    /// Produces the next assistant reply for a conversation.
-    pub(crate) async fn reply(
+    /// Runs one request, reporting each fragment of the reply as it arrives and then exactly one
+    /// final event.
+    pub(crate) async fn stream(
         &self,
         generator: &impl AssistantGenerator,
         request: FileAssistantRequestDto,
-    ) -> Result<FileAssistantReplyDto, FileAssistantError> {
+        on_event: &mut (dyn FnMut(FileAssistantEventDto) + Send),
+    ) {
+        let outcome = {
+            let mut forward = |fragment: &str| {
+                on_event(FileAssistantEventDto::Delta {
+                    text: fragment.to_owned(),
+                });
+            };
+            self.reply(generator, request, &mut forward).await
+        };
+        on_event(match outcome {
+            Ok(text) => FileAssistantEventDto::Done { text },
+            Err(error) => FileAssistantEventDto::Failed {
+                reason: error.into(),
+            },
+        });
+    }
+
+    /// Produces the complete reply, forwarding raw fragments to `on_delta` as they arrive.
+    async fn reply(
+        &self,
+        generator: &impl AssistantGenerator,
+        request: FileAssistantRequestDto,
+        on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
+    ) -> Result<String, FileAssistantError> {
         let prompts = build_prompts(&request.file_name, &request.messages)?;
         let cancellation = CancellationToken::new();
         self.lock().insert(request.request_id, cancellation.clone());
+        let mut visible = VisibleText {
+            raw: String::new(),
+            sent: String::new(),
+            on_delta,
+        };
         let outcome = generator
-            .generate(
+            .generate_streamed(
                 request.profile_id,
                 LlmChatGeneration {
                     system_prompt: prompts.system,
@@ -97,6 +142,7 @@ impl FileAssistantService {
                     temperature: REPLY_TEMPERATURE,
                 },
                 &cancellation,
+                &mut |fragment: &str| visible.push(fragment),
             )
             .await;
         self.lock().remove(&request.request_id);
@@ -112,7 +158,7 @@ impl FileAssistantService {
         // A text file ends with exactly one newline.
         let mut text = truncate_to_bytes(&text, MAX_REPLY_BYTES).to_owned();
         text.push('\n');
-        Ok(FileAssistantReplyDto { text })
+        Ok(text)
     }
 
     /// Cancels one running request. Returns whether it was still running.
@@ -133,14 +179,29 @@ impl FileAssistantService {
     }
 }
 
-/// Maps the sanitized assistant failure onto the host-facing application error.
-pub(crate) fn error_to_application(error: FileAssistantError) -> ApplicationError {
-    match error {
-        FileAssistantError::InvalidRequest(message) => ApplicationError::InvalidRequest(message),
-        FileAssistantError::Unavailable | FileAssistantError::Empty => {
-            ApplicationError::ProviderUnavailable
+/// Reports only the part of a streamed reply that survives reasoning removal, so a model's hidden
+/// reasoning never shows in the chat while it streams. The final text stays authoritative.
+struct VisibleText<'a> {
+    raw: String,
+    sent: String,
+    on_delta: &'a mut (dyn for<'b> FnMut(&'b str) + Send),
+}
+
+impl VisibleText<'_> {
+    fn push(&mut self, fragment: &str) {
+        self.raw.push_str(fragment);
+        let visible = if self.raw.contains('<') {
+            Cow::Owned(strip_reasoning(&self.raw))
+        } else {
+            Cow::Borrowed(self.raw.as_str())
+        };
+        match visible.strip_prefix(self.sent.as_str()) {
+            Some(rest) if !rest.is_empty() => {
+                (self.on_delta)(rest);
+                self.sent.push_str(rest);
+            }
+            _ => {}
         }
-        FileAssistantError::Cancelled => ApplicationError::OperationCancelled,
     }
 }
 
@@ -240,6 +301,8 @@ mod tests {
     #[derive(Clone)]
     enum Outcome {
         Text(String),
+        /// Fragments reported before the final text, as a streaming provider would.
+        Streamed(Vec<String>, String),
         Cancelled,
         Transport,
     }
@@ -251,15 +314,25 @@ mod tests {
 
     #[async_trait]
     impl AssistantGenerator for FakeGenerator {
-        async fn generate(
+        async fn generate_streamed(
             &self,
             _profile_id: Uuid,
             generation: LlmChatGeneration,
             _cancellation: &CancellationToken,
+            on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
         ) -> Result<String, LlmProfileError> {
             self.seen.lock().unwrap().push(generation);
             match &self.reply {
-                Outcome::Text(text) => Ok(text.clone()),
+                Outcome::Text(text) => {
+                    on_delta(text);
+                    Ok(text.clone())
+                }
+                Outcome::Streamed(fragments, text) => {
+                    for fragment in fragments {
+                        on_delta(fragment);
+                    }
+                    Ok(text.clone())
+                }
                 Outcome::Cancelled => Err(LlmProfileError::Cancelled),
                 Outcome::Transport => Err(LlmProfileError::Transport),
             }
@@ -285,23 +358,71 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn returns_the_reply_and_sends_only_the_name_and_conversation() {
-        let generator = fake(Outcome::Text("#!/usr/bin/env bash\necho hi\n".into()));
-        let service = FileAssistantService::default();
-        let reply = service
-            .reply(&generator, request("backup.sh", "a backup script"))
-            .await
-            .expect("reply");
-        assert_eq!(reply.text, "#!/usr/bin/env bash\necho hi\n");
-        let seen = generator.seen.lock().unwrap();
-        assert!(seen[0].system_prompt.contains("backup.sh"));
-        assert_eq!(seen[0].user_prompt, "Person: a backup script\n\n");
-        assert!(seen[0].images.is_empty());
+    /// Runs one request and collects every event it emits.
+    async fn events(
+        service: &FileAssistantService,
+        generator: &FakeGenerator,
+        request: FileAssistantRequestDto,
+    ) -> Vec<FileAssistantEventDto> {
+        let mut seen = Vec::new();
+        service
+            .stream(generator, request, &mut |event| seen.push(event))
+            .await;
+        seen
+    }
+
+    fn delta(text: &str) -> FileAssistantEventDto {
+        FileAssistantEventDto::Delta { text: text.into() }
+    }
+
+    fn done(text: &str) -> FileAssistantEventDto {
+        FileAssistantEventDto::Done { text: text.into() }
+    }
+
+    fn failed(reason: FileAssistantFailureDto) -> FileAssistantEventDto {
+        FileAssistantEventDto::Failed { reason }
     }
 
     #[tokio::test]
-    async fn unwraps_a_single_code_fence_only() {
+    async fn streams_the_reply_and_sends_only_the_name_and_conversation() {
+        let generator = fake(Outcome::Text("#!/usr/bin/env bash\necho hi\n".into()));
+        let service = FileAssistantService::default();
+        let seen = events(
+            &service,
+            &generator,
+            request("backup.sh", "a backup script"),
+        )
+        .await;
+        assert_eq!(
+            seen,
+            vec![
+                delta("#!/usr/bin/env bash\necho hi\n"),
+                done("#!/usr/bin/env bash\necho hi\n"),
+            ]
+        );
+        let calls = generator.seen.lock().unwrap();
+        assert!(calls[0].system_prompt.contains("backup.sh"));
+        assert_eq!(calls[0].user_prompt, "Person: a backup script\n\n");
+        assert!(calls[0].images.is_empty());
+    }
+
+    #[tokio::test]
+    async fn hides_reasoning_from_fragments_but_not_from_the_final_text() {
+        let generator = fake(Outcome::Streamed(
+            vec![
+                "<think>plan".into(),
+                " more</think>".into(),
+                "Answer".into(),
+            ],
+            "Answer".into(),
+        ));
+        let service = FileAssistantService::default();
+        let seen = events(&service, &generator, request("a.txt", "x")).await;
+        assert_eq!(seen, vec![delta("Answer"), done("Answer\n")]);
+    }
+
+    #[test]
+    fn unwraps_a_single_code_fence_only() {
         assert_eq!(unwrap_single_fence("```bash\necho hi\n```"), "echo hi");
         assert_eq!(
             unwrap_single_fence("Here:\n```bash\necho hi\n```"),
@@ -318,40 +439,42 @@ mod tests {
         let service = FileAssistantService::default();
         let generator = fake(Outcome::Text("x".into()));
         for bad in [request("../evil.sh", "x"), request("", "x")] {
-            assert!(matches!(
-                service.reply(&generator, bad).await,
-                Err(FileAssistantError::InvalidRequest(_))
-            ));
+            assert_eq!(
+                events(&service, &generator, bad).await,
+                vec![failed(FileAssistantFailureDto::InvalidRequest)]
+            );
         }
         let mut ends_with_assistant = request("a.txt", "x");
         ends_with_assistant.messages.push(FileAssistantMessageDto {
             role: FileAssistantRoleDto::Assistant,
             content: "y".into(),
         });
-        assert!(matches!(
-            service.reply(&generator, ends_with_assistant).await,
-            Err(FileAssistantError::InvalidRequest(_))
-        ));
+        assert_eq!(
+            events(&service, &generator, ends_with_assistant).await,
+            vec![failed(FileAssistantFailureDto::InvalidRequest)]
+        );
         assert!(generator.seen.lock().unwrap().is_empty());
     }
 
     #[tokio::test]
-    async fn maps_provider_outcomes_to_sanitized_errors() {
+    async fn maps_provider_outcomes_to_sanitized_failures() {
         let service = FileAssistantService::default();
-        let cancelled = fake(Outcome::Cancelled);
         assert_eq!(
-            service.reply(&cancelled, request("a.txt", "x")).await,
-            Err(FileAssistantError::Cancelled)
+            events(&service, &fake(Outcome::Cancelled), request("a.txt", "x")).await,
+            vec![failed(FileAssistantFailureDto::Cancelled)]
         );
-        let failing = fake(Outcome::Transport);
         assert_eq!(
-            service.reply(&failing, request("a.txt", "x")).await,
-            Err(FileAssistantError::Unavailable)
+            events(&service, &fake(Outcome::Transport), request("a.txt", "x")).await,
+            vec![failed(FileAssistantFailureDto::Unavailable)]
         );
-        let blank = fake(Outcome::Text("   \n".into()));
         assert_eq!(
-            service.reply(&blank, request("a.txt", "x")).await,
-            Err(FileAssistantError::Empty)
+            events(
+                &service,
+                &fake(Outcome::Text("   \n".into())),
+                request("a.txt", "x")
+            )
+            .await,
+            vec![delta("   \n"), failed(FileAssistantFailureDto::Empty),]
         );
     }
 

@@ -1206,6 +1206,7 @@ export const pl = {
     loadFailed: 'Nie udało się wczytać profili LLM.',
   },
   newFromTemplate: {
+    draftWithAssistant: 'Napisz z asystentem',
     folderSource: 'Katalog',
     pluginSource: 'Wtyczka',
     loadFailed: 'Nie udało się wczytać listy szablonów. Wyświetlono tylko szablony aplikacji.',

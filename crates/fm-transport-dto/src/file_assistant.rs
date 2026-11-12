@@ -45,12 +45,39 @@ pub struct FileAssistantRequestDto {
     pub messages: Vec<FileAssistantMessageDto>,
 }
 
-/// The model's reply, with the file contents already unwrapped from any single code fence.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+/// Why a reply ended without text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct FileAssistantReplyDto {
-    /// Reply text, to be placed in the editor when the person accepts it.
-    pub text: String,
+pub enum FileAssistantFailureDto {
+    /// The request violates a bounded contract.
+    InvalidRequest,
+    /// The profile is missing, needs consent, or the provider failed.
+    Unavailable,
+    /// The model returned no usable text.
+    Empty,
+    /// The person stopped the request.
+    Cancelled,
+}
+
+/// One event of a streamed reply: fragments as they arrive, then exactly one final event.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum FileAssistantEventDto {
+    /// A fragment of the reply, in arrival order. Fragments are provisional.
+    Delta {
+        /// Text to append to what has arrived so far.
+        text: String,
+    },
+    /// The whole reply, unwrapped from any single code fence. It replaces the fragments.
+    Done {
+        /// Reply text, to be placed in the editor when the person accepts it.
+        text: String,
+    },
+    /// The reply ended without text; no `done` event follows.
+    Failed {
+        /// Why the reply ended.
+        reason: FileAssistantFailureDto,
+    },
 }
 
 /// Requests cancellation of one running file-assistant request.
