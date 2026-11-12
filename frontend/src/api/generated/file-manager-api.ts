@@ -20,9 +20,14 @@ import type {
   BeginOneDriveAuthorizationResponseDto,
   CalculateFolderSizeRequestDto,
   CalculateFolderSizeResponseDto,
+  CancelChatReplyRequestDto,
   CancelFileAssistantRequestDto,
   CancelKnowledgeAnswerRequestDto,
   CancelKnowledgeSearchRequestDto,
+  ChatConversationDto,
+  ChatConversationSummaryDto,
+  ChatReplyEventDto,
+  ChatReplyRequestDto,
   CheckpointSemanticModelMigrationRequestDto,
   ChecksumFileDto,
   ChecksumPageDto,
@@ -182,6 +187,7 @@ import type {
   ReadStructuredRowsResponseDto,
   RemoveApplicationDockIconRequestDto,
   RemoveApplicationDockIconResponseDto,
+  RenameChatConversationRequestDto,
   RenderChecksumFileRequestDto,
   RenderPluginPreviewRequestDto,
   ResolveArchiveEditRequestDto,
@@ -860,6 +866,108 @@ return fetchMutator<previewAttributeChangeResponse>(getPreviewAttributeChangeUrl
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(previewAttributeChangeRequestDto)
+  }
+);}
+
+
+
+export type cancelChatReplyResponse204 = {
+  data: void
+  status: 204
+}
+
+export type cancelChatReplyResponseSuccess = (cancelChatReplyResponse204) & {
+  headers: Headers;
+};
+;
+
+export type cancelChatReplyResponse = (cancelChatReplyResponseSuccess)
+
+export const getCancelChatReplyUrl = () => {
+
+
+
+
+  return `/api/v1/chat/reply/cancel`
+}
+
+/**
+ * @summary Stops one running chat reply. The person's message stays saved; no reply is saved.
+ */
+export const cancelChatReply = async (cancelChatReplyRequestDto: CancelChatReplyRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<cancelChatReplyResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<cancelChatReplyResponse>(getCancelChatReplyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(cancelChatReplyRequestDto)
+  }
+);}
+
+
+
+export type streamChatReplyResponse200 = {
+  stream: TypedResponse<ChatReplyEventDto>
+  status: 200
+}
+
+export type streamChatReplyResponseSuccess = (streamChatReplyResponse200) & {
+  headers: Headers;
+};
+;
+
+export type streamChatReplyResponse = (streamChatReplyResponseSuccess)
+
+export const getStreamChatReplyUrl = () => {
+
+
+
+
+  return `/api/v1/chat/reply/stream`
+}
+
+/**
+ * @summary Streams the next reply of a chat conversation as newline-delimited JSON events: fragments as
+they arrive, then exactly one `done` or `failed` event. Every outcome, including a refused
+request, arrives as an event on this 200 response.
+ */
+export const streamChatReply = async (chatReplyRequestDto: ChatReplyRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<streamChatReplyResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<streamChatReplyResponse>(getStreamChatReplyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json',Accept: 'application/x-ndjson', ...getHeaders(options?.headers) },
+    body: JSON.stringify(chatReplyRequestDto)
   }
 );}
 
@@ -11798,6 +11906,228 @@ export const deleteWorkspace = async (workspaceId: string,
     method: 'DELETE'
 
 
+  }
+);}
+
+
+
+export type listChatConversationsResponse200 = {
+  data: ChatConversationSummaryDto[]
+  status: 200
+}
+
+export type listChatConversationsResponseSuccess = (listChatConversationsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listChatConversationsResponse = (listChatConversationsResponseSuccess)
+
+export const getListChatConversationsUrl = (workspaceId: string,) => {
+
+
+
+
+  return `/api/v1/workspaces/${workspaceId}/chat/conversations`
+}
+
+/**
+ * @summary Lists a workspace's saved chat conversations, most recently changed first.
+ */
+export const listChatConversations = async (workspaceId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<listChatConversationsResponse> => {
+
+  return fetchMutator<listChatConversationsResponse>(getListChatConversationsUrl(workspaceId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createChatConversationResponse200 = {
+  data: ChatConversationDto
+  status: 200
+}
+
+export type createChatConversationResponseSuccess = (createChatConversationResponse200) & {
+  headers: Headers;
+};
+;
+
+export type createChatConversationResponse = (createChatConversationResponseSuccess)
+
+export const getCreateChatConversationUrl = (workspaceId: string,) => {
+
+
+
+
+  return `/api/v1/workspaces/${workspaceId}/chat/conversations`
+}
+
+/**
+ * @summary Starts an empty chat conversation in a workspace.
+ */
+export const createChatConversation = async (workspaceId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<createChatConversationResponse> => {
+
+  return fetchMutator<createChatConversationResponse>(getCreateChatConversationUrl(workspaceId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type getChatConversationResponse200 = {
+  data: ChatConversationDto
+  status: 200
+}
+
+export type getChatConversationResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type getChatConversationResponseSuccess = (getChatConversationResponse200) & {
+  headers: Headers;
+};
+export type getChatConversationResponseError = (getChatConversationResponse404) & {
+  headers: Headers;
+};
+
+export type getChatConversationResponse = (getChatConversationResponseSuccess | getChatConversationResponseError)
+
+export const getGetChatConversationUrl = (workspaceId: string,
+    conversationId: string,) => {
+
+
+
+
+  return `/api/v1/workspaces/${workspaceId}/chat/conversations/${conversationId}`
+}
+
+/**
+ * @summary Loads one chat conversation with its messages.
+ */
+export const getChatConversation = async (workspaceId: string,
+    conversationId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<getChatConversationResponse> => {
+
+  return fetchMutator<getChatConversationResponse>(getGetChatConversationUrl(workspaceId,conversationId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type deleteChatConversationResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteChatConversationResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type deleteChatConversationResponseSuccess = (deleteChatConversationResponse204) & {
+  headers: Headers;
+};
+export type deleteChatConversationResponseError = (deleteChatConversationResponse404) & {
+  headers: Headers;
+};
+
+export type deleteChatConversationResponse = (deleteChatConversationResponseSuccess | deleteChatConversationResponseError)
+
+export const getDeleteChatConversationUrl = (workspaceId: string,
+    conversationId: string,) => {
+
+
+
+
+  return `/api/v1/workspaces/${workspaceId}/chat/conversations/${conversationId}`
+}
+
+/**
+ * @summary Deletes a chat conversation and everything saved in it.
+ */
+export const deleteChatConversation = async (workspaceId: string,
+    conversationId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<deleteChatConversationResponse> => {
+
+  return fetchMutator<deleteChatConversationResponse>(getDeleteChatConversationUrl(workspaceId,conversationId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type renameChatConversationResponse200 = {
+  data: ChatConversationDto
+  status: 200
+}
+
+export type renameChatConversationResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type renameChatConversationResponseSuccess = (renameChatConversationResponse200) & {
+  headers: Headers;
+};
+export type renameChatConversationResponseError = (renameChatConversationResponse404) & {
+  headers: Headers;
+};
+
+export type renameChatConversationResponse = (renameChatConversationResponseSuccess | renameChatConversationResponseError)
+
+export const getRenameChatConversationUrl = (workspaceId: string,
+    conversationId: string,) => {
+
+
+
+
+  return `/api/v1/workspaces/${workspaceId}/chat/conversations/${conversationId}`
+}
+
+/**
+ * @summary Renames a chat conversation.
+ */
+export const renameChatConversation = async (workspaceId: string,
+    conversationId: string,
+    renameChatConversationRequestDto: RenameChatConversationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<renameChatConversationResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<renameChatConversationResponse>(getRenameChatConversationUrl(workspaceId,conversationId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(renameChatConversationRequestDto)
   }
 );}
 

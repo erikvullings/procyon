@@ -8,6 +8,7 @@
 pub mod action;
 pub mod application_uninstall;
 pub mod attributes;
+pub mod chat;
 pub mod checksum;
 pub mod comparison;
 pub mod connection;
@@ -65,6 +66,11 @@ pub use attributes::{
     AttributeSupportDto, AttributeUnsupportedReasonDto, ChangeAttributesDto,
     InspectAttributesRequestDto, InspectAttributesResponseDto, PreviewAttributeChangeRequestDto,
     PreviewAttributeChangeResponseDto,
+};
+pub use chat::{
+    CancelChatReplyRequestDto, ChatConversationDto, ChatConversationSummaryDto, ChatFailureDto,
+    ChatMessageDto, ChatReplyEventDto, ChatReplyRequestDto, ChatRoleDto,
+    RenameChatConversationRequestDto,
 };
 pub use checksum::{
     ChecksumAlgorithmDto, ChecksumEntryDto, ChecksumFileDto, ChecksumPageDto, DuplicateGroupDto,

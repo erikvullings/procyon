@@ -35,6 +35,9 @@ export const ENGLISH_IDENTICAL_ALLOWLIST: Readonly<Record<string, Allowlisted>> 
   'pane.sortDescending': 'all',
   'pane.sortDirectionLabel': 'all',
   'llmRoles.model': ['nl', 'pl'],
+  // "Chat" is the same word in these languages.
+  'chat.title': ['de', 'es', 'fr', 'it', 'nl', 'pt'],
+  'chat.assistant': ['fr'],
   'settings.llm': ['nl', 'pl'],
   'semanticComponents.gemmaQualifiedName': 'all',
   'semanticComponents.kindWorker': 'all',

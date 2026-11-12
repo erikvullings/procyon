@@ -130,11 +130,7 @@ impl FileAssistantService {
         let prompts = build_prompts(&request.file_name, &request.messages)?;
         let cancellation = CancellationToken::new();
         self.lock().insert(request.request_id, cancellation.clone());
-        let mut visible = VisibleText {
-            raw: String::new(),
-            sent: String::new(),
-            on_delta,
-        };
+        let mut visible = VisibleText::new(on_delta);
         let outcome = generator
             .generate_streamed(
                 request.profile_id,
@@ -189,14 +185,23 @@ impl FileAssistantService {
 
 /// Reports only the part of a streamed reply that survives reasoning removal, so a model's hidden
 /// reasoning never shows in the chat while it streams. The final text stays authoritative.
-struct VisibleText<'a> {
+pub(crate) struct VisibleText<'a> {
     raw: String,
     sent: String,
     on_delta: &'a mut (dyn for<'b> FnMut(&'b str) + Send),
 }
 
-impl VisibleText<'_> {
-    fn push(&mut self, fragment: &str) {
+impl<'a> VisibleText<'a> {
+    /// Forwards only the visible part of a streamed reply to `on_delta`.
+    pub(crate) fn new(on_delta: &'a mut (dyn for<'b> FnMut(&'b str) + Send)) -> Self {
+        Self {
+            raw: String::new(),
+            sent: String::new(),
+            on_delta,
+        }
+    }
+
+    pub(crate) fn push(&mut self, fragment: &str) {
         self.raw.push_str(fragment);
         let visible = if self.raw.contains('<') {
             Cow::Owned(strip_reasoning(&self.raw))
@@ -288,7 +293,7 @@ fn unwrap_single_fence(text: &str) -> String {
 }
 
 /// The longest prefix of `text` that fits in `max_bytes`, cut on a character boundary.
-fn truncate_to_bytes(text: &str, max_bytes: usize) -> &str {
+pub(crate) fn truncate_to_bytes(text: &str, max_bytes: usize) -> &str {
     if text.len() <= max_bytes {
         return text;
     }

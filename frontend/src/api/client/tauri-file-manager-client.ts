@@ -28,6 +28,10 @@ import type {
   CalculateFolderSizeResult,
   CancelKnowledgeAnswerRequest,
   CancelKnowledgeSearchRequest,
+  ChatConversation,
+  ChatConversationSummary,
+  ChatReplyEvent,
+  ChatReplyRequest,
   CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
   ChecksumFile,
@@ -1737,6 +1741,62 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   cancelFileAssistantReply(requestId: string): Promise<void> {
     return invoke<void>('cancel_file_assistant_reply', { request: { requestId } });
+  }
+
+  listChatConversations(
+    workspaceId: WorkspaceId,
+    _signal?: AbortSignal,
+  ): Promise<ChatConversationSummary[]> {
+    return invoke<ChatConversationSummary[]>('list_chat_conversations', { workspaceId });
+  }
+
+  createChatConversation(
+    workspaceId: WorkspaceId,
+    _signal?: AbortSignal,
+  ): Promise<ChatConversation> {
+    return invoke<ChatConversation>('create_chat_conversation', { workspaceId });
+  }
+
+  getChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    _signal?: AbortSignal,
+  ): Promise<ChatConversation> {
+    return invoke<ChatConversation>('get_chat_conversation', { workspaceId, conversationId });
+  }
+
+  renameChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    title: string,
+    _signal?: AbortSignal,
+  ): Promise<ChatConversation> {
+    return invoke<ChatConversation>('rename_chat_conversation', {
+      workspaceId,
+      conversationId,
+      request: { title },
+    });
+  }
+
+  deleteChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    _signal?: AbortSignal,
+  ): Promise<void> {
+    return invoke<void>('delete_chat_conversation', { workspaceId, conversationId });
+  }
+
+  streamChatReply(
+    request: ChatReplyRequest,
+    onEvent: (event: ChatReplyEvent) => void,
+    _signal?: AbortSignal,
+  ): Promise<void> {
+    const events = new Channel<ChatReplyEvent>(onEvent);
+    return invoke<void>('stream_chat_reply', { request, events });
+  }
+
+  cancelChatReply(requestId: string): Promise<void> {
+    return invoke<void>('cancel_chat_reply', { request: { requestId } });
   }
 
   listLlmProfiles(_signal?: AbortSignal): Promise<LlmProfile[]> {

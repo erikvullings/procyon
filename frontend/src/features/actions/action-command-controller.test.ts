@@ -90,6 +90,7 @@ function fakeContext(
     toggleBranchView: () => {},
     toggleSyncBrowsing: () => {},
     openSemanticAssistant: () => {},
+    openChat: () => {},
     openKnowledgeSearch: () => {},
     openThemes: () => {},
     uninstallApplication: () => {},

@@ -3,6 +3,7 @@ import { DEFAULT_FILE_TEMPLATES } from '../../features/templates/file-templates'
 import { apiErrorMessage } from '../../i18n';
 import type {
   BackendEvent,
+  ChatConversation,
   ChecksumAlgorithm,
   ChecksumEntry,
   ComparisonCriteria,
@@ -179,6 +180,11 @@ export class MockContext {
   readonly documentSummaries = new Map<string, DocumentSummary>();
 
   readonly ragConversations = new Map<string, SavedRagConversation>();
+  /** Chat conversations by id, with the workspace that owns them (task 0324). */
+  readonly chatConversations = new Map<
+    string,
+    { workspaceId: string; conversation: ChatConversation }
+  >();
 
   readonly knowledgeSearches = new Map<string, AbortController>();
 

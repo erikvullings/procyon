@@ -2791,6 +2791,97 @@ pub(crate) fn cancel_file_assistant_reply(
     state.service.cancel_file_assistant_reply(request);
 }
 
+/// Lists a workspace's saved chat conversations (task 0324).
+#[tauri::command]
+pub(crate) fn list_chat_conversations(
+    state: State<'_, AppState>,
+    workspace_id: Uuid,
+) -> Result<Vec<fm_transport_dto::ChatConversationSummaryDto>, ApplicationErrorDto> {
+    state
+        .service
+        .list_chat_conversations(workspace_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Starts an empty chat conversation in a workspace.
+#[tauri::command]
+pub(crate) fn create_chat_conversation(
+    state: State<'_, AppState>,
+    workspace_id: Uuid,
+) -> Result<fm_transport_dto::ChatConversationDto, ApplicationErrorDto> {
+    state
+        .service
+        .create_chat_conversation(workspace_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Loads one chat conversation with its messages.
+#[tauri::command]
+pub(crate) fn get_chat_conversation(
+    state: State<'_, AppState>,
+    workspace_id: Uuid,
+    conversation_id: Uuid,
+) -> Result<fm_transport_dto::ChatConversationDto, ApplicationErrorDto> {
+    state
+        .service
+        .get_chat_conversation(workspace_id, conversation_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Renames a chat conversation.
+#[tauri::command]
+pub(crate) fn rename_chat_conversation(
+    state: State<'_, AppState>,
+    workspace_id: Uuid,
+    conversation_id: Uuid,
+    request: fm_transport_dto::RenameChatConversationRequestDto,
+) -> Result<fm_transport_dto::ChatConversationDto, ApplicationErrorDto> {
+    state
+        .service
+        .rename_chat_conversation(workspace_id, conversation_id, request)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Deletes a chat conversation and everything saved in it.
+#[tauri::command]
+pub(crate) fn delete_chat_conversation(
+    state: State<'_, AppState>,
+    workspace_id: Uuid,
+    conversation_id: Uuid,
+) -> Result<(), ApplicationErrorDto> {
+    state
+        .service
+        .delete_chat_conversation(workspace_id, conversation_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Streams the next chat reply (task 0324): fragments, then one final event on `events`. Every
+/// outcome arrives as an event, so the command itself succeeds.
+#[tauri::command]
+pub(crate) async fn stream_chat_reply(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::ChatReplyRequestDto,
+    events: Channel<fm_transport_dto::ChatReplyEventDto>,
+) -> Result<(), ApplicationErrorDto> {
+    state
+        .service
+        .stream_chat_reply(request, &mut |event| {
+            // A closed channel means the window is gone; there is no one left to tell.
+            let _ = events.send(event);
+        })
+        .await;
+    Ok(())
+}
+
+/// Stops one running chat reply.
+#[tauri::command]
+pub(crate) fn cancel_chat_reply(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::CancelChatReplyRequestDto,
+) {
+    state.service.cancel_chat_reply(request);
+}
+
 /// Lists plugins through the shared discovery service.
 #[tauri::command]
 pub(crate) fn list_plugins(state: State<'_, AppState>) -> Vec<PluginDescriptorDto> {

@@ -18,6 +18,10 @@ import type {
   CalculateFolderSizeResult,
   CancelKnowledgeAnswerRequest,
   CancelKnowledgeSearchRequest,
+  ChatConversation,
+  ChatConversationSummary,
+  ChatReplyEvent,
+  ChatReplyRequest,
   CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
   ChecksumFile,
@@ -1135,6 +1139,57 @@ export class MockFileManagerClient implements FileManagerClient {
 
   cancelFileAssistantReply(requestId: string): Promise<void> {
     return this.semanticClient.cancelFileAssistantReply(requestId);
+  }
+
+  listChatConversations(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<ChatConversationSummary[]> {
+    return this.semanticClient.listChatConversations(workspaceId, signal);
+  }
+
+  createChatConversation(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<ChatConversation> {
+    return this.semanticClient.createChatConversation(workspaceId, signal);
+  }
+
+  getChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    signal?: AbortSignal,
+  ): Promise<ChatConversation> {
+    return this.semanticClient.getChatConversation(workspaceId, conversationId, signal);
+  }
+
+  renameChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    title: string,
+    signal?: AbortSignal,
+  ): Promise<ChatConversation> {
+    return this.semanticClient.renameChatConversation(workspaceId, conversationId, title, signal);
+  }
+
+  deleteChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return this.semanticClient.deleteChatConversation(workspaceId, conversationId, signal);
+  }
+
+  streamChatReply(
+    request: ChatReplyRequest,
+    onEvent: (event: ChatReplyEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return this.semanticClient.streamChatReply(request, onEvent, signal);
+  }
+
+  cancelChatReply(requestId: string): Promise<void> {
+    return this.semanticClient.cancelChatReply(requestId);
   }
 
   listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {

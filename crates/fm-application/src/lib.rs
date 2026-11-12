@@ -10,6 +10,8 @@ mod action_invoker;
 pub mod app_data;
 mod archive_summary;
 mod attribute_change;
+mod chat;
+mod chat_conversations;
 mod checksum_coordinator;
 mod connection_facade;
 mod content_streaming;

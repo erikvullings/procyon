@@ -4,6 +4,7 @@
 pub(crate) mod action;
 pub(crate) mod application_uninstall;
 pub(crate) mod attributes;
+pub(crate) mod chat;
 pub(crate) mod checksum;
 pub(crate) mod comparison;
 pub(crate) mod connection;

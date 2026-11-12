@@ -4,6 +4,10 @@ import type {
   AttachSemanticVocabularyRequest,
   CancelKnowledgeAnswerRequest,
   CancelKnowledgeSearchRequest,
+  ChatConversation,
+  ChatConversationSummary,
+  ChatReplyEvent,
+  ChatReplyRequest,
   CheckpointSemanticModelMigrationRequest,
   CompleteSemanticModelMigrationRequest,
   ConfirmSemanticEnrolmentRequest,
@@ -1215,6 +1219,114 @@ export class MockSemanticClient implements SemanticClient {
     return Promise.resolve();
   }
 
+  listChatConversations(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<ChatConversationSummary[]> {
+    return this.ctx.perform('listChatConversations', signal, () =>
+      [...this.ctx.chatConversations.values()]
+        .filter((record) => record.workspaceId === workspaceId)
+        .map(({ conversation }) => summaryOf(conversation))
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+    );
+  }
+
+  createChatConversation(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<ChatConversation> {
+    return this.ctx.perform('createChatConversation', signal, () => {
+      const conversation: ChatConversation = {
+        id: crypto.randomUUID(),
+        title: '',
+        updatedAt: new Date().toISOString(),
+        messages: [],
+      };
+      this.ctx.chatConversations.set(conversation.id, { workspaceId, conversation });
+      return structuredClone(conversation);
+    });
+  }
+
+  getChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    signal?: AbortSignal,
+  ): Promise<ChatConversation> {
+    return this.ctx.perform('getChatConversation', signal, () =>
+      structuredClone(
+        chatRecord(this.ctx.chatConversations, workspaceId, conversationId).conversation,
+      ),
+    );
+  }
+
+  renameChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    title: string,
+    signal?: AbortSignal,
+  ): Promise<ChatConversation> {
+    return this.ctx.perform('renameChatConversation', signal, () => {
+      const { conversation } = chatRecord(this.ctx.chatConversations, workspaceId, conversationId);
+      conversation.title = title.trim();
+      return structuredClone(conversation);
+    });
+  }
+
+  deleteChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return this.ctx.perform('deleteChatConversation', signal, () => {
+      chatRecord(this.ctx.chatConversations, workspaceId, conversationId);
+      this.ctx.chatConversations.delete(conversationId);
+    });
+  }
+
+  streamChatReply(
+    request: ChatReplyRequest,
+    onEvent: (event: ChatReplyEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return this.ctx.perform('streamChatReply', signal, () => {
+      const record = this.ctx.chatConversations.get(request.conversationId);
+      if (record === undefined || record.workspaceId !== request.workspaceId) {
+        onEvent({ type: 'failed', reason: 'notFound' });
+        return;
+      }
+      const { conversation } = record;
+      conversation.messages.push({
+        role: 'user',
+        content: request.content,
+        context: request.context ?? null,
+      });
+      if (conversation.title === '') conversation.title = request.content.slice(0, 60);
+      // The mock follows the same consent rule as the backend: a cloud chat endpoint needs consent.
+      const assignment = this.ctx.llmRoles.chat;
+      const profile =
+        assignment == null ? undefined : this.ctx.llmProfiles.get(assignment.profileId);
+      if (assignment == null || profile === undefined) {
+        onEvent({ type: 'failed', reason: 'roleNotAssigned' });
+        return;
+      }
+      if (profile.locality === 'cloud' && profile.consentedHost == null) {
+        onEvent({ type: 'failed', reason: 'consentRequired' });
+        return;
+      }
+      const text = `Mock reply to: ${request.content}`;
+      for (const fragment of text.match(/[\s\S]{1,12}/gu) ?? []) {
+        onEvent({ type: 'delta', text: fragment });
+      }
+      conversation.messages.push({ role: 'assistant', content: text, context: null });
+      conversation.updatedAt = new Date().toISOString();
+      onEvent({ type: 'done', text });
+    });
+  }
+
+  cancelChatReply(_requestId: string): Promise<void> {
+    return Promise.resolve();
+  }
+
   listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {
     return this.ctx.perform('listLlmProfiles', signal, () =>
       [...this.ctx.llmProfiles.values()]
@@ -1998,4 +2110,26 @@ export class MockSemanticClient implements SemanticClient {
     this.ctx.knowledgeAnswers.delete(request.requestId);
     return this.ctx.perform('cancelKnowledgeAnswer', signal, () => undefined);
   }
+}
+
+/** The list-row view of a mock conversation: no messages. */
+function summaryOf(conversation: ChatConversation): ChatConversationSummary {
+  return {
+    id: conversation.id,
+    title: conversation.title,
+    updatedAt: conversation.updatedAt,
+    messageCount: conversation.messages.length,
+  };
+}
+
+function chatRecord(
+  records: Map<string, { workspaceId: string; conversation: ChatConversation }>,
+  workspaceId: WorkspaceId,
+  conversationId: string,
+): { workspaceId: string; conversation: ChatConversation } {
+  const record = records.get(conversationId);
+  if (record === undefined || record.workspaceId !== workspaceId) {
+    throw new MockClientError('notFound', 'Chat conversation not found');
+  }
+  return record;
 }
