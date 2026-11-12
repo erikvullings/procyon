@@ -258,6 +258,7 @@ jobs:
       - name: Build native SPA installer
         run: node scripts/build-tauri.mjs --features native-spa-smoke --config tauri.native-spa-smoke.conf.json --bundles ${{ matrix.os == 'macos-latest' && 'dmg' || matrix.os == 'windows-latest' && 'msi' || 'deb' }}
       - name: Exercise installed native SPA
+        timeout-minutes: 10
         run: node scripts/smoke-desktop-package.mjs --native-spa
 
   audit:

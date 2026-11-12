@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   closeSync,
   mkdirSync,
@@ -43,8 +43,16 @@ async function stopChild() {
   const group = process.platform !== 'win32';
   const signal = (name) => {
     try {
-      if (group) process.kill(-child.pid, name);
-      else child.kill(name);
+      if (group) {
+        process.kill(-child.pid, name);
+      } else {
+        // Windows has no process groups, so `process.kill(-pid)` is meaningless; reap the whole
+        // tree in one call while the parent is still alive. An orphaned updater/worker would
+        // otherwise survive, keep the event loop busy, and hang the run unboundedly (this is the
+        // Windows-only failure behind the "Exercise installed native SPA" step stalling for over
+        // an hour).
+        spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+      }
     } catch (error) {
       if (
         name === 'SIGKILL' &&
