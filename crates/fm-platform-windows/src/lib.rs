@@ -949,7 +949,8 @@ fn wsl_network_locations() -> Vec<SystemLocation> {
             if !entry.path().is_dir() {
                 continue;
             }
-            let Some(name) = entry.file_name().to_str() else {
+            let file_name = entry.file_name();
+            let Some(name) = file_name.to_str() else {
                 continue;
             };
             if !seen.insert(name.to_owned()) {
