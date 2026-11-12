@@ -538,6 +538,8 @@ mod tests {
         assert!(blocked.list(workspace).unwrap().is_empty());
     }
 
+    // Windows ignores the read-only flag on directories, so this failure can only be injected on Unix.
+    #[cfg(unix)]
     #[test]
     fn a_failed_save_leaves_the_store_unchanged() {
         let directory = tempdir().unwrap();
