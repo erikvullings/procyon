@@ -1447,6 +1447,15 @@ function renderPdfBody(state: Extract<FileViewerState, { status: 'ready' }>): m.
   if (content.kind !== 'pdf') return undefined;
   return m(
     '.fm-file-viewer-body.fm-file-viewer-body-pdf',
+    // A thin indeterminate bar at the top signals the remaining slides are still converting;
+    // the role=status text keeps it announced to screen readers without a hard-to-read label.
+    content.slidesConverting
+      ? m(
+          '.fm-file-viewer-slide-progress[role=status]',
+          { 'aria-label': t('viewer', 'convertingSlides') },
+          m('span.fm-file-viewer-slide-progress-bar', { 'aria-hidden': 'true' }),
+        )
+      : undefined,
     m(PdfPageCanvas, {
       document: content.document,
       pageNumber: content.currentPage,
@@ -1906,13 +1915,6 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                   const pageInfo = pagedContentInfo(state.content);
                   if (pageInfo === undefined) return undefined;
                   return m('.fm-file-viewer-page-controls', [
-                    state.content.kind === 'pdf' && state.content.slidesConverting
-                      ? m(
-                          '.fm-file-viewer-slide-converting[role=status]',
-                          t('viewer', 'convertingSlides'),
-                          m('span.fm-file-viewer-loading-spinner', { 'aria-hidden': 'true' }),
-                        )
-                      : undefined,
                     tooltip(
                       t('viewer', 'previousPage'),
                       m(
