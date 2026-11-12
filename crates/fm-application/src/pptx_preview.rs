@@ -32,7 +32,12 @@ pub(crate) const MAX_PPTX_MEDIA_ITEMS: usize = 128;
 pub(crate) const MAX_PPTX_MEDIA_BYTES: usize = 64 * 1024 * 1024;
 pub(crate) const MAX_PPTX_SINGLE_MEDIA_BYTES: usize = 64 * 1024 * 1024;
 pub(crate) const MAX_PPTX_SINGLE_IMAGE_PIXELS: u64 = 16 * 1024 * 1024;
-pub(crate) const MAX_PPTX_TOTAL_IMAGE_PIXELS: u64 = 32 * 1024 * 1024;
+// A whole deck's images summed, not a per-image cap: this must stay far above
+// `MAX_PPTX_SINGLE_IMAGE_PIXELS` (a photo-heavy presentation legitimately totals many more
+// megapixels than any single slide image), otherwise a small deck of a few high-resolution photos
+// is wrongly refused. 512 MP still bounds cumulative decode/render work and, with the single-image
+// cap and the 128-item media budget, caps the practical total at 128 * 16 MP.
+pub(crate) const MAX_PPTX_TOTAL_IMAGE_PIXELS: u64 = 512 * 1024 * 1024;
 const MAX_PPTX_SESSIONS: usize = 8;
 
 struct Session {
@@ -156,7 +161,7 @@ impl PptxPreviewService {
         if bytes.len() as u64 > MAX_PPTX_SOURCE_BYTES {
             return Err(budget_error("source file size", MAX_PPTX_SOURCE_BYTES));
         }
-        preflight_package(&bytes, &cancellation)?;
+        let slide_count = preflight_package(&bytes, &cancellation)?;
         if cancellation.is_cancelled() {
             return Err(ApplicationError::OperationCancelled);
         }
@@ -201,6 +206,7 @@ impl PptxPreviewService {
             session_id,
             source_revision: revision,
             source_bytes,
+            slide_count,
             first_page_pdf,
         })
     }
@@ -315,15 +321,17 @@ async fn validate_revision(session: &Session) -> Result<(), ApplicationError> {
 fn preflight_package(
     bytes: &[u8],
     cancellation: &CancellationToken,
-) -> Result<(), ApplicationError> {
+) -> Result<usize, ApplicationError> {
     preflight_package_with_expanded_limit(bytes, cancellation, MAX_PPTX_EXPANDED_BYTES)
 }
 
+/// Validates the package against every preview budget and returns the slide count discovered
+/// while scanning, so callers can show the deck size before the full PDF finishes rendering.
 fn preflight_package_with_expanded_limit(
     bytes: &[u8],
     cancellation: &CancellationToken,
     max_expanded_bytes: u64,
-) -> Result<(), ApplicationError> {
+) -> Result<usize, ApplicationError> {
     if bytes.len() as u64 > MAX_PPTX_SOURCE_BYTES {
         return Err(budget_error("source file size", MAX_PPTX_SOURCE_BYTES));
     }
@@ -378,25 +386,32 @@ fn preflight_package_with_expanded_limit(
             if let Some(format) = raster_image_format(&name) {
                 let mut data = Vec::with_capacity(entry.size() as usize);
                 entry.read_to_end(&mut data).map_err(invalid_pptx)?;
-                let (width, height) =
-                    image::ImageReader::with_format(std::io::Cursor::new(data), format)
-                        .into_dimensions()
-                        .map_err(invalid_pptx)?;
-                let pixels = u64::from(width) * u64::from(height);
-                if pixels > MAX_PPTX_SINGLE_IMAGE_PIXELS {
-                    return Err(pixel_budget_error(
-                        "per-image decoded pixels",
-                        MAX_PPTX_SINGLE_IMAGE_PIXELS,
-                    ));
-                }
-                image_pixels = image_pixels.checked_add(pixels).ok_or_else(|| {
-                    pixel_budget_error("total decoded image pixels", MAX_PPTX_TOTAL_IMAGE_PIXELS)
-                })?;
-                if image_pixels > MAX_PPTX_TOTAL_IMAGE_PIXELS {
-                    return Err(pixel_budget_error(
-                        "total decoded image pixels",
-                        MAX_PPTX_TOTAL_IMAGE_PIXELS,
-                    ));
+                // A package can mislabel an image's codec (for example a JPEG stored with a `.png`
+                // name). Reading its dimensions with the name-derived format and then aborting the
+                // whole preview would make a single oddball picture render nothing at all - the
+                // "damaged or malformed" failure seen on otherwise-openable decks. Read dimensions
+                // best-effort - declared format first, then the format the bytes actually advertise
+                // - and only enforce the per-image pixel budget when some decoder can size the image.
+                if let Some((width, height)) = image_dimensions_lenient(&data, format) {
+                    let pixels = u64::from(width) * u64::from(height);
+                    if pixels > MAX_PPTX_SINGLE_IMAGE_PIXELS {
+                        return Err(pixel_budget_error(
+                            "per-image decoded pixels",
+                            MAX_PPTX_SINGLE_IMAGE_PIXELS,
+                        ));
+                    }
+                    image_pixels = image_pixels.checked_add(pixels).ok_or_else(|| {
+                        pixel_budget_error(
+                            "total decoded image pixels",
+                            MAX_PPTX_TOTAL_IMAGE_PIXELS,
+                        )
+                    })?;
+                    if image_pixels > MAX_PPTX_TOTAL_IMAGE_PIXELS {
+                        return Err(pixel_budget_error(
+                            "total decoded image pixels",
+                            MAX_PPTX_TOTAL_IMAGE_PIXELS,
+                        ));
+                    }
                 }
             }
         }
@@ -410,7 +425,7 @@ fn preflight_package_with_expanded_limit(
             }
         }
     }
-    Ok(())
+    Ok(slide_count)
 }
 
 fn raster_image_format(name: &str) -> Option<image::ImageFormat> {
@@ -425,6 +440,23 @@ fn raster_image_format(name: &str) -> Option<image::ImageFormat> {
         "webp" => Some(image::ImageFormat::WebP),
         _ => None,
     }
+}
+
+/// Best-effort pixel dimensions for a preflight budget check: try the codec the package names,
+/// then fall back to the codec the bytes actually advertise (a mislabeled image), returning
+/// `None` only when no decoder can size the image - so its budget is skipped rather than
+/// aborting the whole preview over one oddball picture.
+fn image_dimensions_lenient(data: &[u8], declared: image::ImageFormat) -> Option<(u32, u32)> {
+    image::ImageReader::with_format(std::io::Cursor::new(data), declared)
+        .into_dimensions()
+        .ok()
+        .or_else(|| {
+            image::guess_format(data).ok().and_then(|real| {
+                image::ImageReader::with_format(std::io::Cursor::new(data), real)
+                    .into_dimensions()
+                    .ok()
+            })
+        })
 }
 
 fn validate_xml(
@@ -730,6 +762,50 @@ mod tests {
             .expect_err("decoded image pixel budget must be enforced");
 
         assert!(error.to_string().contains("decoded pixels"), "{error}");
+    }
+
+    /// A minimal GIF89a whose logical-screen dimensions the `image` crate reads via
+    /// `into_dimensions()`, matching the byte layout the sibling rejection test overwrites.
+    fn gif_with_dims(width: u16, height: u16) -> Vec<u8> {
+        let mut gif = b"GIF89a\x01\0\x01\0\x80\0\0\0\0\0\xff\xff\xff\
+            \x21\xf9\x04\x01\0\0\0\0\x2c\0\0\0\0\x01\0\x01\0\0\
+            \x02\x02\x44\x01\0\x3b"
+            .to_vec();
+        let mut dims = [0_u8; 4];
+        dims[0..2].copy_from_slice(&width.to_le_bytes());
+        dims[2..4].copy_from_slice(&height.to_le_bytes());
+        gif[6..10].copy_from_slice(&dims);
+        gif
+    }
+
+    #[test]
+    fn accepts_a_photo_heavy_deck_within_the_total_pixel_budget() {
+        // Three 4000x3000 (12 MP) photos: each is under the single-image cap, but they total 36 MP,
+        // which exceeded the previous 32 MP total budget and wrongly refused an ordinary deck.
+        let gif1 = gif_with_dims(4000, 3000);
+        let gif2 = gif_with_dims(4000, 3000);
+        let gif3 = gif_with_dims(4000, 3000);
+        let bytes = package(&[
+            ("ppt/media/image1.gif", &gif1),
+            ("ppt/media/image2.gif", &gif2),
+            ("ppt/media/image3.gif", &gif3),
+        ]);
+        preflight_package(&bytes, &CancellationToken::new())
+            .expect("a deck whose images total under the budget must preview");
+    }
+
+    #[test]
+    fn reports_the_slide_count_discovered_during_preflight() {
+        // Preflight scans `ppt/slides/slide*.xml`; the returned count lets the viewer show the deck
+        // size (and a converting indicator) before the full multi-page PDF finishes rendering.
+        let deck = package(&[
+            ("ppt/slides/slide1.xml", b"<p:sld/>".as_slice()),
+            ("ppt/slides/slide2.xml", b"<p:sld/>".as_slice()),
+            ("ppt/slides/slide3.xml", b"<p:sld/>".as_slice()),
+        ]);
+        let slide_count = preflight_package(&deck, &CancellationToken::new())
+            .expect("a well-formed deck must preview");
+        assert_eq!(slide_count, 3);
     }
 
     #[test]

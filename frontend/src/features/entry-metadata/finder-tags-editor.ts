@@ -110,9 +110,9 @@ export const FinderTagsEditor: FactoryComponent<FinderTagsEditorAttrs> = () => {
           t('entryMetadata', 'add'),
         ),
       ]),
-      m('.fm-finder-tags-actions', [
+      m('.fm-finder-tags-actions.fm-form-actions', [
         m(
-          'button.fm-finder-tags-remove-all',
+          'button.btn-flat.fm-finder-tags-remove-all.fm-form-actions-leading',
           {
             type: 'button',
             disabled: tags.length === 0,
@@ -123,7 +123,7 @@ export const FinderTagsEditor: FactoryComponent<FinderTagsEditorAttrs> = () => {
           t('entryMetadata', 'removeAll'),
         ),
         m(
-          'button.fm-finder-tags-cancel',
+          'button.btn-flat.fm-finder-tags-cancel',
           {
             type: 'button',
             onclick: () => {
@@ -134,7 +134,7 @@ export const FinderTagsEditor: FactoryComponent<FinderTagsEditorAttrs> = () => {
           t('button', 'cancel'),
         ),
         m(
-          'button.fm-finder-tags-save',
+          'button.btn-flat.fm-primary-action.fm-finder-tags-save',
           {
             type: 'button',
             onclick: () => {

@@ -98,7 +98,7 @@ export const fr = {
     findFiles: 'Rechercher des fichiers',
     comparePanes: 'Comparer les panneaux',
     comparePanesTooltip: 'Sélectionne les éléments qui diffèrent entre les deux panneaux (Maj+F2)',
-    operationCentre: 'Opérations (Alt+Z)',
+    operationCentre: 'Opérations',
     activityCount: '{count} activités en arrière-plan',
     activitySingle: '1 activité en arrière-plan',
     indexingActivity: 'Indexation sémantique',
@@ -401,6 +401,9 @@ export const fr = {
     fileTemplates: 'Modèles de fichier',
     fileTemplatesHelp:
       'Proposés par « Nouveau fichier depuis un modèle ». {date} et {name} dans le contenu sont remplacés à la création du fichier.',
+    templateFolder: 'Dossier de modèles',
+    templateFolderHelp:
+      'Les fichiers texte de ce dossier sont aussi proposés par « Nouveau fichier depuis un modèle ». Laisser vide pour désactiver.',
     templateEnabled: 'Activé',
     templateLabel: 'Nom',
     templateFileName: 'Nom de fichier suggéré',
@@ -752,6 +755,7 @@ export const fr = {
     nextPage: 'Page suivante',
     loadingPage: 'Chargement de la page…',
     loadingChapter: 'Chargement du chapitre…',
+    convertingSlides: 'Conversion des diapositives…',
     chapter: 'Chapitre',
     selectSection: 'Sélectionner une section',
     goToPage: 'Aller à la page',
@@ -1187,7 +1191,35 @@ export const fr = {
     title: 'Ouvrir un terminal avec…',
     empty: 'Aucune application de terminal n’est configurée. Ajoutez-en dans Réglages → Terminal.',
   },
+  assistant: {
+    title: 'Assistant IA',
+    file: 'Fichier',
+    profile: 'Profil',
+    placeholder: 'Décris le fichier souhaité…',
+    send: 'Envoyer',
+    stop: 'Arrêter',
+    thinking: 'Rédaction en cours…',
+    insert: 'Utiliser dans l’éditeur',
+    inserted: 'Réponse placée dans l’éditeur. Enregistre pour la conserver.',
+    sourceClosed: 'L’éditeur de ce fichier est fermé.',
+    noProfiles: 'Ajoute un profil LLM dans les réglages pour utiliser l’assistant.',
+    noOtherPane: 'Ouvre un second volet pour afficher l’assistant.',
+    failed: 'L’assistant n’a pas pu répondre. Vérifie le profil LLM et son consentement.',
+    consentRequired:
+      "Ce point de terminaison nécessite votre consentement dans les paramètres avant que l'assistant puisse l'utiliser.",
+    openSettings: 'Ouvrir les paramètres IA',
+    you: 'Vous',
+    assistant: 'Assistant IA',
+    empty:
+      'Décris le fichier souhaité. L’assistant voit le nom du fichier et ce chat, pas le contenu du fichier.',
+    loadFailed: 'Impossible de charger les profils LLM.',
+  },
   newFromTemplate: {
+    draftWithAssistant: 'Rédiger avec l’assistant',
+    folderSource: 'Dossier',
+    pluginSource: 'Extension',
+    loadFailed:
+      'Impossible de charger la liste des modèles. Seuls les modèles de l’application sont affichés.',
     title: 'Nouveau fichier depuis un modèle',
     empty: 'Aucun modèle activé. Ajoutez-les ou activez-les dans Réglages → Terminal.',
     templates: 'Modèles',
@@ -1744,7 +1776,34 @@ export const fr = {
       'Le modèle « {model} » du profil d’IA « {name} » n’est pas disponible sur le service d’IA. Installez-le (pour Ollama : ollama pull {model}) ou choisissez un autre modèle dans le profil d’IA.',
     unreachable: 'Le service d’IA du profil « {name} » est injoignable.',
   },
+  llmRoles: {
+    endpoint: 'Point de terminaison',
+    title: 'Rôles',
+    intro:
+      'Choisissez le point de terminaison et le modèle de chaque fonctionnalité. Les points locaux ne demandent pas de consentement.',
+    chat: 'Discussion et résumés',
+    embeddings: 'Recherche sémantique (embeddings)',
+    unassigned: 'Non attribué',
+    model: 'Modèle',
+    allowCloud: "Autoriser l'usage cloud pour l'indexation",
+    cloudHint:
+      "Le contenu des documents est envoyé à ce point cloud pendant l'indexation. Activez-le seulement si vous l'acceptez.",
+    save: 'Enregistrer le rôle',
+    clear: 'Effacer',
+    saved: 'Rôle enregistré.',
+    loadFailed: "Les rôles n'ont pas pu être chargés.",
+    statusUnassigned: 'Aucun point de terminaison attribué.',
+    statusMissingProfile: "Le point de terminaison attribué n'existe plus.",
+    statusCloudNotAllowed:
+      "L'usage cloud doit être autorisé avant que ce rôle puisse utiliser un point cloud.",
+    statusNeedsConsent:
+      'Ce point de terminaison nécessite un consentement dans les paramètres : ouvrez-le ci-dessus et enregistrez avec consentement.',
+    statusReady: 'Prêt.',
+  },
+
   llmProfiles: {
+    consentRequired:
+      "Autoriser l'usage cloud : confirmez le consentement avant d'enregistrer un point de terminaison cloud.",
     title: 'Résumés et réponses par IA',
     description:
       "Connectez un modèle pour rédiger des résumés de documents et répondre à des questions à partir de vos fichiers. Enregistrez les connexions sous forme de profils et choisissez-en un par défaut. Un modèle local s'exécute sur votre appareil ; un service cloud reçoit les questions et des extraits. La recherche sémantique fonctionne sans profil.",
@@ -2363,6 +2422,7 @@ export const fr = {
     save: 'Enregistrer',
     saving: 'Enregistrement…',
     closeEditor: "Fermer l'éditeur",
+    openAssistant: 'Assistant IA',
     fileChangedOnDisk: 'Fichier modifié sur le disque',
     fileChangedMessage: 'Ce fichier a été modifié après son ouverture.',
     reload: 'Recharger',
@@ -2683,6 +2743,10 @@ export const fr = {
     connectionFailed: 'La connexion a échoué : {detail}',
     llmProfileInvalid: 'Les paramètres du profil d’IA ne sont pas valides.',
     cloudConsentRequired: 'Votre consentement est requis avant d’utiliser le service cloud {host}.',
+    llmRoleNotAssigned:
+      "Aucun point de terminaison IA n'est attribué à ce rôle. Attribuez-en un dans les paramètres.",
+    llmCloudEmbeddingNotAllowed:
+      "L'usage cloud doit être autorisé pour ce rôle avant d'utiliser son point de terminaison.",
     llmModelUnavailable:
       'Le modèle d’IA configuré n’est pas disponible. Vérifiez qu’il est installé (pour Ollama : « ollama pull <modèle> ») ou choisissez un autre modèle dans le profil d’IA.',
     llmAuthentication:

@@ -3273,6 +3273,7 @@ dependencies = [
 name = "fm-plugin-api"
 version = "0.7.0-14"
 dependencies = [
+ "fm-domain",
  "serde",
  "serde_json",
  "thiserror 2.0.20",

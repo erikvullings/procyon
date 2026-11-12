@@ -145,16 +145,9 @@ async function toApiError(response: Response): Promise<ApiError> {
   });
 }
 
-/**
- * Orval fetch mutator: performs the request and returns `{ status, data,
- * headers }`, matching the generated fetch client's response shape.
- */
-export async function fetchMutator<T>(url: string, options: RequestInit = {}): Promise<T> {
+/** Sends one request to the API with the session header; failures become `ApiError`s. */
+async function send(url: string, options: RequestInit): Promise<Response> {
   const headers = new Headers(options.headers);
-  if (!headers.has('accept')) {
-    headers.set('accept', 'application/json');
-  }
-
   const sessionHeader = sessionHeaderProvider?.();
   if (sessionHeader !== undefined) {
     headers.set(sessionHeader.name, sessionHeader.value);
@@ -180,7 +173,53 @@ export async function fetchMutator<T>(url: string, options: RequestInit = {}): P
     }
     throw await toApiError(response);
   }
+  return response;
+}
 
+/**
+ * Orval fetch mutator: performs the request and returns `{ status, data,
+ * headers }`, matching the generated fetch client's response shape.
+ */
+export async function fetchMutator<T>(url: string, options: RequestInit = {}): Promise<T> {
+  const headers = new Headers(options.headers);
+  if (!headers.has('accept')) {
+    headers.set('accept', 'application/json');
+  }
+  const response = await send(url, { ...options, headers });
   const data = await readBody(response);
   return { status: response.status, data, headers: response.headers } as T;
+}
+
+/**
+ * POSTs a JSON body and hands each newline-delimited JSON value of the response to `onItem` as it
+ * arrives (task 0321: streamed assistant replies). Errors before the body starts reject like any
+ * other request; the stream itself reports its outcome as items.
+ */
+export async function postNdjson<T>(
+  url: string,
+  body: unknown,
+  onItem: (item: T) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await send(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/x-ndjson' },
+    body: JSON.stringify(body),
+    ...(signal === undefined ? {} : { signal }),
+  });
+  if (response.body === null) return;
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffered = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffered += value;
+    for (let newline = buffered.indexOf('\n'); newline !== -1; newline = buffered.indexOf('\n')) {
+      const line = buffered.slice(0, newline).trim();
+      buffered = buffered.slice(newline + 1);
+      if (line !== '') onItem(JSON.parse(line) as T);
+    }
+  }
+  const rest = buffered.trim();
+  if (rest !== '') onItem(JSON.parse(rest) as T);
 }

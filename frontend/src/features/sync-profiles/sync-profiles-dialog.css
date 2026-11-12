@@ -14,7 +14,7 @@
   gap: 0.5rem;
   padding: 0.35rem 0.5rem;
   border: 1px solid var(--fm-border);
-  border-radius: 4px;
+  border-radius: var(--fm-radius);
 }
 
 .fm-sync-profile-summary {
@@ -41,7 +41,7 @@
   margin-bottom: 0.5rem;
   padding: 0.35rem 0.5rem;
   border: 1px solid var(--fm-border);
-  border-radius: 4px;
+  border-radius: var(--fm-radius);
   background: var(--fm-surface-elevated);
 }
 
@@ -85,5 +85,5 @@
   flex-direction: column;
   gap: 0.5rem;
   border: 1px solid var(--fm-border);
-  border-radius: 4px;
+  border-radius: var(--fm-radius);
 }

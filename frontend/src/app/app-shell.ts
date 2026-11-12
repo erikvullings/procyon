@@ -229,6 +229,7 @@ import {
 import type { RuntimeKind } from '../utilities/runtime';
 import { createWindowTitleSink, dedupeWindowTitleSink } from '../utilities/window-title-sink';
 import { createActionsWiring } from './actions-wiring';
+import { createAssistantWiring } from './assistant-wiring';
 import { createBasketWiring } from './basket-wiring';
 import { buildControllers } from './controller-registry';
 import { createDialogWiring } from './dialogs-wiring';
@@ -249,6 +250,9 @@ export {
   removeDiskUsageNodes,
   respectSystemLocationReadOnly,
 } from './shell-helpers';
+
+/** Toggles the operation centre; handled by the global keydown handler, not the action registry. */
+const OPERATION_CENTRE_SHORTCUT = 'ALT+Z';
 
 /** Attributes of the application shell. */
 export interface AppShellAttrs {
@@ -272,6 +276,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
   let actionsWiring: ReturnType<typeof createActionsWiring>;
   let previewWiring: ReturnType<typeof createPreviewWiring>;
   let knowledgeWiring: ReturnType<typeof createKnowledgeWiring>;
+  let assistantWiring: ReturnType<typeof createAssistantWiring>;
   let treeWiring: ReturnType<typeof createTreeWiring>;
   let settingsWiring: ReturnType<typeof createSettingsWiring>;
   let miscWiring: ReturnType<typeof createMiscWiring>;
@@ -346,6 +351,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
   actionsWiring = createActionsWiring(shellState);
   previewWiring = createPreviewWiring(shellState, core);
   knowledgeWiring = createKnowledgeWiring(shellState, core);
+  assistantWiring = createAssistantWiring(shellState, core);
   treeWiring = createTreeWiring(shellState, core);
   settingsWiring = createSettingsWiring(shellState, core);
   miscWiring = createMiscWiring(shellState, core);
@@ -1053,6 +1059,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     }
     shellState.knowledgeSearchByTab.delete(key);
     shellState.themesByTab.delete(key);
+    assistantWiring.forget(shellState.client, key);
     shellState.navigation.abort(paneId, tabId);
     shellState.directories.delete(key);
     shellState.selections.delete(key);
@@ -1117,6 +1124,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       themesTab.key = targetKey;
       themesTab.paneId = targetPaneId;
       shellState.themesByTab.set(targetKey, themesTab);
+    }
+    const assistantTab = shellState.assistantByTab.get(sourceKey);
+    if (assistantTab !== undefined) {
+      shellState.assistantByTab.delete(sourceKey);
+      assistantTab.key = targetKey;
+      assistantTab.paneId = targetPaneId;
+      shellState.assistantByTab.set(targetKey, assistantTab);
     }
     shellState.navigation.moveTab(sourcePaneId, targetPaneId, tabId);
     const quickFilterDraft = shellState.appState?.quickFilterDrafts.byTabKey[sourceKey];
@@ -2074,6 +2088,21 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         }
       }
       for (const [key, entry] of movedThemes) shellState.themesByTab.set(key, entry);
+      const movedAssistant = [
+        ...[paneA, paneB].flatMap((pane, index) => {
+          const paneId = index === 0 ? paneAId : paneBId;
+          const otherPaneId = index === 0 ? paneBId : paneAId;
+          return pane.tabOrder.flatMap((tabId) => {
+            const entry = shellState.assistantByTab.get(tabKey(paneId, tabId));
+            if (entry === undefined) return [];
+            shellState.assistantByTab.delete(entry.key);
+            entry.key = tabKey(otherPaneId, tabId);
+            entry.paneId = otherPaneId;
+            return [entry] as const;
+          });
+        }),
+      ];
+      for (const entry of movedAssistant) shellState.assistantByTab.set(entry.key, entry);
       // No backend command swaps a whole tab set atomically (task 0128 Agent Notes) - this
       // mutates the local projection directly, the same optimistic-update pattern
       // `activateTab` uses, rather than round-tripping through `dispatchWorkspaceCommand`.
@@ -2351,7 +2380,21 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     toast: (options) => toast(options),
     getOpenTerminalSupported: () => shellState.openTerminalSupported,
     openCreateDirectory: (location) => shellState.dialogs.openCreateDirectory(location),
-    openNewFromTemplate: (location) => shellState.dialogs.openNewFromTemplate(location),
+    openNewFromTemplate: (location) => {
+      shellState.dialogs.openNewFromTemplate(location);
+      // The picker lists app, folder and plugin templates; the backend answers with all three.
+      // On failure the picker keeps offering the app templates from settings, and says so.
+      void shellState.client.listFileTemplates().then(
+        (entries) => {
+          shellState.dialogs.setNewFromTemplateEntries(entries);
+          m.redraw();
+        },
+        (error: unknown) => {
+          console.warn('Loading file templates failed', error);
+          toast({ html: t('newFromTemplate', 'loadFailed') });
+        },
+      );
+    },
     openFinderTagsDialog: (request) => shellState.dialogs.openFinderTagsDialog(request),
     openSpotlightCommentDialog: (request) => shellState.dialogs.openSpotlightCommentDialog(request),
     openTerminalPickerDialog: (request) => shellState.dialogs.openTerminalPickerDialog(request),
@@ -2433,6 +2476,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     getImageMapPane: imageMapWiring.imageMapPane,
     getKnowledgeSearchByTab: () => shellState.knowledgeSearchByTab,
     getThemesByTab: () => shellState.themesByTab,
+    getAssistantByTab: () => shellState.assistantByTab,
+    openAssistant: (paneId) => void assistantWiring.openAssistant(paneId),
+    assistantActions: {
+      send: (key, draft) => void assistantWiring.send(shellState.client, key, draft),
+      stop: (key) => assistantWiring.stop(shellState.client, key),
+      insert: (key, index) => assistantWiring.insert(key, index),
+      setProfile: (key, profileId) => assistantWiring.setProfile(key, profileId),
+    },
     getKnowledgeAnswerRevision: () => shellState.knowledgeAnswerRevision,
     setConnections: (conns) => {
       shellState.connections = conns;
@@ -2831,18 +2882,28 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     },
     openEditorForCreatedFile: (location, name) => {
       const active = activeDirectory();
-      if (active === undefined) return;
+      if (active === undefined) return undefined;
       refetchAffectedPanes(active.paneId);
+      // The editor loads `entry.location`, so it must be the new file's own
+      // location (the directory under the cursor joined with its name), not the
+      // directory location the create flow passes in - otherwise the load
+      // inspects the folder and fails with "Unable to load file".
+      const fileLocation: Location = {
+        providerId: location.providerId,
+        uri: `${location.uri.replace(/\/$/u, '')}/${encodeURIComponent(name)}`,
+      };
       previewWiring.openEditor(shellState.client, active.paneId, {
         id: crypto.randomUUID(),
-        location,
+        location: fileLocation,
         name,
         kind: 'file',
         hidden: false,
         readOnly: false,
         metadataRevision: 0,
       });
+      return active.paneId;
     },
+    openAssistant: (paneId) => void assistantWiring.openAssistant(paneId),
     getFinderTagsLoader: () => shellState.finderTagsLoader,
     getRuntimeCapabilities: () => shellState.runtimeCapabilities,
     cancelAutoDismiss: opsWiring.cancelAutoDismiss,
@@ -3372,6 +3433,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         );
       const basketF5 =
         basketWiring.basketVisible() && !basketFocused && shortcutFor('core.copy') === 'F5';
+      const menuShortcut = (shortcut: string | undefined): string | undefined =>
+        shortcut === undefined ? undefined : miscWiring.displayShortcut(shortcut);
       const compactToolbar = shellState.currentSettings?.compactToolbar === true;
       const toggleSettingsFromToolbar = (): void => {
         if (shellState.settingsDisclosureElement === undefined) return;
@@ -3391,7 +3454,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       const commandPaletteButton = tooltip(
         miscWiring.labelWithShortcut(
           t('shell', 'commandPalette'),
-          `${shellState.platform === 'macos' ? 'Cmd' : 'Ctrl'}+P`,
+          shortcutFor('core.palette') ?? 'CTRL+P',
         ),
         m(
           IconButton,
@@ -3463,6 +3526,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         {
           id: 'compare',
           label: t('shell', 'comparePanes'),
+          shortcut: menuShortcut(shortcutFor('core.compareDirectories')),
           icon: compareIcon(),
           disabled:
             activeDirectory() === undefined || (shellState.workspace?.paneOrder.length ?? 0) < 2,
@@ -3471,6 +3535,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         {
           id: 'sync-browsing',
           label: syncBrowsingLabel,
+          shortcut: menuShortcut(shortcutFor('core.syncBrowsing')),
           icon: syncBrowsingState === 'off' ? linkOffIcon() : linkIcon(),
           disabled: syncBrowsingDisabled,
           pressed: syncBrowsingState !== 'off',
@@ -3479,6 +3544,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         {
           id: 'operations',
           label: t('shell', 'operationCentre'),
+          shortcut: menuShortcut(OPERATION_CENTRE_SHORTCUT),
           icon: operationsIcon(),
           disabled: shellState.workspace === undefined,
           pressed: shellState.workspace?.operationCentre.visible === true,
@@ -3803,117 +3869,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
               'aria-hidden': 'true',
               'data-tauri-drag-region': isMacOverlay ? '' : undefined,
             }),
-            tooltip(
-              t('shell', 'workspaceSwitcherLabel', {
-                name: shellState.workspace?.name ?? t('shell', 'none'),
-              }),
-              m(
-                IconButton,
-                {
-                  className: 'fm-workspace-switcher-button',
-                  'aria-label': t('shell', 'workspaceSwitcherLabel', {
-                    name: shellState.workspace?.name ?? t('shell', 'none'),
-                  }),
-                  onclick: () => {
-                    if (shellState.workspaceDisclosureElement !== undefined) {
-                      shellState.workspaceDisclosureElement.open =
-                        !shellState.workspaceDisclosureElement.open;
-                    }
-                  },
-                },
-                layoutGridIcon(),
-              ),
-            ),
-            compactToolbar ? commandPaletteButton : undefined,
-            m(
-              'details.fm-workspace-disclosure',
-              {
-                oncreate: ({ dom }) => {
-                  shellState.workspaceDisclosureElement = dom as HTMLDetailsElement;
-                },
-                onremove: () => {
-                  shellState.workspaceDisclosureElement = undefined;
-                },
-              },
-              [
-                m('summary.fm-disclosure-summary-hidden'),
-                m('.fm-workspace-switcher-backdrop', {
-                  onclick: (event: MouseEvent) => {
-                    const disclosure = (event.currentTarget as HTMLElement).closest('details');
-                    if (disclosure instanceof HTMLDetailsElement) disclosure.open = false;
-                  },
-                }),
-                m(
-                  '.fm-workspace-switcher-panel',
-                  { role: 'dialog', 'aria-label': t('shell', 'workspaceSwitcher') },
-                  [
-                    m('.fm-workspace-switcher-heading', [
-                      m('strong', t('shell', 'workspaceSwitcher')),
-                      m(
-                        'button',
-                        {
-                          type: 'button',
-                          'aria-label': t('shell', 'closeWorkspaces'),
-                          onclick: (event: MouseEvent) => {
-                            const disclosure = (event.currentTarget as HTMLElement).closest(
-                              'details',
-                            );
-                            if (disclosure instanceof HTMLDetailsElement) disclosure.open = false;
-                          },
-                        },
-                        closeIcon(),
-                      ),
-                    ]),
-                    m(WorkspaceSwitcher, {
-                      summaries: sortWorkspaceSummaries(shellState.workspaceSummaries),
-                      // An ephemeral window's own id is never listed here (ephemeral workspaces
-                      // are excluded from the switcher) - the row that should read as "current"
-                      // is the named workspace it was forked from, if any. A non-ephemeral
-                      // window (the main/dock window) already is that named workspace.
-                      activeWorkspaceId:
-                        shellState.workspace === undefined
-                          ? undefined
-                          : shellState.workspace.ephemeral
-                            ? shellState.workspace.forkedFrom
-                            : shellState.workspace.id,
-                      error: shellState.workspaceActionError,
-                      onSwitch: (workspaceId) => {
-                        void switchWorkspace(workspaceId);
-                      },
-                      onCreate: () => shellState.workspaceController.createWorkspaceAction(),
-                      onRename: (workspaceId, name) =>
-                        shellState.workspaceController.renameWorkspaceAction(workspaceId, name),
-                      onDelete: (workspaceId) =>
-                        shellState.workspaceController.deleteWorkspaceAction(workspaceId),
-                      ...(shellState.client.openWorkspaceWindow === undefined
-                        ? {}
-                        : {
-                            onOpenInNewWindow: (workspaceId: WorkspaceId) => {
-                              void shellState.client.openWorkspaceWindow?.(workspaceId);
-                              if (shellState.workspaceDisclosureElement !== undefined) {
-                                shellState.workspaceDisclosureElement.open = false;
-                              }
-                            },
-                          }),
-                      ...(shellState.client.resyncWorkspace === undefined ||
-                      shellState.workspace === undefined
-                        ? {}
-                        : {
-                            onUpdate: (workspaceId: WorkspaceId) => {
-                              void resyncWorkspace(shellState.client, workspaceId);
-                            },
-                          }),
-                    }),
-                  ],
-                ),
-              ],
-            ),
-            compactToolbar
-              ? undefined
-              : m('.fm-toolbar-separator', {
-                  role: 'separator',
-                  'aria-orientation': 'vertical',
-                }),
             m(
               '.fm-activity-anchor',
               {
@@ -3928,7 +3883,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 compactToolbar
                   ? undefined
                   : tooltip(
-                      t('shell', 'operationCentre'),
+                      miscWiring.labelWithShortcut(
+                        t('shell', 'operationCentre'),
+                        OPERATION_CENTRE_SHORTCUT,
+                      ),
                       m(
                         IconButton,
                         {
@@ -4042,6 +4000,117 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                       ],
                     )
                   : undefined,
+              ],
+            ),
+            compactToolbar
+              ? undefined
+              : m('.fm-toolbar-separator', {
+                  role: 'separator',
+                  'aria-orientation': 'vertical',
+                }),
+            tooltip(
+              t('shell', 'workspaceSwitcherLabel', {
+                name: shellState.workspace?.name ?? t('shell', 'none'),
+              }),
+              m(
+                IconButton,
+                {
+                  className: 'fm-workspace-switcher-button',
+                  'aria-label': t('shell', 'workspaceSwitcherLabel', {
+                    name: shellState.workspace?.name ?? t('shell', 'none'),
+                  }),
+                  onclick: () => {
+                    if (shellState.workspaceDisclosureElement !== undefined) {
+                      shellState.workspaceDisclosureElement.open =
+                        !shellState.workspaceDisclosureElement.open;
+                    }
+                  },
+                },
+                layoutGridIcon(),
+              ),
+            ),
+            compactToolbar ? commandPaletteButton : undefined,
+            m(
+              'details.fm-workspace-disclosure',
+              {
+                oncreate: ({ dom }) => {
+                  shellState.workspaceDisclosureElement = dom as HTMLDetailsElement;
+                },
+                onremove: () => {
+                  shellState.workspaceDisclosureElement = undefined;
+                },
+              },
+              [
+                m('summary.fm-disclosure-summary-hidden'),
+                m('.fm-workspace-switcher-backdrop', {
+                  onclick: (event: MouseEvent) => {
+                    const disclosure = (event.currentTarget as HTMLElement).closest('details');
+                    if (disclosure instanceof HTMLDetailsElement) disclosure.open = false;
+                  },
+                }),
+                m(
+                  '.fm-workspace-switcher-panel',
+                  { role: 'dialog', 'aria-label': t('shell', 'workspaceSwitcher') },
+                  [
+                    m('.fm-workspace-switcher-heading', [
+                      m('strong', t('shell', 'workspaceSwitcher')),
+                      m(
+                        'button',
+                        {
+                          type: 'button',
+                          'aria-label': t('shell', 'closeWorkspaces'),
+                          onclick: (event: MouseEvent) => {
+                            const disclosure = (event.currentTarget as HTMLElement).closest(
+                              'details',
+                            );
+                            if (disclosure instanceof HTMLDetailsElement) disclosure.open = false;
+                          },
+                        },
+                        closeIcon(),
+                      ),
+                    ]),
+                    m(WorkspaceSwitcher, {
+                      summaries: sortWorkspaceSummaries(shellState.workspaceSummaries),
+                      // An ephemeral window's own id is never listed here (ephemeral workspaces
+                      // are excluded from the switcher) - the row that should read as "current"
+                      // is the named workspace it was forked from, if any. A non-ephemeral
+                      // window (the main/dock window) already is that named workspace.
+                      activeWorkspaceId:
+                        shellState.workspace === undefined
+                          ? undefined
+                          : shellState.workspace.ephemeral
+                            ? shellState.workspace.forkedFrom
+                            : shellState.workspace.id,
+                      error: shellState.workspaceActionError,
+                      onSwitch: (workspaceId) => {
+                        void switchWorkspace(workspaceId);
+                      },
+                      onCreate: () => shellState.workspaceController.createWorkspaceAction(),
+                      onRename: (workspaceId, name) =>
+                        shellState.workspaceController.renameWorkspaceAction(workspaceId, name),
+                      onDelete: (workspaceId) =>
+                        shellState.workspaceController.deleteWorkspaceAction(workspaceId),
+                      ...(shellState.client.openWorkspaceWindow === undefined
+                        ? {}
+                        : {
+                            onOpenInNewWindow: (workspaceId: WorkspaceId) => {
+                              void shellState.client.openWorkspaceWindow?.(workspaceId);
+                              if (shellState.workspaceDisclosureElement !== undefined) {
+                                shellState.workspaceDisclosureElement.open = false;
+                              }
+                            },
+                          }),
+                      ...(shellState.client.resyncWorkspace === undefined ||
+                      shellState.workspace === undefined
+                        ? {}
+                        : {
+                            onUpdate: (workspaceId: WorkspaceId) => {
+                              void resyncWorkspace(shellState.client, workspaceId);
+                            },
+                          }),
+                    }),
+                  ],
+                ),
               ],
             ),
             shellState.semanticInstallation === undefined

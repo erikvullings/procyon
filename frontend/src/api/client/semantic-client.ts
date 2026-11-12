@@ -23,6 +23,8 @@ import type {
   ExecuteKnowledgeSearchRequest,
   ExportCorpusThemesRequest,
   ExportCorpusThemesResponse,
+  FileAssistantEvent,
+  FileAssistantRequest,
   GenerateDocumentSummaryRequest,
   GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
@@ -46,6 +48,8 @@ import type {
   LlmProfileExport,
   LlmProfilePreset,
   LlmProfileTestResult,
+  LlmRole,
+  LlmRoles,
   MoveSemanticDataRequest,
   ParseKnowledgeQueryRequest,
   PlanKnowledgeSearchRequest,
@@ -62,6 +66,7 @@ import type {
   ReviewConceptCandidateRequest,
   SavedRagConversation,
   SaveLlmProfileRequest,
+  SaveLlmRoleRequest,
   SaveRagConversationRequest,
   SemanticComponentCapabilities,
   SemanticComponentStatus,
@@ -102,6 +107,12 @@ export interface SemanticClient {
     signal?: AbortSignal,
   ): Promise<SemanticInstallReceipt>;
 
+  /** Binds a role to an endpoint, model and cloud permission; the result is all role bindings. */
+  setLlmRole(role: LlmRole, request: SaveLlmRoleRequest, signal?: AbortSignal): Promise<LlmRoles>;
+  clearLlmRole(role: LlmRole, signal?: AbortSignal): Promise<LlmRoles>;
+  listLlmRoles(signal?: AbortSignal): Promise<LlmRoles>;
+  /** Records consent for the profile's current cloud host, from the endpoint editor. */
+  grantLlmProfileConsent(profileId: string, signal?: AbortSignal): Promise<LlmProfile>;
   activateLlmProfile(
     profileId: string,
     consent: boolean,
@@ -314,6 +325,16 @@ export interface SemanticClient {
   listLlmProfilePresets(signal?: AbortSignal): Promise<LlmProfilePreset[]>;
 
   listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]>;
+
+  /** Streams the next reply: `onEvent` gets fragments, then one `done` or `failed`. */
+  streamFileAssistantReply(
+    request: FileAssistantRequest,
+    onEvent: (event: FileAssistantEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<void>;
+
+  /** Stops a running file-assistant reply; events that follow are not delivered to the caller. */
+  cancelFileAssistantReply(requestId: string): Promise<void>;
 
   listSavedRagConversations(
     workspaceId: WorkspaceId,

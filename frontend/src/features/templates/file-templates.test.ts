@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  appTemplateEntries,
   DEFAULT_FILE_TEMPLATES,
   enabledTemplates,
   expandTemplateBody,
@@ -23,6 +24,19 @@ describe('file templates', () => {
     }));
     expect(enabledTemplates(templates).map((template) => template.id)).not.toContain('markdown');
     expect(enabledTemplates(templates)[0]?.id).toBe('text');
+  });
+
+  it('lists enabled settings templates as app entries', () => {
+    const templates = DEFAULT_FILE_TEMPLATES.map((template, index) => ({
+      ...template,
+      enabled: index !== 0,
+    }));
+    const entries = appTemplateEntries(templates);
+    expect(entries).toHaveLength(templates.length - 1);
+    expect(entries.every((entry) => entry.source === 'app' && entry.sourceName === null)).toBe(
+      true,
+    );
+    expect(entries[0]?.id).toBe('markdown');
   });
 
   it('mints unused ids', () => {

@@ -302,6 +302,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::action::list_actions))
         .routes(utoipa_axum::routes!(routes::action::invoke_action))
         .routes(utoipa_axum::routes!(routes::plugin::list_plugins))
+        .routes(utoipa_axum::routes!(routes::plugin::list_file_templates))
         .routes(utoipa_axum::routes!(routes::plugin::enable_plugin))
         .routes(utoipa_axum::routes!(routes::plugin::disable_plugin))
         .routes(utoipa_axum::routes!(routes::plugin::get_plugin_logs))
@@ -350,6 +351,12 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(
             routes::llm_profile::activate_llm_profile
         ))
+        .routes(utoipa_axum::routes!(
+            routes::llm_profile::grant_llm_profile_consent
+        ))
+        .routes(utoipa_axum::routes!(routes::llm_profile::list_llm_roles))
+        .routes(utoipa_axum::routes!(routes::llm_profile::set_llm_role))
+        .routes(utoipa_axum::routes!(routes::llm_profile::clear_llm_role))
         .routes(utoipa_axum::routes!(routes::llm_profile::test_llm_profile))
         .routes(utoipa_axum::routes!(
             routes::llm_profile::discover_llm_profile_models
@@ -406,6 +413,12 @@ fn api_router() -> OpenApiRouter<AppState> {
         ))
         .routes(utoipa_axum::routes!(
             routes::knowledge::cancel_knowledge_search
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::file_assistant::stream_file_assistant_reply
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::file_assistant::cancel_file_assistant_reply
         ))
         .routes(utoipa_axum::routes!(
             routes::knowledge::resolve_knowledge_source

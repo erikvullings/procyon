@@ -3,14 +3,14 @@ import type { ClipboardState } from '../features/clipboard/clipboard';
 import { emptyClipboard } from '../features/clipboard/clipboard';
 import { getSelectedEntriesOrCursor } from '../features/selection/selection';
 import { t } from '../i18n';
-import {
-  type FunctionKeyModifiers,
-  hasPrimaryModifier,
-  usesLiteralControl,
-} from '../keybindings/dispatcher';
+import { type FunctionKeyModifiers, hasPrimaryModifier } from '../keybindings/dispatcher';
 import type { Location, PaneId } from '../models';
 import { applyAppPatches, clipboardPatch } from '../state';
-import { tabKey } from './shell-helpers';
+import {
+  labelWithShortcut as formatLabelWithShortcut,
+  displayShortcut as formatShortcutForPlatform,
+  tabKey,
+} from './shell-helpers';
 
 /** Sets up the miscWiring feature wiring and returns its functions. */
 import type { ShellState } from './shell-state';
@@ -105,21 +105,11 @@ export function createMiscWiring(shellState: ShellState, core: MiscCore) {
   }
 
   function displayShortcut(shortcut: string): string {
-    const parts = shortcut.split('+');
-    const literalControl = usesLiteralControl({ key: parts.at(-1) ?? '', ctrl: true });
-    return parts
-      .map((part) => {
-        if (part === 'CTRL')
-          return shellState.platform === 'macos' && !literalControl ? 'Cmd' : 'Ctrl';
-        if (part === 'ALT') return shellState.platform === 'macos' ? 'Option' : 'Alt';
-        if (part === 'SHIFT') return 'Shift';
-        return part.length === 1 ? part.toUpperCase() : part;
-      })
-      .join('+');
+    return formatShortcutForPlatform(shortcut, shellState.platform);
   }
 
   function labelWithShortcut(label: string, shortcut: string | undefined): string {
-    return shortcut === undefined ? label : `${label} (${displayShortcut(shortcut)})`;
+    return formatLabelWithShortcut(label, shortcut, shellState.platform);
   }
 
   function openViewerPaneId(): PaneId | undefined {

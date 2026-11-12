@@ -238,6 +238,13 @@ export interface FileViewerPdfContent {
   readonly currentPage: number;
   readonly zoom: number;
   readonly outline?: readonly FileViewerPdfOutlineItem[];
+  /** Total slide count a PowerPoint preview reports up front (via `openPptxPreview`), so the page
+   * counter can show the full deck size before the complete multi-page PDF finishes rendering.
+   * Absent for ordinary PDFs, which load all pages at once. */
+  readonly slideTotal?: number;
+  /** True while a PowerPoint preview is still converting the remaining slides behind the first
+   * page; the viewer suppresses page navigation and shows a converting indicator until then. */
+  readonly slidesConverting?: boolean;
 }
 
 export interface FileViewerPdfOutlineItem {
@@ -1350,6 +1357,10 @@ export function createFileViewerController(
           pageCount: firstPageDocument.numPages,
           currentPage: initialPdfPage(firstPageDocument.numPages),
           zoom: 1,
+          // The backend already knows the deck size from preflight; show it and flag that the
+          // remaining slides are still converting behind the first page.
+          slideTotal: opened.slideCount,
+          slidesConverting: true,
         },
       });
 
@@ -1393,6 +1404,10 @@ export function createFileViewerController(
           pageCount: document.numPages,
           currentPage: initialPdfPage(document.numPages),
           zoom: 1,
+          // The full multi-page PDF is in place; stop flagging conversion and let the counter fall
+          // back to the real page count (which now equals the slide total).
+          slideTotal: document.numPages,
+          slidesConverting: false,
         },
       });
       void firstPageDocument.cleanup();

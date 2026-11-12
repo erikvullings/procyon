@@ -279,6 +279,9 @@ pub struct PluginContributions {
     /// A directory-entry icon theme, described by a sibling `icon-theme.json`.
     /// Runs no code: no `entrypoint` is required for this contribution alone.
     pub icon_theme: bool,
+    /// Templates for "New file from template", read from a sibling `file-templates.json` (task
+    /// 0312). Runs no code: no `entrypoint` is required for this contribution alone.
+    pub file_templates: bool,
     /// An isolated child-WebView SPA with package-owned assets, independent of the code runtime.
     pub spa_panel: Option<SpaPanelContribution>,
     /// A sandboxed F3 preview renderer for file extensions no built-in renderer claims
@@ -474,6 +477,73 @@ pub enum IconThemeManifestError {
     /// An `iconPath` is absolute or escapes the plugin directory.
     #[error("icon theme manifest icon definition {0:?} has an unsafe iconPath")]
     UnsafeIconPath(String),
+}
+
+/// Most templates one plugin may contribute to "New file from template" (task 0312).
+pub const MAX_PLUGIN_FILE_TEMPLATES: usize = 30;
+/// Longest accepted plugin template body, in characters (task 0312).
+pub const MAX_PLUGIN_TEMPLATE_BODY_CHARS: usize = 64 * 1024;
+/// The sibling document a plugin with `contributions.file_templates` ships (task 0312).
+pub const FILE_TEMPLATES_FILE_NAME: &str = "file-templates.json";
+
+/// One template a plugin contributes to "New file from template" (task 0312). Pure data: the host
+/// fills `{date}` and `{name}` on creation, and the plugin never runs code to produce it.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct FileTemplateContribution {
+    /// Identifier unique within the plugin.
+    pub id: String,
+    /// User-visible name in the template picker.
+    pub label: String,
+    /// Suggested file name, including its extension; a single path segment.
+    pub file_name: String,
+    /// Initial file content.
+    #[serde(default)]
+    pub body: String,
+}
+
+/// `file-templates.json` parsing or validation failure.
+#[derive(Debug, Error)]
+pub enum FileTemplatesError {
+    /// The JSON does not conform to the schema.
+    #[error("invalid file templates document: {0}")]
+    Json(#[source] serde_json::Error),
+    /// A template is incomplete, duplicated, or unsafe.
+    #[error("invalid file template {0:?}")]
+    Invalid(String),
+    /// More templates than the host accepts from one plugin.
+    #[error("too many file templates: at most {MAX_PLUGIN_FILE_TEMPLATES} are accepted")]
+    TooMany,
+}
+
+/// Parses and validates a plugin's `file-templates.json`: an array of [`FileTemplateContribution`].
+pub fn parse_file_templates(
+    source: &str,
+) -> Result<Vec<FileTemplateContribution>, FileTemplatesError> {
+    let mut templates: Vec<FileTemplateContribution> =
+        serde_json::from_str(source).map_err(FileTemplatesError::Json)?;
+    if templates.len() > MAX_PLUGIN_FILE_TEMPLATES {
+        return Err(FileTemplatesError::TooMany);
+    }
+    for template in &mut templates {
+        template.id = template.id.trim().to_owned();
+        template.label = template.label.trim().to_owned();
+        template.file_name = template.file_name.trim().to_owned();
+    }
+    let mut seen: Vec<&str> = Vec::new();
+    for template in &templates {
+        let id = template.id.trim();
+        if id.is_empty()
+            || template.label.trim().is_empty()
+            || fm_domain::location::validate_name(&template.file_name).is_err()
+            || seen.contains(&id)
+            || template.body.chars().count() > MAX_PLUGIN_TEMPLATE_BODY_CHARS
+        {
+            return Err(FileTemplatesError::Invalid(template.id.clone()));
+        }
+        seen.push(id);
+    }
+    Ok(templates)
 }
 
 /// Plugin action declaration, projected into the host action registry.
@@ -920,5 +990,67 @@ actions = true
         let parsed: SelectedEntryContext =
             serde_json::from_str(&json).expect("deserialization must succeed");
         assert_eq!(entry, parsed);
+    }
+}
+
+#[cfg(test)]
+mod file_template_tests {
+    use super::*;
+
+    #[test]
+    fn parses_a_valid_file_templates_document() {
+        let templates = parse_file_templates(
+            r##"[{"id":"note","label":"Note","fileName":"note.md","body":"# {name}"},
+                {"id":"bare","label":"Bare","fileName":"bare.txt"}]"##,
+        )
+        .expect("valid");
+        assert_eq!(templates.len(), 2);
+        assert_eq!(templates[0].file_name, "note.md");
+        assert_eq!(templates[1].body, "");
+    }
+
+    #[test]
+    fn trims_contributed_fields_before_they_are_used() {
+        let templates =
+            parse_file_templates(r#"[{"id":" a ","label":" A ","fileName":" a.txt "}]"#)
+                .expect("valid");
+        assert_eq!(templates[0].id, "a");
+        assert_eq!(templates[0].label, "A");
+        assert_eq!(templates[0].file_name, "a.txt");
+    }
+
+    #[test]
+    fn rejects_unsafe_or_duplicate_templates() {
+        for source in [
+            r#"[{"id":"a","label":"A","fileName":"../evil.txt"}]"#,
+            r#"[{"id":"a","label":"A","fileName":"sub/dir.txt"}]"#,
+            r#"[{"id":"a","label":"A","fileName":".."}]"#,
+            r#"[{"id":"a","label":"","fileName":"a.txt"}]"#,
+            r#"[{"id":"a","label":"A","fileName":"a.txt"},{"id":"a","label":"B","fileName":"b.txt"}]"#,
+        ] {
+            assert!(
+                matches!(
+                    parse_file_templates(source),
+                    Err(FileTemplatesError::Invalid(_))
+                ),
+                "accepted {source}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_fields_and_too_many_templates() {
+        assert!(matches!(
+            parse_file_templates(r#"[{"id":"a","label":"A","fileName":"a.txt","enabled":true}]"#),
+            Err(FileTemplatesError::Json(_))
+        ));
+        let many = (0..=MAX_PLUGIN_FILE_TEMPLATES)
+            .map(|index| format!(r#"{{"id":"t{index}","label":"T","fileName":"f{index}.txt"}}"#))
+            .collect::<Vec<_>>()
+            .join(",");
+        assert!(matches!(
+            parse_file_templates(&format!("[{many}]")),
+            Err(FileTemplatesError::TooMany)
+        ));
     }
 }

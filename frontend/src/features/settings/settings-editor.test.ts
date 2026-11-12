@@ -45,6 +45,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     terminalCommand: null,
     terminalApps: [],
     fileTemplates: [],
+    templateFolder: null,
     editorCommand: null,
     defaultStartLocations: [],
     favouriteLocations: [],
@@ -282,10 +283,12 @@ describe('SettingsEditor', () => {
     const profiles = vi.spyOn(client, 'listLlmProfiles');
     mountEditor({ client });
 
-    await vi.waitFor(() => expect(profiles).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(profiles).toHaveBeenCalled());
+    // The roles section (0322) lists profiles too; opening the section must not fetch them again.
+    const preloads = profiles.mock.calls.length;
     openSection('Semantic (RAG)');
     await vi.waitFor(() => expect(root.textContent).toContain('Provider preset'));
-    expect(profiles).toHaveBeenCalledOnce();
+    expect(profiles).toHaveBeenCalledTimes(preloads);
   });
 
   it('reveals semantic configuration after components are enabled', async () => {

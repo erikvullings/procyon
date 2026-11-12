@@ -272,7 +272,9 @@ export function createActionsWiring(shellState: ShellState) {
   }
 
   function actionsWithFavourites(): readonly ActionDescriptor[] {
-    return [...localisedRegisteredActions(), ...clientOnlyActions(), ...favouriteActions()];
+    // `keybindingActions` (not the raw catalogue): the F1 help fallback the function-key bar
+    // advertises must also be dispatchable and searchable when a host's catalogue omits it.
+    return [...keybindingActions(), ...clientOnlyActions(), ...favouriteActions()];
   }
 
   return {

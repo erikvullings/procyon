@@ -1,6 +1,8 @@
+import { appTemplateEntries } from '../../features/templates/file-templates';
 import type {
   BackendEvent,
   DiagnosticsResult,
+  FileTemplateEntry,
   FrontendDiagnostic,
   Location,
   RuntimeCapabilities,
@@ -170,6 +172,12 @@ export class MockConnectionClient implements ConnectionClient {
 
   getSettings(signal?: AbortSignal): Promise<Settings> {
     return this.ctx.perform('getSettings', signal, () => structuredClone(this.ctx.settings));
+  }
+
+  listFileTemplates(signal?: AbortSignal): Promise<FileTemplateEntry[]> {
+    return this.ctx.perform('listFileTemplates', signal, () =>
+      appTemplateEntries(this.ctx.settings.fileTemplates),
+    );
   }
 
   updateSettings(settings: Settings, signal?: AbortSignal): Promise<Settings> {

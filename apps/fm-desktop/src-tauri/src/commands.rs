@@ -44,24 +44,24 @@ use fm_transport_dto::{
     HostKeyProbeDto, ImportSemanticLocalModelRequestDto, ImportSemanticVocabularyRequestDto,
     InstallSemanticWorkerPatchRequestDto, InvokeActionRequestDto, LinkOptionsDto,
     LinkOptionsRequestDto, ListDirectoryChildrenRequest, ListDirectoryRequest, LlmModelLimitsDto,
-    LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, LocationDto,
-    MoveSemanticDataRequestDto, NavigateRequest, OneDriveAuthorizationAttemptDto,
-    OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto, OpenPptxPreviewRequestDto,
-    OpenPptxPreviewResponseDto, OpenStructuredViewRequestDto, OpenStructuredViewResponseDto,
-    OperationDto, OperationQueueStatusDto, PlanSemanticExclusionRequestDto,
-    PlanSemanticModelMigrationRequestDto, PluginDescriptorDto, PluginLogEntryDto, PluginStatusDto,
-    PptxPreviewSessionRequestDto, PreviewDocumentSummaryRequestDto,
-    PreviewSemanticEnrolmentRequestDto, ReadDocxPreviewResourceRequestDto,
-    ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
-    ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
+    LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, LlmRoleDto,
+    LlmRolesDto, LocationDto, MoveSemanticDataRequestDto, NavigateRequest,
+    OneDriveAuthorizationAttemptDto, OpenDocxPreviewRequestDto, OpenDocxPreviewResponseDto,
+    OpenPptxPreviewRequestDto, OpenPptxPreviewResponseDto, OpenStructuredViewRequestDto,
+    OpenStructuredViewResponseDto, OperationDto, OperationQueueStatusDto,
+    PlanSemanticExclusionRequestDto, PlanSemanticModelMigrationRequestDto, PluginDescriptorDto,
+    PluginLogEntryDto, PluginStatusDto, PptxPreviewSessionRequestDto,
+    PreviewDocumentSummaryRequestDto, PreviewSemanticEnrolmentRequestDto,
+    ReadDocxPreviewResourceRequestDto, ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto,
+    ReadFileRangeResponseDto, ReadPptxPreviewPdfRequestDto, ReadStructuredJsonWindowRequestDto,
     ReadStructuredJsonWindowResponseDto, ReadStructuredRowsRequestDto,
     ReadStructuredRowsResponseDto, RemoveApplicationDockIconRequestDto,
     RemoveApplicationDockIconResponseDto, RenderChecksumFileRequestDto,
     ResolveArchiveEditRequestDto, ResolveOperationConflictRequestDto,
     ResumeSemanticCleanupRequestDto, ReviewConceptCandidateRequestDto, RuntimeCapabilitiesDto,
     SaveChecksumFileRequestDto, SaveChecksumFileResponseDto, SaveLlmProfileRequestDto,
-    ScanDiskUsageRequestDto, SearchInFileRequestDto, SearchInFileResponseDto,
-    SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto,
+    SaveLlmRoleRequestDto, ScanDiskUsageRequestDto, SearchInFileRequestDto,
+    SearchInFileResponseDto, SearchStructuredRowsRequestDto, SearchStructuredRowsResponseDto,
     SemanticComponentCapabilitiesDto, SemanticComponentErrorDto, SemanticComponentStatusDto,
     SemanticDataMoveReceiptDto, SemanticEnrolmentPreviewDto, SemanticExclusionPlanDto,
     SemanticFolderStatusDto, SemanticIndexRemovalPlanDto, SemanticIndexRemovalReceiptDto,
@@ -2755,6 +2755,41 @@ pub(crate) async fn invoke_action<R: Runtime>(
         .map_err(|e| e.into_dto(Uuid::new_v4()))
 }
 
+/// Lists "New file from template" entries across app, folder and plugin sources (task 0312).
+#[tauri::command]
+pub(crate) fn list_file_templates(
+    state: State<'_, AppState>,
+) -> Vec<fm_transport_dto::FileTemplateEntryDto> {
+    state.service.list_file_templates()
+}
+
+/// Streams the next file-assistant reply through a saved LLM profile (task 0321): fragments, then
+/// one final event on `events`. Every outcome arrives as an event, so the command itself succeeds.
+#[tauri::command]
+pub(crate) async fn stream_file_assistant_reply(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::FileAssistantRequestDto,
+    events: Channel<fm_transport_dto::FileAssistantEventDto>,
+) -> Result<(), ApplicationErrorDto> {
+    state
+        .service
+        .stream_file_assistant_reply(request, &mut |event| {
+            // A closed channel means the window is gone; there is no one left to tell.
+            let _ = events.send(event);
+        })
+        .await;
+    Ok(())
+}
+
+/// Cancels one running file-assistant reply.
+#[tauri::command]
+pub(crate) fn cancel_file_assistant_reply(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::CancelFileAssistantRequestDto,
+) {
+    state.service.cancel_file_assistant_reply(request);
+}
+
 /// Lists plugins through the shared discovery service.
 #[tauri::command]
 pub(crate) fn list_plugins(state: State<'_, AppState>) -> Vec<PluginDescriptorDto> {
@@ -3451,6 +3486,54 @@ pub(crate) fn export_llm_profile(
     state
         .service
         .export_llm_profile(profile_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Lists the role bindings (chat, embeddings).
+#[tauri::command]
+pub(crate) fn list_llm_roles(
+    state: State<'_, AppState>,
+) -> Result<LlmRolesDto, ApplicationErrorDto> {
+    state
+        .service
+        .list_llm_roles()
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Binds a role to an endpoint and model.
+#[tauri::command]
+pub(crate) fn set_llm_role(
+    state: State<'_, AppState>,
+    role: LlmRoleDto,
+    request: SaveLlmRoleRequestDto,
+) -> Result<LlmRolesDto, ApplicationErrorDto> {
+    state
+        .service
+        .set_llm_role(role, request)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Clears a role binding.
+#[tauri::command]
+pub(crate) fn clear_llm_role(
+    state: State<'_, AppState>,
+    role: LlmRoleDto,
+) -> Result<LlmRolesDto, ApplicationErrorDto> {
+    state
+        .service
+        .clear_llm_role(role)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Records consent for a profile's cloud host from the endpoint editor.
+#[tauri::command]
+pub(crate) fn grant_llm_profile_consent(
+    state: State<'_, AppState>,
+    profile_id: Uuid,
+) -> Result<LlmProfileDto, ApplicationErrorDto> {
+    state
+        .service
+        .grant_llm_profile_consent(profile_id)
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 

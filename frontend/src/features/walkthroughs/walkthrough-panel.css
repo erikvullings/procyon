@@ -29,7 +29,7 @@
 }
 
 .fm-walkthrough-heading button {
-  font-size: 13px;
+  font-size: var(--fm-type-body);
   line-height: 1;
 }
 
@@ -90,7 +90,7 @@
 }
 
 .fm-walkthrough-article h1 {
-  font-size: 13px;
+  font-size: var(--fm-type-body);
 }
 
 .fm-walkthrough-article a {

@@ -346,6 +346,43 @@ impl PluginManager {
         actions
     }
 
+    /// Templates contributed by enabled, valid plugins for "New file from template" (task 0312).
+    pub(crate) fn plugin_file_templates(&self) -> Vec<fm_transport_dto::FileTemplateEntryDto> {
+        let enabled = self
+            .settings
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .enabled_plugins
+            .clone();
+        self.plugins
+            .discover()
+            .into_iter()
+            .filter(|plugin| {
+                plugin.is_valid()
+                    && enabled.contains(&plugin.id())
+                    && self.plugin_runtime.disabled_reason(&plugin.id()).is_none()
+            })
+            .flat_map(|plugin| {
+                let plugin_id = plugin.id();
+                let plugin_name = plugin
+                    .manifest
+                    .as_ref()
+                    .map(|manifest| manifest.name.clone())
+                    .unwrap_or_else(|| plugin_id.clone());
+                plugin.file_templates.into_iter().map(move |template| {
+                    fm_transport_dto::FileTemplateEntryDto {
+                        id: format!("plugin:{plugin_id}:{}", template.id),
+                        label: template.label,
+                        file_name: template.file_name,
+                        body: template.body,
+                        source: fm_transport_dto::FileTemplateSourceDto::Plugin,
+                        source_name: Some(plugin_name.clone()),
+                    }
+                })
+            })
+            .collect()
+    }
+
     /// Lists discovered plugins, retaining malformed manifests as disabled records.
     pub(crate) fn list_plugins(&self) -> Vec<PluginDescriptorDto> {
         let enabled = self

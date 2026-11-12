@@ -34,6 +34,7 @@ export const ENGLISH_IDENTICAL_ALLOWLIST: Readonly<Record<string, Allowlisted>> 
   'pane.sortAscending': 'all',
   'pane.sortDescending': 'all',
   'pane.sortDirectionLabel': 'all',
+  'llmRoles.model': ['nl', 'pl'],
   'semanticComponents.gemmaQualifiedName': 'all',
   'semanticComponents.kindWorker': 'all',
   'semanticLibrary.mebibytes': ['nl', 'de', 'es', 'it', 'pt', 'pl'],

@@ -154,7 +154,7 @@
       "refersTo": "button-primary",
       "description": "The decisive action in a compact dialog or action group.",
       "html": "<button class=\"ds-btn-primary\">Copy</button>",
-      "css": ".ds-btn-primary { min-height: var(--fm-row-height, 20px); padding: 2px 4px; border: 1px solid var(--fm-border, #c8ced8); border-radius: 2px; background: var(--fm-accent, #075ea8); color: var(--fm-surface, #fff); font: 400 13px/1.2 Inter, ui-sans-serif, sans-serif; box-shadow: none; } .ds-btn-primary:hover { filter: brightness(1.08); } .ds-btn-primary:focus-visible { outline: 2px solid var(--fm-accent, #075ea8); outline-offset: 1px; } .ds-btn-primary:active { filter: brightness(0.94); }"
+      "css": ".ds-btn-primary { box-sizing: border-box; min-width: 4.5rem; min-height: var(--fm-control-height, 24px); padding: 0 10px; border: 1px solid var(--fm-border, #c8ced8); border-radius: 2px; background: var(--fm-accent, #075ea8); color: var(--fm-surface, #fff); font: 400 13px/1.2 Inter, ui-sans-serif, sans-serif; box-shadow: none; } .ds-btn-primary:hover { filter: brightness(1.08); } .ds-btn-primary:focus-visible { outline: 2px solid var(--fm-accent, #075ea8); outline-offset: 1px; } .ds-btn-primary:active { filter: brightness(0.94); }"
     },
     {
       "name": "Flat Action",
@@ -162,15 +162,15 @@
       "refersTo": "button-flat",
       "description": "A secondary command that stays visually inside the working plane.",
       "html": "<button class=\"ds-btn-flat\">Cancel</button>",
-      "css": ".ds-btn-flat { min-height: var(--fm-row-height, 20px); padding: 2px 4px; border: 1px solid transparent; border-radius: 2px; background: transparent; color: var(--fm-text, #344054); font: 400 13px/1.2 Inter, ui-sans-serif, sans-serif; box-shadow: none; } .ds-btn-flat:hover, .ds-btn-flat:focus-visible { background: var(--fm-hover, #e9eef4); } .ds-btn-flat:focus-visible { outline: 1px solid var(--fm-accent, #075ea8); outline-offset: 1px; } .ds-btn-flat:active { background: var(--fm-selection-inactive, #e2e8f0); }"
+      "css": ".ds-btn-flat { box-sizing: border-box; min-width: 4.5rem; min-height: var(--fm-control-height, 24px); padding: 0 10px; border: 1px solid transparent; border-radius: 2px; background: transparent; color: var(--fm-text, #344054); font: 400 13px/1.2 Inter, ui-sans-serif, sans-serif; box-shadow: none; } .ds-btn-flat:hover, .ds-btn-flat:focus-visible { background: var(--fm-hover, #e9eef4); } .ds-btn-flat:focus-visible { outline: 1px solid var(--fm-accent, #075ea8); outline-offset: 1px; } .ds-btn-flat:active { background: var(--fm-selection-inactive, #e2e8f0); }"
     },
     {
       "name": "Compact Text Field",
       "kind": "input",
-      "refersTo": "input-compact",
+      "refersTo": "input-form",
       "description": "A dense, statically labeled text-entry control.",
       "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Name</span><input class=\"ds-input\" value=\"report\" /></label>",
-      "css": ".ds-field { display: grid; gap: 3px; color: var(--fm-text-muted, #667085); font: 400 0.82rem/1.15 Inter, ui-sans-serif, sans-serif; } .ds-input { box-sizing: border-box; width: 100%; height: var(--fm-row-height, 20px); padding: 0 0.55rem; border: 1px solid var(--fm-border, #c8ced8); border-radius: 2px; background: var(--fm-surface, #fff); color: var(--fm-text, #344054); font: 400 13px/1 Inter, ui-sans-serif, sans-serif; } .ds-input:hover { border-color: var(--fm-text-muted, #667085); } .ds-input:focus-visible { border-color: var(--fm-border, #c8ced8); outline: none; box-shadow: none; }"
+      "css": ".ds-field { display: grid; gap: 3px; color: var(--fm-text-muted, #667085); font: 400 12px/1.15 Inter, ui-sans-serif, sans-serif; } .ds-input { box-sizing: border-box; width: 100%; height: var(--fm-control-height, 24px); padding: 0 8px; border: 1px solid var(--fm-border, #c8ced8); border-radius: 2px; background: var(--fm-surface, #fff); color: var(--fm-text, #344054); font: 400 13px/1 Inter, ui-sans-serif, sans-serif; } .ds-input:hover { border-color: var(--fm-text-muted, #667085); } .ds-input:focus-visible { border-color: var(--fm-text-muted, #667085); outline: none; box-shadow: none; caret-color: var(--fm-accent, #075ea8); }"
     },
     {
       "name": "Pane Tabs",

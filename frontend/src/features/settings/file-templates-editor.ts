@@ -6,6 +6,9 @@ import { DEFAULT_FILE_TEMPLATES, newTemplateId } from '../templates/file-templat
 export interface FileTemplatesEditorAttrs {
   readonly templates: readonly FileTemplate[];
   readonly onChange: (templates: readonly FileTemplate[]) => void;
+  /** The template folder (task 0312); `null` when the folder source is off. */
+  readonly folder: string | null;
+  readonly onFolderChange: (folder: string | null) => void;
 }
 
 /** Edits the "New file from template" list in place: enable, rename, change content, add, reset. */
@@ -18,6 +21,17 @@ export const FileTemplatesEditor: FactoryComponent<FileTemplatesEditorAttrs> = (
         ),
       );
     return m('.fm-file-templates', [
+      m('label', [
+        m('span', t('settings', 'templateFolder')),
+        m('input[type=text]', {
+          value: attrs.folder ?? '',
+          oninput: (event: InputEvent) => {
+            const value = (event.currentTarget as HTMLInputElement).value.trim();
+            attrs.onFolderChange(value === '' ? null : value);
+          },
+        }),
+        m('p.helper-text', t('settings', 'templateFolderHelp')),
+      ]),
       attrs.templates.map((template, index) =>
         m('fieldset.fm-file-template', { key: template.id }, [
           m('label.fm-file-template__enabled', [

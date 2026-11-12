@@ -58,9 +58,12 @@ import type {
   ExecuteKnowledgeSearchRequest,
   ExportCorpusThemesRequest,
   ExportCorpusThemesResponse,
+  FileAssistantEvent,
+  FileAssistantRequest,
   FileDiffOptions,
   FileDiffResult,
   FileRangeChunk,
+  FileTemplateEntry,
   FinderTags,
   FindLinkReplacementsRequest,
   FindLinkReplacementsResult,
@@ -108,6 +111,8 @@ import type {
   LlmProfileExport,
   LlmProfilePreset,
   LlmProfileTestResult,
+  LlmRole,
+  LlmRoles,
   LoadEditableFileRequest,
   Location,
   MoveSemanticDataRequest,
@@ -157,6 +162,7 @@ import type {
   SavedRagConversation,
   SaveEditableFileRequest,
   SaveLlmProfileRequest,
+  SaveLlmRoleRequest,
   SaveRagConversationRequest,
   ScanDiskUsageRequest,
   SearchInFileRequest,
@@ -555,6 +561,10 @@ export class MockFileManagerClient implements FileManagerClient {
   }
   getSettings(signal?: AbortSignal): Promise<Settings> {
     return this.connectionClient.getSettings(signal);
+  }
+
+  listFileTemplates(signal?: AbortSignal): Promise<FileTemplateEntry[]> {
+    return this.connectionClient.listFileTemplates(signal);
   }
   getFileIcon(sampleLocationUri: string, signal?: AbortSignal): Promise<Uint8Array | undefined> {
     return this.workspaceClient.getFileIcon(sampleLocationUri, signal);
@@ -1114,8 +1124,32 @@ export class MockFileManagerClient implements FileManagerClient {
   listLlmProfilePresets(signal?: AbortSignal): Promise<LlmProfilePreset[]> {
     return this.semanticClient.listLlmProfilePresets(signal);
   }
+  streamFileAssistantReply(
+    request: FileAssistantRequest,
+    onEvent: (event: FileAssistantEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return this.semanticClient.streamFileAssistantReply(request, onEvent, signal);
+  }
+
+  cancelFileAssistantReply(requestId: string): Promise<void> {
+    return this.semanticClient.cancelFileAssistantReply(requestId);
+  }
+
   listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {
     return this.semanticClient.listLlmProfiles(signal);
+  }
+  listLlmRoles(signal?: AbortSignal): Promise<LlmRoles> {
+    return this.semanticClient.listLlmRoles(signal);
+  }
+  setLlmRole(role: LlmRole, request: SaveLlmRoleRequest, signal?: AbortSignal): Promise<LlmRoles> {
+    return this.semanticClient.setLlmRole(role, request, signal);
+  }
+  clearLlmRole(role: LlmRole, signal?: AbortSignal): Promise<LlmRoles> {
+    return this.semanticClient.clearLlmRole(role, signal);
+  }
+  grantLlmProfileConsent(profileId: string, signal?: AbortSignal): Promise<LlmProfile> {
+    return this.semanticClient.grantLlmProfileConsent(profileId, signal);
   }
   createLlmProfile(request: SaveLlmProfileRequest, signal?: AbortSignal): Promise<LlmProfile> {
     return this.semanticClient.createLlmProfile(request, signal);

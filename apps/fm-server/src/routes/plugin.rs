@@ -7,8 +7,8 @@ use axum::{
     response::IntoResponse,
 };
 use fm_transport_dto::{
-    ApplicationErrorDto, PluginDescriptorDto, PluginLogEntryDto, PluginPreviewResultDto,
-    RenderPluginPreviewRequestDto,
+    ApplicationErrorDto, FileTemplateEntryDto, PluginDescriptorDto, PluginLogEntryDto,
+    PluginPreviewResultDto, RenderPluginPreviewRequestDto,
 };
 use serde::Deserialize;
 use tower_http::request_id::RequestId;
@@ -17,6 +17,14 @@ use crate::{
     error::{ApiError, extract_request_id},
     state::AppState,
 };
+
+/// Lists "New file from template" entries across app, folder and plugin sources (task 0312).
+#[utoipa::path(get, path = "/api/v1/file-templates", operation_id = "listFileTemplates", responses((status = 200, body = Vec<FileTemplateEntryDto>)))]
+pub(crate) async fn list_file_templates(
+    State(state): State<AppState>,
+) -> Json<Vec<FileTemplateEntryDto>> {
+    Json(state.service.list_file_templates())
+}
 
 /// Lists valid and disabled discovered plugins.
 #[utoipa::path(get, path = "/api/v1/plugins", operation_id = "listPlugins", responses((status = 200, body = Vec<PluginDescriptorDto>)))]

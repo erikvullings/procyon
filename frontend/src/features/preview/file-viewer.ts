@@ -197,7 +197,10 @@ const MarkdownPreview: FactoryComponent<MarkdownPreviewAttrs> = () => {
 function pagedContentInfo(
   content: Extract<FileViewerState, { status: 'ready' }>['content'],
 ): { readonly current: number; readonly total: number } | undefined {
-  if (content.kind === 'pdf') return { current: content.currentPage, total: content.pageCount };
+  if (content.kind === 'pdf')
+    // A PowerPoint preview reports the deck size up front (only the first page is loaded at first),
+    // so prefer that over the 1-page first-slide document until the full PDF finishes converting.
+    return { current: content.currentPage, total: content.slideTotal ?? content.pageCount };
   if (content.kind === 'comic')
     return { current: content.currentPage + 1, total: content.pageCount };
   if (content.kind === 'epub')
@@ -1451,9 +1454,20 @@ function renderPdfBody(state: Extract<FileViewerState, { status: 'ready' }>): m.
       ...(content.searchDocument === undefined ? {} : { searchDocument: content.searchDocument }),
       ...(state.pdfSearch === undefined ? {} : { search: state.pdfSearch }),
     }),
+    // The converting bar is rendered *after* the canvas on purpose: a leading conditional sibling
+    // would shift the canvas's index in this children array when the bar disappears, and Mithril
+    // would remount PdfPageCanvas (destroying and recreating the <canvas>) - flashing the whole
+    // page exactly when the deck finishes. Trailing it keeps the canvas's index stable. It is
+    // absolutely positioned, so DOM order does not affect its place pinned to the top edge.
+    content.slidesConverting
+      ? m(
+          '.fm-file-viewer-slide-progress[role=status]',
+          { 'aria-label': t('viewer', 'convertingSlides') },
+          m('span.fm-file-viewer-slide-progress-bar', { 'aria-hidden': 'true' }),
+        )
+      : undefined,
   );
 }
-
 function renderComicBody(state: Extract<FileViewerState, { status: 'ready' }>): m.Children {
   const content = state.content;
   if (content.kind !== 'comic') return undefined;
@@ -1660,9 +1674,38 @@ function renderVideoBody(
   );
 }
 
+/**
+ * Renders a preview-unavailable message: the human-readable reason on its own line, the raw
+ * technical detail (everything after the first ": ") in a distinct, wrapping mono block so the
+ * "reason: detail" colon pair no longer reads as one long wrapped line, plus a button that copies
+ * the whole message verbatim. The detail keeps its own internal punctuation (e.g. "Format error
+ * decoding Png: Invalid PNG signature") untouched.
+ */
+function renderPreviewErrorMessage(message: string): m.Children {
+  const separator = message.indexOf(': ');
+  const reason = separator < 0 ? message : message.slice(0, separator);
+  const detail = separator < 0 ? undefined : message.slice(separator + 2);
+  return m('.fm-file-viewer-error', [
+    m('p.fm-file-viewer-error-reason', reason),
+    detail === undefined ? undefined : m('pre.fm-file-viewer-error-detail', {}, detail),
+    tooltip(
+      t('viewer', 'copyText'),
+      m(
+        'button.fm-file-viewer-error-copy',
+        {
+          type: 'button',
+          'aria-label': t('viewer', 'copyText'),
+          onclick: () => void copyWithToast(() => copyText(message), t('viewer', 'textCopied')),
+        },
+        copyIcon({ size: 12 }),
+      ),
+    ),
+  ]);
+}
+
 function renderExternalFallback(attrs: FileViewerAttrs, message: string): m.Children {
   return m('.fm-file-viewer-body.fm-file-viewer-external-fallback', [
-    m('p', message),
+    renderPreviewErrorMessage(message),
     m('.fm-file-viewer-fallback-actions', [
       attrs.quickLookAvailable
         ? m(
@@ -1952,7 +1995,10 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                         {
                           type: 'button',
                           'aria-label': t('viewer', 'nextPage'),
-                          disabled: pageInfo.current >= pageInfo.total,
+                          // Only the first slide is loaded while the rest convert.
+                          disabled:
+                            pageInfo.current >= pageInfo.total ||
+                            (state.content.kind === 'pdf' && state.content.slidesConverting),
                           onclick: attrs.onNextPage,
                         },
                         '▶',

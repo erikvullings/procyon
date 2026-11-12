@@ -217,8 +217,22 @@ fn decode_image(
     return Image::from_custom(image, false).map_err(PdfError::Krilla);
   }
 
-  let format = format.ok_or_else(|| PdfError::Krilla("unknown raster image format".to_string()))?;
-  let raster = decode_dynamic_image(data, format)?;
+  let declared =
+    format.ok_or_else(|| PdfError::Krilla("unknown raster image format".to_string()))?;
+  // A package can mislabel an embedded image's declared codec (for example a JPEG stored with a
+  // `.png` name and an `image/png` content type, as this presentation does). When that codec
+  // won't decode, retry with the format the raw bytes actually advertise so the picture still
+  // renders instead of being reported as malformed and dropped to a placeholder.
+  let (format, raster) = match decode_dynamic_image(data, declared) {
+    Ok(raster) => (declared, raster),
+    Err(declared_err) => match image::guess_format(data) {
+      Ok(real) if real != declared => {
+        let raster = decode_dynamic_image(data, real).map_err(|_| declared_err)?;
+        (real, raster)
+      }
+      _ => return Err(declared_err),
+    },
+  };
   export_decoded_image(raster, format, export_options)
 }
 
@@ -822,6 +836,31 @@ mod tests {
       )
       .unwrap();
     assert_eq!(images.rasters.values().map(Vec::len).sum::<usize>(), 2);
+  }
+
+  #[test]
+  fn decodes_an_image_mislabeled_with_a_different_declared_format() {
+    // A real JPEG payload advertised as image/png (as this presentation stores one of its
+    // pictures under a `image51.png` name) must still decode via the byte-format fallback
+    // rather than be reported malformed and dropped.
+    let mut jpeg = Vec::new();
+    ImageJpegEncoder::new(&mut jpeg)
+      .encode(&[255, 0, 0], 2, 1, image::ExtendedColorType::Rgb8)
+      .unwrap();
+    let mut images = ImageSet::default();
+
+    let decoded = images
+      .raster(
+        &jpeg,
+        Some("image/png"),
+        &PdfOptions::default(),
+        None,
+        72.0,
+        72.0,
+      )
+      .expect("a mislabeled image must fall back to its real byte format and render");
+
+    assert_eq!(decoded.size(), (2, 1));
   }
 
   #[test]

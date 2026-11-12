@@ -58,7 +58,7 @@
 
 .fm-connections-kind {
   flex: 0 0 auto;
-  border-radius: 999px;
+  border-radius: var(--fm-radius-pill);
   padding: 0.1rem 0.5rem;
   background: var(--fm-hover);
   color: var(--fm-text-muted);

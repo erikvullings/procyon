@@ -98,7 +98,7 @@ export const pl = {
     findFiles: 'Znajdź pliki',
     comparePanes: 'Porównaj panele',
     comparePanesTooltip: 'Zaznacz wpisy różniące się między dwoma panelami (Shift+F2)',
-    operationCentre: 'Operacje (Alt+Z)',
+    operationCentre: 'Operacje',
     activityCount: '{count} aktywności w tle',
     activitySingle: '1 aktywność w tle',
     indexingActivity: 'Indeksowanie semantyczne',
@@ -399,6 +399,9 @@ export const pl = {
     fileTemplates: 'Szablony plików',
     fileTemplatesHelp:
       'Oferowane przez „Nowy plik z szablonu”. {date} i {name} w treści są uzupełniane podczas tworzenia pliku.',
+    templateFolder: 'Folder szablonów',
+    templateFolderHelp:
+      'Pliki tekstowe z tego folderu są też oferowane w „Nowy plik z szablonu”. Pozostaw puste, aby wyłączyć.',
     templateEnabled: 'Włączony',
     templateLabel: 'Nazwa',
     templateFileName: 'Sugerowana nazwa pliku',
@@ -746,6 +749,7 @@ export const pl = {
     nextPage: 'Następna strona',
     loadingPage: 'Wczytywanie strony…',
     loadingChapter: 'Wczytywanie rozdziału…',
+    convertingSlides: 'Konwertowanie diapostywów…',
     chapter: 'Rozdział',
     selectSection: 'Wybierz sekcję',
     goToPage: 'Przejdź do strony',
@@ -1182,7 +1186,33 @@ export const pl = {
     title: 'Otwórz terminal za pomocą…',
     empty: 'Nie skonfigurowano aplikacji terminala. Dodaj je w Ustawienia → Terminal.',
   },
+  assistant: {
+    title: 'Asystent',
+    file: 'Plik',
+    profile: 'Profil',
+    placeholder: 'Opisz potrzebny plik…',
+    send: 'Wyślij',
+    stop: 'Zatrzymaj',
+    thinking: 'Tworzenie szkicu…',
+    insert: 'Użyj w edytorze',
+    inserted: 'Odpowiedź wstawiona do edytora. Zapisz, aby ją zachować.',
+    sourceClosed: 'Edytor tego pliku jest zamknięty.',
+    noProfiles: 'Dodaj profil LLM w ustawieniach, aby użyć asystenta.',
+    noOtherPane: 'Otwórz drugi panel, aby pokazać asystenta.',
+    failed: 'Asystent nie mógł odpowiedzieć. Sprawdź profil LLM i zgodę.',
+    consentRequired:
+      'Ten punkt końcowy wymaga zgody w Ustawieniach, zanim asystent będzie mógł z niego korzystać.',
+    openSettings: 'Otwórz ustawienia AI',
+    you: 'Ty',
+    assistant: 'Asystent',
+    empty: 'Opisz potrzebny plik. Asystent widzi nazwę pliku i tę rozmowę, nie zawartość pliku.',
+    loadFailed: 'Nie udało się wczytać profili LLM.',
+  },
   newFromTemplate: {
+    draftWithAssistant: 'Napisz z asystentem',
+    folderSource: 'Katalog',
+    pluginSource: 'Wtyczka',
+    loadFailed: 'Nie udało się wczytać listy szablonów. Wyświetlono tylko szablony aplikacji.',
     title: 'Nowy plik z szablonu',
     empty: 'Brak włączonych szablonów. Dodaj je lub włącz w Ustawienia → Terminal.',
     templates: 'Szablony',
@@ -1736,7 +1766,34 @@ export const pl = {
       'Model „{model}” profilu AI „{name}” jest niedostępny w usłudze AI. Zainstaluj go (w Ollama: ollama pull {model}) lub wybierz inny model w profilu AI.',
     unreachable: 'Nie można połączyć się z usługą AI profilu „{name}”.',
   },
+  llmRoles: {
+    endpoint: 'Punkt końcowy',
+    title: 'Role',
+    intro:
+      'Wybierz, który punkt końcowy i model obsługuje każdą funkcję. Lokalne punkty końcowe nie wymagają zgody.',
+    chat: 'Czat i podsumowania',
+    embeddings: 'Wyszukiwanie semantyczne (embeddingi)',
+    unassigned: 'Nieprzypisane',
+    model: 'Model',
+    allowCloud: 'Zezwól na użycie w chmurze przy indeksowaniu',
+    cloudHint:
+      'Treść dokumentów jest wysyłana do tego punktu w chmurze podczas indeksowania plików. Włącz tylko, jeśli to akceptujesz.',
+    save: 'Zapisz rolę',
+    clear: 'Wyczyść',
+    saved: 'Rola zapisana.',
+    loadFailed: 'Nie udało się wczytać ról.',
+    statusUnassigned: 'Nie przypisano punktu końcowego.',
+    statusMissingProfile: 'Przypisany punkt końcowy już nie istnieje.',
+    statusCloudNotAllowed:
+      'Przed użyciem punktu w chmurze przez tę rolę trzeba zezwolić na użycie w chmurze.',
+    statusNeedsConsent:
+      'Ten punkt końcowy wymaga zgody w Ustawieniach: otwórz go powyżej i zapisz ze zgodą.',
+    statusReady: 'Gotowe.',
+  },
+
   llmProfiles: {
+    consentRequired:
+      'Zezwól na użycie w chmurze: potwierdź zgodę przed zapisaniem punktu końcowego w chmurze.',
     title: 'Podsumowania i odpowiedzi AI',
     description:
       'Połącz model, aby pisał podsumowania dokumentów i odpowiadał na pytania na podstawie Twoich plików. Zapisuj połączenia jako profile i wybierz domyślny. Model lokalny działa na Twoim urządzeniu; usługa w chmurze otrzymuje pytania i fragmenty. Wyszukiwanie semantyczne działa bez profilu.',
@@ -2348,6 +2405,7 @@ export const pl = {
     save: 'Zapisz',
     saving: 'Zapisywanie…',
     closeEditor: 'Zamknij edytor',
+    openAssistant: 'Asystent',
     fileChangedOnDisk: 'Plik zmieniony na dysku',
     fileChangedMessage: 'Ten plik zmienił się po otwarciu.',
     reload: 'Wczytaj ponownie',
@@ -2666,6 +2724,10 @@ export const pl = {
     connectionFailed: 'Nie udało się połączyć: {detail}',
     llmProfileInvalid: 'Ustawienia profilu AI są nieprawidłowe.',
     cloudConsentRequired: 'Przed użyciem usługi w chmurze {host} wymagana jest Twoja zgoda.',
+    llmRoleNotAssigned:
+      'Do tej roli nie przypisano punktu końcowego AI. Przypisz go w Ustawieniach.',
+    llmCloudEmbeddingNotAllowed:
+      'Przed użyciem punktu końcowego tej roli trzeba zezwolić na użycie w chmurze.',
     llmModelUnavailable:
       'Skonfigurowany model AI jest niedostępny. Sprawdź, czy jest zainstalowany (w Ollama: „ollama pull <model>”), lub wybierz inny model w profilu AI.',
     llmAuthentication:

@@ -11,6 +11,7 @@ import type {
   OrphanLlmCredentialDisposition,
   SaveLlmProfileRequest,
 } from '../../models';
+import { endpointIsLocal } from '../../models/llm-roles';
 
 export interface LlmProfileManagementAttrs {
   readonly client: SemanticClient;
@@ -23,7 +24,7 @@ interface EditorState {
   apiKey: string;
 }
 
-function errorMessage(error: unknown): string {
+export function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (
     typeof error === 'object' &&
@@ -328,14 +329,24 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
       ...editor.request,
       credential: editor.apiKey.trim() === '' ? null : { apiKey: editor.apiKey },
     };
+    const stored = profiles.find((profile) => profile.id === editor?.profileId);
+    // Consent is given in this editor when a cloud host is saved, and again when it changes (0322).
+    const needsConsent =
+      !endpointIsLocal(payload.baseUrl) &&
+      (stored === undefined || stored.consentedHost == null || stored.baseUrl !== payload.baseUrl);
+    if (needsConsent && !consent) {
+      error = t('llmProfiles', 'consentRequired');
+      return false;
+    }
     busy = true;
     error = undefined;
     message = undefined;
     try {
-      const saved =
+      let saved =
         editor?.profileId === undefined
           ? await client.createLlmProfile(payload)
           : await client.updateLlmProfile(editor.profileId, payload);
+      if (needsConsent) saved = await client.grantLlmProfileConsent(saved.id);
       const index = profiles.findIndex((profile) => profile.id === saved.id);
       if (index < 0) profiles = [...profiles, saved];
       else profiles = profiles.map((profile) => (profile.id === saved.id ? saved : profile));
@@ -355,6 +366,8 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
   function updateRequest(patch: Partial<SaveLlmProfileRequest>): void {
     if (editor === undefined) return;
     modelTestRevision += 1;
+    // Consent is bound to the host it was ticked for; a different host must be confirmed again.
+    if (patch.baseUrl !== undefined && patch.baseUrl !== editor.request.baseUrl) consent = false;
     editor = { ...editor, request: { ...editor.request, ...patch } };
     dirty = true;
   }
@@ -378,6 +391,9 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
       const active = profiles.find((profile) => profile.id === selectedId);
       const activeIsDefault = active !== undefined && profiles[0]?.id === active.id;
       const request = editor.request;
+      const cloudDraft = !endpointIsLocal(request.baseUrl);
+      const hostConsented =
+        active !== undefined && active.baseUrl === request.baseUrl && active.consentedHost != null;
       const customHeaders = request.advanced.customHeaders;
       const modelOptions =
         availableModels.length === 0
@@ -688,13 +704,13 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
               }),
             ])
           : undefined,
-        active?.locality === 'cloud'
+        cloudDraft
           ? m('.fm-llm-consent', [
-              m('p', t('llmProfiles', 'cloudDisclosure', { host: active.baseUrl })),
+              m('p', t('llmProfiles', 'cloudDisclosure', { host: request.baseUrl })),
               m(Switch, {
                 label: t('llmProfiles', 'confirmConsent'),
-                checked: consent || active.consentedHost != null,
-                disabled: active.consentedHost != null,
+                checked: consent || hostConsented,
+                disabled: hostConsented,
                 onchange: (checked: boolean) => {
                   consent = checked;
                 },

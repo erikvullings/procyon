@@ -99,7 +99,7 @@ export const de = {
     comparePanes: 'Bereiche vergleichen',
     comparePanesTooltip:
       'Wählt die Einträge aus, die sich zwischen den beiden Bereichen unterscheiden (Shift+F2)',
-    operationCentre: 'Vorgänge (Alt+Z)',
+    operationCentre: 'Vorgänge',
     activityCount: '{count} Hintergrundaktivitäten',
     activitySingle: '1 Hintergrundaktivität',
     indexingActivity: 'Semantische Indizierung',
@@ -406,6 +406,9 @@ export const de = {
     fileTemplates: 'Dateivorlagen',
     fileTemplatesHelp:
       'Angeboten von „Neue Datei aus Vorlage“. {date} und {name} im Inhalt werden beim Erstellen der Datei ersetzt.',
+    templateFolder: 'Vorlagenordner',
+    templateFolderHelp:
+      'Textdateien in diesem Ordner werden ebenfalls unter „Neue Datei aus Vorlage“ angeboten. Leer lassen, um dies zu deaktivieren.',
     templateEnabled: 'Aktiviert',
     templateLabel: 'Name',
     templateFileName: 'Vorgeschlagener Dateiname',
@@ -757,6 +760,7 @@ export const de = {
     nextPage: 'Nächste Seite',
     loadingPage: 'Seite wird geladen…',
     loadingChapter: 'Kapitel wird geladen…',
+    convertingSlides: 'Folien werden konvertiert…',
     chapter: 'Kapitel',
     selectSection: 'Abschnitt auswählen',
     goToPage: 'Zu Seite springen',
@@ -1201,7 +1205,35 @@ export const de = {
     empty:
       'Es sind keine Terminalanwendungen konfiguriert. Fügen Sie sie unter Einstellungen → Terminal hinzu.',
   },
+  assistant: {
+    title: 'Assistent',
+    file: 'Datei',
+    profile: 'Profil',
+    placeholder: 'Beschreibe die gewünschte Datei …',
+    send: 'Senden',
+    stop: 'Stopp',
+    thinking: 'Entwurf wird erstellt …',
+    insert: 'Im Editor verwenden',
+    inserted: 'Antwort im Editor eingefügt. Speichern, um sie zu behalten.',
+    sourceClosed: 'Der Editor für diese Datei ist geschlossen.',
+    noProfiles: 'Füge in den Einstellungen ein LLM-Profil hinzu, um den Assistenten zu nutzen.',
+    noOtherPane: 'Öffne einen zweiten Bereich, um den Assistenten anzuzeigen.',
+    failed: 'Der Assistent konnte nicht antworten. Prüfe das LLM-Profil und seine Zustimmung.',
+    consentRequired:
+      'Dieser Endpunkt benötigt eine Zustimmung in den Einstellungen, bevor der Assistent ihn nutzen kann.',
+    openSettings: 'KI-Einstellungen öffnen',
+    you: 'Du',
+    assistant: 'Assistent',
+    empty:
+      'Beschreibe die gewünschte Datei. Der Assistent sieht den Dateinamen und diesen Chat, nicht den Dateiinhalt.',
+    loadFailed: 'LLM-Profile konnten nicht geladen werden.',
+  },
   newFromTemplate: {
+    draftWithAssistant: 'Mit Assistent entwerfen',
+    folderSource: 'Ordner',
+    pluginSource: 'Erweiterung',
+    loadFailed:
+      'Die Vorlagenliste konnte nicht geladen werden. Es werden nur die App-Vorlagen angezeigt.',
     title: 'Neue Datei aus Vorlage',
     empty:
       'Keine Vorlagen aktiviert. Fügen Sie sie unter Einstellungen → Terminal hinzu oder aktivieren Sie sie.',
@@ -1759,7 +1791,34 @@ export const de = {
       'Das Modell „{model}“ des KI-Profils „{name}“ ist beim KI-Dienst nicht verfügbar. Installieren Sie es (bei Ollama: ollama pull {model}) oder wählen Sie im KI-Profil ein anderes Modell.',
     unreachable: 'Der KI-Dienst des Profils „{name}“ ist nicht erreichbar.',
   },
+  llmRoles: {
+    endpoint: 'Endpunkt',
+    title: 'Rollen',
+    intro:
+      'Lege fest, welcher Endpunkt und welches Modell jede Funktion übernimmt. Lokale Endpunkte brauchen keine Zustimmung.',
+    chat: 'Chat und Zusammenfassungen',
+    embeddings: 'Semantische Suche (Embeddings)',
+    unassigned: 'Nicht zugewiesen',
+    model: 'Modell',
+    allowCloud: 'Cloud-Nutzung für die Indizierung erlauben',
+    cloudHint:
+      'Dokumentinhalte werden beim Indizieren von Dateien an diesen Cloud-Endpunkt gesendet. Aktiviere dies nur, wenn du das akzeptierst.',
+    save: 'Rolle speichern',
+    clear: 'Leeren',
+    saved: 'Rolle gespeichert.',
+    loadFailed: 'Rollen konnten nicht geladen werden.',
+    statusUnassigned: 'Kein Endpunkt zugewiesen.',
+    statusMissingProfile: 'Der zugewiesene Endpunkt existiert nicht mehr.',
+    statusCloudNotAllowed:
+      'Cloud-Nutzung muss erlaubt sein, bevor diese Rolle einen Cloud-Endpunkt nutzen kann.',
+    statusNeedsConsent:
+      'Dieser Endpunkt benötigt eine Zustimmung in den Einstellungen: öffne ihn oben und speichere mit Zustimmung.',
+    statusReady: 'Bereit.',
+  },
+
   llmProfiles: {
+    consentRequired:
+      'Cloud-Nutzung erlauben: Zustimmung bestätigen, bevor ein Cloud-Endpunkt gespeichert wird.',
     title: 'KI-Zusammenfassungen und -Antworten',
     description:
       'Verbinden Sie ein Modell, um Dokumentzusammenfassungen zu schreiben und Fragen anhand Ihrer Dateien zu beantworten. Speichern Sie Verbindungen als Profile und wählen Sie ein Standardprofil. Ein lokales Modell läuft auf Ihrem Gerät; ein Cloud-Dienst erhält Fragen und Auszüge. Die semantische Suche funktioniert auch ohne Profil.',
@@ -2372,6 +2431,7 @@ export const de = {
     save: 'Speichern',
     saving: 'Wird gespeichert…',
     closeEditor: 'Editor schließen',
+    openAssistant: 'Assistent',
     fileChangedOnDisk: 'Datei auf der Festplatte geändert',
     fileChangedMessage: 'Diese Datei wurde geändert, nachdem sie geöffnet wurde.',
     reload: 'Neu laden',
@@ -2703,6 +2763,10 @@ export const de = {
     llmProfileInvalid: 'Die Einstellungen des KI-Profils sind ungültig.',
     cloudConsentRequired:
       'Vor der Nutzung des Cloud-Dienstes {host} ist Ihre Zustimmung erforderlich.',
+    llmRoleNotAssigned:
+      'Diesem Rollenbereich ist kein KI-Endpunkt zugewiesen. Weise in den Einstellungen einen zu.',
+    llmCloudEmbeddingNotAllowed:
+      'Cloud-Nutzung muss für diese Rolle erlaubt sein, bevor ihr Endpunkt genutzt werden kann.',
     llmModelUnavailable:
       'Das konfigurierte KI-Modell ist nicht verfügbar. Prüfen Sie, ob es installiert ist (bei Ollama: „ollama pull <Modell>“), oder wählen Sie im KI-Profil ein anderes Modell.',
     llmAuthentication:

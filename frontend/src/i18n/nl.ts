@@ -96,7 +96,7 @@ export const nl = {
     findFiles: 'Bestanden zoeken',
     comparePanes: 'Vensters vergelijken',
     comparePanesTooltip: 'Selecteer de verskillende bestanden tussen de twee vensters (Shift+F2)',
-    operationCentre: 'Bewerkingen (Alt+Z)',
+    operationCentre: 'Bewerkingen',
     activityCount: '{count} achtergrondactiviteiten',
     activitySingle: '1 achtergrondactiviteit',
     indexingActivity: 'Semantisch indexeren',
@@ -397,6 +397,9 @@ export const nl = {
     fileTemplates: 'Bestandssjablonen',
     fileTemplatesHelp:
       'Aangeboden door "Nieuw bestand uit sjabloon". {date} en {name} in de inhoud worden ingevuld bij het aanmaken van het bestand.',
+    templateFolder: 'Sjablonenmap',
+    templateFolderHelp:
+      'Tekstbestanden in deze map worden ook aangeboden bij «Nieuw bestand uit sjabloon». Leeg laten om dit uit te schakelen.',
     templateEnabled: 'Ingeschakeld',
     templateLabel: 'Naam',
     templateFileName: 'Voorgestelde bestandsnaam',
@@ -750,6 +753,7 @@ export const nl = {
     nextPage: 'Volgende pagina',
     loadingPage: 'Pagina laden…',
     loadingChapter: 'Hoofdstuk laden…',
+    convertingSlides: 'Diapositieven worden geconverteerd…',
     chapter: 'Hoofdstuk',
     selectSection: 'Sectie selecteren',
     goToPage: 'Ga naar pagina',
@@ -1581,7 +1585,35 @@ export const nl = {
     title: 'Terminal openen met…',
     empty: 'Er zijn geen terminaltoepassingen ingesteld. Voeg ze toe via Instellingen → Terminal.',
   },
+  assistant: {
+    title: 'Assistent',
+    file: 'Bestand',
+    profile: 'Profiel',
+    placeholder: 'Beschrijf het gewenste bestand…',
+    send: 'Verzenden',
+    stop: 'Stoppen',
+    thinking: 'Concept wordt opgesteld…',
+    insert: 'Gebruik in editor',
+    inserted: 'Antwoord in de editor geplaatst. Sla op om het te bewaren.',
+    sourceClosed: 'De editor voor dit bestand is gesloten.',
+    noProfiles: 'Voeg in de instellingen een LLM-profiel toe om de assistent te gebruiken.',
+    noOtherPane: 'Open een tweede paneel om de assistent te tonen.',
+    failed: 'De assistent kon niet antwoorden. Controleer het LLM-profiel en de toestemming.',
+    consentRequired:
+      'Dit eindpunt heeft toestemming nodig in Instellingen voordat de assistent het kan gebruiken.',
+    openSettings: 'AI-instellingen openen',
+    you: 'Jij',
+    assistant: 'Assistent',
+    empty:
+      'Beschrijf het gewenste bestand. De assistent ziet de bestandsnaam en deze chat, niet de inhoud van het bestand.',
+    loadFailed: 'LLM-profielen konden niet worden geladen.',
+  },
   newFromTemplate: {
+    draftWithAssistant: 'Opstellen met assistent',
+    folderSource: 'Map',
+    pluginSource: 'Plug-in',
+    loadFailed:
+      'De lijst met sjablonen kon niet worden geladen. Alleen de app-sjablonen worden getoond.',
     title: 'Nieuw bestand uit sjabloon',
     empty: 'Geen sjablonen ingeschakeld. Voeg ze toe of schakel ze in via Instellingen → Terminal.',
     templates: 'Sjablonen',
@@ -2134,7 +2166,34 @@ export const nl = {
       'Het model "{model}" van AI-profiel "{name}" is niet beschikbaar bij de AI-dienst. Installeer het (bij Ollama: ollama pull {model}) of kies een ander model in het AI-profiel.',
     unreachable: 'De AI-dienst van profiel "{name}" is niet bereikbaar.',
   },
+  llmRoles: {
+    endpoint: 'Eindpunt',
+    title: 'Rollen',
+    intro:
+      'Kies welk eindpunt en model elke functie gebruikt. Lokale eindpunten vragen geen toestemming.',
+    chat: 'Chat en samenvattingen',
+    embeddings: 'Semantisch zoeken (embeddings)',
+    unassigned: 'Niet toegewezen',
+    model: 'Model',
+    allowCloud: 'Cloudgebruik toestaan voor indexeren',
+    cloudHint:
+      'Documentinhoud wordt tijdens het indexeren naar dit cloud-eindpunt gestuurd. Zet dit alleen aan als je dat accepteert.',
+    save: 'Rol opslaan',
+    clear: 'Wissen',
+    saved: 'Rol opgeslagen.',
+    loadFailed: 'Rollen konden niet worden geladen.',
+    statusUnassigned: 'Geen eindpunt toegewezen.',
+    statusMissingProfile: 'Het toegewezen eindpunt bestaat niet meer.',
+    statusCloudNotAllowed:
+      'Cloudgebruik moet worden toegestaan voordat deze rol een cloud-eindpunt kan gebruiken.',
+    statusNeedsConsent:
+      'Dit eindpunt heeft toestemming nodig in Instellingen: open het hierboven en sla op met toestemming.',
+    statusReady: 'Gereed.',
+  },
+
   llmProfiles: {
+    consentRequired:
+      'Cloudgebruik toestaan: bevestig toestemming voordat je een cloud-eindpunt opslaat.',
     title: 'AI-samenvattingen en antwoorden',
     description:
       'Verbind een model dat documentsamenvattingen schrijft en vragen beantwoordt met informatie uit je bestanden. Bewaar verbindingen als profielen en kies een standaardprofiel. Een lokaal model werkt op je apparaat; een clouddienst ontvangt vragen en fragmenten. Semantisch zoeken werkt ook zonder profiel.',
@@ -2347,6 +2406,7 @@ export const nl = {
     save: 'Opslaan',
     saving: 'Opslaan…',
     closeEditor: 'Editor sluiten',
+    openAssistant: 'Assistent',
     fileChangedOnDisk: 'Bestand gewijzigd op schijf',
     fileChangedMessage: 'Dit bestand is gewijzigd nadat het werd geopend.',
     reload: 'Opnieuw laden',
@@ -2673,6 +2733,10 @@ export const nl = {
     llmProfileInvalid: 'De instellingen van het AI-profiel zijn niet geldig.',
     cloudConsentRequired:
       'Je toestemming is vereist voordat de cloudservice {host} wordt gebruikt.',
+    llmRoleNotAssigned:
+      'Aan deze rol is geen AI-eindpunt toegewezen. Wijs er een toe in Instellingen.',
+    llmCloudEmbeddingNotAllowed:
+      'Cloudgebruik moet voor deze rol zijn toegestaan voordat het eindpunt kan worden gebruikt.',
     llmModelUnavailable:
       'Het ingestelde AI-model is niet beschikbaar. Controleer of het geïnstalleerd is (bij Ollama: "ollama pull <model>") of kies een ander model in het AI-profiel.',
     llmAuthentication:

@@ -11,7 +11,7 @@
   height: auto;
   padding: 2px 4px;
   border: 1px solid var(--fm-border);
-  border-radius: 2px;
+  border-radius: var(--fm-radius-control);
   box-shadow: none;
   font: inherit;
   line-height: 1.2;
@@ -50,6 +50,75 @@
 .fm-app-shell .btn-flat:focus-visible {
   border-color: transparent;
   background: var(--fm-hover);
+}
+
+/*
+ * Decision rows outside a modal footer (inline editors, drawers) use the same vocabulary: actions
+ * right-aligned, an optional leading secondary action, and one `.fm-primary-action`.
+ */
+.fm-app-shell .fm-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--fm-space-3);
+  margin-top: var(--fm-space-4);
+}
+
+.fm-app-shell .fm-form-actions > .fm-form-actions-leading {
+  margin-right: auto;
+}
+
+.fm-app-shell .fm-form-actions button.btn-flat {
+  box-sizing: border-box;
+  min-width: var(--fm-button-min-width);
+  min-height: var(--fm-control-height);
+  padding: 0 var(--fm-button-padding-inline);
+}
+
+.fm-app-shell .fm-form-actions button.btn-flat.fm-primary-action:not(:disabled, :focus-visible) {
+  border-color: var(--fm-accent);
+  color: var(--fm-accent);
+  font-weight: 600;
+}
+
+.fm-app-shell .fm-form-actions button.btn-flat.fm-primary-action:focus-visible {
+  border-color: var(--fm-accent);
+  outline: none;
+  background: var(--fm-accent);
+  color: var(--fm-surface);
+  font-weight: 600;
+}
+
+/* Segmented choice (theme switcher): one bordered group at form height, body type. */
+.fm-app-shell .theme-switcher .theme-switcher-label {
+  color: var(--fm-text-muted);
+  font-size: var(--fm-type-label);
+}
+
+.fm-app-shell .theme-switcher .theme-switcher-buttons {
+  overflow: hidden;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius-control);
+  background: var(--fm-surface);
+}
+
+.fm-app-shell .theme-switcher .theme-switcher-buttons .btn-flat {
+  box-sizing: border-box;
+  min-height: calc(var(--fm-control-height) - 2px);
+  padding: 0 var(--fm-button-padding-inline);
+  border: 0;
+  border-radius: 0;
+  font-size: var(--fm-type-body);
+}
+
+.fm-app-shell .theme-switcher .theme-switcher-buttons .btn-flat.active {
+  background: var(--fm-selection);
+  color: var(--fm-text);
+}
+
+.fm-app-shell .theme-switcher .theme-switcher-buttons .btn-flat :where(span) {
+  font-size: inherit;
+  font-weight: 400;
 }
 
 .fm-app-shell[data-mm-preset="compact-minimal"] .modal .modal-footer button.btn-flat {
@@ -200,7 +269,7 @@ button.fm-busy-button[aria-busy="true"]::before {
   margin: 0 0 0.2rem;
   padding-left: 0.1rem;
   color: var(--fm-text-muted);
-  font-size: 0.82rem;
+  font-size: var(--fm-type-label);
   line-height: 1.15;
   transform: none;
   transition: none;
@@ -240,7 +309,7 @@ button.fm-busy-button[aria-busy="true"]::before {
   bottom: 0.1rem;
   width: 0.45rem;
   height: 1.5px;
-  border-radius: 2px;
+  border-radius: var(--fm-radius-control);
   background: currentColor;
   content: "";
   transform: rotate(45deg);
@@ -257,19 +326,20 @@ button.fm-busy-button[aria-busy="true"]::before {
 .fm-app-shell .select-wrapper input.select-dropdown,
 .fm-app-shell select.browser-default {
   box-sizing: border-box;
-  min-height: var(--fm-row-height);
-  height: var(--fm-row-height);
+  min-height: var(--fm-control-height);
+  height: var(--fm-control-height);
   margin: 0;
-  padding: 0 0.55rem;
+  padding: 0 var(--fm-control-padding-inline);
   border: 1px solid var(--fm-border);
-  border-radius: 2px;
+  border-radius: var(--fm-radius-control);
   background: var(--fm-surface);
   color: var(--fm-text);
   font: inherit;
+  font-size: var(--fm-type-body);
 }
 
 .fm-app-shell input[type="text"]:not(.browser-default) {
-  padding-inline: 0.55rem;
+  padding-inline: var(--fm-control-padding-inline);
 }
 
 .fm-app-shell .input-field input[type="number"] {
@@ -291,8 +361,8 @@ button.fm-busy-button[aria-busy="true"]::before {
   outline: none;
 }
 
-/* Text-entry focus keeps the same neutral border instead of mixing browser,
- * Materialized, and feature-specific blue rings. */
+/* Text-entry focus is one hairline accent border everywhere -- never a glow, a thicker ring, or a
+ * browser/Materialized/feature-specific variant (DESIGN.md "Inputs / Fields"). */
 .fm-app-shell input:not([type]):focus,
 .fm-app-shell input[type="text"]:focus,
 .fm-app-shell input[type="search"]:focus,
@@ -307,7 +377,7 @@ button.fm-busy-button[aria-busy="true"]::before {
 .fm-app-shell input[type="month"]:focus,
 .fm-app-shell input[type="week"]:focus,
 .fm-app-shell textarea:focus {
-  border-color: var(--fm-border);
+  border-color: var(--fm-text-muted);
   outline: none;
   box-shadow: none;
 }
@@ -316,7 +386,7 @@ button.fm-busy-button[aria-busy="true"]::before {
 .fm-app-shell .select-wrapper input.select-dropdown,
 .fm-app-shell select.browser-default {
   width: 100%;
-  line-height: calc(var(--fm-row-height) - 2px);
+  line-height: calc(var(--fm-control-height) - 2px);
 }
 
 .fm-app-shell .select-wrapper input.select-dropdown {
@@ -459,7 +529,8 @@ button.fm-busy-button[aria-busy="true"]::before {
 .fm-app-shell .modal .modal-footer {
   min-height: 0;
   height: auto;
-  padding: 0.4rem 0.6rem;
+  gap: var(--fm-space-3);
+  padding: var(--fm-space-3);
   border-top: 1px solid var(--fm-border);
   /* background: var(--fm-surface-elevated); */
 }
@@ -480,7 +551,7 @@ button.fm-busy-button[aria-busy="true"]::before {
   min-height: var(--fm-row-height);
   padding: 0 !important;
   border: 0;
-  font-size: 0.85rem;
+  font-size: var(--fm-type-label);
   line-height: 1;
 }
 
@@ -504,15 +575,15 @@ button.fm-busy-button[aria-busy="true"]::before {
 /* biome-ignore-end lint/complexity/noImportantStyles: overrides ModalPanel inline layout */
 
 .fm-app-shell[data-mm-preset="compact-minimal"] .fm-find-files-advanced input.browser-default {
-  min-height: var(--fm-row-height);
-  height: var(--fm-row-height);
+  min-height: var(--fm-control-height);
+  height: var(--fm-control-height);
   margin: 0;
   padding-block: 0;
 }
 
 .fm-app-shell .dropdown-content {
   border: 1px solid var(--fm-border);
-  border-radius: 2px;
+  border-radius: var(--fm-radius-control);
   background: var(--fm-surface-elevated);
   box-shadow: var(--fm-shadow);
 }
@@ -563,12 +634,12 @@ button.fm-busy-button[aria-busy="true"]::before {
 }
 
 .fm-app-shell .input-field .number-input-controls {
-  top: calc(0.82rem * 1.15 + 0.2rem);
+  top: calc(var(--fm-type-label) * 1.15 + 0.2rem);
   right: 0.35rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  height: calc(var(--fm-row-height) - 2px);
+  height: calc(var(--fm-control-height) - 2px);
   pointer-events: none;
 }
 
@@ -618,12 +689,14 @@ button.fm-busy-button[aria-busy="true"]::before {
   line-height: 1.2;
 }
 
+.fm-app-shell .fm-workspace-switcher-heading > button,
 .fm-app-shell .fm-settings-editor-heading > button[aria-label="Close settings"] {
   min-width: 1.25rem;
   min-height: 1.25rem;
   padding: 0.15rem;
 }
 
+.fm-app-shell .fm-workspace-switcher-heading > button > :where(svg),
 .fm-app-shell .fm-settings-editor-heading > button[aria-label="Close settings"] svg {
   width: 0.75rem;
   height: 0.75rem;
@@ -634,4 +707,166 @@ button.fm-busy-button[aria-busy="true"]::before {
   margin-top: 0.15rem;
   font-size: var(--fm-type-label);
   line-height: 1.2;
+}
+
+/*
+ * ---------------------------------------------------------------------------------------------
+ * Control foundation (DESIGN.md "Control Metrics").
+ *
+ * The compact-minimal preset sizes every mm control from its own variables (32px controls,
+ * 0.8125rem text). Mapping those variables onto Procyon's tokens -- instead of fighting each mm
+ * rule with a per-feature override -- is what keeps a text field, select and button the same
+ * height and type size in every dialog, drawer and settings page.
+ * ---------------------------------------------------------------------------------------------
+ */
+.fm-app-shell[data-mm-preset="compact-minimal"] {
+  --mm-control-height: var(--fm-control-height);
+  --mm-control-font-size: var(--fm-type-body);
+  --mm-control-padding-inline: var(--fm-control-padding-inline);
+  --mm-control-padding-block: 0;
+  --mm-control-line-height: 1.35;
+  --mm-body-font-size: var(--fm-type-body);
+  --mm-surface-radius: var(--fm-radius);
+  --mm-focus-ring-width: 1px;
+  --mm-focus-ring-color: var(--fm-accent);
+  accent-color: var(--fm-accent);
+  caret-color: var(--fm-accent);
+}
+
+.fm-app-shell ::selection {
+  background: var(--fm-selection);
+  color: var(--fm-text);
+}
+
+/*
+ * A button that no feature styled must still look like a Procyon control, never like the host
+ * OS's bevelled default. `:where()` keeps this at element specificity, so any class rule wins.
+ */
+:where(.fm-app-shell) button:where(:not(.btn, .btn-flat, .btn-floating, .btn-large, .btn-small)) {
+  border: 1px solid transparent;
+  border-radius: var(--fm-radius-control);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+:where(.fm-app-shell)
+  button:where(:not(.btn, .btn-flat, .btn-floating, .btn-large, .btn-small)):disabled {
+  color: var(--fm-text-muted);
+  cursor: default;
+}
+
+/* Form density: decision buttons share the field height and a readable minimum width. */
+.fm-app-shell .fm-settings-editor-actions :is(button.btn, button.btn-flat),
+.fm-app-shell .modal .modal-footer :is(button.btn, button.btn-flat) {
+  box-sizing: border-box;
+  min-width: var(--fm-button-min-width);
+  min-height: var(--fm-control-height);
+  padding: 0 var(--fm-button-padding-inline);
+}
+
+/* Menus: label left, shortcut right in muted label type -- never appended to the label text. */
+.fm-app-shell .fm-menu-shortcut {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  padding-inline-start: var(--fm-space-5);
+  color: var(--fm-text-muted);
+  font-size: var(--fm-type-label);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The canonical text field. Every plain text-like `<input>` in a dialog or in settings is the same
+ * bordered form-height box, so a feature never has to (and must not) restyle its own. Composite
+ * controls that draw the border on a wrapper opt out with mm's `.browser-default`.
+ */
+.fm-app-shell[data-mm-preset="compact-minimal"]
+  :where(.modal, .fm-settings-editor)
+  input:where(
+    :not([type]),
+    [type="text"],
+    [type="search"],
+    [type="password"],
+    [type="email"],
+    [type="url"],
+    [type="number"]
+  ):not(.browser-default, .select-dropdown) {
+  box-sizing: border-box;
+  min-height: var(--fm-control-height);
+  height: var(--fm-control-height);
+  margin: 0;
+  padding-block: 0;
+  padding-inline: var(--fm-control-padding-inline);
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius-control);
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  font-size: var(--fm-type-body);
+}
+
+/* Dialog fields: body-size text in a form-height box, label one step down and muted. */
+.fm-app-shell .modal :is(input, select, textarea),
+.fm-app-shell .fm-settings-editor :is(input, select, textarea) {
+  font-size: var(--fm-type-body);
+}
+
+/* One key-cap treatment wherever a shortcut is shown. */
+:where(.fm-app-shell) kbd:where(:not(.fm-windows-native-menu-item kbd)) {
+  display: inline-block;
+  box-sizing: border-box;
+  min-width: 1.5em;
+  padding: 0 var(--fm-space-2);
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius-control);
+  background: var(--fm-selection-inactive);
+  color: var(--fm-text);
+  font-family: inherit;
+  font-size: var(--fm-type-label);
+  line-height: 1.4;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/*
+ * Overlays set their own type instead of inheriting it from wherever they are mounted (the
+ * settings disclosure and several dialogs live inside the label-sized toolbar).
+ */
+.fm-app-shell .modal,
+.fm-app-shell .fm-settings-editor {
+  font-size: var(--fm-type-body);
+}
+
+/* Toggles signal with the same Instrument Blue as every other active control, not mm's teal. */
+.fm-app-shell[data-mm-preset="compact-minimal"] {
+  --mm-switch-checked-thumb: var(--fm-accent);
+  --mm-switch-checked-track: var(--fm-selection);
+  --mm-switch-unchecked-thumb: var(--fm-text-muted);
+  --mm-switch-unchecked-track: var(--fm-selection-inactive);
+}
+
+/* Inline edit decisions (DESIGN.md "Decision actions"): check = save, x = cancel, chrome density. */
+.fm-app-shell button.fm-inline-action {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: var(--fm-control-height-dense);
+  min-width: var(--fm-control-height-dense);
+  height: var(--fm-control-height-dense);
+  padding: 0;
+  color: var(--fm-text-muted);
+}
+
+.fm-app-shell button.fm-inline-action:hover:not(:disabled) {
+  background: var(--fm-hover);
+  color: var(--fm-text);
+}
+
+.fm-app-shell button.fm-inline-action-confirm:not(:disabled) {
+  color: var(--fm-accent);
+}
+
+.fm-app-shell button.fm-inline-action:disabled {
+  opacity: 0.45;
 }

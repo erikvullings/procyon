@@ -1562,8 +1562,9 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
     expect(openViewer).toHaveBeenCalledWith(PANE_B, cursorLink, undefined);
   });
 
-  it('F3 on a folder describes the cursor folder as the single selection of the OS-open fallback', () => {
+  it('F3 on a folder calculates its size instead of opening the OS file manager', () => {
     const invokeActionById = vi.fn();
+    const calculateFolderSize = vi.fn();
     const folder: EntrySummary = {
       id: 'folder-1' as never,
       location: { providerId: 'local', uri: 'file:///a/b/photos' },
@@ -1591,6 +1592,7 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
       actionsWithFavourites: () => [...ACTIONS, coreViewAction, coreOpenAction],
       getViewer: () => undefined,
       invokeActionById,
+      calculateFolderSize,
       platformActionParameters: () => ({ uri: folder.location.uri }),
       // Nothing is selected: only the cursor rests on the folder.
       actionContext: () => ({ paneId: PANE_A }),
@@ -1602,11 +1604,8 @@ describe('createGlobalKeydownHandler - task 0128 shortcuts', () => {
 
     createGlobalKeydownHandler(context)(keydown('F3'));
 
-    expect(invokeActionById).toHaveBeenCalledWith(
-      'core.view',
-      { uri: folder.location.uri },
-      expect.objectContaining({ selectedEntryIds: [folder.id] }),
-    );
+    expect(calculateFolderSize).toHaveBeenCalledWith(PANE_A, folder);
+    expect(invokeActionById).not.toHaveBeenCalled();
   });
 
   it('F3 opens a selected PDF image result on its exact indexed page', () => {

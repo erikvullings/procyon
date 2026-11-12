@@ -2,6 +2,7 @@ import type {
   ApplicationUninstallCandidate,
   ArchiveEdit,
   EntrySummary,
+  FileTemplateEntry,
   FinderTag,
   Location,
 } from '../../models';
@@ -61,6 +62,8 @@ export interface DialogUIState {
   createFileOpen: boolean;
   newFromTemplateOpen: boolean;
   newFromTemplateLocation: Location | undefined;
+  /** The catalogue loaded for the open picker (task 0312); `undefined` until it arrives. */
+  newFromTemplateEntries: readonly FileTemplateEntry[] | undefined;
   createFileLocation: Location | undefined;
   createLinkRequest: CreateLinkDialogRequest | undefined;
   archiveCreateRequest: ArchiveCreateRequest | undefined;
@@ -100,6 +103,7 @@ export interface DialogUIController {
   /** Opens the "New file from template" picker for `location` (default: the active directory). */
   openNewFromTemplate(location?: Location): void;
   cancelNewFromTemplate(): void;
+  setNewFromTemplateEntries(entries: readonly FileTemplateEntry[]): void;
   confirmCreateFile(
     name: string,
     activeLocation: Location | undefined,
@@ -141,6 +145,7 @@ export function createDialogUIController(): DialogUIController {
     createFileOpen: false,
     newFromTemplateOpen: false,
     newFromTemplateLocation: undefined,
+    newFromTemplateEntries: undefined,
     createFileLocation: undefined,
     createLinkRequest: undefined,
     archiveCreateRequest: undefined,
@@ -204,7 +209,12 @@ export function createDialogUIController(): DialogUIController {
 
     openNewFromTemplate(location?: Location): void {
       state.newFromTemplateLocation = location;
+      state.newFromTemplateEntries = undefined;
       state.newFromTemplateOpen = true;
+    },
+
+    setNewFromTemplateEntries(entries: readonly FileTemplateEntry[]): void {
+      state.newFromTemplateEntries = entries;
     },
 
     cancelNewFromTemplate(): void {

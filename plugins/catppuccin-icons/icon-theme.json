@@ -195,6 +195,9 @@
     "json": {
       "iconPath": "icons/json.svg"
     },
+    "key": {
+      "iconPath": "icons/key.svg"
+    },
     "kotlin": {
       "iconPath": "icons/kotlin.svg"
     },
@@ -410,6 +413,7 @@
     "json": "json",
     "jsonc": "json",
     "jsx": "javascript-react",
+    "key": "key",
     "kt": "kotlin",
     "kts": "kotlin",
     "lock": "lock",

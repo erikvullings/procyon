@@ -33,6 +33,8 @@ import {
   deleteQuickFilterDraftPatch,
   setQuickFilterDraftPatch,
 } from '../../state';
+import { AssistantTab } from '../assistant/assistant-tab';
+import type { AssistantTabEntry } from '../assistant/assistant-tab-state';
 import { isCutLocation } from '../clipboard/clipboard';
 import { loadConnections } from '../connections/connections-model';
 import { SAMPLE_FILE_AGE_COLUMN } from '../directory-table/directory-table';
@@ -194,6 +196,15 @@ export interface PaneContentContext {
   getImageMapPane?(paneId: PaneId): { tabId: TabId; content: m.Children } | undefined;
   getKnowledgeSearchByTab(): Map<string, KnowledgeSearchTabState>;
   getThemesByTab(): Map<string, ThemesTabState>;
+  /** File-assistant chat tabs (task 0321); absent where the assistant is not offered. */
+  getAssistantByTab?(): Map<string, AssistantTabEntry>;
+  openAssistant?(paneId: PaneId): void;
+  assistantActions?: {
+    send(key: string, draft: string): void;
+    stop(key: string): void;
+    insert(key: string, index: number): void;
+    setProfile(key: string, profileId: string): void;
+  };
 
   // Scalar state setters
   setConnections(conns: readonly Connection[]): void;
@@ -461,6 +472,7 @@ export function createPaneContentBuilder(
     const knowledgeSearch =
       key === undefined ? undefined : context.getKnowledgeSearchByTab().get(key);
     const themes = key === undefined ? undefined : context.getThemesByTab().get(key);
+    const assistant = key === undefined ? undefined : context.getAssistantByTab?.().get(key);
     const viewerTitles = new Map(
       (pane?.tabOrder ?? []).flatMap((tabId) => {
         const title = context.getViewerByTab().get(context.tabKey(paneId, tabId))?.state.entry.name;
@@ -476,6 +488,9 @@ export function createPaneContentBuilder(
       }
       if (context.getThemesByTab().has(context.tabKey(paneId, tabId))) {
         viewerTitles.set(tabId, t('themes', 'title'));
+      }
+      if (context.getAssistantByTab?.().has(context.tabKey(paneId, tabId))) {
+        viewerTitles.set(tabId, t('assistant', 'title'));
       }
     }
     if (pluginPanel !== undefined) viewerTitles.set(pluginPanel.tabId, pluginPanel.title);
@@ -1086,187 +1101,208 @@ export function createPaneContentBuilder(
             : new Set(),
         );
       },
-      ...(pluginPanel?.tabId === tab?.id || context.getEditorByPane().has(paneId)
+      ...(assistant !== undefined
         ? {
-            viewerContent: (() => {
-              if (pluginPanel?.tabId === tab?.id) return m('.fm-plugin-panel-placeholder');
-              const editor = context.getEditorByPane().get(paneId);
-              return editor === undefined
-                ? undefined
-                : m(FileEditor, {
-                    state: editor.state,
-                    controller: editor.controller,
-                    paneId,
-                    onClose: () => context.closeEditor(paneId),
-                    mapClient: client,
-                    onExportGeo: (name, content) =>
-                      context
-                        .getOpsController()
-                        .createTextFile(parentLocation(editor.state.entry.location), name, content)
-                        .then(() => undefined),
-                    links: context.getEditorLinkHandlers(paneId, editor.state.entry.location),
-                  });
-            })(),
+            viewerContent: m(AssistantTab, {
+              entry: assistant,
+              sourceOpen: context.getEditorByPane().has(assistant.sourcePaneId),
+              onSend: (draft: string) => context.assistantActions?.send(assistant.key, draft),
+              onStop: () => context.assistantActions?.stop(assistant.key),
+              onProfile: (profileId: string) =>
+                context.assistantActions?.setProfile(assistant.key, profileId),
+              onInsert: (index: number) => context.assistantActions?.insert(assistant.key, index),
+              onOpenSettings: () => context.openKnowledgeAnswerSettings?.(),
+            }),
           }
-        : key !== undefined && context.getDiskUsageByTab().has(key)
+        : pluginPanel?.tabId === tab?.id || context.getEditorByPane().has(paneId)
           ? {
               viewerContent: (() => {
-                const diskUsage = context.getDiskUsageByTab().get(key);
-                return diskUsage === undefined
+                if (pluginPanel?.tabId === tab?.id) return m('.fm-plugin-panel-placeholder');
+                const editor = context.getEditorByPane().get(paneId);
+                return editor === undefined
                   ? undefined
-                  : m(DiskUsageView, {
-                      state: diskUsage.state,
-                      onOpenFolder: (location, preferredCursorName) =>
-                        context.openDiskUsageFolder(paneId, location, preferredCursorName),
-                      onExpandFolder: (location) => context.expandDiskUsageFolder(key, location),
-                      onScanFolder: (location) => context.scanDiskUsageFolder(key, location),
-                      onRetry: () => context.retryDiskUsage(key),
-                      onStop: () => context.stopDiskUsage(key),
-                      onTrashFolder: (location) =>
+                  : m(FileEditor, {
+                      state: editor.state,
+                      controller: editor.controller,
+                      paneId,
+                      onClose: () => context.closeEditor(paneId),
+                      mapClient: client,
+                      onExportGeo: (name, content) =>
                         context
                           .getOpsController()
-                          .trash([location])
-                          .then((operation) => operation !== undefined),
+                          .createTextFile(
+                            parentLocation(editor.state.entry.location),
+                            name,
+                            content,
+                          )
+                          .then(() => undefined),
+                      links: context.getEditorLinkHandlers(paneId, editor.state.entry.location),
+                      ...(context.openAssistant === undefined
+                        ? {}
+                        : { onOpenAssistant: () => context.openAssistant?.(paneId) }),
                     });
               })(),
             }
-          : key !== undefined &&
-              (knowledgeSearch !== undefined ||
-                themes !== undefined ||
-                context.getViewerByTab().has(key))
+          : key !== undefined && context.getDiskUsageByTab().has(key)
             ? {
                 viewerContent: (() => {
-                  if (themes !== undefined) {
-                    const exportFolder = exportFolderOf(themes.scopes);
-                    return m(ThemesView, {
-                      client,
-                      scopes: themes.scopes,
-                      onOpenPassage: context.openThemePassage,
-                      onSearchSources: context.searchThemeSources,
-                      selectedRootIds: context.getCurrentSettings()?.semanticThemeRootIds ?? [],
-                      onSelectRoots: (rootIds) => {
-                        void context
-                          .updateLocationSettings(client, (settings) => ({
-                            ...settings,
-                            semanticThemeRootIds: [...rootIds],
-                          }))
-                          .catch(() => undefined);
-                      },
-                      // Saved next to where the user opened the themes, so the file is easy to find.
-                      ...(exportFolder === undefined ? {} : { exportFolder }),
-                      onExported: () => context.refetchAffectedPanes(),
-                    });
-                  }
-                  if (knowledgeSearch !== undefined) {
-                    return m(KnowledgeSearchPane, {
-                      open: true,
-                      client,
-                      workspaceId: knowledgeSearch.workspaceId,
-                      currentFolder: knowledgeSearch.currentFolder,
-                      semanticSourceIds: knowledgeSearch.semanticSourceIds,
-                      initialSubject: knowledgeSearch.initialSubject,
-                      profileRevision: context.getKnowledgeAnswerRevision(),
-                      ...(context.openKnowledgeAnswerSettings === undefined
-                        ? {}
-                        : { onConfigureAnswers: context.openKnowledgeAnswerSettings }),
-                      onClose: () => context.closeKnowledgeSearch(paneId, knowledgeSearch.tabId),
-                      onOpenSource: (evidence) => context.openKnowledgeSource(paneId, evidence),
-                      isSourceOpen: context.isKnowledgeSourceOpen,
-                    });
-                  }
-                  const viewer = context.getViewerByTab().get(key);
-                  if (viewer === undefined) return undefined;
-                  const videoPosterDataUri = context
-                    .getThumbnailLoader()
-                    ?.thumbnailDataUri(viewer.state.entry, 'large');
-                  const quickLookAvailable =
-                    viewer.state.entry.kind === 'file' &&
-                    viewer.state.entry.location.providerId === 'local' &&
-                    viewer.state.entry.location.uri.startsWith('file://') &&
-                    context
-                      .getRegisteredActions()
-                      .some(
-                        (action) =>
-                          action.id === 'core.quickLook' &&
-                          action.contextRequirements.featureAvailable !== false,
-                      );
-                  const gallery = context.getGallery(paneId);
-                  return m(
-                    FileViewer,
-                    fileViewerAttrs(viewer.state, viewer.controller, {
-                      openExternalUrl: (url) => void client.openExternalUrl(url),
-                      mapClient: client,
-                      ...(videoPosterDataUri === undefined ? {} : { videoPosterDataUri }),
-                      quickLookAvailable,
-                      onQuickLook: () =>
-                        context.invokeActionById(
-                          'core.quickLook',
-                          { uri: viewer.state.entry.location.uri },
-                          {
-                            paneId,
-                            selectedEntryIds: [viewer.state.entry.id],
-                            cursorEntryId: viewer.state.entry.id,
-                          },
-                        ),
-                      onOpenExternally: () =>
-                        context.invokeActionById(
-                          'core.open',
-                          { uri: viewer.state.entry.location.uri },
-                          {
-                            paneId,
-                            selectedEntryIds: [viewer.state.entry.id],
-                            cursorEntryId: viewer.state.entry.id,
-                          },
-                        ),
-                      ...(context.isDocumentSummaryAvailable?.() === true
-                        ? {
-                            onDocumentSummary: () =>
-                              context.openDocumentSummary?.(paneId, viewer.state.entry),
-                          }
-                        : {}),
-                      ...(context.minifyGeo === undefined ||
-                      !isConvertibleGeoFile(viewer.state.entry)
-                        ? {}
-                        : { onMinifyGeo: () => context.minifyGeo?.(viewer.state.entry) }),
-                      ...(context.convertGeo === undefined ||
-                      !isConvertibleGeoFile(viewer.state.entry)
-                        ? {}
-                        : { onConvertGeo: () => context.convertGeo?.(viewer.state.entry) }),
-                      onEditGeo: () =>
-                        context.invokeActionById(
-                          'core.edit',
-                          { uri: viewer.state.entry.location.uri },
-                          {
-                            paneId,
-                            selectedEntryIds: [viewer.state.entry.id],
-                            cursorEntryId: viewer.state.entry.id,
-                          },
-                        ),
-                      ...(context.showEntryOnMap === undefined
-                        ? {}
-                        : {
-                            onOpenOnMap: () => context.showEntryOnMap?.(paneId, viewer.state.entry),
-                          }),
-                      ...(context.playQueueItems === undefined
-                        ? {}
-                        : { onPlayTracks: context.playQueueItems }),
-                      links: context.getEditorLinkHandlers(paneId, viewer.state.entry.location),
-                      onClose: () => context.closeViewer(paneId),
-                      ...(gallery === undefined || gallery.count < 2
-                        ? {}
-                        : {
-                            gallery: {
-                              index: gallery.index,
-                              count: gallery.count,
-                              onPrevious: () => context.stepGallery(paneId, -1),
-                              onNext: () => context.stepGallery(paneId, 1),
-                            },
-                          }),
-                    }),
-                  );
+                  const diskUsage = context.getDiskUsageByTab().get(key);
+                  return diskUsage === undefined
+                    ? undefined
+                    : m(DiskUsageView, {
+                        state: diskUsage.state,
+                        onOpenFolder: (location, preferredCursorName) =>
+                          context.openDiskUsageFolder(paneId, location, preferredCursorName),
+                        onExpandFolder: (location) => context.expandDiskUsageFolder(key, location),
+                        onScanFolder: (location) => context.scanDiskUsageFolder(key, location),
+                        onRetry: () => context.retryDiskUsage(key),
+                        onStop: () => context.stopDiskUsage(key),
+                        onTrashFolder: (location) =>
+                          context
+                            .getOpsController()
+                            .trash([location])
+                            .then((operation) => operation !== undefined),
+                      });
                 })(),
               }
-            : {}),
+            : key !== undefined &&
+                (knowledgeSearch !== undefined ||
+                  themes !== undefined ||
+                  context.getViewerByTab().has(key))
+              ? {
+                  viewerContent: (() => {
+                    if (themes !== undefined) {
+                      const exportFolder = exportFolderOf(themes.scopes);
+                      return m(ThemesView, {
+                        client,
+                        scopes: themes.scopes,
+                        onOpenPassage: context.openThemePassage,
+                        onSearchSources: context.searchThemeSources,
+                        selectedRootIds: context.getCurrentSettings()?.semanticThemeRootIds ?? [],
+                        onSelectRoots: (rootIds) => {
+                          void context
+                            .updateLocationSettings(client, (settings) => ({
+                              ...settings,
+                              semanticThemeRootIds: [...rootIds],
+                            }))
+                            .catch(() => undefined);
+                        },
+                        // Saved next to where the user opened the themes, so the file is easy to find.
+                        ...(exportFolder === undefined ? {} : { exportFolder }),
+                        onExported: () => context.refetchAffectedPanes(),
+                      });
+                    }
+                    if (knowledgeSearch !== undefined) {
+                      return m(KnowledgeSearchPane, {
+                        open: true,
+                        client,
+                        workspaceId: knowledgeSearch.workspaceId,
+                        currentFolder: knowledgeSearch.currentFolder,
+                        semanticSourceIds: knowledgeSearch.semanticSourceIds,
+                        initialSubject: knowledgeSearch.initialSubject,
+                        profileRevision: context.getKnowledgeAnswerRevision(),
+                        ...(context.openKnowledgeAnswerSettings === undefined
+                          ? {}
+                          : { onConfigureAnswers: context.openKnowledgeAnswerSettings }),
+                        onClose: () => context.closeKnowledgeSearch(paneId, knowledgeSearch.tabId),
+                        onOpenSource: (evidence) => context.openKnowledgeSource(paneId, evidence),
+                        isSourceOpen: context.isKnowledgeSourceOpen,
+                      });
+                    }
+                    const viewer = context.getViewerByTab().get(key);
+                    if (viewer === undefined) return undefined;
+                    const videoPosterDataUri = context
+                      .getThumbnailLoader()
+                      ?.thumbnailDataUri(viewer.state.entry, 'large');
+                    const quickLookAvailable =
+                      viewer.state.entry.kind === 'file' &&
+                      viewer.state.entry.location.providerId === 'local' &&
+                      viewer.state.entry.location.uri.startsWith('file://') &&
+                      context
+                        .getRegisteredActions()
+                        .some(
+                          (action) =>
+                            action.id === 'core.quickLook' &&
+                            action.contextRequirements.featureAvailable !== false,
+                        );
+                    const gallery = context.getGallery(paneId);
+                    return m(
+                      FileViewer,
+                      fileViewerAttrs(viewer.state, viewer.controller, {
+                        openExternalUrl: (url) => void client.openExternalUrl(url),
+                        mapClient: client,
+                        ...(videoPosterDataUri === undefined ? {} : { videoPosterDataUri }),
+                        quickLookAvailable,
+                        onQuickLook: () =>
+                          context.invokeActionById(
+                            'core.quickLook',
+                            { uri: viewer.state.entry.location.uri },
+                            {
+                              paneId,
+                              selectedEntryIds: [viewer.state.entry.id],
+                              cursorEntryId: viewer.state.entry.id,
+                            },
+                          ),
+                        onOpenExternally: () =>
+                          context.invokeActionById(
+                            'core.open',
+                            { uri: viewer.state.entry.location.uri },
+                            {
+                              paneId,
+                              selectedEntryIds: [viewer.state.entry.id],
+                              cursorEntryId: viewer.state.entry.id,
+                            },
+                          ),
+                        ...(context.isDocumentSummaryAvailable?.() === true
+                          ? {
+                              onDocumentSummary: () =>
+                                context.openDocumentSummary?.(paneId, viewer.state.entry),
+                            }
+                          : {}),
+                        ...(context.minifyGeo === undefined ||
+                        !isConvertibleGeoFile(viewer.state.entry)
+                          ? {}
+                          : { onMinifyGeo: () => context.minifyGeo?.(viewer.state.entry) }),
+                        ...(context.convertGeo === undefined ||
+                        !isConvertibleGeoFile(viewer.state.entry)
+                          ? {}
+                          : { onConvertGeo: () => context.convertGeo?.(viewer.state.entry) }),
+                        onEditGeo: () =>
+                          context.invokeActionById(
+                            'core.edit',
+                            { uri: viewer.state.entry.location.uri },
+                            {
+                              paneId,
+                              selectedEntryIds: [viewer.state.entry.id],
+                              cursorEntryId: viewer.state.entry.id,
+                            },
+                          ),
+                        ...(context.showEntryOnMap === undefined
+                          ? {}
+                          : {
+                              onOpenOnMap: () =>
+                                context.showEntryOnMap?.(paneId, viewer.state.entry),
+                            }),
+                        ...(context.playQueueItems === undefined
+                          ? {}
+                          : { onPlayTracks: context.playQueueItems }),
+                        links: context.getEditorLinkHandlers(paneId, viewer.state.entry.location),
+                        onClose: () => context.closeViewer(paneId),
+                        ...(gallery === undefined || gallery.count < 2
+                          ? {}
+                          : {
+                              gallery: {
+                                index: gallery.index,
+                                count: gallery.count,
+                                onPrevious: () => context.stepGallery(paneId, -1),
+                                onNext: () => context.stepGallery(paneId, 1),
+                              },
+                            }),
+                      }),
+                    );
+                  })(),
+                }
+              : {}),
       // The "Show photos on map" panel takes over the pane it was opened in (the opposite pane of
       // the folder being mapped) until it is closed.
       ...(imageMapContent === undefined ? {} : { viewerContent: imageMapContent }),

@@ -90,6 +90,7 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
                 enabled: template.enabled,
             })
             .collect(),
+        template_folder: settings.template_folder,
         editor_command: settings.editor_command,
         default_start_locations: settings.default_start_locations,
         favourite_locations: settings
@@ -259,6 +260,7 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
                 enabled: template.enabled,
             })
             .collect(),
+        template_folder: settings.template_folder,
         editor_command: settings.editor_command,
         default_start_locations: settings.default_start_locations,
         favourite_locations: settings

@@ -148,6 +148,44 @@ pub struct DeleteLlmProfileRequestDto {
     pub credential_disposition: OrphanLlmCredentialDispositionDto,
 }
 
+/// A feature that uses a model; see the settings model (task 0322).
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum LlmRoleDto {
+    Chat,
+    Embeddings,
+}
+
+/// One role's endpoint, model and cloud permission.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmRoleAssignmentDto {
+    pub profile_id: Uuid,
+    pub model: String,
+    pub allow_cloud: bool,
+}
+
+/// The configured role bindings. An absent role is not assigned.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmRolesDto {
+    pub chat: Option<LlmRoleAssignmentDto>,
+    pub embeddings: Option<LlmRoleAssignmentDto>,
+}
+
+/// Request to bind a role to an endpoint and model.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveLlmRoleRequestDto {
+    pub profile_id: Uuid,
+    pub model: String,
+    pub allow_cloud: bool,
+}
+
 /// Activation request carrying explicit informed cloud consent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]

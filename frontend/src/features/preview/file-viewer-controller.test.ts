@@ -139,6 +139,34 @@ describe('file viewer controller', () => {
     );
   });
 
+  it('shows a .pem file as readable text, not hex/unsupported', async () => {
+    const context = setup();
+    const pem = ['-----BEGIN CERTIFICATE-----', 'MIIBhX', '-----END CERTIFICATE-----', ''].join(
+      '\n',
+    );
+    const location = { providerId: 'local', uri: 'file:///tmp/cert.pem' };
+    vi.mocked(context.client.readFileRange).mockResolvedValue({
+      data: Array.from(Buffer.from(pem, 'utf8')),
+      offset: 0,
+      length: pem.length,
+      eof: true,
+      probablyBinary: false,
+    });
+    createFileViewerController({
+      client: context.client,
+      entry: entry({
+        location,
+        name: 'cert.pem',
+        extension: 'pem',
+        mimeType: 'application/x-pem-file',
+      }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() => expect(textOf(context.states.at(-1))).not.toBeUndefined());
+    expect(context.states.at(-1)).toMatchObject({ status: 'ready', content: { kind: 'text' } });
+    expect(textOf(context.states.at(-1))).toContain('BEGIN CERTIFICATE');
+  });
+
   it('reports an unavailable materialized image as a read error, not an unsupported format', async () => {
     const context = setup();
     vi.mocked(context.client.readFileRange).mockRejectedValue(
@@ -175,6 +203,7 @@ describe('file viewer controller', () => {
       sessionId: 'pptx-session',
       sourceRevision: 'r1',
       sourceBytes: 4096,
+      slideCount: 3,
       firstPagePdf: [37, 80, 68, 70],
     });
     vi.mocked(context.client.readPptxPreviewPdf).mockReturnValue(fullPdf);
@@ -216,6 +245,7 @@ describe('file viewer controller', () => {
       sessionId: 'pptx-session',
       sourceRevision: 'r1',
       sourceBytes: 4096,
+      slideCount: 3,
       firstPagePdf: [37, 80, 68, 70],
     });
     vi.mocked(context.client.readPptxPreviewPdf)
@@ -286,6 +316,7 @@ describe('file viewer controller', () => {
       sessionId: 'pptx-session',
       sourceRevision: 'r1',
       sourceBytes: 1024,
+      slideCount: 3,
       firstPagePdf: [37, 80, 68, 70],
     });
     vi.mocked(context.client.readPptxPreviewPdf).mockRejectedValue(

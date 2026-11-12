@@ -1,7 +1,7 @@
 import { linter } from '@codemirror/lint';
 import m, { type Component, type FactoryComponent } from 'mithril';
 import { FlatButton, IconButton, ModalPanel } from 'mithril-materialized';
-import { closeIcon } from '../../components/tabler-icons';
+import { closeIcon, sparklesIcon } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { PaneId } from '../../models';
@@ -24,6 +24,8 @@ export interface FileEditorAttrs {
   readonly mapClient?: GeoMapEditorAttrs['client'];
   /** Writes an exported copy of the GeoJSON next to the file (task 0281). */
   readonly onExportGeo?: GeoMapEditorAttrs['onExport'];
+  /** Opens the file assistant in the other pane (task 0321); the button is hidden without it. */
+  readonly onOpenAssistant?: () => void;
 }
 
 interface UnsavedChangesDialogAttrs {
@@ -178,6 +180,20 @@ export const FileEditor: Component<FileEditorAttrs> = {
                 'aria-pressed': state.previewVisible,
                 onclick: () => controller.togglePreview(),
               })
+            : undefined,
+          attrs.onOpenAssistant
+            ? tooltip(
+                t('editor', 'openAssistant'),
+                m(
+                  IconButton,
+                  {
+                    className: 'fm-file-editor-assistant',
+                    'aria-label': t('editor', 'openAssistant'),
+                    onclick: attrs.onOpenAssistant,
+                  },
+                  sparklesIcon({ size: 13 }),
+                ),
+              )
             : undefined,
           m(FlatButton, {
             label: state.saving ? t('editor', 'saving') : t('editor', 'save'),

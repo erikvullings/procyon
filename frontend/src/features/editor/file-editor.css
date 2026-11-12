@@ -122,7 +122,7 @@
   min-width: 12rem;
   padding: 0.25rem 0;
   border: 1px solid var(--fm-border);
-  border-radius: 4px;
+  border-radius: var(--fm-radius);
   background: var(--fm-surface-elevated);
   box-shadow: 0 4px 16px rgb(0 0 0 / 25%);
 }
@@ -144,5 +144,5 @@
 .fm-link-menu-note {
   padding: 0.35rem 0.9rem;
   color: var(--fm-text-muted);
-  font-size: 0.85rem;
+  font-size: var(--fm-type-label);
 }

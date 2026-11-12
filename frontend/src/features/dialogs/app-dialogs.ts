@@ -77,7 +77,7 @@ import type { FindFilesSearchParams } from '../search/find-files-dialog';
 import { FindFilesDialog } from '../search/find-files-dialog';
 import { deleteSavedSearch, saveSearch, toggleSavedSearchPin } from '../search/saved-searches';
 import { DocumentSummaryDialog } from '../semantic/document-summary-dialog';
-import { enabledTemplates, expandTemplateBody } from '../templates/file-templates';
+import { appTemplateEntries, expandTemplateBody } from '../templates/file-templates';
 import { pathFromUri } from '../workspace/workspace-layout';
 import { NewFromTemplateDialog } from './new-from-template-dialog';
 import { TerminalPickerDialog } from './terminal-picker-dialog';
@@ -128,8 +128,13 @@ export interface AppDialogsContext {
   getWorkspaceId(): string | undefined;
   updateSettings(update: (settings: Settings) => Settings): Promise<void>;
   includeCurrentSemanticFolder(workspaceId: string, location: Location): void;
-  /** Opens the just-created file (Shift+F4) in the active pane's editor. */
-  openEditorForCreatedFile(location: Location, name: string): void;
+  /**
+   * Opens the just-created file (Shift+F4) in the active pane's editor. Returns that pane, or
+   * `undefined` when there is no active pane.
+   */
+  openEditorForCreatedFile(location: Location, name: string): PaneId | undefined;
+  /** Opens the file-assistant chat for the editor in `paneId` (task 0321). */
+  openAssistant(paneId: PaneId): void;
   cancelAutoDismiss(operationId: OperationId): void;
   rememberDismissedOperation(operationId: OperationId): void;
   hasDismissedOperations(): boolean;
@@ -300,7 +305,8 @@ export function renderAppDialogs(
     }),
     m(NewFromTemplateDialog, {
       open: ds.newFromTemplateOpen,
-      templates: enabledTemplates(ctx.getSettings()?.fileTemplates ?? []),
+      templates:
+        ds.newFromTemplateEntries ?? appTemplateEntries(ctx.getSettings()?.fileTemplates ?? []),
       onCancel: () => dialogs.cancelNewFromTemplate(),
       onCreate: (template, fileName) => {
         const location = ds.newFromTemplateLocation ?? ctx.getActiveDirectoryLocation();
@@ -313,6 +319,21 @@ export function renderAppDialogs(
             .createTextFile(loc, n, expandTemplateBody(template.body, n))
             .then(() => {
               ctx.openEditorForCreatedFile(loc, n);
+            }),
+        );
+      },
+      onDraft: (fileName) => {
+        const location = ds.newFromTemplateLocation ?? ctx.getActiveDirectoryLocation();
+        dialogs.cancelNewFromTemplate();
+        // An empty file, created the ordinary way; the assistant's draft only reaches it when the
+        // person accepts it in the chat.
+        dialogs.confirmCreateFile(fileName, location, (loc, n) =>
+          ctx
+            .getOpsController()
+            .createTextFile(loc, n, '')
+            .then(() => {
+              const paneId = ctx.openEditorForCreatedFile(loc, n);
+              if (paneId !== undefined) ctx.openAssistant(paneId);
             }),
         );
       },

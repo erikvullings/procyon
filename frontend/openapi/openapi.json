@@ -2040,6 +2040,55 @@
         }
       }
     },
+    "/api/v1/file-assistant/reply/cancel": {
+      "post": {
+        "summary": "Cancels one running file-assistant reply.",
+        "operationId": "cancelFileAssistantReply",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelFileAssistantRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/file-assistant/reply/stream": {
+      "post": {
+        "summary": "Streams the next reply of a file-assistant conversation as newline-delimited JSON events:\nfragments as they arrive, then exactly one `done` or `failed` event. Every outcome, including\na refused request, arrives as an event on this 200 response.",
+        "operationId": "streamFileAssistantReply",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileAssistantRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Newline-delimited JSON file-assistant events.",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileAssistantEventDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/file-diff": {
       "post": {
         "summary": "Diffs two files read-only: a line diff for text, the first differing offset for binary files\n(task 0256).",
@@ -2091,6 +2140,27 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/file-templates": {
+      "get": {
+        "summary": "Lists \"New file from template\" entries across app, folder and plugin sources (task 0312).",
+        "operationId": "listFileTemplates",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileTemplateEntryDto"
+                  }
                 }
               }
             }
@@ -4300,6 +4370,45 @@
         }
       }
     },
+    "/api/v1/llm-profiles/{profileId}/consent": {
+      "post": {
+        "operationId": "grantLlmProfileConsent",
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "description": "Profile whose cloud host the person approved",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile with consent recorded for its host",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmProfileDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Profile not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/llm-profiles/{profileId}/export": {
       "get": {
         "operationId": "exportLlmProfile",
@@ -4413,6 +4522,97 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/llm-roles": {
+      "get": {
+        "operationId": "listLlmRoles",
+        "responses": {
+          "200": {
+            "description": "Configured role bindings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmRolesDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/llm-roles/{role}": {
+      "put": {
+        "operationId": "setLlmRole",
+        "parameters": [
+          {
+            "name": "role",
+            "in": "path",
+            "description": "Role: chat or embeddings",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveLlmRoleRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated role bindings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmRolesDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid role binding or cloud use not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "clearLlmRole",
+        "parameters": [
+          {
+            "name": "role",
+            "in": "path",
+            "description": "Role: chat or embeddings",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated role bindings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmRolesDto"
                 }
               }
             }
@@ -10102,6 +10302,20 @@
           "fileCount": 42
         }
       },
+      "CancelFileAssistantRequestDto": {
+        "type": "object",
+        "description": "Requests cancellation of one running file-assistant request.",
+        "required": [
+          "requestId"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identity supplied when the request was started."
+          }
+        }
+      },
       "CancelKnowledgeAnswerRequestDto": {
         "type": "object",
         "description": "Requests cancellation of one running knowledge answer generation.",
@@ -13496,6 +13710,152 @@
           }
         }
       },
+      "FileAssistantEventDto": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "A fragment of the reply, in arrival order. Fragments are provisional.",
+            "required": [
+              "text",
+              "type"
+            ],
+            "properties": {
+              "text": {
+                "type": "string",
+                "description": "Text to append to what has arrived so far."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "delta"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The whole reply, unwrapped from any single code fence. It replaces the fragments.",
+            "required": [
+              "text",
+              "type"
+            ],
+            "properties": {
+              "text": {
+                "type": "string",
+                "description": "Reply text, to be placed in the editor when the person accepts it."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "done"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The reply ended without text; no `done` event follows.",
+            "required": [
+              "reason",
+              "type"
+            ],
+            "properties": {
+              "reason": {
+                "$ref": "#/components/schemas/FileAssistantFailureDto",
+                "description": "Why the reply ended."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "failed"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "One event of a streamed reply: fragments as they arrive, then exactly one final event."
+      },
+      "FileAssistantFailureDto": {
+        "type": "string",
+        "description": "Why a reply ended without text.",
+        "enum": [
+          "invalidRequest",
+          "unavailable",
+          "consentRequired",
+          "empty",
+          "cancelled"
+        ]
+      },
+      "FileAssistantMessageDto": {
+        "type": "object",
+        "description": "One chat message in a file-assistant conversation.",
+        "required": [
+          "role",
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "Message text."
+          },
+          "role": {
+            "$ref": "#/components/schemas/FileAssistantRoleDto",
+            "description": "Author of the message."
+          }
+        }
+      },
+      "FileAssistantRequestDto": {
+        "type": "object",
+        "description": "Asks the file assistant for the next reply in a conversation.",
+        "required": [
+          "requestId",
+          "profileId",
+          "fileName",
+          "messages"
+        ],
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "description": "Name of the file being written. Only the name is sent to the model, never its contents."
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FileAssistantMessageDto"
+            },
+            "description": "The conversation so far, ending with the person's latest message."
+          },
+          "profileId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Saved LLM profile that generates the reply."
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identity used to cancel this request."
+          }
+        },
+        "example": {
+          "requestId": "5b1b6b1e-9b1b-4b1b-8b1b-1b1b1b1b1b1b",
+          "profileId": "5b1b6b1e-9b1b-4b1b-8b1b-1b1b1b1b1b1c",
+          "fileName": "backup.sh",
+          "messages": [
+            {
+              "role": "user",
+              "content": "A script that archives ~/notes into a dated tarball"
+            }
+          ]
+        }
+      },
+      "FileAssistantRoleDto": {
+        "type": "string",
+        "description": "Who wrote one chat message.",
+        "enum": [
+          "user",
+          "assistant"
+        ]
+      },
       "FileDiffOutcomeDto": {
         "type": "string",
         "description": "How the pair was compared.",
@@ -13537,6 +13897,55 @@
             "description": "User-visible name in the template picker."
           }
         }
+      },
+      "FileTemplateEntryDto": {
+        "type": "object",
+        "description": "One template offered by \"New file from template\", across every source (task 0312).",
+        "required": [
+          "id",
+          "label",
+          "fileName",
+          "body",
+          "source"
+        ],
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "Initial file content; `{date}` and `{name}` are filled in on creation."
+          },
+          "fileName": {
+            "type": "string",
+            "description": "Suggested name of the created file, including its extension."
+          },
+          "id": {
+            "type": "string",
+            "description": "Unique across sources: plain for app templates, `folder:<file>`, `plugin:<plugin>:<id>`."
+          },
+          "label": {
+            "type": "string",
+            "description": "User-visible name in the template picker."
+          },
+          "source": {
+            "$ref": "#/components/schemas/FileTemplateSourceDto",
+            "description": "Which source offered this entry."
+          },
+          "sourceName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The template folder's name for `folder` entries, the plugin's name for `plugin` entries."
+          }
+        }
+      },
+      "FileTemplateSourceDto": {
+        "type": "string",
+        "description": "Where an entry offered by \"New file from template\" comes from (task 0312).",
+        "enum": [
+          "app",
+          "folder",
+          "plugin"
+        ]
       },
       "FilterCriteriaDto": {
         "type": "object",
@@ -17773,6 +18182,53 @@
           }
         }
       },
+      "LlmRoleAssignmentDto": {
+        "type": "object",
+        "description": "One role's endpoint, model and cloud permission.",
+        "required": [
+          "profileId",
+          "model",
+          "allowCloud"
+        ],
+        "properties": {
+          "allowCloud": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "profileId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "LlmRolesDto": {
+        "type": "object",
+        "description": "The configured role bindings. An absent role is not assigned.",
+        "properties": {
+          "chat": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LlmRoleAssignmentDto"
+              }
+            ]
+          },
+          "embeddings": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LlmRoleAssignmentDto"
+              }
+            ]
+          }
+        }
+      },
       "LlmTestErrorCategoryDto": {
         "type": "string",
         "enum": [
@@ -18754,6 +19210,7 @@
           "sessionId",
           "sourceRevision",
           "sourceBytes",
+          "slideCount",
           "firstPagePdf"
         ],
         "properties": {
@@ -18770,6 +19227,11 @@
             "type": "string",
             "format": "uuid",
             "description": "Opaque backend session identifier."
+          },
+          "slideCount": {
+            "type": "integer",
+            "description": "Total slide count discovered during preflight, so the viewer can show the deck size\n(and a converting indicator) before the complete multi-page PDF finishes rendering.",
+            "minimum": 0
           },
           "sourceBytes": {
             "type": "integer",
@@ -22004,6 +22466,27 @@
           },
           "redactFilenames": {
             "type": "boolean"
+          }
+        }
+      },
+      "SaveLlmRoleRequestDto": {
+        "type": "object",
+        "description": "Request to bind a role to an endpoint and model.",
+        "required": [
+          "profileId",
+          "model",
+          "allowCloud"
+        ],
+        "properties": {
+          "allowCloud": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "profileId": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },
@@ -25540,6 +26023,13 @@
               "$ref": "#/components/schemas/SyncProfileDto"
             },
             "description": "Saved synchronization profiles."
+          },
+          "templateFolder": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Host folder whose text files are also offered as templates (task 0312); `None` disables."
           },
           "terminalApps": {
             "type": "array",

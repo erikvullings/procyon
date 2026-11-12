@@ -17,6 +17,7 @@ pub mod disk_usage;
 pub mod document_summary;
 pub mod entry;
 pub mod error;
+pub mod file_assistant;
 pub mod file_diff;
 pub mod files;
 pub mod finder_tags;
@@ -117,6 +118,10 @@ pub use entry::{
     MediaMetadataDto, OwnershipInfoDto, PermissionsInfoDto,
 };
 pub use error::{ApplicationErrorCode, ApplicationErrorDto};
+pub use file_assistant::{
+    CancelFileAssistantRequestDto, FileAssistantEventDto, FileAssistantFailureDto,
+    FileAssistantMessageDto, FileAssistantRequestDto, FileAssistantRoleDto,
+};
 pub use file_diff::{
     DiffFilesRequestDto, DiffFilesResponseDto, DiffRowDto, DiffRowKindDto, DiffSegmentDto,
     FileDiffOutcomeDto,
@@ -180,8 +185,8 @@ pub use llm_profile::{
     ActivateLlmProfileRequestDto, DeleteLlmProfileRequestDto, LlmAdvancedSettingsDto,
     LlmApiCapabilityDto, LlmCredentialInputDto, LlmEndpointLocalityDto, LlmModelLimitsDto,
     LlmPresetDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto,
-    LlmTestErrorCategoryDto, LlmTlsPolicyDto, OrphanLlmCredentialDispositionDto,
-    SaveLlmProfileRequestDto,
+    LlmRoleAssignmentDto, LlmRoleDto, LlmRolesDto, LlmTestErrorCategoryDto, LlmTlsPolicyDto,
+    OrphanLlmCredentialDispositionDto, SaveLlmProfileRequestDto, SaveLlmRoleRequestDto,
 };
 pub use location::LocationDto;
 pub use metadata_tokens::{
@@ -233,11 +238,12 @@ pub use semantic_ocr::*;
 pub use semantic_vocabulary::*;
 pub use settings::{
     ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto, FavouriteLocationDto, FileTemplateDto,
-    FilterCriteriaDto, FilterKindDto, FilterPresetDto, FilterToggleDto, LanguageDto,
-    MapBasemapKindDto, MapSettingsDto, MultiRenameCaseTransformDto, MultiRenamePresetDto,
-    MultiRenameRulesDto, MultiRenameSequenceDto, QuickFilterMatchModeDto, SavedSearchDto,
-    SettingsDto, SizeFormatDto, SyncProfileDto, SyncRunOutcomeDto, SyncRunSummaryDto,
-    SyncRunTriggerDto, SyncScheduleConfirmationDto, SyncScheduleDto, TerminalAppDto, ThemeDto,
+    FileTemplateEntryDto, FileTemplateSourceDto, FilterCriteriaDto, FilterKindDto, FilterPresetDto,
+    FilterToggleDto, LanguageDto, MapBasemapKindDto, MapSettingsDto, MultiRenameCaseTransformDto,
+    MultiRenamePresetDto, MultiRenameRulesDto, MultiRenameSequenceDto, QuickFilterMatchModeDto,
+    SavedSearchDto, SettingsDto, SizeFormatDto, SyncProfileDto, SyncRunOutcomeDto,
+    SyncRunSummaryDto, SyncRunTriggerDto, SyncScheduleConfirmationDto, SyncScheduleDto,
+    TerminalAppDto, ThemeDto,
 };
 pub use snapshot::{DirectorySnapshotDto, LoadingStateDto, VolumeCapacityDto};
 pub use snapshots::{

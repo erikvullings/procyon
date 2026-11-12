@@ -59,10 +59,13 @@ import type {
   ExecuteKnowledgeSearchRequest,
   ExportCorpusThemesRequest,
   ExportCorpusThemesResponse,
+  FileAssistantEvent,
+  FileAssistantRequest,
   FileDiffOptions,
   FileDiffResult,
   Location as FileLocation,
   FileRangeChunk,
+  FileTemplateEntry,
   FinderTags,
   FindLinkReplacementsRequest,
   FindLinkReplacementsResult,
@@ -110,6 +113,8 @@ import type {
   LlmProfileExport,
   LlmProfilePreset,
   LlmProfileTestResult,
+  LlmRole,
+  LlmRoles,
   LoadEditableFileRequest,
   Location,
   MoveSemanticDataRequest,
@@ -160,6 +165,7 @@ import type {
   SavedRagConversation,
   SaveEditableFileRequest,
   SaveLlmProfileRequest,
+  SaveLlmRoleRequest,
   SaveRagConversationRequest,
   ScanDiskUsageRequest,
   SearchInFileRequest,
@@ -247,6 +253,7 @@ import { SseEventStream } from '../events/sse-event-stream';
 import {
   ApiError,
   desktopHostRequiredError,
+  postNdjson,
   resolveBaseUrl,
   unexpectedResponseError,
 } from '../fetch-mutator';
@@ -299,7 +306,9 @@ import {
   getDuplicateScan as requestDuplicateScanGet,
   startDuplicateScan as requestDuplicateScanStart,
   getEntryMetadata as requestEntryMetadata,
+  cancelFileAssistantReply as requestFileAssistantCancel,
   getFileIcon as requestFileIcon,
+  listFileTemplates as requestFileTemplates,
   getFinderTags as requestFinderTags,
   setFinderTags as requestFinderTagsUpdate,
   findTransferConflicts as requestFindTransferConflicts,
@@ -332,6 +341,7 @@ import {
   findLinkReplacements as requestLinkReplacementsFind,
   activateLlmProfile as requestLlmProfileActivation,
   cloneLlmProfile as requestLlmProfileClone,
+  grantLlmProfileConsent as requestLlmProfileConsent,
   createLlmProfile as requestLlmProfileCreation,
   deleteLlmProfile as requestLlmProfileDeletion,
   discoverLlmProfileDraftModels as requestLlmProfileDraftModelDiscovery,
@@ -342,6 +352,9 @@ import {
   listLlmProfiles as requestLlmProfiles,
   testLlmProfile as requestLlmProfileTest,
   updateLlmProfile as requestLlmProfileUpdate,
+  clearLlmRole as requestLlmRoleClear,
+  setLlmRole as requestLlmRoleSet,
+  listLlmRoles as requestLlmRoles,
   loadEditableFile as requestLoadEditableFile,
   resolveMetadataTokens as requestMetadataTokens,
   cancelMusicDuplicateScan as requestMusicDuplicateScanCancel,
@@ -1248,6 +1261,14 @@ export class HttpFileManagerClient implements FileManagerClient {
     return settingsFromDto(
       (await requestSettings(signal === undefined ? undefined : { signal })).data,
     );
+  }
+
+  async listFileTemplates(signal?: AbortSignal): Promise<FileTemplateEntry[]> {
+    const response = await requestFileTemplates(signal === undefined ? undefined : { signal });
+    if (response.status !== 200) {
+      throw unexpectedResponseError('listFileTemplates', response.status);
+    }
+    return response.data as FileTemplateEntry[];
   }
 
   async updateSettings(settings: Settings, signal?: AbortSignal): Promise<Settings> {
@@ -2701,6 +2722,31 @@ export class HttpFileManagerClient implements FileManagerClient {
     return response.data;
   }
 
+  async streamFileAssistantReply(
+    request: FileAssistantRequest,
+    onEvent: (event: FileAssistantEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await postNdjson<FileAssistantEvent>(
+      '/api/v1/file-assistant/reply/stream',
+      {
+        requestId: request.requestId,
+        profileId: request.profileId,
+        fileName: request.fileName,
+        messages: request.messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+        })),
+      },
+      onEvent,
+      signal,
+    );
+  }
+
+  async cancelFileAssistantReply(requestId: string): Promise<void> {
+    await requestFileAssistantCancel({ requestId });
+  }
+
   async listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {
     const response = await requestLlmProfiles(signal === undefined ? undefined : { signal });
     if (response.status !== 200) throw unexpectedResponseError('listLlmProfiles', response.status);
@@ -2761,6 +2807,42 @@ export class HttpFileManagerClient implements FileManagerClient {
       signal === undefined ? undefined : { signal },
     );
     if (response.status !== 200) throw unexpectedResponseError('exportLlmProfile', response.status);
+    return response.data;
+  }
+
+  async listLlmRoles(signal?: AbortSignal): Promise<LlmRoles> {
+    const response = await requestLlmRoles(signal === undefined ? undefined : { signal });
+    if (response.status !== 200) throw unexpectedResponseError('listLlmRoles', response.status);
+    return response.data;
+  }
+
+  async setLlmRole(
+    role: LlmRole,
+    request: SaveLlmRoleRequest,
+    signal?: AbortSignal,
+  ): Promise<LlmRoles> {
+    const response = await requestLlmRoleSet(
+      role,
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) throw unexpectedResponseError('setLlmRole', response.status);
+    return response.data;
+  }
+
+  async clearLlmRole(role: LlmRole, signal?: AbortSignal): Promise<LlmRoles> {
+    const response = await requestLlmRoleClear(role, signal === undefined ? undefined : { signal });
+    if (response.status !== 200) throw unexpectedResponseError('clearLlmRole', response.status);
+    return response.data;
+  }
+
+  async grantLlmProfileConsent(profileId: string, signal?: AbortSignal): Promise<LlmProfile> {
+    const response = await requestLlmProfileConsent(
+      profileId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200)
+      throw unexpectedResponseError('grantLlmProfileConsent', response.status);
     return response.data;
   }
 

@@ -30,6 +30,7 @@ import { AppUpdateSettings } from './app-update-settings';
 import { FileTemplatesEditor } from './file-templates-editor';
 import { keybindingGroups } from './keybinding-list';
 import { LlmProfileManagement } from './llm-profile-management';
+import { LlmRoleManagement } from './llm-role-management';
 import {
   SemanticComponentManagement,
   type SemanticComponentManagementAttrs,
@@ -574,6 +575,8 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                         m(FileTemplatesEditor, {
                           templates: activeDraft.fileTemplates,
                           onChange: (fileTemplates) => update(current, { fileTemplates }),
+                          folder: activeDraft.templateFolder,
+                          onFolderChange: (templateFolder) => update(current, { templateFolder }),
                         }),
                         m('p.helper-text', t('settings', 'fileTemplatesHelp')),
                       ]),
@@ -801,6 +804,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                             },
                           }),
                         ),
+                        m('.row', m(LlmRoleManagement, { client: current.client })),
                       ]),
                     ]
                   : m('p.fm-settings-semantic-gate', t('settings', 'semanticEnableHint')),

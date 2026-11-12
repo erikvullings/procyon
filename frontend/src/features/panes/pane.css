@@ -40,7 +40,7 @@
   padding: 0.35rem 0.6rem;
   border-block-end: 1px solid var(--fm-border);
   background: var(--fm-surface-elevated);
-  font-size: 0.85rem;
+  font-size: var(--fm-type-label);
 }
 
 .fm-semantic-evidence summary {
@@ -556,7 +556,7 @@ button.fm-breadcrumb-scheme:hover {
   min-width: 10rem;
   padding: 0.25rem;
   border: 1px solid var(--fm-border);
-  border-radius: 0.25rem;
+  border-radius: var(--fm-radius);
   background: var(--fm-surface-elevated);
   box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 25%);
   /* Otherwise falls back to mithril-materialized's default font stack/size instead of the app's. */
@@ -610,7 +610,7 @@ button.fm-breadcrumb-scheme:hover {
   max-height: min(32rem, calc(100vh - var(--fm-row-height) * 2 - 0.75rem));
   overflow: hidden;
   border: 1px solid var(--fm-border);
-  border-radius: 0.25rem;
+  border-radius: var(--fm-radius);
   background: var(--fm-surface-elevated);
   box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 25%);
   /* Otherwise falls back to mithril-materialized's default font stack/size instead of the app's. */

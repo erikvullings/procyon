@@ -49,7 +49,7 @@
 .fm-directory-viewport::-webkit-scrollbar-thumb {
   background: var(--fm-border);
   border: 2px solid var(--fm-surface);
-  border-radius: 999px;
+  border-radius: var(--fm-radius-pill);
 }
 
 .fm-directory-viewport::-webkit-scrollbar-thumb:hover {
@@ -530,7 +530,7 @@ img.fm-native-entry-icon {
   display: inline-block;
   padding: 0 0.4rem;
   border: 1px solid var(--fm-border);
-  border-radius: 0.25rem;
+  border-radius: var(--fm-radius);
   font-size: var(--fm-type-label);
   line-height: 1.4;
   white-space: nowrap;

@@ -97,7 +97,7 @@ export const it = {
     findFiles: 'Trova file',
     comparePanes: 'Confronta riquadri',
     comparePanesTooltip: 'Seleziona le voci che differiscono tra i due riquadri (Maiusc+F2)',
-    operationCentre: 'Operazioni (Alt+Z)',
+    operationCentre: 'Operazioni',
     activityCount: '{count} attività in background',
     activitySingle: '1 attività in background',
     indexingActivity: 'Indicizzazione semantica',
@@ -399,6 +399,9 @@ export const it = {
     fileTemplates: 'Modelli di file',
     fileTemplatesHelp:
       'Offerti da «Nuovo file da modello». {date} e {name} nel contenuto vengono sostituiti alla creazione del file.',
+    templateFolder: 'Cartella dei modelli',
+    templateFolderHelp:
+      'I file di testo in questa cartella sono proposti anche in «Nuovo file da modello». Lasciare vuoto per disattivare.',
     templateEnabled: 'Attivato',
     templateLabel: 'Nome',
     templateFileName: 'Nome file suggerito',
@@ -749,6 +752,7 @@ export const it = {
     nextPage: 'Pagina successiva',
     loadingPage: 'Caricamento pagina…',
     loadingChapter: 'Caricamento capitolo…',
+    convertingSlides: 'Conversione delle diapositive in corso…',
     chapter: 'Capitolo',
     selectSection: 'Seleziona sezione',
     goToPage: 'Vai alla pagina',
@@ -1181,7 +1185,35 @@ export const it = {
     title: 'Apri terminale con…',
     empty: 'Nessuna applicazione terminale configurata. Aggiungile in Impostazioni → Terminale.',
   },
+  assistant: {
+    title: 'Assistente',
+    file: 'Documento',
+    profile: 'Profilo',
+    placeholder: 'Descrivi il file che ti serve…',
+    send: 'Invia',
+    stop: 'Ferma',
+    thinking: 'Redazione in corso…',
+    insert: 'Usa nell’editor',
+    inserted: 'Risposta inserita nell’editor. Salva per conservarla.',
+    sourceClosed: 'L’editor di questo file è chiuso.',
+    noProfiles: 'Aggiungi un profilo LLM nelle impostazioni per usare l’assistente.',
+    noOtherPane: 'Apri un secondo riquadro per mostrare l’assistente.',
+    failed: 'L’assistente non ha potuto rispondere. Controlla il profilo LLM e il consenso.',
+    consentRequired:
+      "Questo endpoint richiede il consenso nelle Impostazioni prima che l'assistente possa usarlo.",
+    openSettings: 'Apri impostazioni IA',
+    you: 'Tu',
+    assistant: 'Assistente',
+    empty:
+      'Descrivi il file che ti serve. L’assistente vede il nome del file e questa chat, non il contenuto del file.',
+    loadFailed: 'Impossibile caricare i profili LLM.',
+  },
   newFromTemplate: {
+    draftWithAssistant: 'Scrivi con l’assistente',
+    folderSource: 'Cartella',
+    pluginSource: 'Estensione',
+    loadFailed:
+      'Impossibile caricare l’elenco dei modelli. Vengono mostrati solo i modelli dell’app.',
     title: 'Nuovo file da modello',
     empty: 'Nessun modello attivato. Aggiungili o attivali in Impostazioni → Terminale.',
     templates: 'Modelli',
@@ -1737,7 +1769,34 @@ export const it = {
       'Il modello «{model}» del profilo IA «{name}» non è disponibile sul servizio di IA. Installalo (con Ollama: ollama pull {model}) oppure scegli un altro modello nel profilo IA.',
     unreachable: 'Impossibile raggiungere il servizio di IA del profilo «{name}».',
   },
+  llmRoles: {
+    endpoint: 'Punto finale',
+    title: 'Ruoli',
+    intro:
+      'Scegli quale endpoint e modello gestiscono ogni funzione. Gli endpoint locali non richiedono consenso.',
+    chat: 'Chat e riassunti',
+    embeddings: 'Ricerca semantica (embedding)',
+    unassigned: 'Non assegnato',
+    model: 'Modello',
+    allowCloud: "Consenti l'uso nel cloud per l'indicizzazione",
+    cloudHint:
+      "Il contenuto dei documenti viene inviato a questo endpoint cloud durante l'indicizzazione. Attivalo solo se lo accetti.",
+    save: 'Salva ruolo',
+    clear: 'Cancella',
+    saved: 'Ruolo salvato.',
+    loadFailed: 'Impossibile caricare i ruoli.',
+    statusUnassigned: 'Nessun endpoint assegnato.',
+    statusMissingProfile: "L'endpoint assegnato non esiste più.",
+    statusCloudNotAllowed:
+      "Occorre consentire l'uso nel cloud prima che questo ruolo possa usare un endpoint cloud.",
+    statusNeedsConsent:
+      'Questo endpoint richiede il consenso nelle Impostazioni: aprilo sopra e salva con consenso.',
+    statusReady: 'Pronto.',
+  },
+
   llmProfiles: {
+    consentRequired:
+      "Consenti l'uso nel cloud: conferma il consenso prima di salvare un endpoint cloud.",
     title: 'Riepiloghi e risposte con IA',
     description:
       'Collega un modello per scrivere riepiloghi dei documenti e rispondere a domande usando i tuoi file. Salva le connessioni come profili e scegli un profilo predefinito. Un modello locale funziona sul tuo dispositivo; un servizio cloud riceve domande ed estratti. La ricerca semantica funziona anche senza profilo.',
@@ -2346,6 +2405,7 @@ export const it = {
     save: 'Salva',
     saving: 'Salvataggio…',
     closeEditor: 'Chiudi editor',
+    openAssistant: 'Assistente',
     fileChangedOnDisk: 'File modificato sul disco',
     fileChangedMessage: 'Questo file è cambiato dopo essere stato aperto.',
     reload: 'Ricarica',
@@ -2665,6 +2725,10 @@ export const it = {
     connectionFailed: 'Connessione non riuscita: {detail}',
     llmProfileInvalid: 'Le impostazioni del profilo IA non sono valide.',
     cloudConsentRequired: 'Serve il tuo consenso prima di usare il servizio cloud {host}.',
+    llmRoleNotAssigned:
+      'Nessun endpoint IA è assegnato a questo ruolo. Assegnane uno nelle Impostazioni.',
+    llmCloudEmbeddingNotAllowed:
+      "L'uso nel cloud deve essere consentito per questo ruolo prima di poter usare il suo endpoint.",
     llmModelUnavailable:
       'Il modello di IA configurato non è disponibile. Verifica che sia installato (con Ollama: «ollama pull <modello>») oppure scegli un altro modello nel profilo IA.',
     llmAuthentication:

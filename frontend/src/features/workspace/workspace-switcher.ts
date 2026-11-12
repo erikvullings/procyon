@@ -1,6 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import { IconButton } from 'mithril-materialized';
 
+import { inlineEditActions } from '../../components/inline-edit-actions';
 import {
   externalLinkIcon,
   pencilIcon,
@@ -94,17 +95,11 @@ export const WorkspaceSwitcher: FactoryComponent<WorkspaceSwitcherAttrs> = () =>
                                 renameDraft = (event.target as HTMLInputElement).value;
                               },
                             }),
-                            m('button', { type: 'submit' }, t('button', 'save')),
-                            m(
-                              'button',
-                              {
-                                type: 'button',
-                                onclick: () => {
-                                  renamingId = undefined;
-                                },
+                            ...inlineEditActions({
+                              onCancel: () => {
+                                renamingId = undefined;
                               },
-                              t('button', 'cancel'),
-                            ),
+                            }),
                           ],
                         )
                       : m(

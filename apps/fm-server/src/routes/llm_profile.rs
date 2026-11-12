@@ -1,4 +1,4 @@
-//! Thin HTTP surface for named generation profiles (task 0184).
+//! Thin HTTP surface for named generation profiles (task 0184) and their role bindings (0322).
 
 use axum::Json;
 use axum::extract::{Extension, Path, State};
@@ -6,7 +6,8 @@ use axum::http::StatusCode;
 use fm_transport_dto::{
     ActivateLlmProfileRequestDto, ApplicationErrorDto, DeleteLlmProfileRequestDto,
     LlmModelLimitsDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto,
-    LlmProfileTestResultDto, SaveLlmProfileRequestDto,
+    LlmProfileTestResultDto, LlmRoleDto, LlmRolesDto, SaveLlmProfileRequestDto,
+    SaveLlmRoleRequestDto,
 };
 use tower_http::request_id::RequestId;
 use uuid::Uuid;
@@ -298,6 +299,100 @@ pub(crate) async fn discover_llm_profile_draft_model_limits(
             .service
             .discover_llm_profile_draft_model_limits(request)
             .await
+            .map_err(|error| ApiError::new(error, request_id))?,
+    ))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/llm-roles",
+    operation_id = "listLlmRoles",
+    responses(
+        (status = 200, description = "Configured role bindings", body = LlmRolesDto),
+    )
+)]
+pub(crate) async fn list_llm_roles(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+) -> Result<Json<LlmRolesDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    Ok(Json(
+        state
+            .service
+            .list_llm_roles()
+            .map_err(|error| ApiError::new(error, request_id))?,
+    ))
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/v1/llm-roles/{role}",
+    operation_id = "setLlmRole",
+    params(("role" = String, Path, description = "Role: chat or embeddings")),
+    request_body = SaveLlmRoleRequestDto,
+    responses(
+        (status = 200, description = "Updated role bindings", body = LlmRolesDto),
+        (status = 400, description = "Invalid role binding or cloud use not allowed", body = ApplicationErrorDto),
+    )
+)]
+pub(crate) async fn set_llm_role(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Path(role): Path<LlmRoleDto>,
+    Json(request): Json<SaveLlmRoleRequestDto>,
+) -> Result<Json<LlmRolesDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    Ok(Json(
+        state
+            .service
+            .set_llm_role(role, request)
+            .map_err(|error| ApiError::new(error, request_id))?,
+    ))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/api/v1/llm-roles/{role}",
+    operation_id = "clearLlmRole",
+    params(("role" = String, Path, description = "Role: chat or embeddings")),
+    responses(
+        (status = 200, description = "Updated role bindings", body = LlmRolesDto),
+    )
+)]
+pub(crate) async fn clear_llm_role(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Path(role): Path<LlmRoleDto>,
+) -> Result<Json<LlmRolesDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    Ok(Json(
+        state
+            .service
+            .clear_llm_role(role)
+            .map_err(|error| ApiError::new(error, request_id))?,
+    ))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/llm-profiles/{profileId}/consent",
+    operation_id = "grantLlmProfileConsent",
+    params(("profileId" = Uuid, Path, description = "Profile whose cloud host the person approved")),
+    responses(
+        (status = 200, description = "Profile with consent recorded for its host", body = LlmProfileDto),
+        (status = 404, description = "Profile not found", body = ApplicationErrorDto),
+    )
+)]
+pub(crate) async fn grant_llm_profile_consent(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Path(profile_id): Path<Uuid>,
+) -> Result<Json<LlmProfileDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    Ok(Json(
+        state
+            .service
+            .grant_llm_profile_consent(profile_id)
             .map_err(|error| ApiError::new(error, request_id))?,
     ))
 }

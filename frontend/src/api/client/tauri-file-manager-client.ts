@@ -69,9 +69,12 @@ import type {
   ExecuteKnowledgeSearchRequest,
   ExportCorpusThemesRequest,
   ExportCorpusThemesResponse,
+  FileAssistantEvent,
+  FileAssistantRequest,
   FileDiffOptions,
   FileDiffResult,
   FileRangeChunk,
+  FileTemplateEntry,
   FinderTags,
   FindLinkReplacementsRequest,
   FindLinkReplacementsResult,
@@ -119,6 +122,8 @@ import type {
   LlmProfileExport,
   LlmProfilePreset,
   LlmProfileTestResult,
+  LlmRole,
+  LlmRoles,
   LoadEditableFileRequest,
   Location,
   MoveSemanticDataRequest,
@@ -168,6 +173,7 @@ import type {
   SavedRagConversation,
   SaveEditableFileRequest,
   SaveLlmProfileRequest,
+  SaveLlmRoleRequest,
   SaveRagConversationRequest,
   ScanDiskUsageRequest,
   SearchInFileRequest,
@@ -854,6 +860,10 @@ export class TauriFileManagerClient implements FileManagerClient {
       uri: locationUri,
       request: comment,
     });
+  }
+
+  async listFileTemplates(_signal?: AbortSignal): Promise<FileTemplateEntry[]> {
+    return invoke<FileTemplateEntry[]>('list_file_templates');
   }
 
   async getSettings(_signal?: AbortSignal): Promise<Settings> {
@@ -1707,8 +1717,45 @@ export class TauriFileManagerClient implements FileManagerClient {
     return invoke<LlmProfilePreset[]>('list_llm_profile_presets');
   }
 
+  streamFileAssistantReply(
+    request: FileAssistantRequest,
+    onEvent: (event: FileAssistantEvent) => void,
+    _signal?: AbortSignal,
+  ): Promise<void> {
+    const events = new Channel<FileAssistantEvent>(onEvent);
+    return invoke<void>('stream_file_assistant_reply', {
+      request: {
+        requestId: request.requestId,
+        profileId: request.profileId,
+        fileName: request.fileName,
+        messages: request.messages,
+      },
+      events,
+    });
+  }
+
+  cancelFileAssistantReply(requestId: string): Promise<void> {
+    return invoke<void>('cancel_file_assistant_reply', { request: { requestId } });
+  }
+
   listLlmProfiles(_signal?: AbortSignal): Promise<LlmProfile[]> {
     return invoke<LlmProfile[]>('list_llm_profiles');
+  }
+
+  listLlmRoles(_signal?: AbortSignal): Promise<LlmRoles> {
+    return invoke<LlmRoles>('list_llm_roles');
+  }
+
+  setLlmRole(role: LlmRole, request: SaveLlmRoleRequest, _signal?: AbortSignal): Promise<LlmRoles> {
+    return invoke<LlmRoles>('set_llm_role', { role, request });
+  }
+
+  clearLlmRole(role: LlmRole, _signal?: AbortSignal): Promise<LlmRoles> {
+    return invoke<LlmRoles>('clear_llm_role', { role });
+  }
+
+  grantLlmProfileConsent(profileId: string, _signal?: AbortSignal): Promise<LlmProfile> {
+    return invoke<LlmProfile>('grant_llm_profile_consent', { profileId });
   }
 
   createLlmProfile(request: SaveLlmProfileRequest, _signal?: AbortSignal): Promise<LlmProfile> {
