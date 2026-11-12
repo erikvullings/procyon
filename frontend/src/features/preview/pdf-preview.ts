@@ -187,10 +187,16 @@ export async function renderPdfPageToCanvas(
     throw error;
   }
   if (isSuperseded()) return;
-  canvas.width = stagingCanvas.width;
-  canvas.height = stagingCanvas.height;
-  canvas.style.width = `${Math.ceil(viewport.width / devicePixelRatio)}px`;
-  canvas.style.height = `${Math.ceil(viewport.height / devicePixelRatio)}px`;
+  const cssWidth = `${Math.ceil(viewport.width / devicePixelRatio)}px`;
+  const cssHeight = `${Math.ceil(viewport.height / devicePixelRatio)}px`;
+  // Assigning `canvas.width` resets (clears) the backing store, which flashes blank for a frame
+  // even when the new page is byte-identical in size - for example when a PowerPoint deck's full
+  // multi-page PDF replaces the first-page stub it was previewed with. Only clear when the size
+  // actually changes; a same-dimension redraw is fully covered by the opaque staging image.
+  if (canvas.width !== stagingCanvas.width) canvas.width = stagingCanvas.width;
+  if (canvas.height !== stagingCanvas.height) canvas.height = stagingCanvas.height;
+  if (canvas.style.width !== cssWidth) canvas.style.width = cssWidth;
+  if (canvas.style.height !== cssHeight) canvas.style.height = cssHeight;
   canvas.getContext('2d')?.drawImage(stagingCanvas, 0, 0);
 }
 
