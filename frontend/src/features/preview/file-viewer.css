@@ -40,8 +40,10 @@
 }
 
 .fm-file-viewer-slide-progress {
-  position: relative;
-  width: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   height: 3px;
   overflow: hidden;
   background: color-mix(in srgb, var(--fm-text-muted) 18%, transparent);
@@ -487,6 +489,7 @@
   align-items: flex-start;
   justify-content: center;
   padding: 1rem;
+  position: relative;
 }
 
 .fm-file-viewer-pdf-page {

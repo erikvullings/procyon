@@ -925,10 +925,14 @@ export class MockWorkspaceClient implements WorkspaceClient {
     });
   }
 
-  readPptxPreviewPdf(
+  async readPptxPreviewPdf(
     request: ReadPptxPreviewPdfRequest,
     signal?: AbortSignal,
   ): Promise<FileRangeChunk> {
+    // The real backend converts the full deck in the background; the first-page slide shows
+    // immediately and the converting indicator above it stays visible until this resolves. A
+    // short delay keeps that state observable in the in-process mock (pnpm dev).
+    await new Promise((resolve) => setTimeout(resolve, 700));
     return this.ctx.perform('readPptxPreviewPdf', signal, () => {
       if (request.length <= 0) {
         throw new MockClientError('invalidRequest', 'length must be a positive number of bytes', {
