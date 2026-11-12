@@ -559,4 +559,10 @@ subtask block (0299–0303) and the earlier corpus-themes follow-ups.
   the filter and type-to-select; done, global in-memory, commit 0c11dd11)*
 - [x] 0319 Compact window toolbar *(frontend + settings — overflow menu, `compactToolbar` setting, sync-browsing on/off icons)*
 - [x] 0320 Archives inside archives *(backend + frontend — browse/read nested archives, zero-copy for stored ZIPs, edit one level deep with a save/discard prompt)*
-- [ ] 0321 LLM-assisted file creation *(backend + frontend, low — "New file with assistant…" drafts a file from a prompt via the configured LLM profile into an unsaved F4 buffer, chat in the F12 drawer; nothing hits disk without save)*
+- [x] 0321 LLM-assisted file creation *(backend + frontend, low — "Assistant" in the editor opens a chat tab in the other pane that drafts file contents via the configured LLM profile, streamed; "Draft with assistant" in the template picker; nothing hits disk without save; done)*
+- [ ] 0322 LLM endpoints and roles in Settings, consent at configuration *(backend, frontend, settings, medium — Settings > LLM (AI) with endpoints and roles (chat, embeddings, later image/search); consent asked once when a cloud endpoint is saved; needs 0184, 0243)*
+- [ ] 0323 First-run LLM endpoint detection *(backend, frontend, settings, medium — probes a declared preset list (Ollama, LM Studio, oMLX) on loopback; new presets are picked up without code changes; needs 0322)*
+- [ ] 0324 Chat tab in a pane *(backend, frontend, medium — general chat as a tab beside the editor, like the assistant; saved conversations; read-only workspace context; needs 0321, 0322)*
+- [ ] 0325 Image generation pane *(backend, frontend, low — prompt pane and preview/save pane; nothing written before Save; needs 0322)*
+- [ ] 0326 Natural-language search *(backend, frontend, medium — describe a search in a sentence, reviewed as an editable structured query; needs 0322, 0324)*
+- [ ] 0327 Voice push-to-talk commands *(backend, frontend, desktop, low — local speech-to-text mapped to a whitelist of intents; file-changing intents always confirmed; needs 0324)*
