@@ -460,6 +460,55 @@
         }
       }
     },
+    "/api/v1/chat/reply/cancel": {
+      "post": {
+        "summary": "Stops one running chat reply. The person's message stays saved; no reply is saved.",
+        "operationId": "cancelChatReply",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelChatReplyRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/chat/reply/stream": {
+      "post": {
+        "summary": "Streams the next reply of a chat conversation as newline-delimited JSON events: fragments as\nthey arrive, then exactly one `done` or `failed` event. Every outcome, including a refused\nrequest, arrives as an event on this 200 response.",
+        "operationId": "streamChatReply",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatReplyRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Newline-delimited JSON chat events.",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatReplyEventDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/checksums": {
       "post": {
         "operationId": "startChecksums",
@@ -9376,6 +9425,216 @@
         }
       }
     },
+    "/api/v1/workspaces/{workspaceId}/chat/conversations": {
+      "get": {
+        "summary": "Lists a workspace's saved chat conversations, most recently changed first.",
+        "operationId": "listChatConversations",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "description": "The workspace that owns the conversations",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conversation summaries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChatConversationSummaryDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Starts an empty chat conversation in a workspace.",
+        "operationId": "createChatConversation",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "description": "The workspace that owns the conversation",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The new conversation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatConversationDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/chat/conversations/{conversationId}": {
+      "get": {
+        "summary": "Loads one chat conversation with its messages.",
+        "operationId": "getChatConversation",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "description": "The workspace that owns the conversation",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "conversationId",
+            "in": "path",
+            "description": "The conversation to load",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The conversation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatConversationDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such conversation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Deletes a chat conversation and everything saved in it.",
+        "operationId": "deleteChatConversation",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "description": "The workspace that owns the conversation",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "conversationId",
+            "in": "path",
+            "description": "The conversation to delete",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The conversation was deleted"
+          },
+          "404": {
+            "description": "No such conversation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Renames a chat conversation.",
+        "operationId": "renameChatConversation",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "description": "The workspace that owns the conversation",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "conversationId",
+            "in": "path",
+            "description": "The conversation to rename",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameChatConversationRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The renamed conversation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatConversationDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such conversation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/workspaces/{workspaceId}/commands": {
       "post": {
         "summary": "Applies a semantic mutation command (spec §5.3.9). The path's\n`workspaceId` must match the id embedded in the command body.",
@@ -10302,6 +10561,20 @@
           "fileCount": 42
         }
       },
+      "CancelChatReplyRequestDto": {
+        "type": "object",
+        "description": "Requests cancellation of one running chat reply.",
+        "required": [
+          "requestId"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identity supplied when the reply was requested."
+          }
+        }
+      },
       "CancelFileAssistantRequestDto": {
         "type": "object",
         "description": "Requests cancellation of one running file-assistant request.",
@@ -10414,6 +10687,225 @@
             "description": "Which visited entries to change."
           }
         }
+      },
+      "ChatConversationDto": {
+        "type": "object",
+        "description": "A saved conversation with its messages.",
+        "required": [
+          "id",
+          "title",
+          "updatedAt",
+          "messages"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Stable identity of the conversation."
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatMessageDto"
+            },
+            "description": "Messages in order, oldest first."
+          },
+          "title": {
+            "type": "string",
+            "description": "Title; empty until the person renames it or the first message sets it."
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "When the conversation last changed, as an RFC 3339 timestamp."
+          }
+        }
+      },
+      "ChatConversationSummaryDto": {
+        "type": "object",
+        "description": "A saved conversation without its messages, for the conversation list.",
+        "required": [
+          "id",
+          "title",
+          "updatedAt",
+          "messageCount"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Stable identity of the conversation."
+          },
+          "messageCount": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of messages saved so far.",
+            "minimum": 0
+          },
+          "title": {
+            "type": "string",
+            "description": "Title; empty until the person renames it or the first message sets it."
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "When the conversation last changed, as an RFC 3339 timestamp."
+          }
+        }
+      },
+      "ChatFailureDto": {
+        "type": "string",
+        "description": "Why a chat reply ended without text.",
+        "enum": [
+          "invalidRequest",
+          "notFound",
+          "roleNotAssigned",
+          "consentRequired",
+          "unavailable",
+          "empty",
+          "cancelled"
+        ]
+      },
+      "ChatMessageDto": {
+        "type": "object",
+        "description": "One message of a saved conversation.",
+        "required": [
+          "role",
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "Message text as the person wrote it, or as the model replied."
+          },
+          "context": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Read-only context the person attached to this message, exactly as it was sent."
+          },
+          "role": {
+            "$ref": "#/components/schemas/ChatRoleDto",
+            "description": "Author of the message."
+          }
+        }
+      },
+      "ChatReplyEventDto": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "A fragment of the reply, in arrival order. Fragments are provisional.",
+            "required": [
+              "text",
+              "type"
+            ],
+            "properties": {
+              "text": {
+                "type": "string",
+                "description": "Text to append to what has arrived so far."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "delta"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The whole reply, saved with the conversation. It replaces the fragments.",
+            "required": [
+              "text",
+              "type"
+            ],
+            "properties": {
+              "text": {
+                "type": "string",
+                "description": "Reply text."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "done"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The reply ended without text; no `done` event follows.",
+            "required": [
+              "reason",
+              "type"
+            ],
+            "properties": {
+              "reason": {
+                "$ref": "#/components/schemas/ChatFailureDto",
+                "description": "Why the reply ended."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "failed"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "One event of a streamed chat reply: fragments as they arrive, then exactly one final event."
+      },
+      "ChatReplyRequestDto": {
+        "type": "object",
+        "description": "Asks for the next reply in a saved conversation. The person's message is saved first; the\nreply is saved only when it completes.",
+        "required": [
+          "requestId",
+          "workspaceId",
+          "conversationId",
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "The person's message."
+          },
+          "context": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Read-only context attached to this message, exactly as shown to the person."
+          },
+          "conversationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Conversation to continue."
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identity used to cancel this request."
+          },
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Workspace that owns the conversation."
+          }
+        },
+        "example": {
+          "requestId": "5b1b6b1e-9b1b-4b1b-8b1b-1b1b1b1b1b1b",
+          "workspaceId": "5b1b6b1e-9b1b-4b1b-8b1b-1b1b1b1b1b1c",
+          "conversationId": "5b1b6b1e-9b1b-4b1b-8b1b-1b1b1b1b1b1d",
+          "content": "Which of these folders is the largest?",
+          "context": "Folder listing of /Users/me/notes (3 entries):\n- archive/ (folder)\n- todo.md (1.2 KB)"
+        }
+      },
+      "ChatRoleDto": {
+        "type": "string",
+        "description": "Who wrote one chat message.",
+        "enum": [
+          "user",
+          "assistant"
+        ]
       },
       "CheckpointSemanticModelMigrationRequestDto": {
         "type": "object",
@@ -21856,6 +22348,19 @@
         },
         "example": {
           "removed": true
+        }
+      },
+      "RenameChatConversationRequestDto": {
+        "type": "object",
+        "description": "Renames a saved conversation.",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "New title. Blank clears it."
+          }
         }
       },
       "RenderChecksumFileRequestDto": {

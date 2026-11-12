@@ -255,6 +255,15 @@ export function createActionsWiring(shellState: ShellState) {
             },
           ]
         : []),
+      {
+        id: 'client.chat',
+        title: t('chat', 'title'),
+        description: t('chat', 'openDescription'),
+        category: 'tools',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' as const },
+      },
       ...(shellState.semanticAssistantAvailable
         ? [
             {

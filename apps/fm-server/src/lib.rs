@@ -420,6 +420,13 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(
             routes::file_assistant::cancel_file_assistant_reply
         ))
+        .routes(utoipa_axum::routes!(routes::chat::list_chat_conversations))
+        .routes(utoipa_axum::routes!(routes::chat::create_chat_conversation))
+        .routes(utoipa_axum::routes!(routes::chat::get_chat_conversation))
+        .routes(utoipa_axum::routes!(routes::chat::rename_chat_conversation))
+        .routes(utoipa_axum::routes!(routes::chat::delete_chat_conversation))
+        .routes(utoipa_axum::routes!(routes::chat::stream_chat_reply))
+        .routes(utoipa_axum::routes!(routes::chat::cancel_chat_reply))
         .routes(utoipa_axum::routes!(
             routes::knowledge::resolve_knowledge_source
         ))

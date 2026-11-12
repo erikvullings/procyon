@@ -1501,6 +1501,37 @@ impl LlmProfileService {
         on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
     ) -> Result<String, LlmProfileError> {
         let profile = self.profile(id)?;
+        self.generate_profile_streamed(profile, generation, cancellation, on_delta)
+            .await
+    }
+
+    /// Like [`Self::generate_streamed`], but the endpoint and model come from a role assignment
+    /// (task 0322). Never prompts: a cloud endpoint without consent is reported as
+    /// [`LlmProfileError::ConsentRequired`].
+    pub async fn generate_role_streamed(
+        &self,
+        role: LlmRole,
+        generation: LlmChatGeneration,
+        cancellation: &CancellationToken,
+        on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
+    ) -> Result<String, LlmProfileError> {
+        let resolved = self.resolve_role(role)?;
+        let profile = LlmProfile {
+            model: resolved.model,
+            ..resolved.profile
+        };
+        self.generate_profile_streamed(profile, generation, cancellation, on_delta)
+            .await
+    }
+
+    async fn generate_profile_streamed(
+        &self,
+        profile: LlmProfile,
+        generation: LlmChatGeneration,
+        cancellation: &CancellationToken,
+        on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
+    ) -> Result<String, LlmProfileError> {
+        let id = profile.id;
         let endpoint = normalize_endpoint(&profile.base_url)?;
         self.enforce_policy(&endpoint, profile.advanced.tls_policy)?;
         if endpoint.locality == EndpointLocality::Cloud

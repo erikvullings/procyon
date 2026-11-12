@@ -129,6 +129,7 @@ export interface ActionCommandControllerContext {
   openDocumentSummary?(paneId: PaneId, entry: EntrySummary): void;
   /** Opens Ask or the active folder's semantic enrolment prompt. */
   openSemanticAssistant(): void;
+  openChat(): void;
   /** Opens search-only Structured Knowledge Search (task 0206). */
   openKnowledgeSearch(): void;
   openThemes(): void;
@@ -519,6 +520,10 @@ export function createActionCommandController(
     }
     if (action.id === 'client.semanticAssistant') {
       context.openSemanticAssistant();
+      return;
+    }
+    if (action.id === 'client.chat') {
+      context.openChat();
       return;
     }
     if (action.id === 'client.searchKnowledge') {

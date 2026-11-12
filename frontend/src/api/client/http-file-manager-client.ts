@@ -18,6 +18,10 @@ import type {
   CalculateFolderSizeResult,
   CancelKnowledgeAnswerRequest,
   CancelKnowledgeSearchRequest,
+  ChatConversation,
+  ChatConversationSummary,
+  ChatReplyEvent,
+  ChatReplyRequest,
   CheckpointSemanticModelMigrationRequest,
   ChecksumAlgorithm,
   ChecksumFile,
@@ -266,6 +270,12 @@ import {
   listArchiveEdits as requestArchiveEdits,
   cacheArchivePassword as requestArchivePasswordCache,
   archiveSummary as requestArchiveSummary,
+  getChatConversation as requestChatConversation,
+  createChatConversation as requestChatConversationCreate,
+  deleteChatConversation as requestChatConversationDelete,
+  renameChatConversation as requestChatConversationRename,
+  listChatConversations as requestChatConversations,
+  cancelChatReply as requestChatReplyCancel,
   cancelChecksums as requestChecksumCancel,
   renderChecksumFile as requestChecksumFileRender,
   saveChecksumFile as requestChecksumFileSave,
@@ -2745,6 +2755,106 @@ export class HttpFileManagerClient implements FileManagerClient {
 
   async cancelFileAssistantReply(requestId: string): Promise<void> {
     await requestFileAssistantCancel({ requestId });
+  }
+
+  async listChatConversations(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<ChatConversationSummary[]> {
+    const response = await requestChatConversations(
+      workspaceId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw unexpectedResponseError('listChatConversations', response.status);
+    }
+    return response.data;
+  }
+
+  async createChatConversation(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<ChatConversation> {
+    const response = await requestChatConversationCreate(
+      workspaceId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw unexpectedResponseError('createChatConversation', response.status);
+    }
+    return response.data;
+  }
+
+  async getChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    signal?: AbortSignal,
+  ): Promise<ChatConversation> {
+    const response = await requestChatConversation(
+      workspaceId,
+      conversationId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw unexpectedResponseError('getChatConversation', response.status);
+    }
+    return response.data;
+  }
+
+  async renameChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    title: string,
+    signal?: AbortSignal,
+  ): Promise<ChatConversation> {
+    const response = await requestChatConversationRename(
+      workspaceId,
+      conversationId,
+      { title },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw unexpectedResponseError('renameChatConversation', response.status);
+    }
+    return response.data;
+  }
+
+  async deleteChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const response = await requestChatConversationDelete(
+      workspaceId,
+      conversationId,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204) {
+      throw unexpectedResponseError('deleteChatConversation', response.status);
+    }
+  }
+
+  async streamChatReply(
+    request: ChatReplyRequest,
+    onEvent: (event: ChatReplyEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await postNdjson<ChatReplyEvent>(
+      '/api/v1/chat/reply/stream',
+      {
+        requestId: request.requestId,
+        workspaceId: request.workspaceId,
+        conversationId: request.conversationId,
+        content: request.content,
+        context: request.context,
+      },
+      onEvent,
+      signal,
+    );
+  }
+
+  async cancelChatReply(requestId: string): Promise<void> {
+    await requestChatReplyCancel({ requestId });
   }
 
   async listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {

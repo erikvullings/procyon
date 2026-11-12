@@ -232,6 +232,8 @@ pub struct FileManagerService {
     connections: ConnectionFacade,
     llm_profiles: LlmProfileService,
     file_assistant: crate::file_assistant::FileAssistantService,
+    chat: crate::chat::ChatService,
+    chat_conversations: crate::chat_conversations::ChatConversationService,
     onedrive: crate::onedrive::OneDriveAuthorizationService<JsonFileConnectionRepository>,
     remote_terminals: RemoteTerminalService,
     directories: DirectoryService,
@@ -451,6 +453,14 @@ impl FileManagerService {
                 llm_policy,
             )
         });
+        // Saved conversations are read on their own, so a damaged file never blocks settings.
+        let chat_conversations =
+            crate::chat_conversations::ChatConversationService::new(settings_store.clone())
+                .unwrap_or_else(|_| {
+                    crate::chat_conversations::ChatConversationService::unavailable(
+                        settings_store.clone(),
+                    )
+                });
         let loaded = match settings_store.load() {
             Ok(loaded) => loaded,
             Err(error @ SettingsError::NewerSchema { .. }) => fm_settings::LoadOutcome {
@@ -620,6 +630,8 @@ impl FileManagerService {
             connections: ConnectionFacade::new(connection_service, ssh_connections),
             llm_profiles,
             file_assistant: crate::file_assistant::FileAssistantService::default(),
+            chat: crate::chat::ChatService::default(),
+            chat_conversations,
             onedrive,
             remote_terminals,
             directories,
@@ -3364,6 +3376,86 @@ impl FileManagerService {
         request: fm_transport_dto::CancelFileAssistantRequestDto,
     ) -> bool {
         self.file_assistant.cancel(request.request_id)
+    }
+
+    /// Lists the saved chat conversations of a workspace (task 0324), without their messages.
+    pub fn list_chat_conversations(
+        &self,
+        workspace_id: Uuid,
+    ) -> Result<Vec<fm_transport_dto::ChatConversationSummaryDto>, ApplicationError> {
+        Ok(self
+            .chat_conversations
+            .list(workspace_id)?
+            .iter()
+            .map(crate::chat_conversations::summary_to_dto)
+            .collect())
+    }
+
+    /// Starts an empty chat conversation in a workspace.
+    pub fn create_chat_conversation(
+        &self,
+        workspace_id: Uuid,
+    ) -> Result<fm_transport_dto::ChatConversationDto, ApplicationError> {
+        Ok(crate::chat_conversations::conversation_to_dto(
+            self.chat_conversations.create(workspace_id)?,
+        ))
+    }
+
+    /// Loads one chat conversation with its messages.
+    pub fn get_chat_conversation(
+        &self,
+        workspace_id: Uuid,
+        conversation_id: Uuid,
+    ) -> Result<fm_transport_dto::ChatConversationDto, ApplicationError> {
+        Ok(crate::chat_conversations::conversation_to_dto(
+            self.chat_conversations.get(workspace_id, conversation_id)?,
+        ))
+    }
+
+    /// Renames a chat conversation.
+    pub fn rename_chat_conversation(
+        &self,
+        workspace_id: Uuid,
+        conversation_id: Uuid,
+        request: fm_transport_dto::RenameChatConversationRequestDto,
+    ) -> Result<fm_transport_dto::ChatConversationDto, ApplicationError> {
+        Ok(crate::chat_conversations::conversation_to_dto(
+            self.chat_conversations
+                .rename(workspace_id, conversation_id, &request.title)?,
+        ))
+    }
+
+    /// Deletes a chat conversation and everything saved in it.
+    pub fn delete_chat_conversation(
+        &self,
+        workspace_id: Uuid,
+        conversation_id: Uuid,
+    ) -> Result<(), ApplicationError> {
+        Ok(self
+            .chat_conversations
+            .delete(workspace_id, conversation_id)?)
+    }
+
+    /// Streams the next reply in a saved conversation through the chat role (task 0324): fragments
+    /// as they arrive, then one final event. Nothing is written to disk except the conversation.
+    pub async fn stream_chat_reply(
+        &self,
+        request: fm_transport_dto::ChatReplyRequestDto,
+        on_event: &mut (dyn FnMut(fm_transport_dto::ChatReplyEventDto) + Send),
+    ) {
+        self.chat
+            .stream(
+                &self.llm_profiles,
+                &self.chat_conversations,
+                request,
+                on_event,
+            )
+            .await;
+    }
+
+    /// Stops one running chat reply. Returns whether it was still running.
+    pub fn cancel_chat_reply(&self, request: fm_transport_dto::CancelChatReplyRequestDto) -> bool {
+        self.chat.cancel(request)
     }
 
     /// Lists discovered plugins, retaining malformed manifests as disabled records.

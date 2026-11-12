@@ -4,6 +4,10 @@ import type {
   AttachSemanticVocabularyRequest,
   CancelKnowledgeAnswerRequest,
   CancelKnowledgeSearchRequest,
+  ChatConversation,
+  ChatConversationSummary,
+  ChatReplyEvent,
+  ChatReplyRequest,
   CheckpointSemanticModelMigrationRequest,
   CompleteSemanticModelMigrationRequest,
   ConfirmSemanticEnrolmentRequest,
@@ -335,6 +339,46 @@ export interface SemanticClient {
 
   /** Stops a running file-assistant reply; events that follow are not delivered to the caller. */
   cancelFileAssistantReply(requestId: string): Promise<void>;
+
+  /** Saved chat conversations of a workspace, most recently changed first (task 0324). */
+  listChatConversations(
+    workspaceId: WorkspaceId,
+    signal?: AbortSignal,
+  ): Promise<ChatConversationSummary[]>;
+
+  createChatConversation(workspaceId: WorkspaceId, signal?: AbortSignal): Promise<ChatConversation>;
+
+  getChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    signal?: AbortSignal,
+  ): Promise<ChatConversation>;
+
+  renameChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    title: string,
+    signal?: AbortSignal,
+  ): Promise<ChatConversation>;
+
+  deleteChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    signal?: AbortSignal,
+  ): Promise<void>;
+
+  /**
+   * Streams the next reply in a conversation through the chat role. The person's message is saved
+   * first; the reply is saved only when it completes. Never prompts for consent.
+   */
+  streamChatReply(
+    request: ChatReplyRequest,
+    onEvent: (event: ChatReplyEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<void>;
+
+  /** Stops a running chat reply; events that follow are not delivered to the caller. */
+  cancelChatReply(requestId: string): Promise<void>;
 
   listSavedRagConversations(
     workspaceId: WorkspaceId,

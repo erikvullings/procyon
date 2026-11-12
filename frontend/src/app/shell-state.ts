@@ -17,6 +17,7 @@ import type { FileManagerClient } from '../api/client/file-manager-client';
 import type { ActionCommandController } from '../features/actions/action-command-controller';
 import type { AssistantTabEntry } from '../features/assistant/assistant-tab-state';
 import type { ChangeAttributesRequest } from '../features/attributes/change-attributes-dialog';
+import type { ChatTabEntry } from '../features/chat/chat-tab-state';
 import type { ChecksumController } from '../features/checksums/checksum-controller';
 import type { ChecksumState, DuplicateState } from '../features/checksums/checksum-state';
 import { initialChecksumState, initialDuplicateState } from '../features/checksums/checksum-state';
@@ -358,6 +359,8 @@ export function createShellState(client: FileManagerClient) {
     themesOpening: false,
     assistantByTab: new Map<string, AssistantTabEntry>(),
     assistantOpening: false,
+    chatByTab: new Map<string, ChatTabEntry>(),
+    chatOpening: false,
     knowledgeSearchOpening: false,
     editorByPane: new Map<
       PaneId,
