@@ -1447,15 +1447,6 @@ function renderPdfBody(state: Extract<FileViewerState, { status: 'ready' }>): m.
   if (content.kind !== 'pdf') return undefined;
   return m(
     '.fm-file-viewer-body.fm-file-viewer-body-pdf',
-    // A thin indeterminate bar at the top signals the remaining slides are still converting;
-    // the role=status text keeps it announced to screen readers without a hard-to-read label.
-    content.slidesConverting
-      ? m(
-          '.fm-file-viewer-slide-progress[role=status]',
-          { 'aria-label': t('viewer', 'convertingSlides') },
-          m('span.fm-file-viewer-slide-progress-bar', { 'aria-hidden': 'true' }),
-        )
-      : undefined,
     m(PdfPageCanvas, {
       document: content.document,
       pageNumber: content.currentPage,
@@ -1463,9 +1454,20 @@ function renderPdfBody(state: Extract<FileViewerState, { status: 'ready' }>): m.
       ...(content.searchDocument === undefined ? {} : { searchDocument: content.searchDocument }),
       ...(state.pdfSearch === undefined ? {} : { search: state.pdfSearch }),
     }),
+    // The converting bar is rendered *after* the canvas on purpose: a leading conditional sibling
+    // would shift the canvas's index in this children array when the bar disappears, and Mithril
+    // would remount PdfPageCanvas (destroying and recreating the <canvas>) - flashing the whole
+    // page exactly when the deck finishes. Trailing it keeps the canvas's index stable. It is
+    // absolutely positioned, so DOM order does not affect its place pinned to the top edge.
+    content.slidesConverting
+      ? m(
+          '.fm-file-viewer-slide-progress[role=status]',
+          { 'aria-label': t('viewer', 'convertingSlides') },
+          m('span.fm-file-viewer-slide-progress-bar', { 'aria-hidden': 'true' }),
+        )
+      : undefined,
   );
 }
-
 function renderComicBody(state: Extract<FileViewerState, { status: 'ready' }>): m.Children {
   const content = state.content;
   if (content.kind !== 'comic') return undefined;

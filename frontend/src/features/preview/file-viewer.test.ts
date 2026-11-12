@@ -899,6 +899,46 @@ describe('FileViewer', () => {
     expect(root.querySelector('.fm-file-viewer-pdf-canvas')).toBe(canvas);
   });
 
+  it('keeps the PDF canvas mounted when the converting bar disappears (regression: a leading bar used to remount the page)', () => {
+    const displayDocument = {} as never;
+    let currentAttrs = baseAttrs({
+      status: 'ready',
+      entry: entry({ name: 'briefing.pptx', extension: 'pptx' }),
+      content: {
+        kind: 'pdf',
+        document: displayDocument,
+        pageCount: 1,
+        currentPage: 1,
+        zoom: 1,
+        slideTotal: 3,
+        slidesConverting: true,
+      },
+    });
+    m.mount(root, { view: () => m(FileViewer, currentAttrs) });
+    const canvas = root.querySelector('.fm-file-viewer-pdf-canvas');
+    expect(root.querySelector('.fm-file-viewer-slide-progress')).not.toBeNull();
+
+    currentAttrs = baseAttrs({
+      status: 'ready',
+      entry: entry({ name: 'briefing.pptx', extension: 'pptx' }),
+      content: {
+        kind: 'pdf',
+        document: displayDocument,
+        pageCount: 3,
+        currentPage: 1,
+        zoom: 1,
+        slideTotal: 3,
+        slidesConverting: false,
+      },
+    });
+    m.redraw.sync();
+
+    // The deck finished converting: the bar is gone but the canvas is the same node - a leading
+    // conditional sibling would have shifted the canvas's index and made Mithril remount it.
+    expect(root.querySelector('.fm-file-viewer-pdf-canvas')).toBe(canvas);
+    expect(root.querySelector('.fm-file-viewer-slide-progress')).toBeNull();
+  });
+
   it('re-renders the PDF canvas when the current page changes (regression: navigation used to only move the counter)', async () => {
     renderPdfPageToCanvas.mockClear();
     let currentAttrs = baseAttrs({
