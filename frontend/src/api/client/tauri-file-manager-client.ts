@@ -121,6 +121,7 @@ import type {
   LinkOptionsRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequest,
+  LlmEndpointLocality,
   LlmModelLimits,
   LlmProfile,
   LlmProfileExport,
@@ -1800,6 +1801,10 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   listLlmProfiles(_signal?: AbortSignal): Promise<LlmProfile[]> {
     return invoke<LlmProfile[]>('list_llm_profiles');
+  }
+
+  classifyLlmEndpoint(baseUrl: string, _signal?: AbortSignal): Promise<LlmEndpointLocality> {
+    return invoke<LlmEndpointLocality>('classify_llm_endpoint', { baseUrl });
   }
 
   listLlmRoles(_signal?: AbortSignal): Promise<LlmRoles> {

@@ -4040,6 +4040,43 @@
         }
       }
     },
+    "/api/v1/llm-endpoints/classify": {
+      "post": {
+        "operationId": "classifyLlmEndpoint",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassifyLlmEndpointRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Local or cloud classification of the endpoint",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmEndpointLocalityDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid endpoint URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/llm-profiles": {
       "get": {
         "operationId": "listLlmProfiles",
@@ -11083,6 +11120,18 @@
             "format": "int64",
             "description": "Entries the job was asked to hash.",
             "minimum": 0
+          }
+        }
+      },
+      "ClassifyLlmEndpointRequestDto": {
+        "type": "object",
+        "description": "Request to classify an endpoint URL as local or cloud before it is saved.",
+        "required": [
+          "baseUrl"
+        ],
+        "properties": {
+          "baseUrl": {
+            "type": "string"
           }
         }
       },

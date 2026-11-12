@@ -47,6 +47,7 @@ import type {
   KnowledgeSearchResult,
   KnowledgeSourceLocation,
   ListKnowledgeRootsRequest,
+  LlmEndpointLocality,
   LlmModelLimits,
   LlmProfile,
   LlmProfileExport,
@@ -132,6 +133,27 @@ import {
   semanticLocationContains,
 } from './mock-shared';
 import type { SemanticClient } from './semantic-client';
+
+/**
+ * Fixture mirror of the backend rule (`fm-application` `classify_endpoint`): loopback and private LAN
+ * are local, everything else is cloud. The mock has no backend, so this is the one place the rule is
+ * repeated; the Rust tests are the source of truth.
+ */
+function mockEndpointLocality(baseUrl: string): LlmEndpointLocality {
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    throw new MockClientError('invalidRequest', 'The endpoint URL is not valid');
+  }
+  const host = url.hostname.replace(/^\[|\]$/gu, '').toLowerCase();
+  if (host === 'localhost' || host === '::1' || /^127\./u.test(host)) return 'loopback';
+  if (/^(10\.|192\.168\.|169\.254\.)/u.test(host) || /^172\.(1[6-9]|2\d|3[01])\./u.test(host)) {
+    return 'loopback';
+  }
+  const ipv6Local = host.includes(':') && (/^f[cd]/u.test(host) || /^fe[89ab]/u.test(host));
+  return ipv6Local ? 'loopback' : 'cloud';
+}
 
 export class MockSemanticClient implements SemanticClient {
   constructor(private readonly ctx: MockContext) {}
@@ -1408,6 +1430,10 @@ export class MockSemanticClient implements SemanticClient {
         redactFilenames: profile.redactFilenames,
       });
     });
+  }
+
+  classifyLlmEndpoint(baseUrl: string, signal?: AbortSignal): Promise<LlmEndpointLocality> {
+    return this.ctx.perform('classifyLlmEndpoint', signal, () => mockEndpointLocality(baseUrl));
   }
 
   listLlmRoles(signal?: AbortSignal): Promise<LlmRoles> {

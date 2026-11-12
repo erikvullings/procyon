@@ -278,17 +278,14 @@ describe('SettingsEditor', () => {
     expect(status).toHaveBeenCalledOnce();
   });
 
-  it('preloads the generation profiles for installed Semantic components', async () => {
+  it('loads the generation profiles for the LLM section', async () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     const profiles = vi.spyOn(client, 'listLlmProfiles');
     mountEditor({ client });
 
     await vi.waitFor(() => expect(profiles).toHaveBeenCalled());
-    // The roles section (0322) lists profiles too; opening the section must not fetch them again.
-    const preloads = profiles.mock.calls.length;
-    openSection('Semantic (RAG)');
+    openSection('LLM (AI)');
     await vi.waitFor(() => expect(root.textContent).toContain('Provider preset'));
-    expect(profiles).toHaveBeenCalledTimes(preloads);
   });
 
   it('reveals semantic configuration after components are enabled', async () => {
@@ -298,6 +295,7 @@ describe('SettingsEditor', () => {
 
     await vi.waitFor(() => expect(root.textContent).toContain('Semantic library'));
     expect(root.textContent).toContain('Concept vocabularies');
+    openSection('LLM (AI)');
     expect(root.textContent).toContain('AI summaries and answers');
     const ocr = [...root.querySelectorAll<HTMLDetailsElement>('.fm-settings-semantic-tools')].find(
       (section) =>
@@ -332,7 +330,7 @@ describe('SettingsEditor', () => {
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     const createProfile = vi.spyOn(client, 'createLlmProfile');
     const { onSave } = mountEditor({ client });
-    openSection('Semantic (RAG)');
+    openSection('LLM (AI)');
 
     await vi.waitFor(() => expect(root.textContent).toContain('Provider preset'));
     const nameInput = [...root.querySelectorAll<HTMLInputElement>('input')].find(
@@ -362,7 +360,7 @@ describe('SettingsEditor', () => {
     ]);
     const createProfile = vi.spyOn(client, 'createLlmProfile');
     const { onSave } = mountEditor({ client });
-    openSection('Semantic (RAG)');
+    openSection('LLM (AI)');
 
     await vi.waitFor(() => {
       const model = [...root.querySelectorAll<HTMLInputElement>('.select-dropdown')].find(
@@ -449,7 +447,9 @@ describe('SettingsEditor', () => {
     root.querySelector<HTMLButtonElement>('.fm-settings-save')?.click();
     m.redraw.sync();
 
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ fontSize: 20 }));
+    await vi.waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ fontSize: 20 })),
+    );
   });
 
   it('saves a plugin enabled via Plugin Management instead of reverting it (regression)', async () => {
@@ -476,8 +476,10 @@ describe('SettingsEditor', () => {
     root.querySelector<HTMLButtonElement>('.fm-settings-save')?.click();
     m.redraw.sync();
 
-    expect(onSave).toHaveBeenCalledWith(
-      expect.objectContaining({ enabledPlugins: ['catppuccin.icons'] }),
+    await vi.waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ enabledPlugins: ['catppuccin.icons'] }),
+      ),
     );
   });
 

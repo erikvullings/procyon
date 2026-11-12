@@ -106,7 +106,8 @@ pub enum LlmApiCapability {
     ModelDiscovery,
 }
 
-/// Network locality visible wherever a profile is selected.
+/// Network locality visible wherever a profile is selected. `Loopback` is the local class: the
+/// loopback interface or a private LAN address. Everything else, including host names, is `Cloud`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum EndpointLocality {
@@ -223,12 +224,11 @@ impl LlmHostPolicy {
     }
 
     fn permits(&self, endpoint: &NormalizedEndpoint) -> bool {
-        match endpoint.locality {
-            EndpointLocality::Loopback => self.allow_loopback,
-            EndpointLocality::Cloud => {
-                self.allow_all_cloud_hosts || self.allowed_cloud_hosts.contains(&endpoint.host)
-            }
+        // Private LAN endpoints are local for consent but stay under the administrator's host list.
+        if endpoint.loopback {
+            return self.allow_loopback;
         }
+        self.allow_all_cloud_hosts || self.allowed_cloud_hosts.contains(&endpoint.host)
     }
 }
 
@@ -287,6 +287,8 @@ struct NormalizedEndpoint {
     base_url: String,
     host: String,
     locality: EndpointLocality,
+    /// True only for the loopback interface; private LAN endpoints are local but not loopback.
+    loopback: bool,
 }
 
 #[derive(Clone)]
@@ -1886,13 +1888,24 @@ fn normalize_endpoint(value: &str) -> Result<NormalizedEndpoint, LlmProfileError
     }
 
     let host = url.host().ok_or(LlmProfileError::InvalidConfiguration)?;
-    let locality = match host {
-        Host::Domain(domain) if domain.eq_ignore_ascii_case("localhost") => {
-            EndpointLocality::Loopback
+    let loopback = match host {
+        Host::Domain(domain) => domain.eq_ignore_ascii_case("localhost"),
+        Host::Ipv4(address) => address.is_loopback(),
+        Host::Ipv6(address) => address.is_loopback(),
+    };
+    let private_lan = match host {
+        Host::Ipv4(address) => address.is_private() || address.is_link_local(),
+        Host::Ipv6(address) => {
+            let first = address.segments()[0];
+            // Unique-local fc00::/7 and link-local fe80::/10.
+            (first & 0xfe00) == 0xfc00 || (first & 0xffc0) == 0xfe80
         }
-        Host::Ipv4(address) if address.is_loopback() => EndpointLocality::Loopback,
-        Host::Ipv6(address) if address.is_loopback() => EndpointLocality::Loopback,
-        _ => EndpointLocality::Cloud,
+        Host::Domain(_) => false,
+    };
+    let locality = if loopback || private_lan {
+        EndpointLocality::Loopback
+    } else {
+        EndpointLocality::Cloud
     };
     let host = url
         .host_str()
@@ -1904,6 +1917,7 @@ fn normalize_endpoint(value: &str) -> Result<NormalizedEndpoint, LlmProfileError
         base_url: url.to_string().trim_end_matches('/').to_owned(),
         host,
         locality,
+        loopback,
     })
 }
 
@@ -1911,6 +1925,11 @@ pub(crate) fn normalize_endpoint_locality(
     value: &str,
 ) -> Result<EndpointLocality, LlmProfileError> {
     normalize_endpoint(value).map(|endpoint| endpoint.locality)
+}
+
+/// Classifies an endpoint URL for the editor, so the UI never re-implements the rule.
+pub fn classify_endpoint(value: &str) -> Result<EndpointLocality, LlmProfileError> {
+    normalize_endpoint_locality(value)
 }
 
 fn chat_completions_url(
@@ -3189,6 +3208,49 @@ mod tests {
             service.resolve_role(LlmRole::Chat).unwrap().profile.id,
             profile.id
         );
+    }
+
+    #[test]
+    fn endpoint_classification_is_local_for_loopback_and_private_lan_only() {
+        for url in [
+            "http://localhost:11434",
+            "http://127.0.0.1:1234",
+            "http://[::1]:8000",
+            "http://192.168.1.20:8000",
+            "http://10.0.0.5",
+            "http://172.20.1.1",
+            "http://169.254.10.1",
+            "http://[fd00::1]:8000",
+            "http://[fe80::1]:8000",
+        ] {
+            assert_eq!(
+                classify_endpoint(url),
+                Ok(EndpointLocality::Loopback),
+                "{url}"
+            );
+        }
+        for url in [
+            "https://api.example.test",
+            "http://printer.local",
+            "http://172.32.0.1",
+            "https://8.8.8.8",
+            "http://[2001:db8::1]",
+        ] {
+            assert_eq!(classify_endpoint(url), Ok(EndpointLocality::Cloud), "{url}");
+        }
+        assert!(classify_endpoint("not a url").is_err());
+    }
+
+    #[test]
+    fn server_policy_keeps_private_lan_under_the_host_allow_list() {
+        let policy = LlmHostPolicy::server(["192.168.1.20".to_owned()]);
+        let lan = normalize_endpoint("http://192.168.1.20:8000").unwrap();
+        let other_lan = normalize_endpoint("http://192.168.1.21:8000").unwrap();
+        let loopback = normalize_endpoint("http://127.0.0.1:8000").unwrap();
+
+        assert!(policy.permits(&lan));
+        assert!(!policy.permits(&other_lan));
+        assert!(!policy.permits(&loopback));
     }
 
     #[test]

@@ -339,6 +339,7 @@ export const pt = {
     filesAndOperations: 'Ficheiros e operações',
     rememberFolderViews: 'Memorizar a vista (ordenação, colunas, modo) de cada pasta',
     semantic: 'Semântica (RAG)',
+    llm: 'LLM (IA)',
     settingsSections: 'Secções das definições',
     semanticEnableHint:
       'Instale e ative os componentes semânticos antes de configurar bibliotecas, vocabulários e perfis de geração.',
@@ -1816,6 +1817,7 @@ export const pt = {
     unreachable: 'Não foi possível contactar o serviço de IA do perfil «{name}».',
   },
   llmRoles: {
+    advanced: 'Usar outros endpoints ou modelos por funcionalidade',
     endpoint: 'Ponto final',
     title: 'Funções',
     intro:

@@ -38,6 +38,7 @@ export const ENGLISH_IDENTICAL_ALLOWLIST: Readonly<Record<string, Allowlisted>> 
   // "Chat" is the same word in these languages.
   'chat.title': ['de', 'es', 'fr', 'it', 'nl', 'pt'],
   'chat.assistant': ['fr'],
+  'settings.llm': ['nl', 'pl'],
   'semanticComponents.gemmaQualifiedName': 'all',
   'semanticComponents.kindWorker': 'all',
   'semanticLibrary.mebibytes': ['nl', 'de', 'es', 'it', 'pt', 'pl'],

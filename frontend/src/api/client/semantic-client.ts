@@ -47,6 +47,7 @@ import type {
   KnowledgeSearchResult,
   KnowledgeSourceLocation,
   ListKnowledgeRootsRequest,
+  LlmEndpointLocality,
   LlmModelLimits,
   LlmProfile,
   LlmProfileExport,
@@ -115,6 +116,8 @@ export interface SemanticClient {
   setLlmRole(role: LlmRole, request: SaveLlmRoleRequest, signal?: AbortSignal): Promise<LlmRoles>;
   clearLlmRole(role: LlmRole, signal?: AbortSignal): Promise<LlmRoles>;
   listLlmRoles(signal?: AbortSignal): Promise<LlmRoles>;
+  /** Classifies an endpoint URL with the backend's rule; the editor never re-derives it. */
+  classifyLlmEndpoint(baseUrl: string, signal?: AbortSignal): Promise<LlmEndpointLocality>;
   /** Records consent for the profile's current cloud host, from the endpoint editor. */
   grantLlmProfileConsent(profileId: string, signal?: AbortSignal): Promise<LlmProfile>;
   activateLlmProfile(

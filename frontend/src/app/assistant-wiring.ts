@@ -8,7 +8,8 @@ import {
 } from '../features/assistant/assistant-tab-state';
 import { dispatchWorkspaceCommand } from '../features/workspace/dispatch-workspace-command';
 import { t } from '../i18n';
-import type { LlmProfile, PaneId, WorkspaceProjection } from '../models';
+import type { LlmProfile, LlmRoles, PaneId, WorkspaceProjection } from '../models';
+import { preferredProfile } from '../models/llm-roles';
 import { tabKey } from './shell-helpers';
 import type { ShellState } from './shell-state';
 
@@ -44,6 +45,13 @@ export function createAssistantWiring(shellState: ShellState, core: AssistantCor
       toast({ html: t('assistant', 'noProfiles') });
       return;
     }
+    // Start on the chat role's endpoint when it is still saved (0322); otherwise the first profile.
+    let roles: LlmRoles = { chat: null, embeddings: null };
+    try {
+      roles = await shellState.client.listLlmRoles();
+    } catch {
+      // The first saved profile is used when the roles cannot be read.
+    }
     const fileName = editor.state.entry.name;
     shellState.assistantOpening = true;
     try {
@@ -68,7 +76,7 @@ export function createAssistantWiring(shellState: ShellState, core: AssistantCor
             sourcePaneId,
             fileName,
             profiles,
-            profileId: profiles[0]?.id ?? '',
+            profileId: preferredProfile(profiles, roles.chat)?.id ?? '',
             messages: [],
           });
           m.redraw();

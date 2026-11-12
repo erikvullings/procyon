@@ -9,6 +9,8 @@ import { errorMessage } from './llm-profile-management';
 
 export interface LlmRoleManagementAttrs {
   readonly client: SemanticClient;
+  /** Changes whenever an endpoint changes; a new value reloads the bindings and profiles. */
+  readonly revision: number;
 }
 
 /** The editable binding of one role; `profileId` empty means unassigned. */
@@ -37,8 +39,10 @@ function draftFrom(assignment: LlmRoleAssignment | null | undefined): RoleDraft 
 }
 
 /**
- * Roles (task 0322): which endpoint and model handle chat and semantic embeddings. Cloud use for
- * embeddings is a separate, explicit flag; consent for a cloud host is given on its endpoint.
+ * Roles (task 0322): which endpoint and model handle chat and semantic embeddings. The simple view
+ * binds chat only; saving it also binds embeddings to the same local endpoint and model. The
+ * advanced view exposes embeddings separately. Cloud use for embeddings is an explicit flag, and
+ * consent for a cloud host is given on its endpoint.
  */
 export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () => {
   let profiles: LlmProfile[] = [];
@@ -49,6 +53,8 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
   };
   let loading = true;
   let busy = false;
+  let advanced = false;
+  let loadedRevision: number | undefined;
   let message: string | undefined;
   let error: string | undefined;
 
@@ -152,11 +158,20 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
             disabled: busy || draft.profileId === '' || draft.model.trim() === '',
             onclick: () =>
               void run(async () => {
+                const model = draft.model.trim();
                 roles = await attrs.client.setLlmRole(role, {
                   profileId: draft.profileId,
-                  model: draft.model.trim(),
+                  model,
                   allowCloud: draft.allowCloud,
                 });
+                // The simple view keeps embeddings on the chat endpoint while that endpoint is local.
+                if (role === 'chat' && !advanced && selected?.locality === 'loopback') {
+                  roles = await attrs.client.setLlmRole('embeddings', {
+                    profileId: draft.profileId,
+                    model,
+                    allowCloud: false,
+                  });
+                }
                 drafts = { ...drafts, [role]: draftFrom(roles[role]) };
               }),
           },
@@ -181,14 +196,29 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
 
   return {
     oninit: ({ attrs }) => {
+      loadedRevision = attrs.revision;
+      void load(attrs.client);
+    },
+    onupdate: ({ attrs }) => {
+      if (attrs.revision === loadedRevision) return;
+      loadedRevision = attrs.revision;
       void load(attrs.client);
     },
     view: ({ attrs }) => {
       if (loading) return m('p', t('llmProfiles', 'loading'));
+      const visibleRoles = advanced ? LLM_ROLES : LLM_ROLES.filter((role) => role === 'chat');
       return m('.fm-llm-roles', { 'aria-label': t('llmRoles', 'title') }, [
         m('h4', t('llmRoles', 'title')),
         m('p', t('llmRoles', 'intro')),
-        ...LLM_ROLES.map((role) => roleBlock(attrs, role)),
+        m(Switch, {
+          label: t('llmRoles', 'advanced'),
+          checked: advanced,
+          disabled: busy,
+          onchange: (checked: boolean) => {
+            advanced = checked;
+          },
+        }),
+        ...visibleRoles.map((role) => roleBlock(attrs, role)),
         error ? m('p.fm-llm-role-error', { role: 'alert' }, error) : undefined,
         message ? m('p.fm-llm-role-message', { role: 'status' }, message) : undefined,
       ]);

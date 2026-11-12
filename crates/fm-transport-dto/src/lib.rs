@@ -188,11 +188,12 @@ pub use link_doctor::{
     StartLinkDoctorScanResponseDto,
 };
 pub use llm_profile::{
-    ActivateLlmProfileRequestDto, DeleteLlmProfileRequestDto, LlmAdvancedSettingsDto,
-    LlmApiCapabilityDto, LlmCredentialInputDto, LlmEndpointLocalityDto, LlmModelLimitsDto,
-    LlmPresetDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto,
-    LlmRoleAssignmentDto, LlmRoleDto, LlmRolesDto, LlmTestErrorCategoryDto, LlmTlsPolicyDto,
-    OrphanLlmCredentialDispositionDto, SaveLlmProfileRequestDto, SaveLlmRoleRequestDto,
+    ActivateLlmProfileRequestDto, ClassifyLlmEndpointRequestDto, DeleteLlmProfileRequestDto,
+    LlmAdvancedSettingsDto, LlmApiCapabilityDto, LlmCredentialInputDto, LlmEndpointLocalityDto,
+    LlmModelLimitsDto, LlmPresetDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto,
+    LlmProfileTestResultDto, LlmRoleAssignmentDto, LlmRoleDto, LlmRolesDto,
+    LlmTestErrorCategoryDto, LlmTlsPolicyDto, OrphanLlmCredentialDispositionDto,
+    SaveLlmProfileRequestDto, SaveLlmRoleRequestDto,
 };
 pub use location::LocationDto;
 pub use metadata_tokens::{

@@ -35,10 +35,10 @@ use fm_transport_dto::{
     FinderTagsDto, GenerateRagAnswerRequestDto, GenerateRagAnswerResponseDto,
     GenerateSyncPlanRequestDto, GetFileGitHistoryRequestDto, GetFileGitHistoryResponseDto,
     InterruptedTransfersDto, InvokeActionRequestDto, LinkOptionsDto, LinkOptionsRequestDto,
-    ListDirectoryRequest, LlmModelLimitsDto, LlmProfileDto, LlmProfileExportDto,
-    LlmProfilePresetDto, LlmProfileTestResultDto, LlmRoleDto, LlmRolesDto, NavigateRequest,
-    OperationDto, PluginDescriptorDto, PluginLogEntryDto, PreviewRagRequestDto, RagPreviewDto,
-    RagScopeDto, RagScopeKindDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
+    ListDirectoryRequest, LlmEndpointLocalityDto, LlmModelLimitsDto, LlmProfileDto,
+    LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto, LlmRoleDto, LlmRolesDto,
+    NavigateRequest, OperationDto, PluginDescriptorDto, PluginLogEntryDto, PreviewRagRequestDto,
+    RagPreviewDto, RagScopeDto, RagScopeKindDto, ReadFileRangeRequestDto, ReadFileRangeResponseDto,
     RemoveApplicationDockIconRequestDto, RemoveApplicationDockIconResponseDto,
     RenderChecksumFileRequestDto, ResolveOperationConflictRequestDto, ResolveRagCitationRequestDto,
     ResolvedRagCitationDto, RuntimeCapabilitiesDto, RuntimeKindDto, SaveLlmProfileRequestDto,
@@ -80,9 +80,9 @@ use crate::llm_profiles::{
     LlmHostPolicy, LlmImageAttachment, LlmProfileService, ReqwestLlmProbeTransport,
 };
 use crate::llm_profiles::{
-    disposition_from_dto, draft_from_dto, model_limits_to_dto, preset_to_profile_dto,
-    profile_to_dto, profile_to_export_dto, role_from_dto, role_input_from_dto, roles_to_dto,
-    test_result_to_dto,
+    disposition_from_dto, draft_from_dto, locality_to_dto, model_limits_to_dto,
+    preset_to_profile_dto, profile_to_dto, profile_to_export_dto, role_from_dto,
+    role_input_from_dto, roles_to_dto, test_result_to_dto,
 };
 use crate::operation_history::{ApplicationOperationObserver, OperationHistory};
 use crate::operation_planner::OperationPlanner;
@@ -4860,6 +4860,16 @@ impl FileManagerService {
     /// Exports only non-secret reusable configuration.
     pub fn export_llm_profile(&self, id: Uuid) -> Result<LlmProfileExportDto, ApplicationError> {
         Ok(profile_to_export_dto(self.llm_profiles.export_profile(id)?))
+    }
+
+    /// Classifies an endpoint URL with the rule that governs consent, so the editor never repeats it.
+    pub fn classify_llm_endpoint(
+        &self,
+        base_url: &str,
+    ) -> Result<LlmEndpointLocalityDto, ApplicationError> {
+        Ok(locality_to_dto(crate::llm_profiles::classify_endpoint(
+            base_url,
+        )?))
     }
 
     /// Lists the role bindings (chat, embeddings).

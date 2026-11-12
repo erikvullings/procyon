@@ -64,6 +64,7 @@ export type SettingsSection =
   | 'keybindings'
   | 'plugins'
   | 'semantic'
+  | 'llm'
   | 'updates'
   | 'diagnostics';
 
@@ -134,6 +135,11 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
   let semanticStatus: SemanticComponentStatus | undefined;
   let semanticOcrEnabled: boolean | undefined;
   let saveLlmProfile: (() => Promise<boolean>) | undefined;
+  // Bumped when endpoints change, so the roles section reloads its endpoint status (0322).
+  let llmRevision = 0;
+  const notifyLlmChanged = (): void => {
+    llmRevision += 1;
+  };
 
   function resetDraft(current: SettingsEditorAttrs): void {
     draft = cloneSettings(current.settings);
@@ -245,6 +251,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
         { id: 'keybindings', label: t('settings', 'keybindings') },
         { id: 'plugins', label: t('settings', 'plugins') },
         { id: 'semantic', label: t('settings', 'semantic') },
+        { id: 'llm', label: t('settings', 'llm') },
         { id: 'updates', label: t('settings', 'updates') },
         { id: 'diagnostics', label: t('shell', 'diagnostics') },
       ];
@@ -793,21 +800,23 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                           }),
                         ),
                       ]),
-                      m('details.fm-settings-semantic-tools', [
-                        m('summary', t('llmProfiles', 'title')),
-                        m(
-                          '.row',
-                          m(LlmProfileManagement, {
-                            client: current.client,
-                            onSaveHandlerChange: (handler) => {
-                              saveLlmProfile = handler;
-                            },
-                          }),
-                        ),
-                        m('.row', m(LlmRoleManagement, { client: current.client })),
-                      ]),
                     ]
                   : m('p.fm-settings-semantic-gate', t('settings', 'semanticEnableHint')),
+              ]),
+
+              m('.fm-settings-section-content', { hidden: activeSection !== 'llm' }, [
+                m('.row', m('h4.fm-settings-section-heading.col.s12', t('llmProfiles', 'title'))),
+                m(
+                  '.row',
+                  m(LlmProfileManagement, {
+                    client: current.client,
+                    onSaveHandlerChange: (handler) => {
+                      saveLlmProfile = handler;
+                    },
+                    onChanged: notifyLlmChanged,
+                  }),
+                ),
+                m('.row', m(LlmRoleManagement, { client: current.client, revision: llmRevision })),
               ]),
 
               activeSection === 'plugins'

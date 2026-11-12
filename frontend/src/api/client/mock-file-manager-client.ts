@@ -110,6 +110,7 @@ import type {
   LinkOptionsRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequest,
+  LlmEndpointLocality,
   LlmModelLimits,
   LlmProfile,
   LlmProfileExport,
@@ -1193,6 +1194,9 @@ export class MockFileManagerClient implements FileManagerClient {
 
   listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {
     return this.semanticClient.listLlmProfiles(signal);
+  }
+  classifyLlmEndpoint(baseUrl: string, signal?: AbortSignal): Promise<LlmEndpointLocality> {
+    return this.semanticClient.classifyLlmEndpoint(baseUrl, signal);
   }
   listLlmRoles(signal?: AbortSignal): Promise<LlmRoles> {
     return this.semanticClient.listLlmRoles(signal);

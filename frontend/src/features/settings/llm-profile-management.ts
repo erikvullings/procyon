@@ -5,17 +5,19 @@ import type { SemanticClient } from '../../api/client/semantic-client.ts';
 import { getLocale, t } from '../../i18n';
 import type {
   LlmApiCapability,
+  LlmEndpointLocality,
   LlmModelLimits,
   LlmProfile,
   LlmProfilePreset,
   OrphanLlmCredentialDisposition,
   SaveLlmProfileRequest,
 } from '../../models';
-import { endpointIsLocal } from '../../models/llm-roles';
 
 export interface LlmProfileManagementAttrs {
   readonly client: SemanticClient;
   readonly onSaveHandlerChange?: (handler: (() => Promise<boolean>) | undefined) => void;
+  /** Called after an endpoint, its consent, or the active endpoint changes (0322). */
+  readonly onChanged?: () => void;
 }
 
 interface EditorState {
@@ -181,6 +183,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
   }
 
   function selectProfile(profile: LlmProfile): void {
+    consentPending = false;
     selectedId = profile.id;
     editor = { profileId: profile.id, request: requestFromProfile(profile), apiKey: '' };
     dirty = false;
@@ -323,17 +326,64 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     }
   }
 
-  async function save(client: SemanticClient): Promise<boolean> {
-    if (editor === undefined || !dirty) return true;
-    const payload: SaveLlmProfileRequest = {
-      ...editor.request,
-      credential: editor.apiKey.trim() === '' ? null : { apiKey: editor.apiKey },
-    };
-    const stored = profiles.find((profile) => profile.id === editor?.profileId);
+  /** A saved profile whose consent grant failed: saving again must confirm consent first. */
+  let consentPending = false;
+  /** Backend classification per URL, cached: the editor never re-derives the local/cloud rule. */
+  const localities = new Map<string, LlmEndpointLocality>();
+  const classifying = new Set<string>();
+
+  async function classifyNow(
+    client: SemanticClient,
+    baseUrl: string,
+  ): Promise<LlmEndpointLocality> {
+    const known = localities.get(baseUrl);
+    if (known !== undefined) return known;
+    try {
+      const locality = await client.classifyLlmEndpoint(baseUrl);
+      localities.set(baseUrl, locality);
+      return locality;
+    } catch {
+      // An unclassifiable URL is treated as cloud, so consent is asked before anything is saved.
+      return 'cloud';
+    }
+  }
+
+  /** The cached locality, or undefined while the backend is still answering. */
+  function localityOf(client: SemanticClient, baseUrl: string): LlmEndpointLocality | undefined {
+    const known = localities.get(baseUrl);
+    if (known !== undefined) return known;
+    if (!classifying.has(baseUrl)) {
+      classifying.add(baseUrl);
+      void classifyNow(client, baseUrl).then(() => {
+        classifying.delete(baseUrl);
+        m.redraw();
+      });
+    }
+    return undefined;
+  }
+
+  /** Records a saved profile so a retry updates it instead of creating a second one (0322). */
+  function recordSaved(saved: LlmProfile): void {
+    const index = profiles.findIndex((profile) => profile.id === saved.id);
+    if (index < 0) profiles = [...profiles, saved];
+    else profiles = profiles.map((profile) => (profile.id === saved.id ? saved : profile));
+    selectProfile(saved);
+  }
+
+  async function save(attrs: LlmProfileManagementAttrs): Promise<boolean> {
+    const client = attrs.client;
+    const current = editor;
+    if (current === undefined) return true;
+    const stored = profiles.find((profile) => profile.id === current.profileId);
+    const locality = await classifyNow(client, current.request.baseUrl);
     // Consent is given in this editor when a cloud host is saved, and again when it changes (0322).
     const needsConsent =
-      !endpointIsLocal(payload.baseUrl) &&
-      (stored === undefined || stored.consentedHost == null || stored.baseUrl !== payload.baseUrl);
+      locality === 'cloud' &&
+      (stored === undefined ||
+        stored.consentedHost == null ||
+        stored.baseUrl !== current.request.baseUrl);
+    // Nothing changed and no grant is pending: nothing to save.
+    if (!dirty && !consentPending) return true;
     if (needsConsent && !consent) {
       error = t('llmProfiles', 'consentRequired');
       return false;
@@ -342,16 +392,31 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     error = undefined;
     message = undefined;
     try {
-      let saved =
-        editor?.profileId === undefined
-          ? await client.createLlmProfile(payload)
-          : await client.updateLlmProfile(editor.profileId, payload);
-      if (needsConsent) saved = await client.grantLlmProfileConsent(saved.id);
-      const index = profiles.findIndex((profile) => profile.id === saved.id);
-      if (index < 0) profiles = [...profiles, saved];
-      else profiles = profiles.map((profile) => (profile.id === saved.id ? saved : profile));
-      selectProfile(saved);
+      let saved: LlmProfile | undefined = stored;
+      if (dirty) {
+        const payload: SaveLlmProfileRequest = {
+          ...current.request,
+          credential: current.apiKey.trim() === '' ? null : { apiKey: current.apiKey },
+        };
+        saved =
+          current.profileId === undefined
+            ? await client.createLlmProfile(payload)
+            : await client.updateLlmProfile(current.profileId, payload);
+        recordSaved(saved);
+      }
+      if (saved === undefined) return true;
+      if (needsConsent) {
+        try {
+          saved = await client.grantLlmProfileConsent(saved.id);
+        } catch (reason) {
+          consentPending = true;
+          throw reason;
+        }
+        recordSaved(saved);
+      }
+      consentPending = false;
       discoverModels(client, saved);
+      attrs.onChanged?.();
       message = t('llmProfiles', 'saved');
       return true;
     } catch (reason) {
@@ -381,7 +446,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
 
   return {
     oninit: ({ attrs }) => {
-      attrs.onSaveHandlerChange?.(() => save(attrs.client));
+      attrs.onSaveHandlerChange?.(() => save(attrs));
       void load(attrs.client);
     },
     onremove: ({ attrs }) => attrs.onSaveHandlerChange?.(undefined),
@@ -391,7 +456,11 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
       const active = profiles.find((profile) => profile.id === selectedId);
       const activeIsDefault = active !== undefined && profiles[0]?.id === active.id;
       const request = editor.request;
-      const cloudDraft = !endpointIsLocal(request.baseUrl);
+      const locality =
+        localityOf(attrs.client, request.baseUrl) ??
+        (active?.baseUrl === request.baseUrl ? active.locality : undefined);
+      // Until the backend answers, the consent block stays visible: the safe default.
+      const cloudDraft = locality !== 'loopback';
       const hostConsented =
         active !== undefined && active.baseUrl === request.baseUrl && active.consentedHost != null;
       const customHeaders = request.advanced.customHeaders;
@@ -779,6 +848,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                         ...profiles.filter((profile) => profile.id !== activated.id),
                       ];
                       selectProfile(activated);
+                      attrs.onChanged?.();
                       message = t('llmProfiles', 'activated');
                     }),
                 },
@@ -840,6 +910,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                         credentialDisposition: deleteDisposition,
                       });
                       profiles = profiles.filter((profile) => profile.id !== active.id);
+                      attrs.onChanged?.();
                       const preset = presets[0];
                       selectedId = undefined;
                       if (preset !== undefined) {

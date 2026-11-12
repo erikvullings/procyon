@@ -344,6 +344,7 @@ export const de = {
     filesAndOperations: 'Dateien und Vorgänge',
     rememberFolderViews: 'Ansicht (Sortierung, Spalten, Modus) jedes Ordners merken',
     semantic: 'Semantik (RAG)',
+    llm: 'LLM (KI)',
     settingsSections: 'Einstellungsbereiche',
     semanticEnableHint:
       'Installieren und aktivieren Sie die semantischen Komponenten, bevor Sie Bibliotheken, Vokabulare und Generierungsprofile konfigurieren.',
@@ -1833,6 +1834,7 @@ export const de = {
     unreachable: 'Der KI-Dienst des Profils „{name}“ ist nicht erreichbar.',
   },
   llmRoles: {
+    advanced: 'Verschiedene Endpunkte oder Modelle pro Funktion verwenden',
     endpoint: 'Endpunkt',
     title: 'Rollen',
     intro:

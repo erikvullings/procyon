@@ -1,6 +1,6 @@
 # 0322 LLM endpoints and roles in Settings, consent at configuration
 
-Status: in progress (roles, migration, consent and cloud-embedding gate done; Settings relocation and three-scenario UI open)
+Status: done (embeddings consumer moved to 0328)
 Priority: medium
 Subsystem: backend, frontend, settings
 Depends on: 0184, 0243
@@ -77,4 +77,19 @@ all need an LLM.
   grant that fails after a successful save leaves the profile saved without consent; no HTTP route
   tests for `/api/v1/llm-roles`; the frontend `endpointIsLocal` duplicates the backend locality rules
   (the draft should carry the backend's classification); the roles section refetches profiles.
+- 2026-11-12 claude: Follow-up pass. The roles section reloads when an endpoint changes (settings
+  revision counter), so status is no longer stale. "LLM (AI)" is its own Settings section, mounted
+  always like Semantic so its save handler survives section changes. Roles show a simple view (chat
+  only; saving also binds embeddings to the same endpoint and model when it is local) with an
+  advanced switch that reveals the embeddings role. The file assistant and the RAG answer dialog start
+  on the chat role's endpoint (`preferredProfile`). HTTP route tests added
+  (`apps/fm-server/tests/llm_role_routes.rs`). Still open: embeddings consumer (deferred to a later
+  task, per the owner); index metadata and reindex on embeddings-model change; the endpoint-local
+  classification is duplicated in TypeScript.
+- 2026-11-12 claude: Closed. Endpoint classification now comes from the backend
+  (`POST /api/v1/llm-endpoints/classify`) and private LAN counts as local, as the spec requires.
+  Server policy still keys host allow-listing on true loopback, so LAN endpoints remain under the
+  administrator's host list. The consent save is retry-safe: a saved profile is recorded before its
+  consent grant, and a failed grant leaves consent pending until it is granted. The embeddings
+  consumer and reindex rule moved to 0328.
 
