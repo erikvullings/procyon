@@ -80,6 +80,32 @@ function withCapability(
   return [...next];
 }
 
+/** The two images contracts an endpoint may answer; exactly one describes it. */
+export type ImagesApiStyle = 'imageGenerations' | 'dashscopeTasks';
+
+const IMAGES_API_STYLES: readonly ImagesApiStyle[] = ['imageGenerations', 'dashscopeTasks'];
+
+/**
+ * Records which images contract an endpoint answers. An endpoint speaks one of them, so the other
+ * is dropped; an endpoint saved before either was recorded uses the OpenAI-style one.
+ */
+export function withImagesApi(
+  capabilities: readonly LlmApiCapability[],
+  style: ImagesApiStyle,
+): LlmApiCapability[] {
+  return [
+    ...capabilities.filter(
+      (capability) => !IMAGES_API_STYLES.includes(capability as ImagesApiStyle),
+    ),
+    style,
+  ];
+}
+
+/** Which images contract a draft advertises, defaulting to the one every endpoint today answers. */
+export function imagesApiOf(capabilities: readonly LlmApiCapability[]): ImagesApiStyle {
+  return capabilities.includes('dashscopeTasks') ? 'dashscopeTasks' : 'imageGenerations';
+}
+
 const TOKEN_PRESETS = [
   [1_024, '1k'],
   [2_048, '2k'],
@@ -766,6 +792,20 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                     capabilities: withCapability(request.capabilities, 'responses', checked),
                   }),
               }),
+              m(Select<string>, {
+                label: t('llmProfiles', 'imagesApi'),
+                options: [
+                  { id: 'imageGenerations', label: t('llmProfiles', 'imagesApiOpenAi') },
+                  { id: 'dashscopeTasks', label: t('llmProfiles', 'imagesApiDashscope') },
+                ],
+                checkedId: imagesApiOf(request.capabilities),
+                onchange: ([value]) =>
+                  value !== undefined &&
+                  updateRequest({
+                    capabilities: withImagesApi(request.capabilities, value as ImagesApiStyle),
+                  }),
+              }),
+              m('p', t('llmProfiles', 'imagesApiHint')),
               m(Switch, {
                 label: t('llmProfiles', 'redactFilenames'),
                 checked: request.redactFilenames,

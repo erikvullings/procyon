@@ -1943,8 +1943,19 @@ mod tests {
             .expect("profile presets command must succeed")
             .deserialize::<Vec<fm_transport_dto::LlmProfilePresetDto>>()
             .expect("presets response must deserialize");
-        assert_eq!(presets.len(), 8);
+        assert_eq!(presets.len(), 9);
         assert_eq!(presets[5].preset, fm_transport_dto::LlmPresetDto::MlxServe);
+        let studio = presets
+            .iter()
+            .find(|preset| preset.preset == fm_transport_dto::LlmPresetDto::ModelStudio)
+            .expect("the desktop host offers Model Studio too, as the server does");
+        assert_eq!(studio.base_url, "https://dashscope.aliyuncs.com/api/v1");
+        assert!(
+            studio
+                .capabilities
+                .contains(&fm_transport_dto::LlmApiCapabilityDto::DashscopeTasks),
+            "its images API is the asynchronous task API"
+        );
 
         let created = invoke!(
             "create_llm_profile",

@@ -3473,7 +3473,7 @@ impl FileManagerService {
             .llm_profiles
             .image_request(crate::llm_profiles::LlmRole::Image)
             .await?;
-        let provider = crate::image_generation_transport::OpenAiImagesTransport::new(endpoint);
+        let provider = crate::image_generation_transport::ImageEndpointTransport::new(endpoint);
         Ok(self.image_generation.generate(&provider, request).await?)
     }
 

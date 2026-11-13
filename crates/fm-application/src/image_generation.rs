@@ -38,7 +38,7 @@ pub const MAX_PIXELS: u64 = 2_097_152;
 /// Largest seed the person may name.
 pub const MAX_SEED: u64 = 4_294_967_295;
 /// Largest single image the provider may return.
-const MAX_IMAGE_BYTES: usize = 24 * 1024 * 1024;
+pub(crate) const MAX_IMAGE_BYTES: usize = 24 * 1024 * 1024;
 /// Largest batch the provider may return.
 const MAX_BATCH_BYTES: usize = 64 * 1024 * 1024;
 /// Longest edge kept for a preview; larger images are downscaled for the preview only.

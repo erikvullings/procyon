@@ -10,4 +10,6 @@ export const LlmApiCapabilityDto = {
   chatCompletions: 'chatCompletions',
   responses: 'responses',
   modelDiscovery: 'modelDiscovery',
+  imageGenerations: 'imageGenerations',
+  dashscopeTasks: 'dashscopeTasks',
 } as const;

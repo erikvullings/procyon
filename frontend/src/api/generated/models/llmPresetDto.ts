@@ -15,4 +15,5 @@ export const LlmPresetDto = {
   mlxServe: 'mlxServe',
   openAiCompatible: 'openAiCompatible',
   azureOpenAi: 'azureOpenAi',
+  modelStudio: 'modelStudio',
 } as const;

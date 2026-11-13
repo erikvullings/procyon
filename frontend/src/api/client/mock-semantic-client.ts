@@ -1202,6 +1202,15 @@ export class MockSemanticClient implements SemanticClient {
           apiVersion: '2024-10-21',
           redactFilenames: true,
         },
+        {
+          ...defaults,
+          name: 'Alibaba Cloud Model Studio',
+          preset: 'modelStudio',
+          baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+          // qwen-image and the wan* models answer the async task API and no chat here.
+          capabilities: ['dashscopeTasks'],
+          redactFilenames: true,
+        },
       ];
     });
   }
@@ -1553,6 +1562,13 @@ export class MockSemanticClient implements SemanticClient {
       if (profile.locality === 'cloud' && role !== 'chat' && !request.allowCloud) {
         throw new MockClientError('invalidRequest', 'Cloud use is not allowed for this role', {
           reason: role === 'image' ? 'llmCloudImageNotAllowed' : 'llmCloudEmbeddingNotAllowed',
+        });
+      }
+      // An endpoint that only speaks an images contract cannot answer the chat role, and the
+      // backend refuses the binding rather than failing at the provider (0325).
+      if (role === 'chat' && !profile.capabilities.includes('chatCompletions')) {
+        throw new MockClientError('invalidRequest', 'This endpoint cannot serve the chat role', {
+          reason: 'llmProfileInvalid',
         });
       }
       this.ctx.llmRoles = {

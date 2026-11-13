@@ -19,6 +19,8 @@ pub enum LlmPresetDto {
     MlxServe,
     OpenAiCompatible,
     AzureOpenAi,
+    /// Alibaba Cloud Model Studio, whose `qwen-image` and `wan*` models answer the async task API.
+    ModelStudio,
 }
 
 #[allow(missing_docs)]
@@ -28,6 +30,10 @@ pub enum LlmApiCapabilityDto {
     ChatCompletions,
     Responses,
     ModelDiscovery,
+    /// Answers `POST {base}/v1/images/generations`.
+    ImageGenerations,
+    /// Answers Model Studio's async text-to-image task API.
+    DashscopeTasks,
 }
 
 #[allow(missing_docs)]

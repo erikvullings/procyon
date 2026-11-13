@@ -72,6 +72,27 @@ describe('MockFileManagerClient image generation', () => {
     expect([...bytes.bytes.slice(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   });
 
+  it('refuses to bind an endpoint that only speaks the images API to the chat role', async () => {
+    const client = new MockFileManagerClient();
+    const profile = await client.createLlmProfile({
+      ...localProfile(),
+      name: 'Model Studio',
+      preset: 'modelStudio',
+      baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+      capabilities: ['dashscopeTasks'],
+      redactFilenames: true,
+    });
+
+    await expect(
+      client.setLlmRole('chat', { profileId: profile.id, model: 'qwen-plus', allowCloud: true }),
+    ).rejects.toMatchObject({ code: 'invalidRequest', details: { reason: 'llmProfileInvalid' } });
+
+    // The same endpoint is a fine image endpoint.
+    await expect(
+      client.setLlmRole('image', { profileId: profile.id, model: 'qwen-image', allowCloud: true }),
+    ).resolves.toMatchObject({ image: { model: 'qwen-image' } });
+  });
+
   it('asks for an image role and refuses a cloud endpoint without consent', async () => {
     const withoutRole = new MockFileManagerClient();
     await expect(withoutRole.generateImages(REQUEST)).rejects.toMatchObject({

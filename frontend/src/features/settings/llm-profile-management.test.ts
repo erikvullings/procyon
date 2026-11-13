@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MockFileManagerClient } from '../../api/client/mock-file-manager-client';
 import { setLocale } from '../../i18n';
-import { LlmProfileManagement } from './llm-profile-management';
+import { imagesApiOf, LlmProfileManagement, withImagesApi } from './llm-profile-management';
 
 let root: HTMLElement;
 
@@ -38,7 +38,50 @@ function fieldInput(label: string): HTMLInputElement | undefined {
   );
 }
 
+describe('the images API choice', () => {
+  it('records exactly one contract', () => {
+    expect(withImagesApi(['chatCompletions', 'modelDiscovery'], 'dashscopeTasks')).toEqual([
+      'chatCompletions',
+      'modelDiscovery',
+      'dashscopeTasks',
+    ]);
+    expect(withImagesApi(['chatCompletions', 'dashscopeTasks'], 'imageGenerations')).toEqual([
+      'chatCompletions',
+      'imageGenerations',
+    ]);
+  });
+
+  it('defaults an endpoint saved before the choice existed to the OpenAI-style API', () => {
+    expect(imagesApiOf(['chatCompletions', 'modelDiscovery'])).toBe('imageGenerations');
+    expect(imagesApiOf([])).toBe('imageGenerations');
+    expect(imagesApiOf(['dashscopeTasks'])).toBe('dashscopeTasks');
+  });
+});
+
 describe('LlmProfileManagement', () => {
+  it('asks which images contract the endpoint answers, in the advanced settings', async () => {
+    const client = new MockFileManagerClient();
+    await mountLoaded(client);
+    const toggle = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'Advanced settings',
+    );
+    expect(toggle, 'the editor offers advanced settings').toBeDefined();
+    toggle?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-llm-advanced-settings')).not.toBeNull());
+    m.redraw.sync();
+
+    const advanced = root.querySelector('.fm-llm-advanced-settings');
+    expect(
+      advanced?.querySelector('[aria-label="Images API"]'),
+      'a choice of images API',
+    ).toBeDefined();
+    // The choice only matters for the image role, and the editor says so rather than leaving a
+    // second API selector unexplained next to the chat ones.
+    expect(advanced?.textContent).toContain(
+      'Used when this endpoint is assigned to the Image role',
+    );
+  });
+
   it('loads provider defaults and exposes an accessible profile form', async () => {
     const client = new MockFileManagerClient();
     await mountLoaded(client);

@@ -1,7 +1,9 @@
 # 0325 Image generation pane
 
-Status: done (OpenAI-style images endpoint only; local adapters such as ComfyUI/Automatic1111 remain
-presets to add. Neither host's pane has been checked visually.)
+Status: done (two images contracts: the OpenAI-style API and Alibaba Cloud Model Studio's async task
+API behind `qwen-image`/`wan*`. Local adapters such as ComfyUI/Automatic1111 remain presets to add.
+Neither host's pane has been checked visually, and the Model Studio path has not been run against the
+live service.)
 Priority: low
 Subsystem: backend, frontend
 Depends on: 0322
@@ -39,9 +41,16 @@ must review before anything is written. It gets its own role in 0322 and its own
     2^32-1), holds finished batches for 30 minutes and at most 128 MiB, and serves preview or original
     bytes by id. Previews are downscaled to a 1024 px edge for display only; a JPEG preview stays a
     JPEG and an unsupported output format is refused.
-  - `crates/fm-application/src/image_generation_transport.rs` speaks the OpenAI-style images API
-    (`b64_json` replies), reads a bounded response, honours cancellation, and never carries the key in
-    its `Debug` text.
+  - `crates/fm-application/src/image_generation_transport.rs` speaks two contracts, picked by what the
+    endpoint's profile advertises: the OpenAI-style images API (`b64_json` replies) and Alibaba Cloud
+    Model Studio's asynchronous task API, where a submit creates a task (`X-DashScope-Async: enable`)
+    that is polled at `{base}/api/v1/tasks/{task_id}` until it hands back image URLs. Both read bounded
+    responses, honour cancellation, and never carry the key in their `Debug` text. The task reply's URLs
+    are only fetched when they stay on the endpoint's own service (same scheme, same host or a sibling
+    of its registered domain, which is how Model Studio serves results from object storage) and say
+    `image/*`; the prompt is submitted with `prompt_extend: false` and `watermark: false`, because the
+    person already reviewed the wording and the saved file is theirs. `LlmPreset::ModelStudio` offers it
+    as a preset on both hosts.
   - `LlmRole::Image` and `LlmRoles.image` in `llm_profiles.rs`: the image role resolves its own
     endpoint, model, auth header, timeout (>= 120 s) and images URL, and a cloud endpoint is refused
     unless cloud use is allowed for that role (`llmCloudImageNotAllowed`), as embeddings already are.
@@ -60,5 +69,10 @@ must review before anything is written. It gets its own role in 0322 and its own
     the no-overwrite rule so both hosts behave the same.
   - Settings > LLM (AI) now exposes the Image role in the advanced view, with the cloud permission and
     consent handled as they already are for embeddings.
+  - A profile no longer has to advertise the chat completions API to be saved - an images-only endpoint
+    is legitimate - but binding one to the chat role is refused where the person can still act on it,
+    both in `set_role` and again in `resolve_role` for bindings saved before the rule existed.
   - Tests cover request bounds, preview downscaling, save and no-overwrite, metadata embedding for PNG
-    and JPEG, cancellation, transport request shape and redaction, the role gate, and the mock host.
+    and JPEG, cancellation, transport request shape and redaction for both contracts (including the
+    poll-to-ready path, a failed task, and the refusal to fetch a URL off the endpoint's own host), the
+    role gate, the contract the capabilities select, and the mock host.

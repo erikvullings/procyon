@@ -18826,7 +18826,9 @@
         "enum": [
           "chatCompletions",
           "responses",
-          "modelDiscovery"
+          "modelDiscovery",
+          "imageGenerations",
+          "dashscopeTasks"
         ]
       },
       "LlmCredentialInputDto": {
@@ -18895,7 +18897,8 @@
           "omlx",
           "mlxServe",
           "openAiCompatible",
-          "azureOpenAi"
+          "azureOpenAi",
+          "modelStudio"
         ]
       },
       "LlmProfileDto": {

@@ -29,7 +29,7 @@ use tokio_util::sync::CancellationToken;
 use url::{Host, Url};
 use uuid::Uuid;
 
-use crate::image_generation_transport::ImageEndpointRequest;
+use crate::image_generation_transport::{ImageApiStyle, ImageEndpointRequest};
 
 const PROFILE_SCHEMA_VERSION: u32 = 5;
 const TEST_PROMPT: &str = "Reply with OK.";
@@ -52,6 +52,9 @@ pub enum LlmPreset {
     MlxServe,
     OpenAiCompatible,
     AzureOpenAi,
+    /// Alibaba Cloud Model Studio: `qwen-image` and the `wan*` image models. Its images API is an
+    /// asynchronous task API rather than the OpenAI-style one.
+    ModelStudio,
 }
 
 /// How a local OpenAI-compatible server is asked not to emit reasoning (thinking) tokens. The
@@ -106,6 +109,10 @@ pub enum LlmApiCapability {
     ChatCompletions,
     Responses,
     ModelDiscovery,
+    /// Answers `POST {base}/v1/images/generations` with base64 images in one reply.
+    ImageGenerations,
+    /// Answers Model Studio's async text-to-image task API (`qwen-image`, `wan*`).
+    DashscopeTasks,
 }
 
 /// Network locality visible wherever a profile is selected. `Loopback` is the local class: the
@@ -1030,9 +1037,23 @@ impl LlmProfileService {
                 "Azure OpenAI",
                 "https://example.openai.azure.com",
             ),
+            (
+                LlmPreset::ModelStudio,
+                "Alibaba Cloud Model Studio",
+                "https://dashscope.aliyuncs.com/api/v1",
+            ),
         ]
         .into_iter()
-        .map(|(preset, name, base_url)| preset_draft(preset, name, base_url))
+        .map(|(preset, name, base_url)| {
+            let mut draft = preset_draft(preset, name, base_url);
+            if preset == LlmPreset::ModelStudio {
+                // It is reached over the internet and answers the image task API rather than chat.
+                draft.capabilities =
+                    std::collections::BTreeSet::from([LlmApiCapability::DashscopeTasks]);
+                draft.redact_filenames = true;
+            }
+            draft
+        })
         .collect()
     }
 
@@ -1293,6 +1314,15 @@ impl LlmProfileService {
                 {
                     return Err(cloud_role_denied(role));
                 }
+                if role == LlmRole::Chat
+                    && !profile
+                        .capabilities
+                        .contains(&LlmApiCapability::ChatCompletions)
+                {
+                    // Binding an image-only endpoint to the chat role would only fail later, at the
+                    // provider, so it is refused where the person can still act on it.
+                    return Err(LlmProfileError::InvalidConfiguration);
+                }
                 Some(RoleAssignment {
                     profile_id: input.profile_id,
                     model: input.model,
@@ -1329,6 +1359,14 @@ impl LlmProfileService {
             .iter()
             .find(|profile| profile.id == assignment.profile_id)
             .ok_or(LlmProfileError::NotFound)?;
+        if role == LlmRole::Chat
+            && !profile
+                .capabilities
+                .contains(&LlmApiCapability::ChatCompletions)
+        {
+            // An image-only endpoint bound to the chat role would fail at the provider; say so here.
+            return Err(LlmProfileError::InvalidConfiguration);
+        }
         let endpoint = normalize_endpoint(&profile.base_url)?;
         self.enforce_policy(&endpoint, profile.advanced.tls_policy)?;
         if endpoint.locality == EndpointLocality::Cloud {
@@ -1805,8 +1843,30 @@ impl LlmProfileService {
         let profile = resolved.profile;
         let endpoint = normalize_endpoint(&profile.base_url)?;
         let api_key = self.api_key_for(&profile).await?;
+        // Which contract the endpoint answers is what the profile says it answers; a profile saved
+        // before the task API existed keeps using the OpenAI-style one.
+        let api = if profile
+            .capabilities
+            .contains(&LlmApiCapability::DashscopeTasks)
+        {
+            if profile.preset == LlmPreset::AzureOpenAi {
+                // Azure has no task API; the pairing would only produce a request nobody answers.
+                return Err(LlmProfileError::InvalidConfiguration);
+            }
+            ImageApiStyle::DashscopeTasks {
+                task_url_prefix: model_studio_prefix(&endpoint) + "/tasks",
+            }
+        } else {
+            ImageApiStyle::OpenAiImages
+        };
+        let url = match &api {
+            ImageApiStyle::OpenAiImages => images_url(&profile, &endpoint)?,
+            ImageApiStyle::DashscopeTasks { .. } => {
+                model_studio_prefix(&endpoint) + "/services/aigc/text2image/image-synthesis"
+            }
+        };
         Ok(ImageEndpointRequest {
-            url: images_url(&profile, &endpoint)?,
+            url,
             model: resolved.model,
             api_key,
             api_key_header: api_key_header(&profile),
@@ -1817,6 +1877,7 @@ impl LlmProfileService {
                     .timeout_seconds
                     .max(crate::image_generation::MIN_IMAGE_TIMEOUT_SECONDS),
             ),
+            api,
         })
     }
 
@@ -1899,9 +1960,18 @@ fn validate_profile(profile: &LlmProfile) -> Result<(), LlmProfileError> {
         || !(0.0..=2.0).contains(&profile.advanced.temperature)
         || profile.advanced.timeout_seconds == 0
         || profile.advanced.timeout_seconds > 600
-        || !profile
+        || profile.capabilities.is_empty()
+        // A profile has to answer something this app asks of it. Chat needs the completions API;
+        // an endpoint that only speaks one of the images contracts is a legitimate image endpoint.
+        || !(profile
             .capabilities
             .contains(&LlmApiCapability::ChatCompletions)
+            || profile
+                .capabilities
+                .contains(&LlmApiCapability::ImageGenerations)
+            || profile
+                .capabilities
+                .contains(&LlmApiCapability::DashscopeTasks))
     {
         return Err(LlmProfileError::InvalidConfiguration);
     }
@@ -2051,6 +2121,14 @@ fn images_url(
         .strip_suffix("/v1")
         .unwrap_or(&endpoint.base_url);
     Ok(format!("{base}/v1/images/generations"))
+}
+
+/// The `{origin}/api/v1` prefix a Model Studio endpoint is reached under, whether the person typed
+/// the origin or the versioned prefix itself.
+fn model_studio_prefix(endpoint: &NormalizedEndpoint) -> String {
+    let trimmed = endpoint.base_url.trim_end_matches('/');
+    let origin = trimmed.strip_suffix("/api/v1").unwrap_or(trimmed);
+    format!("{origin}/api/v1")
 }
 
 /// Removes the chain-of-thought a reasoning model may put inline in its answer
@@ -2596,6 +2674,7 @@ fn preset_from_dto(value: LlmPresetDto) -> LlmPreset {
         LlmPresetDto::MlxServe => LlmPreset::MlxServe,
         LlmPresetDto::OpenAiCompatible => LlmPreset::OpenAiCompatible,
         LlmPresetDto::AzureOpenAi => LlmPreset::AzureOpenAi,
+        LlmPresetDto::ModelStudio => LlmPreset::ModelStudio,
     }
 }
 
@@ -2609,6 +2688,7 @@ fn preset_to_dto(value: LlmPreset) -> LlmPresetDto {
         LlmPreset::MlxServe => LlmPresetDto::MlxServe,
         LlmPreset::OpenAiCompatible => LlmPresetDto::OpenAiCompatible,
         LlmPreset::AzureOpenAi => LlmPresetDto::AzureOpenAi,
+        LlmPreset::ModelStudio => LlmPresetDto::ModelStudio,
     }
 }
 
@@ -2617,6 +2697,8 @@ fn capability_from_dto(value: LlmApiCapabilityDto) -> LlmApiCapability {
         LlmApiCapabilityDto::ChatCompletions => LlmApiCapability::ChatCompletions,
         LlmApiCapabilityDto::Responses => LlmApiCapability::Responses,
         LlmApiCapabilityDto::ModelDiscovery => LlmApiCapability::ModelDiscovery,
+        LlmApiCapabilityDto::ImageGenerations => LlmApiCapability::ImageGenerations,
+        LlmApiCapabilityDto::DashscopeTasks => LlmApiCapability::DashscopeTasks,
     }
 }
 
@@ -2625,6 +2707,8 @@ fn capability_to_dto(value: LlmApiCapability) -> LlmApiCapabilityDto {
         LlmApiCapability::ChatCompletions => LlmApiCapabilityDto::ChatCompletions,
         LlmApiCapability::Responses => LlmApiCapabilityDto::Responses,
         LlmApiCapability::ModelDiscovery => LlmApiCapabilityDto::ModelDiscovery,
+        LlmApiCapability::ImageGenerations => LlmApiCapabilityDto::ImageGenerations,
+        LlmApiCapability::DashscopeTasks => LlmApiCapabilityDto::DashscopeTasks,
     }
 }
 
@@ -2833,7 +2917,7 @@ mod tests {
     #[test]
     fn every_preset_has_safe_explicit_defaults() {
         let presets = LlmProfileService::presets();
-        assert_eq!(presets.len(), 8);
+        assert_eq!(presets.len(), 9);
         assert_eq!(presets[0].base_url, "http://127.0.0.1:11434");
         assert_eq!(presets[1].base_url, "http://127.0.0.1:1234");
         assert_eq!(presets[2].base_url, "http://127.0.0.1:8000");
@@ -3257,6 +3341,148 @@ mod tests {
         let mut draft = draft(preset, base_url);
         draft.api_key = Some("sk-test-key".to_owned());
         service.create(draft).await.expect("created")
+    }
+
+    #[tokio::test]
+    async fn an_image_endpoint_uses_the_contract_its_capabilities_claim() {
+        let (service, _, _) = service(LlmHostPolicy::desktop());
+        let local = endpoint(&service, LlmPreset::Vllm, "http://127.0.0.1:8000").await;
+        service
+            .set_role(
+                LlmRole::Image,
+                Some(RoleAssignmentInput {
+                    profile_id: local.id,
+                    model: "flux".to_owned(),
+                    allow_cloud: false,
+                }),
+            )
+            .unwrap();
+        let request = service.image_request(LlmRole::Image).await.unwrap();
+        assert_eq!(request.api, ImageApiStyle::OpenAiImages);
+        assert_eq!(request.url, "http://127.0.0.1:8000/v1/images/generations");
+
+        // A Model Studio endpoint (qwen-image) says so, and then both URLs are its own: the task is
+        // submitted to the synthesis route and polled under the task route.
+        let mut draft = draft(
+            LlmPreset::ModelStudio,
+            "https://dashscope.aliyuncs.com/api/v1",
+        );
+        draft.capabilities = std::collections::BTreeSet::from([LlmApiCapability::DashscopeTasks]);
+        draft.api_key = Some("sk-test-key".to_owned());
+        let studio = service.create(draft).await.expect("created");
+        service
+            .grant_endpoint_consent(studio.id)
+            .expect("consented");
+        service
+            .set_role(
+                LlmRole::Image,
+                Some(RoleAssignmentInput {
+                    profile_id: studio.id,
+                    model: "qwen-image".to_owned(),
+                    allow_cloud: true,
+                }),
+            )
+            .unwrap();
+        let request = service.image_request(LlmRole::Image).await.unwrap();
+        assert_eq!(
+            request.api,
+            ImageApiStyle::DashscopeTasks {
+                task_url_prefix: "https://dashscope.aliyuncs.com/api/v1/tasks".to_owned(),
+            }
+        );
+        assert_eq!(
+            request.url,
+            "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis"
+        );
+        assert_eq!(
+            request.timeout,
+            Duration::from_secs(crate::image_generation::MIN_IMAGE_TIMEOUT_SECONDS),
+            "a queued task needs far more time than a chat reply"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_image_only_endpoint_serves_images_and_refuses_the_chat_role() {
+        let (service, _, _) = service(LlmHostPolicy::desktop());
+        let mut draft = draft(
+            LlmPreset::ModelStudio,
+            "https://dashscope.aliyuncs.com/api/v1",
+        );
+        draft.capabilities = std::collections::BTreeSet::from([LlmApiCapability::DashscopeTasks]);
+        draft.api_key = Some("sk-test-key".to_owned());
+        let studio = service.create(draft).await.expect("created");
+        service
+            .grant_endpoint_consent(studio.id)
+            .expect("consented");
+
+        // The same endpoint cannot answer both roles; the chat role needs the completions API.
+        assert_eq!(
+            service.set_role(
+                LlmRole::Chat,
+                Some(RoleAssignmentInput {
+                    profile_id: studio.id,
+                    model: "qwen-plus".to_owned(),
+                    allow_cloud: true,
+                }),
+            ),
+            Err(LlmProfileError::InvalidConfiguration)
+        );
+        service
+            .set_role(
+                LlmRole::Image,
+                Some(RoleAssignmentInput {
+                    profile_id: studio.id,
+                    model: "qwen-image".to_owned(),
+                    allow_cloud: true,
+                }),
+            )
+            .unwrap();
+        assert_eq!(
+            service
+                .image_request(LlmRole::Image)
+                .await
+                .expect("image endpoint")
+                .model,
+            "qwen-image"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_task_api_endpoint_typed_by_its_origin_still_reaches_the_versioned_routes() {
+        let (service, _, _) = service(LlmHostPolicy::desktop());
+        // The person typed the origin rather than the versioned prefix the preset carries.
+        let mut draft = draft(
+            LlmPreset::OpenAiCompatible,
+            "https://dashscope.aliyuncs.com",
+        );
+        draft.capabilities = std::collections::BTreeSet::from([LlmApiCapability::DashscopeTasks]);
+        draft.api_key = Some("sk-test-key".to_owned());
+        let profile = service.create(draft).await.expect("created");
+        service
+            .grant_endpoint_consent(profile.id)
+            .expect("consented");
+        service
+            .set_role(
+                LlmRole::Image,
+                Some(RoleAssignmentInput {
+                    profile_id: profile.id,
+                    model: "wan2.5-t2i-preview".to_owned(),
+                    allow_cloud: true,
+                }),
+            )
+            .unwrap();
+        let request = service.image_request(LlmRole::Image).await.unwrap();
+        assert_eq!(
+            request.url,
+            "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis"
+        );
+        let ImageApiStyle::DashscopeTasks { task_url_prefix } = request.api else {
+            panic!("the capability selects the task API");
+        };
+        assert_eq!(
+            task_url_prefix,
+            "https://dashscope.aliyuncs.com/api/v1/tasks"
+        );
     }
 
     #[tokio::test]

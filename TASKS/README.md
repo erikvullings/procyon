@@ -563,7 +563,8 @@ subtask block (0299–0303) and the earlier corpus-themes follow-ups.
 - [x] 0322 LLM endpoints and roles in Settings, consent at configuration *(backend, frontend, settings, medium — endpoints, roles (chat, embeddings), consent in the endpoint editor, a top-level LLM (AI) section; done. Embeddings consumer and reindex moved to 0328; needs 0184, 0243)*
 - [ ] 0323 First-run LLM endpoint detection *(backend, frontend, settings, medium — probes a declared preset list (Ollama, LM Studio, oMLX) on loopback; new presets are picked up without code changes; needs 0322)*
 - [x] 0324 Chat tab in a pane *(backend, frontend, medium — general chat as a tab beside the editor, like the assistant; saved conversations per workspace; read-only context: folder listing, selection, one file's contents; done, browser pane not yet checked visually)*
-- [x] 0325 Image generation pane *(backend, frontend, low — prompt pane and preview/save pane; nothing written before Save; OpenAI-style endpoint only; pane not yet checked visually; needs 0322)*
+- [x] 0325 Image generation pane *(backend, frontend, low — prompt pane and preview/save pane; nothing written before Save; OpenAI-style and Model Studio task APIs; pane not yet checked visually; needs 0322)*
 - [ ] 0326 Natural-language search *(backend, frontend, medium — describe a search in a sentence, reviewed as an editable structured query; needs 0322, 0324)*
 - [ ] 0327 Voice push-to-talk commands *(backend, frontend, desktop, low — local speech-to-text mapped to a whitelist of intents; file-changing intents always confirmed; needs 0324)*
 - [ ] 0328 Embeddings role consumer *(backend, semantic, settings, low — semantic indexing uses the embeddings role; cloud only with the allow-cloud flag and consent; reindex on model change; needs 0322)*
+- [ ] 0329 Paste images into the chat *(backend, frontend, low — image paste for vision-capable chat endpoints; Ollama first; needs 0324, 0325; planned)*
