@@ -280,6 +280,8 @@ export function createShellState(client: FileManagerClient) {
      * cursor navigation works immediately, e.g. right after a filename search closes its dialog. */
     focusPane: undefined as unknown as ((paneId: PaneId) => void) | undefined,
     focusTerminal: undefined as unknown as (() => boolean) | undefined,
+    /** Types text at the active terminal's prompt; `undefined` when no terminal is mounted (task 0333). */
+    insertIntoTerminal: undefined as ((text: string, host: string) => boolean) | undefined,
     /** Registered by `DirectoryTree` (task 0139): moves DOM focus into the tree sidebar. */
     focusDirectoryTree: undefined as unknown as (() => boolean) | undefined,
     commandPaletteOpen: false,

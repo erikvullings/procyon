@@ -172,7 +172,8 @@ import {
 } from '../features/sync-profiles/sync-profile-controller';
 import { SyncProfilesDialog } from '../features/sync-profiles/sync-profiles-dialog';
 import { tauriTerminalClient } from '../features/terminal/terminal-client';
-import { TerminalDrawer } from '../features/terminal/terminal-drawer';
+import { TerminalDrawer, terminalHost } from '../features/terminal/terminal-drawer';
+import { absolutePathOf, shellQuote } from '../features/terminal/terminal-paths';
 import { focusOpenedTerminal, isTerminalVisible } from '../features/terminal/terminal-state';
 import { ToolbarOverflow, type ToolbarOverflowItem } from '../features/toolbar/toolbar-overflow.ts';
 import { WalkthroughPanel } from '../features/walkthroughs/walkthrough-panel';
@@ -899,6 +900,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
 
   /** Task 0314: flip the global match mode and persist it; every open tab re-filters once the
    * settings write resolves (updateLocationSettings redraws on completion). */
+  /** Cmd+click on a row: types the entry's shell-quoted absolute path at the terminal prompt. */
+  function insertEntryPathIntoTerminal(entry: EntrySummary): void {
+    const path = absolutePathOf(entry.location.uri);
+    if (path === undefined) return;
+    shellState.insertIntoTerminal?.(shellQuote(path), terminalHost(entry.location));
+  }
+
   function toggleQuickFilterMatchMode(): void {
     const next: QuickFilterMatchMode = quickFilterMatchMode() === 'fuzzy' ? 'contains' : 'fuzzy';
     void updateLocationSettings(shellState.client, (settings) => ({
@@ -2622,6 +2630,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     runRecursiveQuickFilter,
     quickFilterMatchMode,
     toggleQuickFilterMatchMode,
+    insertEntryPath: insertEntryPathIntoTerminal,
     advancedFilters: shellState.advancedFilters,
     contentSearchInitialQuery,
     searchQueryForLocationUri: (locationUri) =>
@@ -4731,6 +4740,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 location: activeDirectory()?.location,
                 client: tauriTerminalClient,
                 shellIntegration: shellState.currentSettings?.terminalShellIntegration ?? 'unset',
+                registerInsert: (insert) => {
+                  shellState.insertIntoTerminal = insert;
+                },
                 onShellIntegrationChoice: (choice) =>
                   updateLocationSettings(shellState.client, (settings) => ({
                     ...settings,

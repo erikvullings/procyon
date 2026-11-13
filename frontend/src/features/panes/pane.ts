@@ -224,6 +224,8 @@ export interface PaneRenameRequest {
 }
 
 export interface PaneAttrs {
+  /** Cmd+click on a row: types the entry's path into the terminal (task 0333). */
+  readonly onInsertEntryPath?: ((entry: EntrySummary) => void) | undefined;
   // Location display (4)
   readonly path: string;
   readonly locationUri?: string;
@@ -2086,6 +2088,12 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                 if (renameCtrl.entry !== undefined) return;
                 const entry = attrs.entries[index];
                 if (entry === undefined) return;
+                if (modifiers?.metaKey === true && !isParentEntry(entry.id)) {
+                  // Cmd+click types the entry's path at the terminal prompt (task 0333).
+                  if (document.activeElement !== sectionElement) sectionElement?.focus();
+                  attrs.onInsertEntryPath?.(entry);
+                  return;
+                }
                 // A mouse click only ever changed selection *state* - nothing moved real DOM focus
                 // to match, so a keypress immediately after clicking a row could race (or entirely
                 // miss) this pane's `onkeydown` handler depending on whatever had focus beforehand.

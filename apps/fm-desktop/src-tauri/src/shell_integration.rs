@@ -75,11 +75,25 @@ trap '__procyon_preexec' DEBUG
 PROMPT_COMMAND="__procyon_begin${PROMPT_COMMAND:+; $PROMPT_COMMAND}; __procyon_end"
 "#;
 
+/// Hooks for fish, loaded before the person's `config.fish` with `-C`. They use fish events, so a
+/// person's own prompt function cannot remove them.
+const FISH_HOOKS: &str = r#"# Procyon shell integration (command blocks)
+function __procyon_prompt --on-event fish_prompt
+    set -l exit_code $status
+    printf '\e]133;D;%d\a' $exit_code
+    printf '\e]133;A\a'
+end
+function __procyon_preexec --on-event fish_preexec
+    printf '\e]133;C\a'
+end
+"#;
+
 /// The shells this module can wrap, identified from the shell program's file name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ShellKind {
     Zsh,
     Bash,
+    Fish,
 }
 
 impl ShellKind {
@@ -88,6 +102,7 @@ impl ShellKind {
         match program.file_name()?.to_str()? {
             "zsh" => Some(Self::Zsh),
             "bash" => Some(Self::Bash),
+            "fish" => Some(Self::Fish),
             _ => None,
         }
     }
@@ -102,11 +117,20 @@ pub(crate) fn write_wrappers(dir: &Path) -> io::Result<()> {
         (".zprofile", ZPROFILE.to_owned()),
         (".zshrc", format!("{ZSHRC}{ZSH_HOOKS}")),
         ("bashrc", BASH_STARTUP.to_owned()),
+        (FISH_FILE, FISH_HOOKS.to_owned()),
     ];
     for (name, contents) in files {
         std::fs::write(dir.join(name), contents)?;
     }
     Ok(())
+}
+
+/// The fish hook file in the wrapper folder.
+const FISH_FILE: &str = "fish-integration.fish";
+
+/// Single-quotes `text` for fish, escaping quotes and backslashes.
+fn fish_quote(text: &str) -> String {
+    format!("'{}'", text.replace('\\', "\\\\").replace('\'', "\\'"))
 }
 
 /// The shell command that starts `program` with command-block integration, or `None` when the
@@ -129,6 +153,15 @@ pub(crate) fn integrated_command(
             command.env("ZDOTDIR", wrappers);
             let original = user_zdotdir.or(home)?;
             command.env("PROCYON_USER_ZDOTDIR", original);
+        }
+        ShellKind::Fish => {
+            // `-C` runs before the person's config.fish, which then loads as usual.
+            command.arg("-l");
+            command.arg("-C");
+            command.arg(format!(
+                "source {}",
+                fish_quote(&wrappers.join(FISH_FILE).to_string_lossy())
+            ));
         }
         ShellKind::Bash => {
             // Bash reads `--init-file` only for non-login shells; `BASH_STARTUP` does the login
@@ -157,7 +190,10 @@ mod tests {
             ShellKind::of(Path::new("/usr/local/bin/bash")),
             Some(ShellKind::Bash)
         );
-        assert_eq!(ShellKind::of(Path::new("/opt/homebrew/bin/fish")), None);
+        assert_eq!(
+            ShellKind::of(Path::new("/opt/homebrew/bin/fish")),
+            Some(ShellKind::Fish)
+        );
         assert_eq!(ShellKind::of(Path::new("pwsh")), None);
     }
 
@@ -173,7 +209,7 @@ mod tests {
     fn writing_the_wrappers_creates_every_file() {
         let dir = tempfile::tempdir().unwrap();
         write_wrappers(dir.path()).unwrap();
-        for name in [".zshenv", ".zprofile", ".zshrc", "bashrc"] {
+        for name in [".zshenv", ".zprofile", ".zshrc", "bashrc", FISH_FILE] {
             assert!(dir.path().join(name).is_file(), "{name} missing");
         }
         let bashrc = std::fs::read_to_string(dir.path().join("bashrc")).unwrap();
@@ -232,7 +268,7 @@ mod tests {
     fn unsupported_shells_get_no_integrated_command() {
         assert!(
             integrated_command(
-                Path::new("/usr/bin/fish"),
+                Path::new("/usr/bin/nu"),
                 Path::new("/data"),
                 Path::new("/work"),
                 Some(Path::new("/home/me")),
@@ -334,6 +370,54 @@ mod tests {
         );
 
         assert!(output.contains("rc=loaded"), "zshrc not loaded: {output:?}");
+        assert!(
+            output.contains("\x1b]133;C\x07"),
+            "no command start: {output:?}"
+        );
+        assert!(
+            output.contains("\x1b]133;D;1\x07"),
+            "no failed end: {output:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fish_loads_the_persons_config_and_reports_command_marks() {
+        let fish = [
+            "/opt/homebrew/bin/fish",
+            "/usr/local/bin/fish",
+            "/usr/bin/fish",
+        ]
+        .into_iter()
+        .map(Path::new)
+        .find(|path| path.exists());
+        let Some(fish) = fish else {
+            return;
+        };
+        let home = tempfile::tempdir().unwrap();
+        let config = home.path().join(".config/fish");
+        std::fs::create_dir_all(&config).unwrap();
+        std::fs::write(
+            config.join("config.fish"),
+            "set -gx PROCYON_TEST_RC loaded\n",
+        )
+        .unwrap();
+        let wrappers = tempfile::tempdir().unwrap();
+        write_wrappers(wrappers.path()).unwrap();
+        let mut command =
+            integrated_command(fish, wrappers.path(), home.path(), Some(home.path()), None)
+                .unwrap();
+        command.env("HOME", home.path());
+        command.env("XDG_CONFIG_HOME", home.path().join(".config"));
+        let output = run_in_pty(
+            command,
+            &["echo rc=$PROCYON_TEST_RC\n", "false\n", "exit\n"],
+        );
+
+        assert!(
+            output.contains("rc=loaded"),
+            "config.fish not loaded: {output:?}"
+        );
         assert!(
             output.contains("\x1b]133;C\x07"),
             "no command start: {output:?}"

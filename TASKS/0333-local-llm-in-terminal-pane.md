@@ -106,3 +106,11 @@ Cross-cutting:
     typecheck.
   - Not done: fish (its `$status` in `fish_postexec` is unverified; not installed here); remote SSH
     shells; a Settings toggle to change the choice later (only the consent prompt sets it).
+- 2026-11-13 Claude: Overlay and highlighting pass. The overlay scrolls and the answer buttons sit in
+  a footer that stays in reach. Command text in answers and the suggestion chip is shell-highlighted
+  (`shell-highlight.ts`: command, option, string, variable, operator, comment).
+  fish added to the automatic integration: `fish -l -C 'source <wrapper>'` with a fish-event hook
+  file. Verified in a real fish 4.9.3 PTY (config loads; command and exit-status marks appear).
+  Cmd+click on a row types its absolute path, shell-quoted (`terminal-paths.ts`), at the active
+  terminal's prompt, without Enter. Cmd+click no longer toggles selection; Ctrl+click still does.
+  Not verified visually: overlay scrolling and highlight colours in the Tauri app. Uncommitted.

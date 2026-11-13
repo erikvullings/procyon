@@ -301,6 +301,8 @@ export interface PaneContentContext {
   quickFilterMatchMode(): QuickFilterMatchMode;
   /** Task 0314: flip the app-wide quick-filter match mode. */
   toggleQuickFilterMatchMode(): void;
+  /** Task 0333: types an entry's path at the terminal prompt (Cmd+click). */
+  insertEntryPath(entry: EntrySummary): void;
   contentSearchInitialQuery(locationUri: string, entry: EntrySummary): InitialSearch | undefined;
   searchQueryForLocationUri(locationUri: string): SearchQuery | undefined;
   searchFavouriteNameForLocationUri(locationUri: string): string | undefined;
@@ -689,6 +691,7 @@ export function createPaneContentBuilder(
       // Task 0314: global fuzzy/contains match-mode toggle, exposed to the filter box.
       quickFilterMatchMode: context.quickFilterMatchMode(),
       toggleQuickFilterMatchMode: () => context.toggleQuickFilterMatchMode(),
+      onInsertEntryPath: (entry: EntrySummary) => context.insertEntryPath(entry),
       formatSettings: entryFormatSettings,
       ...(nativeIconLoader === undefined ? {} : { nativeIconLoader }),
       ...(thumbnailLoader === undefined ? {} : { thumbnailLoader }),

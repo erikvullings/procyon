@@ -174,6 +174,8 @@ export function entryArraySource(
 export interface CursorClickModifiers {
   readonly shiftKey: boolean;
   readonly ctrlKey: boolean;
+  /** Cmd on macOS: inserts the entry's path into the terminal (task 0333) instead of selecting. */
+  readonly metaKey?: boolean;
 }
 
 /** Rendering inputs. Cursor and selection behavior are owned by tasks 0028/0029. */
@@ -1192,7 +1194,8 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                   if (consumePointerFileDragClick()) return;
                   attrs.onCursorChange?.(entryIndex, {
                     shiftKey: event.shiftKey,
-                    ctrlKey: event.ctrlKey || event.metaKey,
+                    ctrlKey: event.ctrlKey,
+                    metaKey: event.metaKey,
                   });
                 },
                 oncontextmenu: (event: MouseEvent) => {

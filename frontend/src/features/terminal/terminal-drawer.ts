@@ -8,6 +8,7 @@ import { t } from '../../i18n';
 import type { Location } from '../../models';
 import type { TerminalShellIntegration } from '../../models/settings';
 import { type BlockTracker, type CommandBlock, createBlockTracker } from './block-tracker';
+import { highlightShell } from './shell-highlight';
 import { parseShellMark } from './shell-integration';
 import {
   cleanCommand,
@@ -35,6 +36,8 @@ export interface TerminalDrawerAttrs {
   readonly registerDisposeTab?: (dispose: (tabKey: string) => void) => void;
   /** The person's choice for command-block shell integration (task 0333). */
   readonly shellIntegration?: TerminalShellIntegration;
+  /** Hands the owner a way to type text at this drawer's active prompt (task 0333). */
+  readonly registerInsert?: (insert: (text: string, host: string) => boolean) => void;
   /** Saves the choice; `undefined` hides the consent prompt. */
   readonly onShellIntegrationChoice?: (choice: 'enabled' | 'disabled') => Promise<void>;
 }
@@ -178,6 +181,24 @@ function blockTranscript(live: LiveTerminal, block: CommandBlock<IMarker>): stri
   return transcriptTail([head, ...linesText(live.terminal, outputMark.line, endMark.line)]);
 }
 
+/** Shell text as coloured spans, so commands, options and strings stand apart in the overlay. */
+function highlightedShell(text: string): m.Children {
+  return highlightShell(text).map((token) =>
+    token.kind === 'plain' ? token.text : m(`span.fm-shell-${token.kind}`, token.text),
+  );
+}
+
+/** An answer's text; the command of a `Command:` line is highlighted as shell. */
+function answerNodes(kind: TerminalAssistKind, text: string): m.Children {
+  if (kind === 'command') return highlightedShell(text);
+  return text.split('\n').map((line) => {
+    const match = /^(\s*Command:\s*)(.+)$/i.exec(line);
+    return match
+      ? [match[1], m('span.fm-shell-command-line', highlightedShell(match[2] ?? ''))]
+      : line;
+  });
+}
+
 /** Maps a failure from the desktop host to the message the person sees. */
 function assistFailureText(reason: string): string {
   switch (reason) {
@@ -265,6 +286,21 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     live.terminal.focus();
     panel = undefined;
     m.redraw();
+  }
+
+  /**
+   * Types `text` at the active tab's prompt, without Enter, when that terminal runs on `host`.
+   * Returns whether the text was typed.
+   */
+  function insertAtPrompt(text: string, host: string): boolean {
+    const key = currentAttrs?.tabKey;
+    const live = key === undefined ? undefined : terminals.get(key);
+    if (live === undefined || live.sessionId === undefined || live.host !== host) return false;
+    writeToShell(live, text);
+    live.typed = { text: `${live.typed.text}${text}`, known: live.typed.known };
+    live.terminal.focus();
+    m.redraw();
+    return true;
   }
 
   function writeToShell(live: LiveTerminal, text: string): void {
@@ -514,7 +550,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         ? undefined
         : m('.fm-terminal-suggestion', [
             m('span.fm-terminal-suggestion-hint', t('terminal', 'suggestionAccept')),
-            m('code', `${live.typed.text}${live.suggestion}`),
+            m('code', highlightedShell(`${live.typed.text}${live.suggestion}`)),
           ]),
       consentView(attrs, live),
       shown === undefined ? undefined : answerPanel(shown, live),
@@ -523,16 +559,21 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
 
   function answerPanel(shown: AssistPanel, live: LiveTerminal | undefined): m.Children {
     const busy = shown.status === 'busy';
-    return m('.fm-terminal-assist-panel', { role: 'status' }, [
+    const answer =
       shown.status === 'busy'
         ? m('p.fm-terminal-assist-status', t('terminal', 'assistBusy'))
         : shown.status === 'failed'
           ? m('p.fm-terminal-assist-status', assistFailureText(shown.reason))
-          : m('pre.fm-terminal-assist-text', shown.text),
-      shown.status === 'done' && shown.command === undefined
-        ? m('p.fm-terminal-assist-status', t('terminal', 'assistNoCommand'))
-        : undefined,
-      m('p.fm-terminal-assist-note', t('terminal', 'assistSendsNote')),
+          : m('pre.fm-terminal-assist-text', answerNodes(shown.kind, shown.text));
+    // The body scrolls; the buttons stay in a footer that is always in reach.
+    return m('.fm-terminal-assist-panel', { role: 'status' }, [
+      m('.fm-terminal-assist-body', [
+        answer,
+        shown.status === 'done' && shown.command === undefined
+          ? m('p.fm-terminal-assist-status', t('terminal', 'assistNoCommand'))
+          : undefined,
+        m('p.fm-terminal-assist-note', t('terminal', 'assistSendsNote')),
+      ]),
       m('.fm-terminal-assist-buttons', [
         shown.status === 'done' && shown.command !== undefined && live !== undefined
           ? m(
@@ -621,6 +662,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         live.terminal.focus();
         return true;
       });
+      attrs.registerInsert?.((text, host) => insertAtPrompt(text, host));
       attrs.registerDisposeTab?.((key) => {
         const live = terminals.get(key);
         if (live === undefined) return;

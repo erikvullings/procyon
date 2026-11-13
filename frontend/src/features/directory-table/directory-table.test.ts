@@ -339,6 +339,7 @@ describe('DirectoryTable rows', () => {
     row?.click();
     expect(onCursorChange).toHaveBeenCalledExactlyOnceWith(0, {
       ctrlKey: false,
+      metaKey: false,
       shiftKey: false,
     });
   });
@@ -694,7 +695,11 @@ describe('DirectoryTable rows', () => {
     root
       .querySelectorAll<HTMLElement>('.fm-directory-row:not(.fm-directory-group-row)')[1]
       ?.click();
-    expect(onCursorChange).toHaveBeenCalledWith(1, { shiftKey: false, ctrlKey: false });
+    expect(onCursorChange).toHaveBeenCalledWith(1, {
+      shiftKey: false,
+      ctrlKey: false,
+      metaKey: false,
+    });
     expect(root.querySelector('.fm-cursor-row .fm-entry-name')?.textContent).toBe('b');
   });
 
@@ -776,7 +781,11 @@ describe('DirectoryTable rows', () => {
     expect(toggle?.getAttribute('aria-expanded')).toBe('true');
     expect(root.querySelectorAll('.fm-grouped-entry')).toHaveLength(3);
     root.querySelectorAll<HTMLElement>('.fm-grouped-entry')[1]?.click();
-    expect(onCursorChange).toHaveBeenCalledWith(1, { shiftKey: false, ctrlKey: false });
+    expect(onCursorChange).toHaveBeenCalledWith(1, {
+      shiftKey: false,
+      ctrlKey: false,
+      metaKey: false,
+    });
   });
 
   it('copies the full remote folder URI rather than only its displayed path', async () => {
@@ -947,7 +956,11 @@ describe('DirectoryTable rows', () => {
 
     root.querySelectorAll<HTMLElement>('.fm-directory-row')[1]?.click();
 
-    expect(onCursorChange).toHaveBeenCalledWith(1, { shiftKey: false, ctrlKey: false });
+    expect(onCursorChange).toHaveBeenCalledWith(1, {
+      shiftKey: false,
+      ctrlKey: false,
+      metaKey: false,
+    });
   });
 
   it('does not scroll when a clicked row is already visible', () => {

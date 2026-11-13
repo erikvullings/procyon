@@ -82,6 +82,8 @@ export interface WorkspacePaneContent {
   readonly quickFilterMatchMode: QuickFilterMatchMode;
   /** Task 0314: flips the global match mode. */
   readonly toggleQuickFilterMatchMode: () => void;
+  /** Cmd+click on a row: types the entry's path at the terminal prompt (task 0333). */
+  readonly onInsertEntryPath?: (entry: EntrySummary) => void;
   readonly formatSettings?: EntryFormatSettings;
   readonly pluginColumns?: readonly DirectoryColumnDescriptor[];
   /** Restricts non-mandatory columns to this set; see `DirectoryTableAttrs.visibleColumnIds`. */
@@ -739,6 +741,7 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
             : { onSearchKnowledge: content.onSearchKnowledge }),
           onSelectionAction: content.onSelectionAction,
           onRetry: content.onRetry,
+          onInsertEntryPath: content.onInsertEntryPath,
           onLoadNextPage: content.onLoadNextPage,
           onSortChange: content.onSortChange,
           onRename: content.onRename,

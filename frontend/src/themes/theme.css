@@ -605,6 +605,7 @@ main.fm-workspace {
 .fm-terminal-overlay {
   position: absolute;
   top: 4px;
+  bottom: 4px;
   right: 36px;
   z-index: 2;
   display: flex;
@@ -612,6 +613,8 @@ main.fm-workspace {
   align-items: flex-end;
   gap: 6px;
   max-width: calc(100% - 80px);
+  /* Scrolls when the banner, answer and suggestion do not fit the drawer's height. */
+  overflow-y: auto;
   pointer-events: none;
 }
 
@@ -663,10 +666,9 @@ main.fm-workspace {
 }
 
 .fm-terminal-assist-panel,
-.fm-terminal-shell-help {
+.fm-terminal-consent {
   width: min(520px, 70vw);
-  max-height: 60%;
-  overflow: auto;
+  box-sizing: border-box;
   padding: 8px;
   border: 1px solid var(--fm-border);
   border-radius: var(--fm-radius);
@@ -676,26 +678,49 @@ main.fm-workspace {
   font-size: 12px;
 }
 
+.fm-terminal-assist-body {
+  max-height: 180px;
+  overflow-y: auto;
+}
+
 .fm-terminal-assist-text {
   margin: 0 0 6px;
   font-family: var(--fm-font-mono);
   white-space: pre-wrap;
 }
 
+/* Shell syntax colours (task 0333), from the app's semantic tokens so both themes stay legible. */
+.fm-shell-command {
+  color: var(--fm-accent);
+  font-weight: 600;
+}
+
+.fm-shell-option {
+  color: var(--fm-warning);
+}
+
+.fm-shell-string {
+  color: var(--fm-success);
+}
+
+.fm-shell-variable {
+  color: var(--fm-error);
+}
+
+.fm-shell-operator {
+  color: var(--fm-text-muted);
+  font-weight: 600;
+}
+
+.fm-shell-comment {
+  color: var(--fm-text-muted);
+  font-style: italic;
+}
+
 .fm-terminal-assist-status,
 .fm-terminal-assist-note {
   margin: 0 0 6px;
   color: var(--fm-text-muted);
-}
-
-.fm-terminal-shell-help p {
-  margin: 4px 0;
-}
-
-.fm-terminal-shell-help pre {
-  margin: 4px 0 8px;
-  font-family: var(--fm-font-mono);
-  white-space: pre-wrap;
 }
 
 /* Actions on a finished command, drawn on its prompt line by an xterm decoration. */
