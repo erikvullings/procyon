@@ -1892,6 +1892,12 @@ main.fm-workspace {
   font-size: var(--fm-type-label);
 }
 
+.fm-llm-profiles .row {
+  /* Cancel materialize's column gutter so form fields line up with the text above them. */
+  margin-left: -0.75rem;
+  margin-right: -0.75rem;
+}
+
 .fm-llm-advanced-settings > p {
   margin: 0.25rem 0;
   color: var(--fm-text-muted);

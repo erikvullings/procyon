@@ -35,8 +35,8 @@ import {
 } from '../../state';
 import { AssistantTab } from '../assistant/assistant-tab';
 import type { AssistantTabEntry } from '../assistant/assistant-tab-state';
-import { ChatTab } from '../chat/chat-tab';
-import type { ChatTabEntry } from '../chat/chat-tab-state';
+import { type ChatFolderSelection, ChatTab } from '../chat/chat-tab';
+import type { ChatAttachment, ChatTabEntry } from '../chat/chat-tab-state';
 import { isCutLocation } from '../clipboard/clipboard';
 import { loadConnections } from '../connections/connections-model';
 import { SAMPLE_FILE_AGE_COLUMN } from '../directory-table/directory-table';
@@ -212,7 +212,9 @@ export interface PaneContentContext {
   /** Chat tabs (task 0324); absent where chat is not offered. */
   getChatByTab?(): Map<string, ChatTabEntry>;
   chatFolderAvailable?(key: string): boolean;
-  chatFolderSelection?(key: string): { readonly selected: number; readonly selectedFiles: number };
+  /** Opens a new tab in the pane; the chat header offers it beside the new-chat control. */
+  openNewTab?(paneId: PaneId): void;
+  chatFolderSelection?(key: string): ChatFolderSelection;
   chatActions?: {
     newConversation(key: string): void;
     select(key: string, conversationId: string): void;
@@ -220,10 +222,15 @@ export interface PaneContentContext {
     remove(key: string, conversationId: string): void;
     send(key: string, draft: string): void;
     stop(key: string): void;
-    attachFolder(key: string): void;
-    attachSelection(key: string): void;
+    retry(key: string): void;
+    /** Returns the listing or selection as text for the draft; the chat inserts it at the caret. */
+    attachFolder(key: string): ChatAttachment | undefined;
+    attachSelection(key: string): ChatAttachment | undefined;
     attachFileContents(key: string): void;
     detach(key: string, attachmentId: string): void;
+    /** Adds pasted image files to the next message when the chat endpoint accepts images. */
+    pasteImages(key: string, files: Blob[]): void;
+    removeImage(key: string, imageId: string): void;
   };
   /** Image generation tabs (task 0325); absent where image generation is not offered. */
   getImageByTab?(): Map<string, ImagePaneEntry>;
@@ -1167,12 +1174,15 @@ export function createPaneContentBuilder(
           }
         : chat !== undefined
           ? {
+              viewerOwnsTabActions: true,
               viewerContent: m(ChatTab, {
                 entry: chat,
+                onNewTab: () => context.openNewTab?.(paneId),
                 folderAvailable: context.chatFolderAvailable?.(chat.key) ?? false,
                 folderSelection: context.chatFolderSelection?.(chat.key) ?? {
                   selected: 0,
                   selectedFiles: 0,
+                  fileTooLarge: false,
                 },
                 onNew: () => context.chatActions?.newConversation(chat.key),
                 onSelect: (conversationId: string) =>
@@ -1183,11 +1193,16 @@ export function createPaneContentBuilder(
                   context.chatActions?.remove(chat.key, conversationId),
                 onSend: (draft: string) => context.chatActions?.send(chat.key, draft),
                 onStop: () => context.chatActions?.stop(chat.key),
+                onRetry: () => context.chatActions?.retry(chat.key),
                 onAttachFolder: () => context.chatActions?.attachFolder(chat.key),
                 onAttachSelection: () => context.chatActions?.attachSelection(chat.key),
                 onAttachFileContents: () => context.chatActions?.attachFileContents(chat.key),
                 onDetach: (attachmentId: string) =>
                   context.chatActions?.detach(chat.key, attachmentId),
+                images: chat.images,
+                onPasteImages: (files: Blob[]) => context.chatActions?.pasteImages(chat.key, files),
+                onRemoveImage: (imageId: string) =>
+                  context.chatActions?.removeImage(chat.key, imageId),
                 onOpenSettings: () => context.openKnowledgeAnswerSettings?.(),
               }),
             }

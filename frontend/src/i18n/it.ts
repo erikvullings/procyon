@@ -1210,6 +1210,16 @@ export const it = {
     loadFailed: 'Impossibile caricare i profili LLM.',
   },
   chat: {
+    retry: 'Riprova',
+    copy: 'Copia',
+    waitingForModel:
+      'In attesa del modello. La prima risposta può richiedere un minuto mentre si carica.',
+    imagesNotSupported:
+      "L'endpoint della chat non accetta immagini. Attivalo prima nelle Impostazioni.",
+    imageLimit: 'Massimo 4 immagini per messaggio.',
+    imageFailed: "Impossibile leggere l'immagine.",
+    imageAlt: 'Immagine incollata',
+    imageLabel: 'Immagine',
     title: 'Chat',
     openDescription: 'Apri una chat accanto all’editor o alla cartella',
     newChat: 'Nuova chat',
@@ -1967,6 +1977,7 @@ export const it = {
     requireHttps: 'Richiedi HTTPS',
     modelDiscovery: 'Rileva e convalida i modelli',
     responsesCapability: 'Segnala la futura funzionalità Responses API',
+    visionCapability: 'Accetta immagini nella chat',
     imagesApi: 'API Immagini',
     imagesApiOpenAi: 'Stile OpenAI (una risposta)',
     imagesApiDashscope: 'API attività di Alibaba Cloud (Qwen-Image, Wan)',

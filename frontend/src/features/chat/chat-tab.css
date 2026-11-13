@@ -18,7 +18,7 @@
 .fm-chat-header,
 .fm-chat-status {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   gap: var(--fm-space-2);
   box-sizing: border-box;
   min-width: 0;
@@ -37,10 +37,6 @@
 .fm-chat-status {
   flex: 0 0 auto;
   border-top: 1px solid var(--fm-border);
-}
-
-.fm-chat-header > :last-child {
-  margin-left: auto;
 }
 
 .fm-chat-title {
@@ -79,8 +75,11 @@
   padding: 0;
 }
 
+/* Pushes the trailing actions (new chat, new tab, favourites) to the right edge, as in the
+   breadcrumb bar. The current title grows into the space when the list is folded. */
 .fm-chat-toggle {
   gap: var(--fm-space-2);
+  margin-right: auto;
 }
 
 /* Equal gap on both sides of the chevron, so the toggle reads as one symmetric segment. */
@@ -204,18 +203,51 @@
   min-height: 0;
 }
 
-/* The conversation is a rounded, full-width window. */
+/* Attached context waits as pills at the top of the window until the next message sends it. */
+.fm-chat-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--fm-space-1);
+  min-width: 0;
+}
+
+.fm-chat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--fm-space-1);
+  max-width: 100%;
+  height: var(--fm-row-height);
+  box-sizing: border-box;
+  padding: 0 var(--fm-space-1) 0 var(--fm-space-2);
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius-pill);
+  background: var(--fm-background);
+  color: var(--fm-text);
+  font-size: var(--fm-type-body);
+}
+
+.fm-chat-pill-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-chat-pill .fm-chat-chrome-icon {
+  width: calc(var(--fm-row-height) - 2px);
+  height: calc(var(--fm-row-height) - 2px);
+}
+
+/* The conversation is a rounded, full-width window with no frame of its own. */
 .fm-chat-messages {
   display: flex;
   flex: 1 1 0;
   flex-direction: column;
   gap: var(--fm-space-2);
   min-height: 0;
-  padding: var(--fm-space-3);
+  padding: var(--fm-space-2) var(--fm-space-1);
   overflow-y: auto;
-  border: 1px solid var(--fm-border);
-  border-radius: var(--fm-radius);
-  background: var(--fm-background);
 }
 
 .fm-chat-empty,
@@ -236,6 +268,58 @@
 
 .fm-chat-message-user {
   margin-left: var(--fm-space-5);
+}
+
+.fm-chat-message-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fm-space-2);
+}
+
+.fm-chat-markdown > :first-child {
+  margin-top: 0;
+}
+
+.fm-chat-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.fm-chat-markdown p,
+.fm-chat-markdown ul,
+.fm-chat-markdown ol,
+.fm-chat-markdown pre {
+  margin: 0 0 var(--fm-space-2);
+}
+
+.fm-chat-markdown ul,
+.fm-chat-markdown ol {
+  padding-left: var(--fm-space-5);
+}
+
+.fm-chat-markdown code {
+  font-family: var(--fm-font-mono, monospace);
+  font-size: var(--fm-type-label);
+  background: var(--fm-surface-elevated);
+  border-radius: var(--fm-radius);
+  padding: 0 var(--fm-space-1);
+}
+
+.fm-chat-markdown pre code {
+  display: block;
+  padding: var(--fm-space-2);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.fm-chat-partial {
+  opacity: 0.7;
+}
+
+.fm-chat-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--fm-space-1);
 }
 
 .fm-chat-author {
@@ -265,31 +349,11 @@
   color: var(--fm-error);
 }
 
-.fm-chat-attachments {
-  display: flex;
-  flex-direction: column;
-  gap: var(--fm-space-1);
-  padding: var(--fm-space-2) var(--fm-space-3);
-  border: 1px dashed var(--fm-border);
-  border-radius: var(--fm-radius);
-}
-
-.fm-chat-attachments ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.fm-chat-attachments-title {
-  margin: 0;
-  color: var(--fm-text-muted);
-  font-size: var(--fm-type-label);
-}
-
-/* The composer is one rounded box: the text field and its trailing controls share the border. */
+/* The composer is one rounded box: the pills sit above the text field, and the field's trailing
+   controls share the same border. Tall enough for a few lines and the pills. */
 .fm-chat-composer {
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
   gap: var(--fm-space-1);
   padding: var(--fm-space-2);
   border: 1px solid var(--fm-border);
@@ -301,11 +365,18 @@
   border-color: var(--fm-text-muted);
 }
 
+.fm-chat-composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--fm-space-1);
+  min-width: 0;
+}
+
 .fm-chat-input {
   flex: 1 1 auto;
   box-sizing: border-box;
   min-width: 0;
-  min-height: var(--fm-control-height);
+  min-height: calc(var(--fm-control-height) * 3);
   margin: 0;
   padding: var(--fm-space-1) var(--fm-space-2);
   border: 0;

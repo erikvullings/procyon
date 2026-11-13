@@ -298,6 +298,8 @@ export interface PaneAttrs {
   readonly pointerDragEffect?: (event: DropModifiers) => 'copy' | 'move';
   /** When set, replaces the entire directory-listing surface (task 0088). */
   readonly viewerContent?: m.Children;
+  /** The viewer renders the new-tab and favourites buttons in its own header, not the tab strip. */
+  readonly viewerOwnsTabActions?: boolean;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -988,6 +990,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               onTabDrop: attrs.onTabDrop,
               favouritesOpen: false,
               onToggleFavourites: () => undefined,
+              showActions: attrs.viewerOwnsTabActions !== true,
             }),
             attrs.viewerContent,
           ],

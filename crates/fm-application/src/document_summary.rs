@@ -592,7 +592,7 @@ impl DocumentSummaryCoordinator {
                             context_window: (profile.preset
                                 == crate::llm_profiles::LlmPreset::Ollama)
                                 .then_some(budget.context_window),
-                            temperature: profile.advanced.temperature,
+                            temperature: Some(profile.advanced.temperature),
                         },
                         cancellation,
                     )
@@ -703,7 +703,7 @@ async fn extract_attribution(
                     .maximum_output_tokens
                     .min(ATTRIBUTION_MAX_OUTPUT_TOKENS),
                 context_window: ollama.then_some(budget.context_window),
-                temperature: 0.0,
+                temperature: Some(0.0),
             },
             cancellation,
         )

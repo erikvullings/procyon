@@ -1,5 +1,5 @@
 import m, { type FactoryComponent } from 'mithril';
-import { Select, Switch, TextInput } from 'mithril-materialized';
+import { Select, Switch } from 'mithril-materialized';
 
 import type { SemanticClient } from '../../api/client/semantic-client.ts';
 import { t } from '../../i18n';
@@ -29,6 +29,16 @@ const NOTICE_KEYS: Partial<Record<RoleStatus, NoticeKey>> = {
   needsConsent: 'statusNeedsConsent',
 };
 
+function modelOptions(
+  draft: RoleDraft,
+  choices: Record<string, string[]>,
+): { id: string; label: string }[] {
+  const offered = choices[draft.profileId] ?? [];
+  // A saved model that the endpoint no longer lists stays selectable, so it can be replaced.
+  const ids = [...new Set(draft.model === '' ? offered : [...offered, draft.model])];
+  return ids.map((id) => ({ id, label: id }));
+}
+
 function draftFrom(assignment: LlmRoleAssignment | null | undefined): RoleDraft {
   return assignment == null
     ? { profileId: '', model: '', allowCloud: false }
@@ -53,12 +63,30 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
     embeddings: draftFrom(null),
     image: draftFrom(null),
   };
+  /** Models each profile offers, from discovery when the endpoint supports it. */
+  let choices: Record<string, string[]> = {};
   let loading = true;
   let busy = false;
   let advanced = false;
   let loadedRevision: number | undefined;
   let message: string | undefined;
   let error: string | undefined;
+
+  /** Loads the models a profile offers; a profile that cannot discover offers its own model. */
+  async function loadChoices(client: SemanticClient, profileId: string): Promise<void> {
+    const profile = profiles.find((candidate) => candidate.id === profileId);
+    if (profile === undefined) return;
+    let offered = [profile.model];
+    if (profile.capabilities.includes('modelDiscovery')) {
+      try {
+        offered = await client.discoverLlmProfileModels(profileId);
+      } catch {
+        offered = [profile.model];
+      }
+    }
+    choices = { ...choices, [profileId]: offered };
+    m.redraw();
+  }
 
   async function load(client: SemanticClient): Promise<void> {
     loading = true;
@@ -70,6 +98,10 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
         embeddings: draftFrom(roles.embeddings),
         image: draftFrom(roles.image),
       };
+      const assigned = LLM_ROLES.map((role) => drafts[role].profileId).filter(
+        (profileId) => profileId !== '',
+      );
+      await Promise.all([...new Set(assigned)].map((id) => loadChoices(client, id)));
     } catch (reason) {
       error = errorMessage(reason);
     } finally {
@@ -116,14 +148,22 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
           checkedId: draft.profileId,
           onchange: ([value]) => {
             if (value === undefined) return;
-            drafts = { ...drafts, [role]: { ...draft, profileId: value } };
+            // The endpoint's own model is the starting point; the person may pick another.
+            const chosen = profiles.find((profile) => profile.id === value);
+            drafts = {
+              ...drafts,
+              [role]: { ...draft, profileId: value, model: chosen?.model ?? '' },
+            };
+            if (value !== '') void loadChoices(attrs.client, value);
           },
         }),
-        m(TextInput, {
+        m(Select<string>, {
           label: t('llmRoles', 'model'),
-          value: draft.model,
-          disabled: busy,
-          oninput: (value: string) => {
+          disabled: busy || draft.profileId === '',
+          options: modelOptions(draft, choices),
+          checkedId: draft.model,
+          onchange: ([value]) => {
+            if (value === undefined) return;
             drafts = { ...drafts, [role]: { ...draft, model: value } };
           },
         }),

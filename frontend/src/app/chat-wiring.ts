@@ -10,6 +10,11 @@ import {
   selectionAttachment,
 } from '../features/chat/chat-context';
 import {
+  CHAT_IMAGE_MAX_COUNT,
+  encodePastedImage,
+  type PastedImage,
+} from '../features/chat/chat-image';
+import {
   type ChatAttachment,
   type ChatTabEntry,
   canSendMessage,
@@ -69,6 +74,7 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
             tabId,
             workspaceId: workspace.id,
             conversations: [],
+            images: [],
             messages: [],
             attachments: [],
           });
@@ -202,29 +208,58 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
    */
   async function send(client: FileManagerClient, key: string, draft: string): Promise<void> {
     const entry = entryOf(key);
-    const conversationId = entry?.conversationId;
-    if (entry === undefined || conversationId === undefined || !canSendMessage(entry, draft)) {
-      return;
-    }
+    if (entry === undefined || !canSendMessage(entry, draft)) return;
     const content = draft.trim();
+    const context = contextForMessage(entry.attachments);
+    entry.messages = [...entry.messages, { role: 'user', content, context }];
+    await streamReply(client, key, { content, context, retry: false });
+  }
+
+  /** Asks again for the reply to the last message, after a failure. The message is not saved twice. */
+  async function retry(client: FileManagerClient, key: string): Promise<void> {
+    const entry = entryOf(key);
+    if (entry === undefined || entry.pendingRequestId !== undefined) return;
+    if (entry.conversationId === undefined || !lastIsPersonsMessage(entry)) return;
+    await streamReply(client, key, { content: '', context: undefined, retry: true });
+  }
+
+  /** Streams one reply. On failure the person's message stays, with the attachments and images
+   * restored and any partial reply kept on screen. */
+  async function streamReply(
+    client: FileManagerClient,
+    key: string,
+    request: { content: string; context: string | null | undefined; retry: boolean },
+  ): Promise<void> {
+    const entry = entryOf(key);
+    const conversationId = entry?.conversationId;
+    if (entry === undefined || conversationId === undefined) return;
     const attached = entry.attachments;
-    const context = contextForMessage(attached);
+    const images = entry.images;
     const requestId = crypto.randomUUID();
     const isCurrent = (): boolean => entry.pendingRequestId === requestId;
     const finish = (): void => {
       entry.pendingRequestId = undefined;
       entry.streamedText = undefined;
     };
-    entry.messages = [...entry.messages, { role: 'user', content, context }];
     entry.attachments = [];
+    entry.images = [];
     entry.pendingRequestId = requestId;
     entry.streamedText = undefined;
+    entry.partialReply = undefined;
     entry.failure = undefined;
     entry.error = undefined;
     m.redraw();
     try {
       await client.streamChatReply(
-        { requestId, workspaceId: entry.workspaceId, conversationId, content, context },
+        {
+          requestId,
+          workspaceId: entry.workspaceId,
+          conversationId,
+          content: request.content,
+          context: request.context ?? null,
+          retry: request.retry,
+          ...(images.length > 0 ? { images: images.map(({ data }) => ({ data })) } : {}),
+        },
         (event) => {
           if (!isCurrent()) return;
           if (event.type === 'delta') {
@@ -237,8 +272,10 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
             finish();
           } else {
             entry.failure = event.reason;
-            // Keep the attached context so the person can send again without re-attaching.
+            entry.partialReply = entry.streamedText;
+            // Keep the attached context and images so the person can send again without re-adding.
             entry.attachments = attached;
+            entry.images = images;
             entry.error = t('chat', failureKey(event.reason));
             finish();
           }
@@ -248,13 +285,19 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
     } catch {
       if (isCurrent()) {
         entry.error = t('chat', 'failed');
+        entry.partialReply = entry.streamedText;
         entry.attachments = attached;
+        entry.images = images;
       }
     } finally {
       if (isCurrent()) finish();
       m.redraw();
       void refreshList(client, key);
     }
+  }
+
+  function lastIsPersonsMessage(entry: ChatTabEntry): boolean {
+    return entry.messages[entry.messages.length - 1]?.role === 'user';
   }
 
   /** Stops the reply in flight. The person's message stays; no reply is saved. */
@@ -279,33 +322,41 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
     return true;
   }
 
-  /** The folder pane's current listing, as context for the next message. */
-  function attachFolder(key: string): void {
+  /** Text for the draft: the folder pane's current listing. The caller inserts it at the caret. */
+  function attachFolder(key: string): ChatAttachment | undefined {
     const found = folderOf(key);
-    if (found === undefined) return;
-    const { entry, view } = found;
+    if (found === undefined) return undefined;
+    const { view } = found;
     if (view?.location === undefined) {
       toast({ html: t('chat', 'noFolder') });
-      return;
+      return undefined;
     }
-    addAttachment(
-      entry,
+    return textFitting(
       folderListingAttachment(crypto.randomUUID(), view.location.uri, view.entries),
     );
   }
 
-  /** The selected entries of the folder pane, as context for the next message. */
-  function attachSelection(key: string): void {
+  /** Text for the draft: the selected entries of the folder pane. The caller inserts it. */
+  function attachSelection(key: string): ChatAttachment | undefined {
     const found = folderOf(key);
-    if (found === undefined) return;
-    const { entry, folderKey, view } = found;
+    if (found === undefined) return undefined;
+    const { folderKey, view } = found;
     const selected = new Set(shellState.selections.get(folderKey)?.selectedEntryIds ?? []);
     const entries = (view?.entries ?? []).filter((item) => selected.has(item.id));
     if (view?.location === undefined || entries.length === 0) {
       toast({ html: t('chat', 'noSelection') });
-      return;
+      return undefined;
     }
-    addAttachment(entry, selectionAttachment(crypto.randomUUID(), view.location.uri, entries));
+    return textFitting(selectionAttachment(crypto.randomUUID(), view.location.uri, entries));
+  }
+
+  /** Inserted text must fit the context limit like any attachment; otherwise the person is told. */
+  function textFitting(attachment: ChatAttachment): ChatAttachment | undefined {
+    if (attachment.text.length > MAX_ATTACHED_CHARS) {
+      toast({ html: t('chat', 'contextTooLarge') });
+      return undefined;
+    }
+    return attachment;
   }
 
   /** The contents of the one file selected in the folder pane, read only on this request. */
@@ -338,6 +389,48 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
     m.redraw();
   }
 
+  /** Whether the chat endpoint is marked as accepting images in Settings. */
+  async function chatAcceptsImages(client: FileManagerClient): Promise<boolean> {
+    const roles = await client.listLlmRoles();
+    const profileId = roles.chat?.profileId;
+    if (profileId === undefined) return false;
+    const profile = (await client.listLlmProfiles()).find(
+      (candidate) => candidate.id === profileId,
+    );
+    return profile?.capabilities.includes('vision') ?? false;
+  }
+
+  /** Adds pasted images to the next message, when the chat endpoint accepts them. */
+  async function pasteImages(client: FileManagerClient, key: string, files: Blob[]): Promise<void> {
+    const entry = entryOf(key);
+    if (entry === undefined || files.length === 0) return;
+    if (!(await chatAcceptsImages(client))) {
+      toast({ html: t('chat', 'imagesNotSupported') });
+      return;
+    }
+    if (entry.images.length + files.length > CHAT_IMAGE_MAX_COUNT) {
+      toast({ html: t('chat', 'imageLimit') });
+      return;
+    }
+    try {
+      const encoded: PastedImage[] = [];
+      for (const file of files) {
+        encoded.push(await encodePastedImage(file, crypto.randomUUID()));
+      }
+      entry.images = [...entry.images, ...encoded];
+    } catch {
+      toast({ html: t('chat', 'imageFailed') });
+    }
+    m.redraw();
+  }
+
+  function removeImage(key: string, imageId: string): void {
+    const entry = entryOf(key);
+    if (entry === undefined) return;
+    entry.images = entry.images.filter((image) => image.id !== imageId);
+    m.redraw();
+  }
+
   function detach(key: string, attachmentId: string): void {
     const entry = entryOf(key);
     if (entry === undefined) return;
@@ -363,15 +456,21 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
     return folderOf(key)?.view?.location !== undefined;
   }
 
-  /** How many entries, and how many files, the folder pane has selected; zero without a folder. */
+  /**
+   * What the folder pane has selected, for the attach commands. `fileTooLarge` is set when the one
+   * selected file is over the limit for attaching its contents.
+   */
   function folderSelection(key: string): FolderSelection {
     const found = folderOf(key);
-    if (found === undefined) return { selected: 0, selectedFiles: 0 };
+    if (found === undefined) return { selected: 0, selectedFiles: 0, fileTooLarge: false };
     const selectedIds = new Set(shellState.selections.get(found.folderKey)?.selectedEntryIds ?? []);
     const chosen = (found.view?.entries ?? []).filter((item) => selectedIds.has(item.id));
+    const files = chosen.filter((item) => item.kind === 'file');
+    const onlyFile = files.length === 1 ? files[0] : undefined;
     return {
       selected: chosen.length,
-      selectedFiles: chosen.filter((item) => item.kind === 'file').length,
+      selectedFiles: files.length,
+      fileTooLarge: onlyFile?.size !== undefined && onlyFile.size > MAX_ATTACHED_FILE_BYTES,
     };
   }
 
@@ -393,12 +492,16 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
     remove: (client: FileManagerClient, key: string, id: string) =>
       void deleteConversation(client, key, id),
     send: (client: FileManagerClient, key: string, draft: string) => void send(client, key, draft),
+    retry: (client: FileManagerClient, key: string) => void retry(client, key),
     stop,
     attachFolder,
     attachSelection,
     attachFileContents: (client: FileManagerClient, key: string) =>
       void attachFileContents(client, key),
     detach,
+    pasteImages: (client: FileManagerClient, key: string, files: Blob[]) =>
+      void pasteImages(client, key, files),
+    removeImage,
     folderAvailable,
     folderSelection,
     forget,
@@ -409,6 +512,7 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
 export interface FolderSelection {
   readonly selected: number;
   readonly selectedFiles: number;
+  readonly fileTooLarge: boolean;
 }
 
 /** Keys of the messages that explain a failed reply. */
@@ -417,6 +521,7 @@ type ChatFailureKey =
   | 'roleNotAssigned'
   | 'invalidRequest'
   | 'notFound'
+  | 'imagesNotSupported'
   | 'noText'
   | 'failed';
 
@@ -431,6 +536,8 @@ function failureKey(reason: ChatFailure): ChatFailureKey {
       return 'invalidRequest';
     case 'notFound':
       return 'notFound';
+    case 'imagesNotSupported':
+      return 'imagesNotSupported';
     case 'empty':
       return 'noText';
     default:

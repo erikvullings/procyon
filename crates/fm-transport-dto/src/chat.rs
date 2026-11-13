@@ -88,6 +88,22 @@ pub struct ChatReplyRequestDto {
     /// Read-only context attached to this message, exactly as shown to the person.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
+    /// Images pasted into this message, sent with it and not saved in the conversation. Empty
+    /// unless the chat endpoint accepts images.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<ChatImageDto>,
+    /// Asks again for the reply to the conversation's last message, which must be the person's.
+    /// The message is not saved a second time, and `content` and `context` are not used.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub retry: bool,
+}
+
+/// One image sent with a chat message. The format is detected from the bytes (PNG, JPEG or WebP).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatImageDto {
+    /// The encoded image, base64 without a data-URL prefix.
+    pub data: String,
 }
 
 /// Why a chat reply ended without text.
@@ -108,6 +124,8 @@ pub enum ChatFailureDto {
     Empty,
     /// The person stopped the request.
     Cancelled,
+    /// The chat endpoint is not marked as accepting images in Settings.
+    ImagesNotSupported,
 }
 
 /// One event of a streamed chat reply: fragments as they arrive, then exactly one final event.

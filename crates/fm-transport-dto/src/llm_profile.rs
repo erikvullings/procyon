@@ -34,6 +34,8 @@ pub enum LlmApiCapabilityDto {
     ImageGenerations,
     /// Answers Model Studio's async text-to-image task API.
     DashscopeTasks,
+    /// Reads images sent in chat messages.
+    Vision,
 }
 
 #[allow(missing_docs)]

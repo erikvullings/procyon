@@ -18,6 +18,7 @@ function fakeShell(client: Partial<FileManagerClient>): { shell: ShellState; ent
     conversationId: 'c1',
     messages: [],
     attachments: [],
+    images: [],
   };
   const shell = {
     client: client as FileManagerClient,
@@ -51,7 +52,12 @@ describe('chat wiring', () => {
     };
     const { shell, entry } = fakeShell(client);
     entry.attachments = [
-      { id: 'a1', label: 'Folder listing', text: 'Folder listing of /notes:\n- a.txt' },
+      {
+        id: 'a1',
+        kind: 'folder',
+        label: 'Folder listing',
+        text: 'Folder listing of /notes:\n- a.txt',
+      },
     ];
     const wiring = createChatWiring(shell, { replaceWorkspace: vi.fn() });
 
@@ -63,6 +69,7 @@ describe('chat wiring', () => {
       conversationId: 'c1',
       content: 'How many?',
       context: 'Folder listing of /notes:\n- a.txt',
+      retry: false,
     });
     expect(entry.attachments).toEqual([]);
     expect(entry.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
@@ -161,11 +168,81 @@ describe('chat wiring', () => {
     expect(entry.attachments[0]?.text).toBe('Contents of todo.md (10 B):\nbuy milk\n');
   });
 
+  it('sends pasted images with the message and clears them once sent', async () => {
+    const requests: ChatReplyRequest[] = [];
+    const client = {
+      streamChatReply: vi.fn(
+        (request: ChatReplyRequest, onEvent: (event: ChatReplyEvent) => void) => {
+          requests.push(request);
+          onEvent({ type: 'done', text: 'A cat.' });
+          return Promise.resolve();
+        },
+      ),
+      listChatConversations: vi.fn(() => Promise.resolve([])),
+    };
+    const { shell, entry } = fakeShell(client);
+    entry.images = [{ id: 'i1', data: 'QUJD', previewUrl: 'data:image/jpeg;base64,QUJD' }];
+    const wiring = createChatWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.send(client as unknown as FileManagerClient, entry.key, 'What is this?');
+
+    expect(requests[0]?.images).toEqual([{ data: 'QUJD' }]);
+    expect(entry.images).toEqual([]);
+  });
+
+  it('refuses pasted images unless the chat endpoint is marked as accepting them', async () => {
+    const client = {
+      listLlmRoles: vi.fn(() =>
+        Promise.resolve({ chat: { profileId: 'p1', model: 'm', allowCloud: false } }),
+      ),
+      listLlmProfiles: vi.fn(() =>
+        Promise.resolve([{ id: 'p1', capabilities: ['chatCompletions'] }]),
+      ),
+    };
+    const { shell, entry } = fakeShell(client as unknown as Partial<FileManagerClient>);
+    const wiring = createChatWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.pasteImages(client as unknown as FileManagerClient, entry.key, [
+      new Blob(['x'], { type: 'image/png' }),
+    ]);
+
+    expect(entry.images).toEqual([]);
+  });
+
+  it('retries a failed reply without sending the message again', async () => {
+    const requests: ChatReplyRequest[] = [];
+    const client = {
+      streamChatReply: vi.fn(
+        (request: ChatReplyRequest, onEvent: (event: ChatReplyEvent) => void) => {
+          requests.push(request);
+          if (requests.length === 1) {
+            onEvent({ type: 'delta', text: 'Partly' });
+            onEvent({ type: 'failed', reason: 'unavailable' });
+          } else {
+            onEvent({ type: 'done', text: 'Whole.' });
+          }
+          return Promise.resolve();
+        },
+      ),
+      listChatConversations: vi.fn(() => Promise.resolve([])),
+    };
+    const { shell, entry } = fakeShell(client);
+    const wiring = createChatWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.send(client as unknown as FileManagerClient, entry.key, 'Question');
+    expect(entry.partialReply).toBe('Partly');
+    await wiring.retry(client as unknown as FileManagerClient, entry.key);
+
+    expect(requests[1]).toMatchObject({ retry: true, content: '' });
+    expect(entry.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(entry.partialReply).toBeUndefined();
+  });
+
   it('attaches nothing when the other pane shows no folder', () => {
     const { shell, entry } = fakeShell({});
     const wiring = createChatWiring(shell, { replaceWorkspace: vi.fn() });
     expect(wiring.folderAvailable(entry.key)).toBe(false);
-    wiring.attachFolder(entry.key);
+    expect(wiring.attachFolder(entry.key)).toBeUndefined();
     expect(entry.attachments).toEqual([]);
   });
 });

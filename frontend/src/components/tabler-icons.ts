@@ -416,6 +416,12 @@ export const arrowBarToRightIcon = trustedStrokeIcon(
 );
 
 /** "player-play" — start playback. */
+/** "player-stop" — stop an operation in progress. */
+export const playerStopIcon = trustedStrokeIcon(
+  '<path d="M5 5m0 1a1 1 0 0 1 1 -1h12a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-12a1 1 0 0 1 -1 -1z" />',
+  'fm-icon-player-stop',
+);
+
 export const playerPlayIcon = trustedStrokeIcon(
   '<path d="M7 4v16l13 -8z" />',
   'fm-icon-player-play',

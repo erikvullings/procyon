@@ -1001,7 +1001,7 @@ impl RagCoordinator {
                     images: Vec::new(),
                     maximum_tokens: MAX_PLANNER_TOKENS,
                     context_window: None,
-                    temperature: 0.0,
+                    temperature: Some(0.0),
                 },
                 cancellation,
             )
@@ -1081,7 +1081,7 @@ impl RagCoordinator {
                     images: Vec::new(),
                     maximum_tokens: MAX_ANSWER_TOKENS,
                     context_window: None,
-                    temperature: 0.2,
+                    temperature: Some(0.2),
                 },
                 cancellation,
             )

@@ -113,6 +113,9 @@ pub enum LlmApiCapability {
     ImageGenerations,
     /// Answers Model Studio's async text-to-image task API (`qwen-image`, `wan*`).
     DashscopeTasks,
+    /// The model reads images sent in chat messages. Set by the person; providers do not disclose it
+    /// reliably, so the endpoint is never sent image bytes without it.
+    Vision,
 }
 
 /// Network locality visible wherever a profile is selected. `Loopback` is the local class: the
@@ -366,8 +369,9 @@ pub struct LlmChatGeneration {
     pub maximum_tokens: u32,
     /// Explicit runtime context request, used only after summary capacity is verified.
     pub context_window: Option<u32>,
-    /// Sampling temperature, further bounded by the saved profile.
-    pub temperature: f32,
+    /// Sampling temperature, further bounded by the saved profile. `None` keeps the model's own
+    /// default, which the server applies when the field is absent.
+    pub temperature: Option<f32>,
 }
 
 /// Result of one generation attempt that may carry a thinking-off switch.
@@ -476,7 +480,29 @@ impl ReqwestLlmProbeTransport {
         request: &LlmProbeRequest,
         url: &str,
     ) -> reqwest::RequestBuilder {
-        let mut builder = self.client.request(method, url).timeout(request.timeout);
+        self.request_with_timeout(method, request, url, request.timeout)
+    }
+
+    /// A generation request: its total wait is capped far above the idle timeout, because a local
+    /// model may take minutes to load and a reply may stream for a long time. Waits are enforced by
+    /// [`send_generation`] and [`read_streamed_body`] instead.
+    fn generation_request(
+        &self,
+        method: reqwest::Method,
+        request: &LlmProbeRequest,
+        url: &str,
+    ) -> reqwest::RequestBuilder {
+        self.request_with_timeout(method, request, url, GENERATION_MAX_WAIT)
+    }
+
+    fn request_with_timeout(
+        &self,
+        method: reqwest::Method,
+        request: &LlmProbeRequest,
+        url: &str,
+        timeout: Duration,
+    ) -> reqwest::RequestBuilder {
+        let mut builder = self.client.request(method, url).timeout(timeout);
         if let Some(key) = &request.api_key {
             builder = builder.header(request.api_key_header, key);
         }
@@ -624,18 +650,16 @@ impl LlmProbeTransport for ReqwestLlmProbeTransport {
     ) -> Result<String, LlmProfileError> {
         if let Some(url) = &request.ollama_generation_url {
             let body = ollama_generation_body(request, generation);
-            let response = tokio::select! {
-                () = cancellation.cancelled() => return Err(LlmProfileError::Cancelled),
-                response = self.request(reqwest::Method::POST, request, url).json(&body).send() => {
-                    response.map_err(map_reqwest)?
-                }
-            };
+            let response = send_generation(
+                self.generation_request(reqwest::Method::POST, request, url)
+                    .json(&body),
+                request,
+                cancellation,
+            )
+            .await?;
             classify_http_status(response.status().as_u16())?;
             let bytes = read_bounded_body(response, cancellation).await?;
             return parse_ollama_chat(&bytes);
-        }
-        if !generation.images.is_empty() {
-            return Err(LlmProfileError::InvalidConfiguration);
         }
         match self
             .generate_chat_adaptive(request, generation, cancellation)
@@ -673,22 +697,20 @@ impl LlmProbeTransport for ReqwestLlmProbeTransport {
                 reasoning_seen: false,
             });
         }
-        if !generation.images.is_empty() {
-            return Err(LlmProfileError::InvalidConfiguration);
-        }
         let body = openai_generation_body(request, generation, request.reasoning_switch);
-        let response = tokio::select! {
-            () = cancellation.cancelled() => return Err(LlmProfileError::Cancelled),
-            response = self.request(reqwest::Method::POST, request, &request.url).json(&body).send() => {
-                response.map_err(map_reqwest)?
-            }
-        };
+        let response = send_generation(
+            self.generation_request(reqwest::Method::POST, request, &request.url)
+                .json(&body),
+            request,
+            cancellation,
+        )
+        .await?;
         let status = response.status().as_u16();
         if request.reasoning_switch != ReasoningSwitch::Plain && matches!(status, 400 | 422) {
             return Ok(ChatOutcome::Rejected);
         }
         classify_http_status(status)?;
-        let bytes = read_streamed_body(response, cancellation, on_delta).await?;
+        let bytes = read_streamed_body(response, cancellation, request.timeout, on_delta).await?;
         let (text, reasoning_seen) = parse_streaming_chat_detailed(&bytes)?;
         Ok(ChatOutcome::Generated {
             text,
@@ -701,7 +723,30 @@ async fn read_bounded_body(
     response: reqwest::Response,
     cancellation: &CancellationToken,
 ) -> Result<Vec<u8>, LlmProfileError> {
-    read_streamed_body(response, cancellation, &mut |_| {}).await
+    read_streamed_body(response, cancellation, GENERATION_MAX_WAIT, &mut |_| {}).await
+}
+
+/// Longest total wait for one generation request; the first reply and each streamed chunk have
+/// their own, shorter limits.
+const GENERATION_MAX_WAIT: Duration = Duration::from_secs(2 * 60 * 60);
+/// Least time to wait for the first byte of a reply, so a model that is still loading gets time.
+const FIRST_REPLY_MIN_WAIT: Duration = Duration::from_secs(300);
+
+/// Sends a generation request. The first reply may take as long as a model load needs; after that
+/// the stream is limited by its idle timeout, not by its total length.
+async fn send_generation(
+    builder: reqwest::RequestBuilder,
+    request: &LlmProbeRequest,
+    cancellation: &CancellationToken,
+) -> Result<reqwest::Response, LlmProfileError> {
+    let first_reply = request.timeout.max(FIRST_REPLY_MIN_WAIT);
+    tokio::select! {
+        () = cancellation.cancelled() => Err(LlmProfileError::Cancelled),
+        sent = tokio::time::timeout(first_reply, builder.send()) => match sent {
+            Ok(response) => response.map_err(map_reqwest),
+            Err(_) => Err(LlmProfileError::Timeout),
+        },
+    }
 }
 
 /// Reads a bounded response body and reports the content fragments of its `data:` events as they
@@ -709,6 +754,7 @@ async fn read_bounded_body(
 async fn read_streamed_body(
     response: reqwest::Response,
     cancellation: &CancellationToken,
+    idle: Duration,
     on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
 ) -> Result<Vec<u8>, LlmProfileError> {
     let mut stream = response.bytes_stream();
@@ -718,9 +764,12 @@ async fn read_streamed_body(
         on_delta,
     };
     loop {
+        // A chunk must arrive within the idle time; a stream that keeps arriving may run on.
         let next = tokio::select! {
             () = cancellation.cancelled() => return Err(LlmProfileError::Cancelled),
-            next = stream.next() => next,
+            next = tokio::time::timeout(idle, stream.next()) => {
+                next.map_err(|_| LlmProfileError::Timeout)?
+            }
         };
         let Some(chunk) = next else {
             // A final line without its newline still counts.
@@ -1602,6 +1651,12 @@ impl LlmProfileService {
             return Err(LlmProfileError::InvalidConfiguration);
         }
         let request = self.probe_request(&profile).await?;
+        if !generation.images.is_empty()
+            && request.ollama_generation_url.is_none()
+            && !profile.capabilities.contains(&LlmApiCapability::Vision)
+        {
+            return Err(LlmProfileError::InvalidConfiguration);
+        }
         let bounded = LlmChatGeneration {
             maximum_tokens: generation
                 .maximum_tokens
@@ -1609,7 +1664,7 @@ impl LlmProfileService {
                 .min(MAX_GENERATION_ANSWER_TOKENS),
             temperature: generation
                 .temperature
-                .clamp(0.0, profile.advanced.temperature),
+                .map(|value| value.clamp(0.0, profile.advanced.temperature)),
             ..generation
         };
         let capable = supports_reasoning_switch(profile.preset);
@@ -1696,6 +1751,28 @@ impl LlmProfileService {
         }
         stored.reasoning_switch = Some(switch);
         let _ = self.persist(&document);
+    }
+
+    /// Whether the role's resolved model reads images. Ollama reports vision per model, so it is
+    /// asked; other endpoints disclose nothing reliable, so the person's `Vision` switch decides.
+    pub(crate) async fn role_accepts_images(&self, role: LlmRole) -> Result<bool, LlmProfileError> {
+        let resolved = self.resolve_role(role)?;
+        let profile = LlmProfile {
+            model: resolved.model,
+            ..resolved.profile
+        };
+        let endpoint = normalize_endpoint(&profile.base_url)?;
+        self.enforce_policy(&endpoint, profile.advanced.tls_policy)?;
+        let request = self.probe_request(&profile).await?;
+        if request.ollama_generation_url.is_some() {
+            let cancellation = CancellationToken::new();
+            return Ok(self
+                .transport
+                .model_capabilities(&request, &cancellation)
+                .await?
+                .vision);
+        }
+        Ok(profile.capabilities.contains(&LlmApiCapability::Vision))
     }
 
     pub(crate) async fn model_capabilities(
@@ -2166,12 +2243,14 @@ fn openai_generation_body(
         "model": request.model,
         "messages": [
             {"role": "system", "content": generation.system_prompt},
-            {"role": "user", "content": generation.user_prompt}
+            {"role": "user", "content": openai_user_content(generation)}
         ],
         "stream": true,
         "max_tokens": generation.maximum_tokens,
-        "temperature": generation.temperature,
     });
+    if let Some(temperature) = generation.temperature {
+        body["temperature"] = json!(temperature);
+    }
     if matches!(
         switch,
         ReasoningSwitch::Both | ReasoningSwitch::TemplateKwargs
@@ -2182,6 +2261,24 @@ fn openai_generation_body(
         body["reasoning_effort"] = json!("none");
     }
     body
+}
+
+/// The user message: plain text, or a content array with each image as a data URL after the text.
+fn openai_user_content(generation: &LlmChatGeneration) -> Value {
+    use base64::Engine as _;
+
+    if generation.images.is_empty() {
+        return Value::from(generation.user_prompt.as_str());
+    }
+    let mut parts = vec![json!({"type": "text", "text": generation.user_prompt})];
+    parts.extend(generation.images.iter().map(|image| {
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&image.data);
+        json!({
+            "type": "image_url",
+            "image_url": {"url": format!("data:{};base64,{encoded}", image.media_type)}
+        })
+    }));
+    Value::Array(parts)
 }
 
 fn ollama_chat_url(endpoint: &NormalizedEndpoint) -> String {
@@ -2200,10 +2297,10 @@ fn ollama_generation_body(request: &LlmProbeRequest, generation: &LlmChatGenerat
         .iter()
         .map(|image| base64::engine::general_purpose::STANDARD.encode(&image.data))
         .collect::<Vec<_>>();
-    let mut options = json!({
-        "num_predict": generation.maximum_tokens,
-        "temperature": generation.temperature
-    });
+    let mut options = json!({"num_predict": generation.maximum_tokens});
+    if let Some(temperature) = generation.temperature {
+        options["temperature"] = json!(temperature);
+    }
     if let Some(context_window) = generation.context_window {
         options["num_ctx"] = Value::from(context_window);
     }
@@ -2699,6 +2796,7 @@ fn capability_from_dto(value: LlmApiCapabilityDto) -> LlmApiCapability {
         LlmApiCapabilityDto::ModelDiscovery => LlmApiCapability::ModelDiscovery,
         LlmApiCapabilityDto::ImageGenerations => LlmApiCapability::ImageGenerations,
         LlmApiCapabilityDto::DashscopeTasks => LlmApiCapability::DashscopeTasks,
+        LlmApiCapabilityDto::Vision => LlmApiCapability::Vision,
     }
 }
 
@@ -2709,6 +2807,7 @@ fn capability_to_dto(value: LlmApiCapability) -> LlmApiCapabilityDto {
         LlmApiCapability::ModelDiscovery => LlmApiCapabilityDto::ModelDiscovery,
         LlmApiCapability::ImageGenerations => LlmApiCapabilityDto::ImageGenerations,
         LlmApiCapability::DashscopeTasks => LlmApiCapabilityDto::DashscopeTasks,
+        LlmApiCapability::Vision => LlmApiCapabilityDto::Vision,
     }
 }
 
@@ -2782,7 +2881,7 @@ mod tests {
             images: Vec::new(),
             maximum_tokens: 10,
             context_window: None,
-            temperature: 0.0,
+            temperature: Some(0.0),
         };
         let off = openai_generation_body(&request, &generation, ReasoningSwitch::Both);
         assert_eq!(off["chat_template_kwargs"]["enable_thinking"], false);
@@ -3233,13 +3332,69 @@ mod tests {
                 }],
                 maximum_tokens: 512,
                 context_window: Some(8_192),
-                temperature: 0.1,
+                temperature: Some(0.1),
             },
         );
 
         assert_eq!(body["messages"][1]["images"][0], "AQID");
         assert_eq!(body["format"], "json");
         assert_eq!(body["options"]["num_ctx"], 8_192);
+    }
+
+    #[test]
+    fn an_unset_temperature_is_left_to_the_model_default() {
+        let request = LlmProbeRequest {
+            url: "http://127.0.0.1:8000/v1/chat/completions".into(),
+            ollama_generation_url: None,
+            model: "m".into(),
+            api_key: None,
+            api_key_header: "Authorization",
+            headers: BTreeMap::new(),
+            timeout: Duration::from_secs(30),
+            reasoning_switch: ReasoningSwitch::Plain,
+        };
+        let generation = |temperature| LlmChatGeneration {
+            system_prompt: "s".into(),
+            user_prompt: "u".into(),
+            images: Vec::new(),
+            maximum_tokens: 8,
+            context_window: None,
+            temperature,
+        };
+        let unset = openai_generation_body(&request, &generation(None), ReasoningSwitch::Plain);
+        assert!(unset.get("temperature").is_none());
+        let set = openai_generation_body(&request, &generation(Some(0.2)), ReasoningSwitch::Plain);
+        assert!((set["temperature"].as_f64().unwrap() - 0.2).abs() < 1e-6);
+    }
+
+    #[test]
+    fn openai_user_content_puts_each_image_after_the_text() {
+        let text_only = openai_user_content(&LlmChatGeneration {
+            system_prompt: "s".into(),
+            user_prompt: "Describe".into(),
+            images: Vec::new(),
+            maximum_tokens: 8,
+            context_window: None,
+            temperature: Some(0.0),
+        });
+        assert_eq!(text_only, json!("Describe"));
+
+        let with_image = openai_user_content(&LlmChatGeneration {
+            system_prompt: "s".into(),
+            user_prompt: "Describe".into(),
+            images: vec![LlmImageAttachment {
+                media_type: "image/png".into(),
+                data: vec![1, 2, 3],
+            }],
+            maximum_tokens: 8,
+            context_window: None,
+            temperature: Some(0.0),
+        });
+        assert_eq!(with_image[0], json!({"type": "text", "text": "Describe"}));
+        assert_eq!(
+            with_image[1]["image_url"]["url"],
+            "data:image/png;base64,AQID"
+        );
     }
 
     #[test]
@@ -4105,7 +4260,7 @@ mod tests {
                 images: Vec::new(),
                 maximum_tokens: 1_024,
                 context_window: None,
-                temperature: 0.2,
+                temperature: Some(0.2),
             },
         );
         assert_eq!(body["think"], false);
@@ -4203,7 +4358,7 @@ mod tests {
             images: Vec::new(),
             maximum_tokens: 512,
             context_window: None,
-            temperature: 0.1,
+            temperature: Some(0.1),
         };
         assert!(matches!(
             service
@@ -4268,7 +4423,7 @@ mod tests {
             images: Vec::new(),
             maximum_tokens: 16,
             context_window: None,
-            temperature: 0.0,
+            temperature: Some(0.0),
         }
     }
 

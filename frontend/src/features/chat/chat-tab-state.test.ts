@@ -6,7 +6,10 @@ import {
   chatFolderPaneId,
   chatPlacementPaneId,
   contextForMessage,
+  expandPastes,
   failureNeedsSettings,
+  isLongPaste,
+  pastePlaceholder,
 } from './chat-tab-state';
 
 const entry = (overrides: Partial<ChatTabEntry> = {}): ChatTabEntry => ({
@@ -17,11 +20,17 @@ const entry = (overrides: Partial<ChatTabEntry> = {}): ChatTabEntry => ({
   conversations: [],
   messages: [],
   attachments: [],
+  images: [],
   conversationId: 'c1',
   ...overrides,
 });
 
-const attachment = (id: string, text: string): ChatAttachment => ({ id, label: id, text });
+const attachment = (id: string, text: string): ChatAttachment => ({
+  id,
+  kind: 'folder',
+  label: id,
+  text,
+});
 
 describe('chat placement', () => {
   it('opens in the active pane when it shows no editor', () => {
@@ -65,5 +74,27 @@ describe('sending', () => {
     expect(failureNeedsSettings('roleNotAssigned')).toBe(true);
     expect(failureNeedsSettings('unavailable')).toBe(false);
     expect(failureNeedsSettings(undefined)).toBe(false);
+  });
+});
+
+describe('long pastes', () => {
+  it('shows short pastes as typed and long ones as a placeholder', () => {
+    expect(isLongPaste('one\ntwo\nthree')).toBe(false);
+    expect(isLongPaste('one\ntwo\nthree\nfour')).toBe(true);
+    expect(isLongPaste('x'.repeat(400))).toBe(true);
+    expect(pastePlaceholder('a\nb\nc\nd', 2)).toBe('[4 lines pasted #2]');
+  });
+
+  it('restores each placeholder to its text and drops one the person deleted', () => {
+    const pastes = [
+      { placeholder: '[4 lines pasted #1]', text: 'A $& B\nC\nD\nE' },
+      { placeholder: '[4 lines pasted #2]', text: 'second' },
+    ];
+    expect(expandPastes('Look at [4 lines pasted #1] and more', pastes)).toBe(
+      'Look at A $& B\nC\nD\nE and more',
+    );
+    expect(expandPastes('only [4 lines pasted #2] left', pastes.slice(0, 1))).toBe(
+      'only [4 lines pasted #2] left',
+    );
   });
 });

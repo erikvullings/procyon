@@ -70,7 +70,7 @@ pub use attributes::{
 };
 pub use chat::{
     CancelChatReplyRequestDto, ChatConversationDto, ChatConversationSummaryDto, ChatFailureDto,
-    ChatMessageDto, ChatReplyEventDto, ChatReplyRequestDto, ChatRoleDto,
+    ChatImageDto, ChatMessageDto, ChatReplyEventDto, ChatReplyRequestDto, ChatRoleDto,
     RenameChatConversationRequestDto,
 };
 pub use checksum::{

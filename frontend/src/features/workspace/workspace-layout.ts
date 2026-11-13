@@ -170,6 +170,8 @@ export interface WorkspacePaneContent {
   readonly onTabDrop?: (tabId: TabId, event: DropModifiers) => void;
   /** When set, replaces the pane's directory-listing surface with this content (task 0088). */
   readonly viewerContent?: m.Children;
+  /** The viewer renders the new-tab and favourites buttons itself (see `PaneAttrs`). */
+  readonly viewerOwnsTabActions?: boolean;
   /** Mounted beside the pane even when another tab is active, to retain its native WebView. */
   readonly pluginPanel?: m.Children;
   readonly pluginTabId?: TabId;
@@ -762,6 +764,9 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
           ...(content.onDragOver === undefined ? {} : { onDragOver: content.onDragOver }),
           ...(content.onDrop === undefined ? {} : { onDrop: content.onDrop }),
           ...(content.viewerContent === undefined ? {} : { viewerContent: content.viewerContent }),
+          ...(content.viewerOwnsTabActions === undefined
+            ? {}
+            : { viewerOwnsTabActions: content.viewerOwnsTabActions }),
         }),
         content.pluginPanel,
       ],

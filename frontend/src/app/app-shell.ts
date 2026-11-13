@@ -22,6 +22,7 @@ import {
   layoutGridIcon,
   linkIcon,
   linkOffIcon,
+  messageCircleIcon,
   operationsIcon,
   plusIcon,
   searchIcon,
@@ -2546,17 +2547,21 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     imageSaveFolder: (key) => imageWiring.saveFolder(key),
     chatFolderAvailable: (key) => chatWiring.folderAvailable(key),
     chatFolderSelection: (key) => chatWiring.folderSelection(key),
+    openNewTab: (paneId) => shellState.tabController.openTab(paneId),
     chatActions: {
       newConversation: (key) => chatWiring.newConversation(shellState.client, key),
       select: (key, id) => chatWiring.select(shellState.client, key, id),
       rename: (key, id, title) => chatWiring.rename(shellState.client, key, id, title),
       remove: (key, id) => chatWiring.remove(shellState.client, key, id),
       send: (key, draft) => chatWiring.send(shellState.client, key, draft),
+      retry: (key) => chatWiring.retry(shellState.client, key),
       stop: (key) => chatWiring.stop(shellState.client, key),
       attachFolder: (key) => chatWiring.attachFolder(key),
       attachSelection: (key) => chatWiring.attachSelection(key),
       attachFileContents: (key) => chatWiring.attachFileContents(shellState.client, key),
       detach: (key, id) => chatWiring.detach(key, id),
+      pasteImages: (key, files) => void chatWiring.pasteImages(shellState.client, key, files),
+      removeImage: (key, id) => chatWiring.removeImage(key, id),
     },
     assistantActions: {
       send: (key, draft) => void assistantWiring.send(shellState.client, key, draft),
@@ -3585,6 +3590,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         });
       }
       overflowItems.push(
+        {
+          id: 'chat',
+          label: t('chat', 'title'),
+          icon: messageCircleIcon(),
+          onclick: () => void chatWiring.openChat(),
+        },
         {
           id: 'basket-add',
           label: t('basket', 'add'),

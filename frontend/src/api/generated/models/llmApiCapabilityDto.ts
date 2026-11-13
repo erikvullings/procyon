@@ -12,4 +12,5 @@ export const LlmApiCapabilityDto = {
   modelDiscovery: 'modelDiscovery',
   imageGenerations: 'imageGenerations',
   dashscopeTasks: 'dashscopeTasks',
+  vision: 'vision',
 } as const;

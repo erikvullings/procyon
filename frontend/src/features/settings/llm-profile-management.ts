@@ -792,6 +792,17 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                     capabilities: withCapability(request.capabilities, 'responses', checked),
                   }),
               }),
+              // Ollama reports image input per model, so only other endpoints ask the person.
+              request.preset === 'ollama'
+                ? undefined
+                : m(Switch, {
+                    label: t('llmProfiles', 'visionCapability'),
+                    checked: request.capabilities.includes('vision'),
+                    onchange: (checked: boolean) =>
+                      updateRequest({
+                        capabilities: withCapability(request.capabilities, 'vision', checked),
+                      }),
+                  }),
               m(Select<string>, {
                 label: t('llmProfiles', 'imagesApi'),
                 options: [

@@ -11015,8 +11015,22 @@
           "consentRequired",
           "unavailable",
           "empty",
-          "cancelled"
+          "cancelled",
+          "imagesNotSupported"
         ]
+      },
+      "ChatImageDto": {
+        "type": "object",
+        "description": "One image sent with a chat message. The format is detected from the bytes (PNG, JPEG or WebP).",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "string",
+            "description": "The encoded image, base64 without a data-URL prefix."
+          }
+        }
       },
       "ChatMessageDto": {
         "type": "object",
@@ -11134,10 +11148,21 @@
             "format": "uuid",
             "description": "Conversation to continue."
           },
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatImageDto"
+            },
+            "description": "Images pasted into this message, sent with it and not saved in the conversation. Empty\nunless the chat endpoint accepts images."
+          },
           "requestId": {
             "type": "string",
             "format": "uuid",
             "description": "Identity used to cancel this request."
+          },
+          "retry": {
+            "type": "boolean",
+            "description": "Asks again for the reply to the conversation's last message, which must be the person's.\nThe message is not saved a second time, and `content` and `context` are not used."
           },
           "workspaceId": {
             "type": "string",
@@ -18828,7 +18853,8 @@
           "responses",
           "modelDiscovery",
           "imageGenerations",
-          "dashscopeTasks"
+          "dashscopeTasks",
+          "vision"
         ]
       },
       "LlmCredentialInputDto": {

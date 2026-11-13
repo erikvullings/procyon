@@ -45,6 +45,7 @@ export * from './changeAttributesDto.ts';
 export * from './chatConversationDto.ts';
 export * from './chatConversationSummaryDto.ts';
 export * from './chatFailureDto.ts';
+export * from './chatImageDto.ts';
 export * from './chatMessageDto.ts';
 export * from './chatReplyEventDto.ts';
 export * from './chatReplyRequestDto.ts';

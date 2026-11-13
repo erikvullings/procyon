@@ -48,6 +48,7 @@ export function folderListingAttachment(
 ): ChatAttachment {
   return {
     id,
+    kind: 'folder',
     label: `Folder listing: ${folderUri}`,
     text: describe(`Folder listing of ${folderUri} (${entries.length} entries):`, entries),
   };
@@ -61,6 +62,7 @@ export function selectionAttachment(
 ): ChatAttachment {
   return {
     id,
+    kind: 'selection',
     label: `Selection: ${entries.length} in ${folderUri}`,
     text: describe(`Selected entries in ${folderUri} (${entries.length}):`, entries),
   };
@@ -75,6 +77,7 @@ export function fileContentAttachment(
 ): ChatAttachment {
   return {
     id,
+    kind: 'file',
     label: `File: ${name}`,
     text: `Contents of ${name} (${formatBytes(size)}):\n${content}`,
   };

@@ -2859,6 +2859,7 @@ export class HttpFileManagerClient implements FileManagerClient {
         conversationId: request.conversationId,
         content: request.content,
         context: request.context,
+        images: request.images,
       },
       onEvent,
       signal,

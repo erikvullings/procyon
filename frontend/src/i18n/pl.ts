@@ -1210,6 +1210,16 @@ export const pl = {
     loadFailed: 'Nie udało się wczytać profili LLM.',
   },
   chat: {
+    retry: 'Ponów',
+    copy: 'Kopiuj',
+    waitingForModel:
+      'Czekam na model. Pierwsza odpowiedź może potrwać minutę, gdy model się ładuje.',
+    imagesNotSupported:
+      'Punkt końcowy czatu nie przyjmuje obrazów. Włącz to najpierw w ustawieniach.',
+    imageLimit: 'Najwyżej 4 obrazy w wiadomości.',
+    imageFailed: 'Nie udało się odczytać obrazu.',
+    imageAlt: 'Wklejony obraz',
+    imageLabel: 'Obraz',
     title: 'Czat',
     openDescription: 'Otwórz czat obok edytora lub folderu',
     newChat: 'Nowy czat',
@@ -1965,6 +1975,7 @@ export const pl = {
     requireHttps: 'Wymagaj HTTPS',
     modelDiscovery: 'Wykrywaj i weryfikuj modele',
     responsesCapability: 'Deklaruj przyszłą obsługę interfejsu Responses API',
+    visionCapability: 'Przyjmuje obrazy w czacie',
     imagesApi: 'API obrazów',
     imagesApiOpenAi: 'Styl OpenAI (jedna odpowiedź)',
     imagesApiDashscope: 'API zadań Alibaba Cloud (Qwen-Image, Wan)',

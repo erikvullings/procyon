@@ -1610,6 +1610,16 @@ export const nl = {
     loadFailed: 'LLM-profielen konden niet worden geladen.',
   },
   chat: {
+    retry: 'Opnieuw proberen',
+    copy: 'Kopiëren',
+    waitingForModel:
+      'Wachten op het model. Het eerste antwoord kan een minuut duren terwijl het laadt.',
+    imagesNotSupported:
+      'Het chat-eindpunt accepteert geen afbeeldingen. Schakel dit eerst in de instellingen in.',
+    imageLimit: 'Maximaal 4 afbeeldingen per bericht.',
+    imageFailed: 'De afbeelding kon niet worden gelezen.',
+    imageAlt: 'Geplakte afbeelding',
+    imageLabel: 'Afbeelding',
     title: 'Chat',
     openDescription: 'Een chat openen naast de editor of map',
     newChat: 'Nieuwe chat',
@@ -2365,6 +2375,7 @@ export const nl = {
     requireHttps: 'HTTPS vereisen',
     modelDiscovery: 'Modellen ontdekken en valideren',
     responsesCapability: 'Toekomstige Responses API-mogelijkheid aangeven',
+    visionCapability: 'Accepteert afbeeldingen in de chat',
     imagesApi: 'Afbeeldingen-API',
     imagesApiOpenAi: 'OpenAI-stijl (één antwoord)',
     imagesApiDashscope: 'Alibaba Cloud-taak-API (Qwen-Image, Wan)',

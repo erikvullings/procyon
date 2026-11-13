@@ -140,7 +140,7 @@ impl FileAssistantService {
                     images: Vec::new(),
                     maximum_tokens: MAX_REPLY_TOKENS,
                     context_window: None,
-                    temperature: REPLY_TEMPERATURE,
+                    temperature: Some(REPLY_TEMPERATURE),
                 },
                 &cancellation,
                 &mut |fragment: &str| visible.push(fragment),

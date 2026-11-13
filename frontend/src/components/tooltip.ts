@@ -18,15 +18,18 @@ import { visibleBounds } from './floating-position';
  * The wrapper still carries `label` as `data-tooltip` (unused for rendering) so tests can assert
  * which control owns which tooltip without needing to simulate hover/focus.
  */
+/** How long a hover or focus must last before the tooltip opens, so passing over a control is quiet. */
+export const TOOLTIP_DELAY_MS = 800;
+
 export function tooltip(label: string, child: m.Children, extraAttrs?: m.Attributes): m.Vnode {
   return m(
     'span.fm-tooltip',
     {
       ...extraAttrs,
       'data-tooltip': label,
-      onmouseenter: (event: MouseEvent) => showTooltipPortal(event.currentTarget, label),
+      onmouseenter: (event: MouseEvent) => scheduleTooltip(event.currentTarget, label),
       onmouseleave: hideTooltipPortal,
-      onfocusin: (event: FocusEvent) => showTooltipPortal(event.currentTarget, label),
+      onfocusin: (event: FocusEvent) => scheduleTooltip(event.currentTarget, label),
       onfocusout: hideTooltipPortal,
       // Acting on the control answers what the tooltip described, and the popup it may open (a
       // menu, a dialog) must not stay covered by it. Runs after the mousedown-time focus that
@@ -38,9 +41,24 @@ export function tooltip(label: string, child: m.Children, extraAttrs?: m.Attribu
 }
 
 let portal: HTMLDivElement | undefined;
+let pending: ReturnType<typeof setTimeout> | undefined;
+
+function scheduleTooltip(target: EventTarget | null, label: string): void {
+  cancelPending();
+  pending = setTimeout(() => {
+    pending = undefined;
+    showTooltipPortal(target, label);
+  }, TOOLTIP_DELAY_MS);
+}
+
+function cancelPending(): void {
+  if (pending === undefined) return;
+  clearTimeout(pending);
+  pending = undefined;
+}
 
 function ensurePortal(): HTMLDivElement {
-  if (portal !== undefined) return portal;
+  if (portal?.isConnected) return portal;
   const created = document.createElement('div');
   created.className = 'fm-tooltip-portal';
   created.setAttribute('role', 'tooltip');
@@ -84,6 +102,7 @@ function showTooltipPortal(target: EventTarget | null, label: string): void {
 }
 
 function hideTooltipPortal(): void {
+  cancelPending();
   if (portal === undefined) return;
   portal.style.display = 'none';
 }

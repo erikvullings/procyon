@@ -567,4 +567,7 @@ subtask block (0299–0303) and the earlier corpus-themes follow-ups.
 - [ ] 0326 Natural-language search *(backend, frontend, medium — describe a search in a sentence, reviewed as an editable structured query; needs 0322, 0324)*
 - [ ] 0327 Voice push-to-talk commands *(backend, frontend, desktop, low — local speech-to-text mapped to a whitelist of intents; file-changing intents always confirmed; needs 0324)*
 - [ ] 0328 Embeddings role consumer *(backend, semantic, settings, low — semantic indexing uses the embeddings role; cloud only with the allow-cloud flag and consent; reindex on model change; needs 0322)*
-- [ ] 0329 Paste images into the chat *(backend, frontend, low — image paste for vision-capable chat endpoints; Ollama first; needs 0324, 0325; planned)*
+- [ ] 0329 Paste images into the chat *(backend, frontend, low — image paste for vision-capable chat endpoints; needs 0324, 0325; implemented, uncommitted)*
+- [ ] 0330 Cross-platform color tags with tag virtual folders *(backend, frontend, medium — Procyon-owned tag store that works on every OS, unlike Finder tags (0136); tags open as virtual folders grouping files across directories, reusing smart-folder plumbing (0162); needs 0136, 0162)*
+- [ ] 0331 Git branch switch and pull/push in the status bar *(backend, frontend, medium — branch, ahead/behind, switch, and pull/push as cancellable operation jobs; extends the status bar (0025) and git status (0135))*
+- [ ] 0332 Customizable toolbar and sidebar *(frontend, settings, medium — add, remove, reorder and label-toggle any registered action; sidebar items editable; default layout unchanged; needs 0049, 0094, 0319)*
