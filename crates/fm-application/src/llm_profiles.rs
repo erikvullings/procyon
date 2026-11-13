@@ -55,6 +55,10 @@ pub enum LlmPreset {
     /// Alibaba Cloud Model Studio: `qwen-image` and the `wan*` image models. Its images API is an
     /// asynchronous task API rather than the OpenAI-style one.
     ModelStudio,
+    /// Model Studio's Qwen-Image model, offered on its own so the image role can be filled without
+    /// knowing which model id to type. `wan2.1` and the other Model Studio image models are reached
+    /// by typing their id into the same profile.
+    QwenImage,
 }
 
 /// How a local OpenAI-compatible server is asked not to emit reasoning (thinking) tokens. The
@@ -1091,15 +1095,24 @@ impl LlmProfileService {
                 "Alibaba Cloud Model Studio",
                 "https://dashscope.aliyuncs.com/api/v1",
             ),
+            (
+                LlmPreset::QwenImage,
+                "Qwen Image (Alibaba Cloud)",
+                "https://dashscope.aliyuncs.com/api/v1",
+            ),
         ]
         .into_iter()
         .map(|(preset, name, base_url)| {
             let mut draft = preset_draft(preset, name, base_url);
-            if preset == LlmPreset::ModelStudio {
-                // It is reached over the internet and answers the image task API rather than chat.
+            if matches!(preset, LlmPreset::ModelStudio | LlmPreset::QwenImage) {
+                // Reached over the internet, and it answers the image task API rather than chat.
                 draft.capabilities =
                     std::collections::BTreeSet::from([LlmApiCapability::DashscopeTasks]);
                 draft.redact_filenames = true;
+            }
+            if preset == LlmPreset::QwenImage {
+                // Named so the image role can be filled without looking the model id up.
+                draft.model = "qwen-image".to_owned();
             }
             draft
         })
@@ -2772,6 +2785,7 @@ fn preset_from_dto(value: LlmPresetDto) -> LlmPreset {
         LlmPresetDto::OpenAiCompatible => LlmPreset::OpenAiCompatible,
         LlmPresetDto::AzureOpenAi => LlmPreset::AzureOpenAi,
         LlmPresetDto::ModelStudio => LlmPreset::ModelStudio,
+        LlmPresetDto::QwenImage => LlmPreset::QwenImage,
     }
 }
 
@@ -2786,6 +2800,7 @@ fn preset_to_dto(value: LlmPreset) -> LlmPresetDto {
         LlmPreset::OpenAiCompatible => LlmPresetDto::OpenAiCompatible,
         LlmPreset::AzureOpenAi => LlmPresetDto::AzureOpenAi,
         LlmPreset::ModelStudio => LlmPresetDto::ModelStudio,
+        LlmPreset::QwenImage => LlmPresetDto::QwenImage,
     }
 }
 
@@ -3016,7 +3031,7 @@ mod tests {
     #[test]
     fn every_preset_has_safe_explicit_defaults() {
         let presets = LlmProfileService::presets();
-        assert_eq!(presets.len(), 9);
+        assert_eq!(presets.len(), 10);
         assert_eq!(presets[0].base_url, "http://127.0.0.1:11434");
         assert_eq!(presets[1].base_url, "http://127.0.0.1:1234");
         assert_eq!(presets[2].base_url, "http://127.0.0.1:8000");
@@ -3031,6 +3046,22 @@ mod tests {
         );
         assert!(presets[6].redact_filenames);
         assert_eq!(presets[7].api_version.as_deref(), Some("2024-10-21"));
+
+        // An image-only endpoint is a preset of its own, so the image role is one choice away.
+        let qwen = presets
+            .iter()
+            .find(|preset| preset.preset == LlmPreset::QwenImage)
+            .expect("Qwen-Image is offered as a preset");
+        assert_eq!(qwen.base_url, "https://dashscope.aliyuncs.com/api/v1");
+        assert_eq!(qwen.model, "qwen-image");
+        assert_eq!(
+            qwen.capabilities,
+            std::collections::BTreeSet::from([LlmApiCapability::DashscopeTasks])
+        );
+        assert!(
+            qwen.redact_filenames,
+            "prompts leave the machine either way"
+        );
     }
 
     #[test]

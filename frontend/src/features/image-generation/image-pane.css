@@ -1,287 +1,424 @@
-/* Image generation pane (task 0325). Two sides, one dense column each; spacing, type and colour come
-   only from the design tokens (DESIGN.md: Four Steps, Spacing, Two Densities, Signal Rarity). Blue
-   stays on interaction, focus and the selected thumbnail - nothing here paints a decorative fill. */
+/* Image generation pane (task 0325). It borrows the chat pane's shape: a 20px header row, the
+   generated content, one composer at the bottom, and a 20px status bar. Spacing, type and colour
+   come from the design tokens only (DESIGN.md: Four Steps, Spacing, Two Densities, Cursor Supremacy,
+   and blue reserved for interaction). */
 
 .fm-image {
   display: flex;
   flex-direction: column;
-  gap: var(--fm-space-3);
   height: 100%;
   min-height: 0;
-  padding: var(--fm-space-4);
   box-sizing: border-box;
   color: var(--fm-text);
   background: var(--fm-surface);
   font-size: var(--fm-type-body);
   line-height: 1.35;
+}
+
+/* Same geometry and background as the pane's breadcrumb row and status bar: one 20px row, an
+   elevated background, one hairline. */
+.fm-image-header,
+.fm-image-status {
+  display: flex;
+  align-items: center;
+  gap: var(--fm-space-2);
+  box-sizing: border-box;
+  min-width: 0;
+  height: var(--fm-row-height);
+  padding: 0 var(--fm-space-2);
+  background: var(--fm-pane-breadcrumb-background, var(--fm-surface-elevated));
+  color: var(--fm-text-muted);
+  font-size: var(--fm-type-body);
 }
 
 .fm-image-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--fm-space-3);
-  min-height: var(--fm-header-height);
-}
-
-.fm-image-title {
+  border-bottom: 1px solid var(--fm-border);
   color: var(--fm-text);
-  font-size: var(--fm-type-title);
-  font-weight: 600;
-  line-height: 1.2;
 }
 
-/* Side by side while there is room for two readable columns, stacked when there is not. */
-.fm-image-split {
-  display: grid;
-  grid-template-columns: minmax(18rem, 1fr) minmax(20rem, 1.2fr);
-  gap: var(--fm-space-4);
-  flex: 1 1 auto;
-  min-height: 0;
+.fm-image-status {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--fm-border);
 }
 
-@media (max-width: 52rem) {
-  .fm-image-split {
-    grid-template-columns: 1fr;
-    overflow-y: auto;
-  }
-}
-
-.fm-image-side {
-  display: flex;
-  flex-direction: column;
-  gap: var(--fm-space-3);
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  padding: var(--fm-space-3);
-  border: 1px solid var(--fm-border);
-  border-radius: var(--fm-radius);
+/* Chrome-density flat button (DESIGN.md "button-chrome": 20px, 2px 4px padding, body type). */
+.fm-image .btn-flat.fm-image-chrome {
+  flex: 0 0 auto;
   box-sizing: border-box;
-}
-
-.fm-image-side-title {
-  margin: 0;
-  color: var(--fm-text-muted);
-  font-size: var(--fm-type-label);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-.fm-image-subject {
-  min-height: 5.5rem;
-  padding: var(--fm-space-2) var(--fm-space-3);
-  border: 1px solid var(--fm-border);
-  border-radius: var(--fm-radius-control);
-  color: var(--fm-text);
-  background: var(--fm-surface);
-  font-family: inherit;
-  font-size: var(--fm-type-body);
-  line-height: 1.35;
-  resize: vertical;
-}
-
-.fm-image-subject:focus-visible {
-  outline: 2px solid var(--fm-accent);
-  outline-offset: 1px;
-}
-
-/* Preset chips: one line, quiet until chosen, then the one selection signal. */
-.fm-image-presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--fm-space-2);
-}
-
-.fm-image-chip {
   display: inline-flex;
   align-items: center;
-  gap: var(--fm-space-2);
-  min-height: var(--fm-row-height);
+  height: var(--fm-row-height);
+  min-height: 0;
   margin: 0;
-  padding: 0 var(--fm-space-3);
-  border: 1px solid var(--fm-border);
-  border-radius: var(--fm-radius-pill);
+  padding: var(--fm-space-1) var(--fm-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--fm-radius-control);
   color: var(--fm-text);
-  background: var(--fm-surface);
+  font-size: var(--fm-type-body);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.fm-image .btn-flat.fm-image-chrome:disabled {
+  color: var(--fm-text-muted);
+}
+
+/* Icon-only chrome button: a square 20px hit box with the icon centred. */
+.fm-image .btn-flat.fm-image-chrome-icon {
+  justify-content: center;
+  width: var(--fm-row-height);
+  padding: 0;
+}
+
+/* The crumbs. They take the row's spare width, which is what pushes the header's actions to the
+   trailing edge, as in the breadcrumb bar. */
+.fm-image-crumbs {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: var(--fm-space-1);
+  min-width: 0;
+  margin-right: auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.fm-image-crumbs::-webkit-scrollbar {
+  display: none;
+}
+
+.fm-image-crumb {
+  flex: 0 0 auto;
+  max-width: 12rem;
+  height: var(--fm-row-height);
+  overflow: hidden;
+  padding: 0 var(--fm-space-2);
+  border: 0;
+  border-radius: var(--fm-radius-control);
+  background: none;
+  color: var(--fm-text-muted);
   font: inherit;
-  font-size: var(--fm-type-label);
+  font-size: var(--fm-type-body);
+  line-height: var(--fm-row-height);
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.fm-image-chip:hover {
+.fm-image-crumb:hover {
   background: var(--fm-hover);
 }
 
-.fm-image-chip:focus-visible {
-  outline: 2px solid var(--fm-accent);
-  outline-offset: 1px;
+/* The generation on screen is the cursor row: the strongest thing in the bar. Blue stays on
+   interaction and selection only. */
+.fm-image-crumb-active {
+  background: var(--fm-cursor-row-background);
+  color: var(--fm-cursor-row-text);
 }
 
-.fm-image-chip[aria-pressed="true"] {
-  border-color: var(--fm-accent);
-  color: var(--fm-accent);
-  background: var(--fm-editor-selection);
+.fm-image-crumb-active:hover {
+  background: var(--fm-cursor-row-background);
 }
 
-.fm-image-chip-icon {
-  font-size: var(--fm-type-label);
-  line-height: 1;
+.fm-image-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--fm-space-2);
+  min-height: 0;
+  padding: var(--fm-space-2);
 }
 
-.fm-image-controls {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--fm-space-2) var(--fm-space-3);
+/* The pictures sit in the flow of the pane, framed by nothing: like the chat's reply, the content
+   is the surface. */
+.fm-image-preview {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: var(--fm-space-2);
+  min-height: 0;
+  padding: var(--fm-space-1);
+  overflow-y: auto;
 }
 
-.fm-image-lens {
-  border-top: 1px solid var(--fm-border);
-  padding-top: var(--fm-space-2);
-}
-
-/* What will actually be sent, so the presets are not a mystery. */
-.fm-image-composed {
+.fm-image-pending,
+.fm-image-saved {
   margin: 0;
+  color: var(--fm-text-muted);
+}
+
+.fm-image-figure {
   display: flex;
   flex-direction: column;
   gap: var(--fm-space-1);
-}
-
-.fm-image-composed-label {
-  color: var(--fm-text-muted);
-  font-size: var(--fm-type-label);
-}
-
-.fm-image-composed-text {
-  color: var(--fm-text);
-  font-size: var(--fm-type-label);
-  overflow-wrap: anywhere;
-}
-
-.fm-image-problem,
-.fm-image-save-hint,
-.fm-image-meta,
-.fm-image-saved,
-.fm-image-pending,
-.fm-image-empty,
-.fm-image-footnote {
   margin: 0;
-  color: var(--fm-text-muted);
-  font-size: var(--fm-type-label);
+  min-width: 0;
 }
 
-.fm-image-problem {
-  color: var(--fm-warning);
+.fm-image-figure img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--fm-radius);
+}
+
+.fm-image-figure:focus-visible {
+  outline: 2px solid var(--fm-focus, var(--fm-accent));
+  outline-offset: 2px;
+}
+
+.fm-image-image-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--fm-space-1);
 }
 
 .fm-image-error {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--fm-space-2);
+  gap: var(--fm-space-3);
   color: var(--fm-error);
-  font-size: var(--fm-type-label);
 }
 
-.fm-image-saved {
-  color: var(--fm-success);
-}
-
-.fm-image-actions {
+/* The composer is one rounded box holding the prompt, what to leave out, and what will be sent. */
+.fm-image-composer {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--fm-space-2);
-}
-
-.fm-image-thumbs {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--fm-space-2);
-}
-
-.fm-image-thumb {
-  display: block;
-  width: 4.5rem;
-  height: 4.5rem;
-  margin: 0;
-  padding: var(--fm-space-1);
-  border: 1px solid var(--fm-border);
-  border-radius: var(--fm-radius-control);
-  background: var(--fm-background);
-  cursor: pointer;
-  overflow: hidden;
-}
-
-.fm-image-thumb:hover {
-  border-color: var(--fm-accent);
-}
-
-.fm-image-thumb:focus-visible {
-  outline: 2px solid var(--fm-accent);
-  outline-offset: 1px;
-}
-
-.fm-image-thumb[aria-pressed="true"] {
-  border-color: var(--fm-accent);
-  box-shadow: inset 0 0 0 1px var(--fm-accent);
-}
-
-.fm-image-thumb-img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.fm-image-thumb-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  color: var(--fm-text-muted);
-}
-
-.fm-image-large {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 1 1 auto;
-  min-height: 12rem;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--fm-space-1);
   padding: var(--fm-space-2);
   border: 1px solid var(--fm-border);
   border-radius: var(--fm-radius);
   background: var(--fm-background);
+}
+
+.fm-image-composer:focus-within {
+  border-color: var(--fm-text-muted);
+}
+
+.fm-image-composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--fm-space-1);
+  min-width: 0;
+}
+
+.fm-image-input {
+  flex: 1 1 auto;
   box-sizing: border-box;
+  min-width: 0;
+  min-height: calc(var(--fm-control-height) * 2);
+  margin: 0;
+  padding: var(--fm-space-1) var(--fm-space-2);
+  border: 0;
+  background: transparent;
+  color: var(--fm-text);
+  font: inherit;
+  font-size: var(--fm-type-body);
+  resize: none;
 }
 
-.fm-image-large img {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
+.fm-image-input:focus {
+  outline: none;
+  box-shadow: none;
 }
 
-.fm-image-large-empty {
+.fm-image-composer-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--fm-space-1);
+}
+
+/* The leave-out line reads as part of the same box: no label of its own, only a placeholder. */
+.fm-image-avoid,
+.fm-image-folder,
+.fm-image-name {
+  box-sizing: border-box;
+  min-width: 0;
+  height: var(--fm-row-height);
+  margin: 0;
+  padding: 0 var(--fm-space-2);
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius-control);
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  font: inherit;
+  font-size: var(--fm-type-body);
+}
+
+.fm-image-avoid {
+  border-color: transparent;
+  background: transparent;
+}
+
+.fm-image-avoid:focus,
+.fm-image-folder:focus,
+.fm-image-name:focus {
+  outline: 2px solid var(--fm-focus, var(--fm-accent));
+  outline-offset: 1px;
+}
+
+/* What will be sent, in the muted voice: the person can see what the buttons did to their words. */
+.fm-image-composed {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fm-space-1) var(--fm-space-2);
+  margin: 0;
   color: var(--fm-text-muted);
   font-size: var(--fm-type-label);
 }
 
-.fm-image-preview-actions,
+.fm-image-composed-label {
+  flex: 0 0 auto;
+}
+
+.fm-image-composed-text {
+  min-width: 0;
+  overflow: hidden;
+  max-height: calc(var(--fm-row-height) * 3);
+  color: var(--fm-text);
+  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+}
+
+.fm-image-problem {
+  flex: 0 0 auto;
+  color: var(--fm-error);
+}
+
+/* The status bar holds the settings that shape the request. A choice is a native select at chrome
+   density, so the row stays one line tall. */
+/* Materialize hides and stretches bare selects and text inputs, so these carry
+   `browser-default` and the rules below are scoped under the status row to outweigh it. */
+.fm-image-status .fm-image-select,
+.fm-image-status .fm-image-seed {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: auto;
+  height: var(--fm-row-height);
+  min-width: 0;
+  margin: 0;
+  padding: 0 var(--fm-space-1);
+  border: 1px solid transparent;
+  border-radius: var(--fm-radius-control);
+  background: transparent;
+  color: var(--fm-text);
+  font: inherit;
+  font-size: var(--fm-type-body);
+  opacity: 1;
+}
+
+.fm-image-status .fm-image-select:hover,
+.fm-image-status .fm-image-seed:hover {
+  background: var(--fm-hover);
+}
+
+.fm-image-status .fm-image-select:focus-visible,
+.fm-image-status .fm-image-seed:focus-visible {
+  outline: 2px solid var(--fm-focus, var(--fm-accent));
+  outline-offset: 1px;
+}
+
+.fm-image-status .fm-image-seed {
+  width: 6.5rem;
+  border-color: var(--fm-border);
+}
+
+.fm-image-status .fm-image-seed::-webkit-outer-spin-button,
+.fm-image-status .fm-image-seed::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.fm-image-status-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--fm-space-1);
+  margin-left: auto;
+}
+
+/* The styles list is folded behind a count: the row has no room to name what is on. */
+.fm-image-presets {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.fm-image-preset-trigger {
+  color: var(--fm-text);
+}
+
+.fm-image-preset-list {
+  position: absolute;
+  z-index: 10;
+  top: calc(var(--fm-row-height) + var(--fm-space-1));
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 12rem;
+  max-height: calc(var(--fm-row-height) * 8);
+  padding: var(--fm-space-1);
+  overflow-y: auto;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface-elevated);
+  box-shadow: var(--fm-shadow);
+}
+
+/* A preset is a row of the list: its label only. An icon name is drawn as an icon, never spelled
+   out beside the words it stands for. */
+.fm-image-preset-option {
+  display: flex;
+  align-items: center;
+  gap: var(--fm-space-2);
+  min-height: var(--fm-row-height);
+  padding: 0 var(--fm-space-1);
+  border-radius: var(--fm-radius-control);
+  color: var(--fm-text);
+  font-size: var(--fm-type-body);
+  cursor: pointer;
+}
+
+.fm-image-preset-option:hover {
+  background: var(--fm-hover);
+}
+
+.fm-image-preset-option input {
+  flex: 0 0 auto;
+  margin: 0;
+  accent-color: var(--fm-accent);
+}
+
+.fm-image-preset-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The save form appears in place of the picture's actions, beside the picture it names. */
 .fm-image-save {
   display: flex;
   flex-direction: column;
-  gap: var(--fm-space-2);
+  gap: var(--fm-space-1);
+  padding: var(--fm-space-2);
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-background);
 }
 
-.fm-image-save .fm-image-actions {
-  justify-content: flex-end;
+.fm-image-save-hint {
+  margin: 0;
+  color: var(--fm-text-muted);
+  font-size: var(--fm-type-label);
 }
 
-.fm-image-footnote {
-  overflow-wrap: anywhere;
+.fm-image-save-actions {
+  display: flex;
+  gap: var(--fm-space-1);
 }

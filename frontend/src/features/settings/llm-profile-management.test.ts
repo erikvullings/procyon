@@ -94,6 +94,17 @@ describe('LlmProfileManagement', () => {
         capabilities: ['chatCompletions', 'modelDiscovery'],
       }),
     );
+    // The image role is one choice away: a preset that already names the Qwen-Image model.
+    expect(await client.listLlmProfilePresets()).toContainEqual(
+      expect.objectContaining({
+        name: 'Qwen Image (Alibaba Cloud)',
+        preset: 'qwenImage',
+        baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+        model: 'qwen-image',
+        capabilities: ['dashscopeTasks'],
+        redactFilenames: true,
+      }),
+    );
     expect(root.querySelector('[aria-label="AI summaries and answers"]')).not.toBeNull();
     expect(root.textContent).toContain('No generation profiles configured.');
     expect(await client.listLlmProfiles()).toEqual([]);

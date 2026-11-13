@@ -2,8 +2,9 @@
 
 Status: done (two images contracts: the OpenAI-style API and Alibaba Cloud Model Studio's async task
 API behind `qwen-image`/`wan*`. Local adapters such as ComfyUI/Automatic1111 remain presets to add.
-Neither host's pane has been checked visually, and the Model Studio path has not been run against the
-live service.)
+The browser host's pane has been walked through in the mock build and its layout measured; the Tauri
+host has not been seen, no image has been generated against a live endpoint, and the Model Studio path
+has not been run against the real service.)
 Priority: low
 Subsystem: backend, frontend
 Depends on: 0322
@@ -62,9 +63,11 @@ must review before anything is written. It gets its own role in 0322 and its own
   - Hosts: `POST /api/v1/images/generate|cancel|save|discard` and `GET /api/v1/images/bytes` in
     `fm-server` (bytes are served as a response body, never as JSON), and matching Tauri commands. The
     save route enforces the accessible roots.
-  - Frontend: `frontend/src/features/image-generation/` renders the two sides - prompt (subject, style
-    presets, size, count, seed, negative prompt, lens and aperture for photographic presets, and the
-    composed prompt that will be sent) and preview (thumbnails, large view, Save, Discard, Regenerate).
+  - Frontend: `frontend/src/features/image-generation/` is laid out like the chat pane rather than as two
+    documents side by side: a header row (previous generations as crumbs, new prompt, new tab,
+    favourites, and a gear that opens Settings at LLM (AI)), the preview above, the prompt composer
+    below at full width, and a status row holding the style multi-select, size, lens, aperture and seed.
+    There is no image-count choice: one image per generation, matching how the pane is used.
     `frontend/src/app/image-wiring.ts` drives it; the mock host mirrors bounds, consent, cancellation and
     the no-overwrite rule so both hosts behave the same.
   - Settings > LLM (AI) now exposes the Image role in the advanced view, with the cloud permission and
@@ -76,3 +79,23 @@ must review before anything is written. It gets its own role in 0322 and its own
     and JPEG, cancellation, transport request shape and redaction for both contracts (including the
     poll-to-ready path, a failed task, and the refusal to fetch a URL off the endpoint's own host), the
     role gate, the contract the capabilities select, and the mock host.
+  - The style picker folds ten presets behind a count (`Style · 2`) because the status row has no room to
+    name them: eight `medium` presets are mutually exclusive, `black and white` is a `treatment` that
+    rides along with one, and the checkbox rows show labels alone - never the icon name beside them.
+    `togglePreset`/`presetsAreCompatible` in `image-presets.ts` own that rule.
+  - Generations are kept in `entry.history` (at most `MAX_GENERATION_CRUMBS`) so the crumb bar can show
+    earlier ones; `selectGeneration` returns to one, `newPrompt` clears the composer, and `discard`/
+    `forget` drop them from the store as well.
+  - `LlmPreset::QwenImage` ("Qwen Image (Alibaba Cloud)", `qwen-image` filled in) lets the image role be
+    bound from the preset list without typing a model id; `wan2.1` and the other Model Studio image
+    models are reached by editing the same model field.
+  - The pane is opened from the pane overflow menu next to Chat (`photoIcon`), the way the chat pane is.
+  - 2026-11-13, browser host (mock build): the header icons, empty preview, composer, status row and the
+    style popup were checked in Chrome at 1728x998. Two fixes came out of it - the status-row select and
+    seed field were being stretched to the full pane width by Materialize's `select`/`input` rules (they
+    now carry `browser-default` on the field only, with the row's own rules scoped under `.fm-image-status`
+    to outweigh the shell's `select.browser-default { width: 100% }`), and no reachable command existed to
+    open the pane at all.
+  - Still unverified: a live generation end to end. Driving the mock settings UI saved the Qwen profile and
+    showed the Image row in Roles, but the role never stuck, and the pane stayed on its "No image model is
+    set" state - which is itself covered by wiring tests, not by a real reply.

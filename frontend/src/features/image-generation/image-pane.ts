@@ -1,10 +1,22 @@
 import m, { type FactoryComponent } from 'mithril';
-import { FlatButton, Select, TextInput } from 'mithril-materialized';
+import {
+  checkIcon,
+  folderOpenIcon,
+  heartIcon,
+  photoIcon,
+  playerStopIcon,
+  plusIcon,
+  refreshIcon,
+  settingsIcon,
+  trashIcon,
+} from '../../components/tabler-icons';
+import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { GeneratedImage, Location } from '../../models';
-import { IMAGE_COUNTS, IMAGE_SIZES, isValidImageFileName } from '../../models';
+import { IMAGE_SIZES, isValidImageFileName } from '../../models';
 import {
   canGenerate,
+  crumbLabel,
   failureNeedsSettings,
   hasPreview,
   type ImagePaneEntry,
@@ -19,6 +31,9 @@ import {
   IMAGE_LENSES,
   IMAGE_PRESETS,
   presetById,
+  selectedPresets,
+  selectionIsPhotographic,
+  togglePreset,
 } from './image-presets';
 import './image-pane.css';
 
@@ -27,8 +42,6 @@ export interface ImagePaneAttrs {
   /** Folder a save defaults to - the other pane's directory - and how to name it in the field. */
   readonly saveFolder?: Location | undefined;
   readonly saveFolderName?: string | undefined;
-  /** The prompt actually sent, so the preview can show what produced these pictures. */
-  readonly promptPreview?: string | undefined;
   readonly onPatch: (patch: Partial<ImagePaneEntry>) => void;
   readonly onGenerate: () => void;
   readonly onStop: () => void;
@@ -41,14 +54,23 @@ export interface ImagePaneAttrs {
   }) => void;
   readonly onDiscard: () => void;
   readonly onRegenerate: () => void;
+  /** Shows one of the generations the crumb bar holds. */
+  readonly onSelectGeneration: (generationId: string) => void;
+  /** Clears the prompt for a fresh idea, leaving the generations already made alone. */
+  readonly onNewPrompt: () => void;
+  /** Opens a new tab in the pane; the header offers it after the new-prompt control. */
+  readonly onNewTab?: () => void;
   /** Opens the AI settings, where the image role and consent are set. */
   readonly onOpenSettings?: (() => void) | undefined;
 }
 
 /**
- * The image generation pane (task 0325): a prompt on one side, the pictures on the other. Nothing is
- * written to disk here - the preview side only ever shows bytes the backend is holding, and Save is
- * the single path to a file. The two sides sit beside each other and stack when the pane is narrow.
+ * The image generation pane (task 0325), laid out the way the chat pane is: a crumb bar of the
+ * generations this pane asked for, the pictures above, one prompt field at the bottom, and the
+ * settings that shape the request in the status bar.
+ *
+ * Nothing here writes to disk - the preview only ever shows bytes the backend is holding, and Save
+ * is the single path to a file.
  */
 export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
   /** The save form is local UI state: a file name, the folder text, and a replace confirmation. */
@@ -56,6 +78,8 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
   let fileName = '';
   let folderText = '';
   let confirmingReplace = false;
+  /** The list of styles is folded into the status bar; there is no room to show which are on. */
+  let stylesOpen = false;
 
   const openSaveForm = (attrs: ImagePaneAttrs, image: GeneratedImage, index: number): void => {
     saveImageId = image.id;
@@ -75,165 +99,212 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
     confirmingReplace = false;
   };
 
-  const presetChips = (attrs: ImagePaneAttrs) =>
+  /** A chrome-density flat button (DESIGN.md "button-chrome": 20px, flat). */
+  const chromeButton = (
+    label: string,
+    onclick: () => void,
+    options: { readonly type?: 'button' | 'submit'; readonly disabled?: boolean } = {},
+  ) =>
     m(
-      '.fm-image-presets',
-      { role: 'group', 'aria-label': t('image', 'presets') },
-      IMAGE_PRESETS.map((preset) =>
-        m(
-          'button.fm-image-chip',
-          {
-            type: 'button',
-            'aria-pressed': String(attrs.entry.presetId === preset.id),
-            onclick: () => {
-              // Picking a preset also takes the shape it suits; the person can change it afterwards.
-              attrs.onPatch({
-                presetId: attrs.entry.presetId === preset.id ? '' : preset.id,
-                width: preset.width,
-                height: preset.height,
-              });
-            },
-          },
-          [
-            m('i.fm-image-chip-icon', { 'aria-hidden': 'true' }, preset.icon),
-            t('imagePreset', preset.id),
-          ],
-        ),
+      'button.btn-flat.fm-image-chrome',
+      { type: options.type ?? 'button', disabled: options.disabled ?? false, onclick },
+      label,
+    );
+
+  /** An icon-only chrome button; the tooltip gives its name, as DESIGN.md requires. */
+  const iconButton = (label: string, icon: m.Children, onclick: () => void, disabled = false) =>
+    tooltip(
+      label,
+      m(
+        'button.btn-flat.fm-image-chrome.fm-image-chrome-icon',
+        { type: 'button', 'aria-label': label, disabled, onclick },
+        icon,
       ),
     );
 
-  const sizeFields = (attrs: ImagePaneAttrs) => {
+  /**
+   * A choice in the status bar. A native select keeps the 20px row, needs no script to open and
+   * speaks its own name to a screen reader, so nothing has to be drawn beside it.
+   */
+  const nativeSelect = (
+    label: string,
+    checkedId: string,
+    options: readonly { readonly id: string; readonly label: string }[],
+    disabled: boolean,
+    onchange: (id: string) => void,
+  ) =>
+    m(
+      // No `browser-default`: the shell makes those full width, and this row has none to spare.
+      'select.fm-image-select',
+      {
+        'aria-label': label,
+        disabled,
+        value: checkedId,
+        onchange: (event: Event) => {
+          const target = event.target as HTMLSelectElement;
+          onchange(target.value);
+        },
+      },
+      options.map((option) => m('option', { value: option.id }, option.label)),
+    );
+
+  const crumbs = (attrs: ImagePaneAttrs) => {
     const { entry } = attrs;
-    const preset = presetById(entry.presetId);
-    return m('.fm-image-controls', [
-      m(Select<string>, {
-        label: t('image', 'size'),
-        disabled: entry.pendingRequestId !== undefined,
-        options: IMAGE_SIZES.map((size) => ({
+    return m(
+      'nav.fm-image-crumbs',
+      { role: 'navigation', 'aria-label': t('image', 'generations') },
+      entry.history.map((record) => {
+        const active = record.generationId === entry.activeGenerationId;
+        const label = crumbLabel(record.batch.prompt);
+        return m(
+          'button.fm-image-crumb',
+          {
+            type: 'button',
+            title: record.batch.prompt,
+            'aria-current': active ? 'true' : undefined,
+            class: active ? 'fm-image-crumb-active' : undefined,
+            onclick: () => attrs.onSelectGeneration(record.generationId),
+          },
+          label === '' ? t('image', 'untitledGeneration') : label,
+        );
+      }),
+    );
+  };
+
+  /** The styles live behind one status bar control that counts them rather than naming them. */
+  const styleControl = (attrs: ImagePaneAttrs) => {
+    const { entry } = attrs;
+    const chosen = selectedPresets(entry.presetIds);
+    const pending = entry.pendingRequestId !== undefined;
+    return m('.fm-image-presets', [
+      m(
+        'button.btn-flat.fm-image-chrome.fm-image-preset-trigger',
+        {
+          type: 'button',
+          'aria-expanded': String(stylesOpen),
+          'aria-controls': stylesOpen ? 'fm-image-preset-list' : undefined,
+          disabled: pending,
+          onclick: () => {
+            stylesOpen = !stylesOpen;
+          },
+          onkeydown: (event: KeyboardEvent) => {
+            if (event.key !== 'Escape' || !stylesOpen) return;
+            stylesOpen = false;
+          },
+        },
+        chosen.length === 0
+          ? t('image', 'styles')
+          : t('image', 'stylesCount', { count: String(chosen.length) }),
+      ),
+      stylesOpen
+        ? m(
+            'div.fm-image-preset-list',
+            {
+              id: 'fm-image-preset-list',
+              role: 'group',
+              'aria-label': t('image', 'styles'),
+            },
+            IMAGE_PRESETS.map((preset) => {
+              const label = t('imagePreset', preset.id);
+              const on = entry.presetIds.includes(preset.id);
+              return m('label.fm-image-preset-option', [
+                m('input', {
+                  type: 'checkbox',
+                  'aria-label': label,
+                  checked: on,
+                  disabled: pending,
+                  onclick: (event: Event) => {
+                    event.preventDefault();
+                    const next = togglePreset(entry.presetIds, preset.id);
+                    const medium = presetById(togglePreset([], preset.id)[0] ?? '');
+                    // A medium also brings the shape it suits; the size control beside it stays open
+                    // to the person afterwards.
+                    attrs.onPatch(
+                      medium !== undefined && medium.group === 'medium'
+                        ? { presetIds: next, width: medium.width, height: medium.height }
+                        : { presetIds: next },
+                    );
+                  },
+                }),
+                m('span.fm-image-preset-label', label),
+              ]);
+            }),
+          )
+        : undefined,
+    ]);
+  };
+
+  const status = (attrs: ImagePaneAttrs) => {
+    const { entry } = attrs;
+    const pending = entry.pendingRequestId !== undefined;
+    const photographic = selectionIsPhotographic(entry.presetIds);
+    return m('footer.fm-image-status', [
+      styleControl(attrs),
+      nativeSelect(
+        t('image', 'size'),
+        `${entry.width}x${entry.height}`,
+        IMAGE_SIZES.map((size) => ({
           id: `${size.width}x${size.height}`,
           label: `${size.width} × ${size.height} · ${t('imageSize', size.labelKey)}`,
         })),
-        checkedId: `${entry.width}x${entry.height}`,
-        onchange: ([value]) => {
-          if (value === undefined) return;
+        pending,
+        (value) => {
           const [width, height] = value.split('x').map(Number);
           if (width === undefined || height === undefined) return;
           attrs.onPatch({ width, height });
         },
-      }),
-      m(Select<number>, {
-        label: t('image', 'count'),
-        disabled: entry.pendingRequestId !== undefined,
-        options: IMAGE_COUNTS.map((count) => ({ id: count, label: String(count) })),
-        checkedId: entry.count,
-        onchange: ([value]) => {
-          if (value === undefined) return;
-          attrs.onPatch({ count: value });
-        },
-      }),
-      m(TextInput, {
-        label: t('image', 'seed'),
+      ),
+      photographic
+        ? nativeSelect(
+            t('image', 'lens'),
+            entry.lensId,
+            IMAGE_LENSES.map((lens) => ({
+              id: lens.id,
+              label: lens.id === '' ? t('image', 'lensNone') : lens.id,
+            })),
+            pending,
+            (value) => attrs.onPatch({ lensId: value }),
+          )
+        : undefined,
+      photographic
+        ? nativeSelect(
+            t('image', 'aperture'),
+            entry.apertureId,
+            IMAGE_APERTURES.map((aperture) => ({
+              id: aperture.id,
+              label: aperture.id === '' ? t('image', 'apertureNone') : aperture.id,
+            })),
+            pending,
+            (value) => attrs.onPatch({ apertureId: value }),
+          )
+        : undefined,
+      // `browser-default` keeps Materialize from stretching the field to the whole row.
+      m('input.fm-image-seed.browser-default', {
         type: 'number',
-        disabled: entry.pendingRequestId !== undefined,
-        value: entry.seed === undefined ? '' : String(entry.seed),
-        onchange: (value: string) => {
-          const parsed = Number.parseInt(value.trim(), 10);
-          attrs.onPatch({
-            seed: Number.isFinite(parsed) && value.trim() !== '' ? parsed : undefined,
-          });
-        },
-      }),
-      m(TextInput, {
-        label: t('image', 'negative'),
-        disabled: entry.pendingRequestId !== undefined,
-        active: entry.negativePrompt !== '',
-        value: entry.negativePrompt,
-        placeholder: preset === undefined ? t('image', 'negativePlaceholder') : preset.negative,
-        onchange: (value: string) => {
-          attrs.onPatch({ negativePrompt: value });
-        },
-      }),
-    ]);
-  };
-
-  const lensFields = (attrs: ImagePaneAttrs) => {
-    const preset = presetById(attrs.entry.presetId);
-    if (preset === undefined || !preset.photographic) return undefined;
-    return m('.fm-image-controls.fm-image-lens', [
-      m(Select<string>, {
-        label: t('image', 'lens'),
-        disabled: attrs.entry.pendingRequestId !== undefined,
-        options: IMAGE_LENSES.map((lens) => ({
-          id: lens.id,
-          label: lens.id === '' ? t('image', 'lensNone') : lens.id,
-        })),
-        checkedId: attrs.entry.lensId,
-        onchange: ([value]) => {
-          if (value === undefined) return;
-          attrs.onPatch({ lensId: value });
-        },
-      }),
-      m(Select<string>, {
-        label: t('image', 'aperture'),
-        disabled: attrs.entry.pendingRequestId !== undefined,
-        options: IMAGE_APERTURES.map((aperture) => ({
-          id: aperture.id,
-          label: aperture.id === '' ? t('image', 'apertureNone') : aperture.id,
-        })),
-        checkedId: attrs.entry.apertureId,
-        onchange: ([value]) => {
-          if (value === undefined) return;
-          attrs.onPatch({ apertureId: value });
-        },
-      }),
-    ]);
-  };
-
-  const promptSide = (attrs: ImagePaneAttrs) => {
-    const { entry } = attrs;
-    const pending = entry.pendingRequestId !== undefined;
-    const problem = imageRequestProblem(entry);
-    return m('section.fm-image-side.fm-image-prompt', [
-      m('h5.fm-image-side-title', t('image', 'promptTitle')),
-      m('textarea.fm-image-subject', {
-        'aria-label': t('image', 'subject'),
-        placeholder: t('image', 'subjectPlaceholder'),
-        value: entry.subject,
+        'aria-label': t('image', 'seed'),
+        min: '0',
+        max: '4294967295',
+        placeholder: t('image', 'seedPlaceholder'),
         disabled: pending,
+        value: entry.seed === undefined ? '' : String(entry.seed),
         oninput: (event: Event) => {
-          attrs.onPatch({ subject: (event.target as HTMLTextAreaElement).value });
-        },
-        onkeydown: (event: KeyboardEvent) => {
-          if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
-            event.preventDefault();
-            if (canGenerate(entry)) attrs.onGenerate();
-          }
+          const text = (event.target as HTMLInputElement).value.trim();
+          const parsed = Number.parseInt(text, 10);
+          attrs.onPatch({ seed: text !== '' && Number.isFinite(parsed) ? parsed : undefined });
         },
       }),
-      presetChips(attrs),
-      sizeFields(attrs),
-      lensFields(attrs),
-      m('p.fm-image-composed', [
-        m('span.fm-image-composed-label', t('image', 'sent')),
-        m(
-          'span.fm-image-composed-text',
-          composePrompt(entry.subject, entry.presetId, entry.lensId, entry.apertureId) === ''
-            ? t('image', 'nothingYet')
-            : composePrompt(entry.subject, entry.presetId, entry.lensId, entry.apertureId),
-        ),
-      ]),
-      problem === undefined || pending
-        ? undefined
-        : m('p.fm-image-problem', { role: 'status' }, t('image', problem)),
-      m('.fm-image-actions', [
-        pending
-          ? m(FlatButton, { label: t('image', 'stop'), onclick: () => attrs.onStop() })
-          : m(FlatButton, {
-              label: t('image', 'generate'),
-              className: 'fm-primary-action',
-              disabled: !canGenerate(entry),
-              onclick: () => attrs.onGenerate(),
-            }),
+      m('.fm-image-status-actions', [
+        hasPreview(entry)
+          ? iconButton(
+              t('image', 'discard'),
+              trashIcon({ size: 14 }),
+              () => {
+                closeSaveForm();
+                attrs.onDiscard();
+              },
+              entry.savingImageId !== undefined,
+            )
+          : undefined,
       ]),
     ]);
   };
@@ -248,8 +319,7 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
       {
         onsubmit: (event: Event) => {
           event.preventDefault();
-          if (!valid) return;
-          if (attrs.saveFolder === undefined) return;
+          if (!valid || attrs.saveFolder === undefined) return;
           attrs.onSave({
             imageId: image.id,
             fileName: fileName.trim(),
@@ -260,33 +330,32 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
         },
       },
       [
-        m(TextInput, {
-          label: t('image', 'folder'),
+        m('input.fm-image-folder', {
+          type: 'text',
+          'aria-label': t('image', 'folder'),
           value: folderText,
           placeholder: attrs.saveFolderName ?? attrs.saveFolder?.uri ?? '',
-          onchange: (value: string) => {
-            folderText = value;
+          oninput: (event: Event) => {
+            folderText = (event.target as HTMLInputElement).value;
           },
         }),
-        m(TextInput, {
-          label: t('image', 'fileName'),
+        m('input.fm-image-name', {
+          type: 'text',
+          'aria-label': t('image', 'fileName'),
           value: fileName,
-          onchange: (value: string) => {
-            fileName = value;
+          oninput: (event: Event) => {
+            fileName = (event.target as HTMLInputElement).value;
           },
         }),
         m('p.fm-image-save-hint', t('image', 'saveHint', { extension: image.extension })),
-        m('.fm-image-actions', [
-          m(FlatButton, { label: t('image', 'cancel'), onclick: () => closeSaveForm() }),
+        m('.fm-image-save-actions', [
+          chromeButton(t('image', 'cancel'), () => closeSaveForm()),
           confirmingReplace
-            ? m(FlatButton, {
-                label: t('image', 'confirmReplace'),
+            ? chromeButton(t('image', 'confirmReplace'), () => undefined, {
                 type: 'submit',
                 disabled: !valid,
               })
-            : m(FlatButton, {
-                label: t('image', 'save'),
-                className: 'fm-primary-action',
+            : chromeButton(t('image', 'save'), () => undefined, {
                 type: 'submit',
                 disabled: !valid,
               }),
@@ -295,148 +364,216 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
     );
   };
 
-  const thumbnail = (
-    attrs: ImagePaneAttrs,
-    image: GeneratedImage,
-    index: number,
-    view: ImagePaneEntry['views'][number] | undefined,
-  ) => {
-    const selected = attrs.entry.selectedImageId === image.id;
-    return m(
-      'button.fm-image-thumb',
-      {
-        type: 'button',
-        'aria-pressed': String(selected),
-        'aria-label': t('image', 'showImage', { number: index + 1 }),
-        onclick: () => attrs.onSelect(image.id),
-      },
-      view?.previewUrl === undefined
-        ? m('span.fm-image-thumb-empty', { 'aria-hidden': 'true' }, m('i', 'image'))
-        : m('img.fm-image-thumb-img', { src: view.previewUrl, alt: '' }),
-    );
+  const imageActions = (attrs: ImagePaneAttrs, image: GeneratedImage, index: number) => {
+    const saving = attrs.entry.savingImageId !== undefined;
+    if (saveImageId === image.id) return saveForm(attrs, image);
+    return m('.fm-image-image-actions', [
+      iconButton(t('image', 'save'), folderOpenIcon({ size: 14 }), () =>
+        openSaveForm(attrs, image, index),
+      ),
+      iconButton(
+        t('image', 'regenerate'),
+        refreshIcon({ size: 14 }),
+        () => attrs.onRegenerate(),
+        saving || attrs.entry.pendingRequestId !== undefined,
+      ),
+    ]);
   };
 
-  const previewSide = (attrs: ImagePaneAttrs) => {
+  const preview = (attrs: ImagePaneAttrs) => {
     const { entry } = attrs;
-    const saving = entry.savingImageId !== undefined;
-    if (!hasPreview(entry) && entry.batch === undefined) {
-      return m('section.fm-image-side.fm-image-preview', [
-        m('h5.fm-image-side-title', t('image', 'previewTitle')),
-        m('p.fm-image-empty', t('image', 'previewEmpty')),
-      ]);
-    }
-    const batch = entry.batch;
-    const selected =
-      batch?.images.find((image) => image.id === entry.selectedImageId) ?? batch?.images[0];
-    const selectedIndex = batch?.images.findIndex((image) => image.id === selected?.id) ?? 0;
-    const selectedView = entry.views.find((view) => view.imageId === selected?.id);
-    return m('section.fm-image-side.fm-image-preview', [
-      m('h5.fm-image-side-title', t('image', 'previewTitle')),
-      m('.fm-image-thumbs', { role: 'group', 'aria-label': t('image', 'images') }, [
-        ...(batch?.images.map((image, index) =>
-          thumbnail(
-            attrs,
-            image,
-            index,
-            entry.views.find((view) => view.imageId === image.id),
-          ),
-        ) ?? []),
-        m(FlatButton, {
-          label: t('image', 'discard'),
-          disabled: saving,
-          onclick: () => {
-            closeSaveForm();
-            attrs.onDiscard();
-          },
-        }),
-      ]),
-      selectedView?.loading
-        ? m('p.fm-image-pending', { role: 'status' }, t('image', 'loading'))
-        : undefined,
-      selectedView?.previewUrl === undefined
-        ? m('.fm-image-large.fm-image-large-empty', m('span', t('image', 'noPreview')))
-        : m(
-            '.fm-image-large',
-            m('img', { src: selectedView.previewUrl, alt: t('image', 'previewAlt') }),
-          ),
+    const pending = entry.pendingRequestId !== undefined;
+    const images = entry.batch?.images ?? [];
+    // One picture is normally on screen, so no click is needed to make it the chosen one.
+    const selectedId = entry.selectedImageId ?? images[0]?.id;
+    return m('section.fm-image-preview', { role: 'log', 'aria-live': 'polite' }, [
+      pending
+        ? m('p.fm-image-pending', t('image', 'waitingForModel'))
+        : images.length === 0
+          ? undefined
+          : images.map((image, index) => {
+              const view = entry.views.find((candidate) => candidate.imageId === image.id);
+              const selected = image.id === selectedId;
+              return m(
+                'figure.fm-image-figure',
+                {
+                  class: selected ? 'fm-image-figure-selected' : undefined,
+                  onclick: () => {
+                    if (!selected) attrs.onSelect(image.id);
+                  },
+                  tabindex: '0',
+                  role: 'button',
+                  'aria-label': t('image', 'showImage', { number: index + 1 }),
+                  onkeydown: (event: KeyboardEvent) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    attrs.onSelect(image.id);
+                  },
+                },
+                [
+                  view?.loading
+                    ? m('p.fm-image-pending', t('image', 'loading'))
+                    : view?.previewUrl === undefined
+                      ? undefined
+                      : m('img', { src: view.previewUrl, alt: t('image', 'previewAlt') }),
+                  selected ? imageActions(attrs, image, index) : undefined,
+                ],
+              );
+            }),
       entry.error
         ? m('.fm-image-error', { role: 'alert' }, [
             m('span', entry.error),
             failureNeedsSettings(entry.failure) && attrs.onOpenSettings
-              ? m(FlatButton, {
-                  label: t('image', 'openSettings'),
-                  onclick: () => attrs.onOpenSettings?.(),
-                })
+              ? chromeButton(t('image', 'openSettings'), () => attrs.onOpenSettings?.())
               : undefined,
             isSaveConflict(entry.failure)
-              ? m(FlatButton, {
-                  label: t('image', 'replace'),
-                  disabled: saving,
-                  onclick: () => {
+              ? chromeButton(
+                  t('image', 'replace'),
+                  () => {
                     confirmingReplace = true;
-                    if (selected !== undefined) openSaveForm(attrs, selected, selectedIndex);
+                    const selected =
+                      images.find((image) => image.id === entry.selectedImageId) ?? images[0];
+                    if (selected !== undefined) {
+                      openSaveForm(attrs, selected, images.indexOf(selected));
+                    }
                   },
-                })
+                  { disabled: entry.savingImageId !== undefined },
+                )
+              : undefined,
+            !pending && entry.batch !== undefined && entry.selectedImageId !== undefined
+              ? chromeButton(t('image', 'regenerate'), () => attrs.onRegenerate())
               : undefined,
           ])
         : undefined,
-      selected === undefined
-        ? undefined
-        : m('.fm-image-preview-actions', [
-            saveImageId === selected.id
-              ? saveForm(attrs, selected)
-              : m(FlatButton, {
-                  label: t('image', 'save'),
-                  disabled: saving,
-                  onclick: () => openSaveForm(attrs, selected, selectedIndex),
-                }),
-            m(FlatButton, {
-              label: t('image', 'regenerate'),
-              disabled: saving || entry.pendingRequestId !== undefined,
-              onclick: () => attrs.onRegenerate(),
-            }),
-          ]),
-      selectedView?.savedLocation === undefined
+      entry.views.find((view) => view.imageId === entry.selectedImageId)?.savedLocation ===
+      undefined
         ? undefined
         : m(
             'p.fm-image-saved',
             { role: 'status' },
-            t('image', 'savedTo', { location: selectedView.savedLocation }),
-          ),
-      selected === undefined || entry.batch === undefined
-        ? undefined
-        : m(
-            'p.fm-image-meta',
-            t('image', 'meta', {
-              width: selected.width,
-              height: selected.height,
-              model: entry.batch.model,
-              downscaled: selected.downscaled ? t('image', 'downscaled') : t('image', 'original'),
+            t('image', 'savedTo', {
+              location:
+                entry.views.find((view) => view.imageId === entry.selectedImageId)?.savedLocation ??
+                '',
             }),
           ),
     ]);
   };
 
+  const composer = (attrs: ImagePaneAttrs) => {
+    const { entry } = attrs;
+    const pending = entry.pendingRequestId !== undefined;
+    const problem = imageRequestProblem(entry);
+    const composed = composePrompt(entry.subject, entry.presetIds, entry.lensId, entry.apertureId);
+    const negative = composeNegativePrompt(entry.negativePrompt, entry.presetIds);
+    return m(
+      'form.fm-image-composer',
+      {
+        onsubmit: (event: Event) => {
+          event.preventDefault();
+          if (pending || !canGenerate(entry)) return;
+          attrs.onGenerate();
+        },
+      },
+      [
+        m('.fm-image-composer-row', [
+          m('textarea.fm-image-input', {
+            'aria-label': t('image', 'subject'),
+            placeholder: t('image', 'subjectPlaceholder'),
+            value: entry.subject,
+            disabled: pending,
+            oninput: (event: Event) => {
+              attrs.onPatch({ subject: (event.target as HTMLTextAreaElement).value });
+            },
+            onkeydown: (event: KeyboardEvent) => {
+              if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+                event.preventDefault();
+                if (canGenerate(entry)) attrs.onGenerate();
+              }
+            },
+          }),
+          m('.fm-image-composer-actions', [
+            pending
+              ? tooltip(
+                  t('image', 'stop'),
+                  m(
+                    'button.btn-flat.fm-image-chrome.fm-image-chrome-icon.fm-image-stop',
+                    {
+                      type: 'button',
+                      'aria-label': t('image', 'stop'),
+                      onclick: () => attrs.onStop(),
+                    },
+                    playerStopIcon({ size: 14 }),
+                  ),
+                )
+              : tooltip(
+                  t('image', 'generate'),
+                  m(
+                    'button.btn-flat.fm-image-chrome.fm-image-chrome-icon.fm-image-send',
+                    {
+                      type: 'submit',
+                      'aria-label': t('image', 'generate'),
+                      disabled: !canGenerate(entry),
+                    },
+                    checkIcon({ size: 14 }),
+                  ),
+                ),
+          ]),
+        ]),
+        // What to leave out travels with the prompt it belongs to, in the same box.
+        m('input.fm-image-avoid', {
+          type: 'text',
+          'aria-label': t('image', 'negative'),
+          placeholder: t('image', 'negativePlaceholder'),
+          disabled: pending,
+          value: entry.negativePrompt,
+          oninput: (event: Event) => {
+            attrs.onPatch({ negativePrompt: (event.target as HTMLInputElement).value });
+          },
+        }),
+        // The wording the presets and lens picks added is what the model will be sent; a person
+        // who cannot see it cannot trust it.
+        m('p.fm-image-composed', { 'aria-live': 'polite' }, [
+          m('span.fm-image-composed-label', t('image', 'sent')),
+          m('span.fm-image-composed-text', composed === '' ? t('image', 'nothingYet') : composed),
+          negative === ''
+            ? undefined
+            : [
+                m('span.fm-image-composed-label', t('image', 'negative')),
+                m('span.fm-image-composed-text', negative),
+              ],
+          problem === undefined || pending
+            ? undefined
+            : m('span.fm-image-problem', t('image', problem)),
+        ]),
+      ],
+    );
+  };
+
   return {
     view: ({ attrs }) => {
       const { entry } = attrs;
-      const composed = composePrompt(entry.subject, entry.presetId, entry.lensId, entry.apertureId);
-      const negative = composeNegativePrompt(entry.negativePrompt, entry.presetId);
-      return m('div.fm-image', [
+      return m('section.fm-image', [
         m('header.fm-image-header', [
-          m('span.fm-image-title', t('image', 'title')),
-          m(FlatButton, {
-            label: t('image', 'openSettings'),
-            className: 'btn-flat fm-image-settings',
-            onclick: () => attrs.onOpenSettings?.(),
-          }),
+          crumbs(attrs),
+          iconButton(
+            t('image', 'newPrompt'),
+            photoIcon({ size: 16 }),
+            () => attrs.onNewPrompt(),
+            entry.pendingRequestId !== undefined,
+          ),
+          attrs.onNewTab === undefined
+            ? undefined
+            : iconButton(t('pane', 'newTab'), plusIcon({ size: 16 }), () => attrs.onNewTab?.()),
+          // The pane's favourites menu is its own chrome; the viewer's header mirrors the button
+          // the tab strip would otherwise show.
+          iconButton(t('pane', 'favourites'), heartIcon({ size: 16 }), () => undefined),
+          iconButton(t('image', 'openSettings'), settingsIcon({ size: 16 }), () =>
+            attrs.onOpenSettings?.(),
+          ),
         ]),
-        m('.fm-image-split', [promptSide(attrs), previewSide(attrs)]),
-        m('p.fm-image-footnote', { 'aria-live': 'polite' }, [
-          composed === ''
-            ? t('image', 'footnoteIdle')
-            : t('image', 'footnoteReady', { prompt: composed, negative }),
-        ]),
+        m('.fm-image-body', [preview(attrs), composer(attrs)]),
+        status(attrs),
       ]);
     },
   };

@@ -41,7 +41,7 @@ async fn profile_crud_clone_export_and_test_never_echo_secret_material() {
         .json()
         .await
         .unwrap();
-    assert_eq!(presets.as_array().unwrap().len(), 9);
+    assert_eq!(presets.as_array().unwrap().len(), 10);
     assert_eq!(presets[5]["preset"], "mlxServe");
     assert_eq!(presets[5]["baseUrl"], "http://127.0.0.1:11234");
     let studio = presets
@@ -53,6 +53,15 @@ async fn profile_crud_clone_export_and_test_never_echo_secret_material() {
     assert_eq!(studio["baseUrl"], "https://dashscope.aliyuncs.com/api/v1");
     assert_eq!(studio["capabilities"], json!(["dashscopeTasks"]));
     assert_eq!(studio["redactFilenames"], true);
+    let qwen = presets
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|preset| preset["preset"] == "qwenImage")
+        .expect("the browser host can fill the image role with one choice");
+    assert_eq!(qwen["model"], "qwen-image");
+    assert_eq!(qwen["baseUrl"], "https://dashscope.aliyuncs.com/api/v1");
+    assert_eq!(qwen["redactFilenames"], true);
 
     let limits_response = client
         .post(format!(

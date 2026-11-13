@@ -19,11 +19,20 @@ export type ImagePresetId =
   | 'pattern'
   | 'sticker';
 
-/** A preset the person can pick with one click. */
+/**
+ * What a preset describes. A `medium` is how the picture is made - flat clipart, a watercolour, a
+ * photograph, a film still - so only one of them can describe a given picture. A `treatment` is
+ * something done to a picture, such as taking the colour out of it, and sits on top of a medium.
+ */
+export type ImagePresetGroup = 'medium' | 'treatment';
+
+/** A preset the person can switch on with one click. */
 export interface ImagePreset {
   readonly id: ImagePresetId;
-  /** Material icon name shown on the chip. */
+  /** Material icon name; only the label is shown in the list, the icon belongs on the chip. */
   readonly icon: string;
+  /** Whether this preset is the look of the picture, or something done to it. */
+  readonly group: ImagePresetGroup;
   /** Wording appended to what the person typed; it carries the style. */
   readonly suffix: string;
   /** What to ask the model to avoid. */
@@ -45,6 +54,7 @@ export const IMAGE_PRESETS: readonly ImagePreset[] = [
     negative: 'photo, realism, gradient, text, watermark',
     width: 1_024,
     height: 1_024,
+    group: 'medium',
     photographic: false,
   },
   {
@@ -55,6 +65,7 @@ export const IMAGE_PRESETS: readonly ImagePreset[] = [
     negative: 'colour, oversaturated, cartoon, text, watermark',
     width: 1_216,
     height: 832,
+    group: 'treatment',
     photographic: true,
   },
   {
@@ -64,6 +75,7 @@ export const IMAGE_PRESETS: readonly ImagePreset[] = [
     negative: 'deformed hands, extra fingers, text, watermark',
     width: 832,
     height: 1_216,
+    group: 'medium',
     photographic: true,
   },
   {
@@ -74,6 +86,7 @@ export const IMAGE_PRESETS: readonly ImagePreset[] = [
     negative: 'clutter, hands, text, watermark',
     width: 1_024,
     height: 1_024,
+    group: 'medium',
     photographic: true,
   },
   {
@@ -83,6 +96,7 @@ export const IMAGE_PRESETS: readonly ImagePreset[] = [
     negative: 'photo, heavy outlines, text, watermark',
     width: 1_024,
     height: 1_024,
+    group: 'medium',
     photographic: false,
   },
   {
@@ -92,6 +106,7 @@ export const IMAGE_PRESETS: readonly ImagePreset[] = [
     negative: 'photo, gradient, text, watermark',
     width: 1_216,
     height: 832,
+    group: 'medium',
     photographic: false,
   },
   {
@@ -101,6 +116,7 @@ export const IMAGE_PRESETS: readonly ImagePreset[] = [
     negative: 'cartoon, text, watermark',
     width: 1_344,
     height: 768,
+    group: 'medium',
     photographic: true,
   },
   {
@@ -110,6 +126,7 @@ export const IMAGE_PRESETS: readonly ImagePreset[] = [
     negative: 'photo, text, watermark',
     width: 1_024,
     height: 1_024,
+    group: 'medium',
     photographic: false,
   },
   {
@@ -119,6 +136,7 @@ export const IMAGE_PRESETS: readonly ImagePreset[] = [
     negative: 'photo, text, watermark, vignette',
     width: 1_024,
     height: 1_024,
+    group: 'medium',
     photographic: false,
   },
   {
@@ -128,9 +146,13 @@ export const IMAGE_PRESETS: readonly ImagePreset[] = [
     negative: 'photo, text, watermark, shadow',
     width: 1_024,
     height: 1_024,
+    group: 'medium',
     photographic: false,
   },
 ] as const;
+
+/** Nothing is switched on when a pane opens. */
+export const NO_PRESETS: readonly string[] = [];
 
 /** The preset id a pane starts on: nothing is chosen until the person picks one. */
 export const NO_PRESET = '';
@@ -169,21 +191,58 @@ export function clauseById(list: readonly ImageLens[], id: string): string {
   return list.find((entry) => entry.id === id)?.clause ?? '';
 }
 
+/** The presets behind these ids, in the order they are listed; unknown ids contribute nothing. */
+export function selectedPresets(ids: readonly string[]): ImagePreset[] {
+  return IMAGE_PRESETS.filter((preset) => ids.includes(preset.id));
+}
+
 /**
- * The prompt actually sent: what the person typed, then the style the preset carries, then the lens
- * wording when it applies. Empty parts are dropped so no double commas appear.
+ * Whether a selection can describe one picture: the way it is made is a single choice, so two
+ * mediums such as flat clipart and a cinematic still contradict each other. A treatment - the
+ * colour taken out of a photograph - is free to join any of them.
+ */
+export function presetsAreCompatible(ids: readonly string[]): boolean {
+  return selectedPresets(ids).filter((preset) => preset.group === 'medium').length <= 1;
+}
+
+/**
+ * The selection after the person clicks a preset: it comes off when it was on, and goes on beside
+ * the others otherwise - replacing whatever medium was on, since only one picture can be made one
+ * way. The result is in preset order, so the prompt does not depend on the order of clicks.
+ */
+export function togglePreset(ids: readonly string[], id: string): string[] {
+  if (presetById(id) === undefined) return [...ids];
+  const without = ids.filter((candidate) => candidate !== id);
+  if (ids.includes(id)) return selectedPresets(without).map((preset) => preset.id);
+  const chosen = presetById(id) as ImagePreset;
+  const kept =
+    chosen.group === 'medium'
+      ? without.filter((candidate) => presetById(candidate)?.group !== 'medium')
+      : without;
+  return selectedPresets([...kept, id]).map((preset) => preset.id);
+}
+
+/** Whether a camera makes sense for this selection: any photographic preset is enough. */
+export function selectionIsPhotographic(ids: readonly string[]): boolean {
+  return selectedPresets(ids).some((preset) => preset.photographic);
+}
+
+/**
+ * The prompt actually sent: what the person typed, then the wording each chosen preset carries,
+ * then the lens wording when a photographic preset is on. Empty parts are dropped so no double
+ * commas appear.
  */
 export function composePrompt(
   subject: string,
-  presetId: string,
+  presetIds: readonly string[],
   lensId: string,
   apertureId: string,
 ): string {
-  const preset = presetById(presetId);
-  const photographic = preset?.photographic ?? false;
+  const presets = selectedPresets(presetIds);
+  const photographic = presets.some((preset) => preset.photographic);
   const parts = [
     subject.trim(),
-    preset?.suffix ?? '',
+    ...presets.map((preset) => preset.suffix),
     photographic ? clauseById(IMAGE_LENSES, lensId) : '',
     photographic ? clauseById(IMAGE_APERTURES, apertureId) : '',
   ].filter((part) => part.trim() !== '');
@@ -191,11 +250,14 @@ export function composePrompt(
 }
 
 /**
- * The negative prompt sent: the person's own wording first, then the preset's, so a preset never
- * silently drops what the person asked to avoid.
+ * The negative prompt sent: the person's own wording first, then what each chosen preset asks to
+ * avoid, with a term that two presets both dislike listed once.
  */
-export function composeNegativePrompt(own: string, presetId: string): string {
-  const preset = presetById(presetId);
-  const parts = [own.trim(), preset?.negative ?? ''].filter((part) => part !== '');
-  return parts.join(', ');
+export function composeNegativePrompt(own: string, presetIds: readonly string[]): string {
+  const terms = [own, ...selectedPresets(presetIds).map((preset) => preset.negative)]
+    .join(',')
+    .split(',')
+    .map((term) => term.trim())
+    .filter((term) => term !== '');
+  return [...new Set(terms)].join(', ');
 }

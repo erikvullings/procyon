@@ -18924,7 +18924,8 @@
           "mlxServe",
           "openAiCompatible",
           "azureOpenAi",
-          "modelStudio"
+          "modelStudio",
+          "qwenImage"
         ]
       },
       "LlmProfileDto": {

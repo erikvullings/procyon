@@ -21,6 +21,8 @@ pub enum LlmPresetDto {
     AzureOpenAi,
     /// Alibaba Cloud Model Studio, whose `qwen-image` and `wan*` models answer the async task API.
     ModelStudio,
+    /// Model Studio's Qwen-Image model, with its model id already filled in.
+    QwenImage,
 }
 
 #[allow(missing_docs)]

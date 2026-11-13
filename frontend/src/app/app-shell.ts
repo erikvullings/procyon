@@ -24,6 +24,7 @@ import {
   linkOffIcon,
   messageCircleIcon,
   operationsIcon,
+  photoIcon,
   plusIcon,
   searchIcon,
   settingsIcon,
@@ -2543,8 +2544,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       save: (key, input) => imageWiring.save(shellState.client, key, input),
       discard: (key) => imageWiring.discard(shellState.client, key),
       regenerate: (key) => imageWiring.regenerate(shellState.client, key),
+      selectGeneration: (key, generationId) =>
+        imageWiring.selectGeneration(shellState.client, key, generationId),
+      newPrompt: (key) => imageWiring.newPrompt(shellState.client, key),
     },
     imageSaveFolder: (key) => imageWiring.saveFolder(key),
+    // The image pane's settings icon goes to the endpoints and roles, not to the semantic section.
+    openImageSettings: () => settingsWiring.openSettingsDialog('llm'),
     chatFolderAvailable: (key) => chatWiring.folderAvailable(key),
     chatFolderSelection: (key) => chatWiring.folderSelection(key),
     openNewTab: (paneId) => shellState.tabController.openTab(paneId),
@@ -3595,6 +3601,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
           label: t('chat', 'title'),
           icon: messageCircleIcon(),
           onclick: () => void chatWiring.openChat(),
+        },
+        {
+          // Reachable the way the chat pane is: the pane's own overflow menu.
+          id: 'image',
+          label: t('image', 'title'),
+          icon: photoIcon(),
+          onclick: () => void imageWiring.openImage(),
         },
         {
           id: 'basket-add',

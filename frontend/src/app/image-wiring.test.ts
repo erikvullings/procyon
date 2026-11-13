@@ -70,12 +70,30 @@ function imageClient(overrides: Partial<FileManagerClient> = {}): Partial<FileMa
   };
 }
 
+let objectUrls = 0;
+const originalCreate = URL.createObjectURL;
+const originalRevoke = URL.revokeObjectURL;
+
+/** Lets the fired-off byte fetches run to their end. */
+async function settle(): Promise<void> {
+  for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+}
+
 beforeEach(() => {
   vi.stubGlobal('crypto', { randomUUID: () => 'req-1' });
+  // The preview holds bytes behind an object URL; a stand-in name is enough to follow it.
+  objectUrls = 0;
+  URL.createObjectURL = (() => {
+    objectUrls += 1;
+    return `blob:${objectUrls}`;
+  }) as unknown as typeof URL.createObjectURL;
+  URL.revokeObjectURL = vi.fn() as unknown as typeof URL.revokeObjectURL;
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  URL.createObjectURL = originalCreate;
+  URL.revokeObjectURL = originalRevoke;
 });
 
 describe('image wiring', () => {
@@ -83,7 +101,7 @@ describe('image wiring', () => {
     const client = imageClient();
     const { shell, entry } = fakeShell(client);
     entry.subject = 'a lighthouse at dusk';
-    entry.presetId = 'watercolour';
+    entry.presetIds = ['watercolour'];
     entry.negativePrompt = 'blur';
     const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
 
@@ -293,5 +311,180 @@ describe('failure mapping', () => {
       expect(text, reason).not.toContain(reason);
       expect(text, reason).not.toBe(key);
     }
+  });
+});
+
+describe('the crumb bar of previous generations', () => {
+  /** A second batch, so a pane can be holding one generation while asked for another. */
+  const otherBatch: ImageBatch = { ...batch, generationId: 'g2', prompt: 'a fox in a boat' };
+
+  it('keeps the generation it replaces as a crumb', async () => {
+    const client = imageClient({
+      generateImages: vi
+        .fn<() => Promise<ImageBatch>>()
+        .mockResolvedValueOnce(batch)
+        .mockResolvedValueOnce(otherBatch),
+    });
+    const { shell, entry } = fakeShell(client);
+    entry.subject = 'a fox';
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+    const clientAsClient = client as unknown as FileManagerClient;
+
+    await wiring.generate(clientAsClient, entry.key);
+    await settle();
+    await wiring.generate(clientAsClient, entry.key);
+    await settle();
+
+    expect(entry.history.map((record) => record.generationId)).toEqual(['g1', 'g2']);
+    expect(entry.batch?.generationId).toBe('g2');
+    expect(entry.activeGenerationId).toBe('g2');
+  });
+
+  it('shows an earlier generation again without asking for its pictures twice', async () => {
+    const client = imageClient({
+      generateImages: vi
+        .fn<() => Promise<ImageBatch>>()
+        .mockResolvedValueOnce(batch)
+        .mockResolvedValueOnce(otherBatch),
+    });
+    const { shell, entry } = fakeShell(client);
+    entry.subject = 'a fox';
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+    const clientAsClient = client as unknown as FileManagerClient;
+    await wiring.generate(clientAsClient, entry.key);
+    await settle();
+    await wiring.generate(clientAsClient, entry.key);
+    await settle();
+    const fetched = (client.generatedImageBytes as ReturnType<typeof vi.fn>).mock.calls.length;
+
+    wiring.selectGeneration(clientAsClient, entry.key, 'g1');
+    await Promise.resolve();
+
+    expect(entry.batch?.generationId).toBe('g1');
+    expect(entry.activeGenerationId).toBe('g1');
+    expect(entry.views[0]?.previewUrl).toBe('blob:1');
+    // Its pictures were already fetched, so going back costs nothing.
+    expect(client.generatedImageBytes).toHaveBeenCalledTimes(fetched);
+  });
+
+  it('brings back the prompt that produced the generation it goes back to', async () => {
+    const client = imageClient({
+      generateImages: vi
+        .fn<() => Promise<ImageBatch>>()
+        .mockResolvedValueOnce({ ...batch, prompt: 'a lighthouse at dusk' })
+        .mockResolvedValueOnce({ ...otherBatch, prompt: 'a fox in a boat' }),
+    });
+    const { shell, entry } = fakeShell(client);
+    entry.subject = 'a fox';
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+    const clientAsClient = client as unknown as FileManagerClient;
+    await wiring.generate(clientAsClient, entry.key);
+    await settle();
+    await wiring.generate(clientAsClient, entry.key);
+    await settle();
+
+    wiring.selectGeneration(clientAsClient, entry.key, 'g1');
+
+    expect(entry.subject).toBe('a lighthouse at dusk');
+  });
+
+  it('fetches again for a generation whose bytes the backend has let go', async () => {
+    const client = imageClient();
+    const { shell, entry } = fakeShell(client);
+    entry.batch = batch;
+    entry.views = [{ imageId: 'i1', loading: false }];
+    entry.activeGenerationId = 'g1';
+    entry.history = [{ generationId: 'g1', batch, views: entry.views }];
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+    const clientAsClient = client as unknown as FileManagerClient;
+    // Look at something else, then come back to the generation whose preview is gone.
+    entry.batch = otherBatch;
+    entry.views = [{ imageId: 'i1', loading: false, previewUrl: 'blob:other' }];
+    entry.activeGenerationId = 'g2';
+    entry.history = [
+      ...entry.history,
+      { generationId: 'g2', batch: otherBatch, views: entry.views },
+    ];
+
+    wiring.selectGeneration(clientAsClient, entry.key, 'g1');
+    await Promise.resolve();
+
+    expect(client.generatedImageBytes).toHaveBeenCalledWith('g1', 'i1', false);
+  });
+
+  it('starts a new prompt and leaves the previous generations where they are', async () => {
+    const client = imageClient();
+    const { shell, entry } = fakeShell(client);
+    entry.subject = 'a fox';
+    entry.presetIds = ['clipart'];
+    entry.seed = 7;
+    entry.batch = batch;
+    entry.views = [{ imageId: 'i1', loading: false, previewUrl: 'blob:1' }];
+    entry.activeGenerationId = 'g1';
+    entry.history = [{ generationId: 'g1', batch, views: entry.views }];
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    wiring.newPrompt(client as unknown as FileManagerClient, entry.key);
+
+    expect(entry.subject).toBe('');
+    expect(entry.presetIds).toEqual([]);
+    expect(entry.seed).toBeUndefined();
+    expect(entry.batch).toBeUndefined();
+    expect(entry.activeGenerationId).toBeUndefined();
+    expect(entry.history.map((record) => record.generationId)).toEqual(['g1']);
+    // Nothing was thrown away: the crumb still leads to the pictures the backend holds.
+    expect(client.discardImageBatch).not.toHaveBeenCalled();
+  });
+
+  it('drops every generation the pane was holding when it closes', async () => {
+    const client = imageClient();
+    const { shell, entry } = fakeShell(client);
+    entry.batch = otherBatch;
+    entry.views = [{ imageId: 'i1', loading: false }];
+    entry.history = [{ generationId: 'g1', batch, views: [] }];
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    wiring.forget(client as unknown as FileManagerClient, entry.key);
+
+    expect(client.discardImageBatch).toHaveBeenCalledWith('g1');
+    expect(client.discardImageBatch).toHaveBeenCalledWith('g2');
+  });
+
+  it('takes a discarded generation out of the crumb bar', async () => {
+    const client = imageClient();
+    const { shell, entry } = fakeShell(client);
+    entry.batch = batch;
+    entry.views = [{ imageId: 'i1', loading: false, previewUrl: 'blob:1' }];
+    entry.activeGenerationId = 'g1';
+    entry.history = [{ generationId: 'g1', batch, views: entry.views }];
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.discard(client as unknown as FileManagerClient, entry.key);
+
+    expect(entry.history).toEqual([]);
+    expect(entry.activeGenerationId).toBeUndefined();
+  });
+});
+
+describe('several presets at once', () => {
+  it('sends a treatment on top of the medium', async () => {
+    const client = imageClient();
+    const { shell, entry } = fakeShell(client);
+    entry.subject = 'a fox';
+    entry.presetIds = ['watercolour', 'blackAndWhite'];
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.generate(client as unknown as FileManagerClient, entry.key);
+
+    const sent = (client.generateImages as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as {
+      prompt: string;
+      negativePrompt: string | null;
+    };
+    expect(sent.prompt).toContain('loose watercolour illustration');
+    expect(sent.prompt).toContain('film grain');
+    // The two presets both dislike watermarks; the word is sent once.
+    expect(
+      sent.negativePrompt?.split(',').filter((term) => term.trim() === 'watermark'),
+    ).toHaveLength(1);
   });
 });

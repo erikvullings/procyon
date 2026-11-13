@@ -251,6 +251,10 @@ export interface PaneContentContext {
     ): void;
     discard(key: string): void;
     regenerate(key: string): void;
+    /** Shows one of the generations the crumb bar holds. */
+    selectGeneration(key: string, generationId: string): void;
+    /** Clears the prompt for a fresh idea. */
+    newPrompt(key: string): void;
   };
 
   // Scalar state setters
@@ -335,6 +339,8 @@ export interface PaneContentContext {
   /** Opens search-only knowledge search defaulted to the visible result set (task 0206). */
   openKnowledgeSearch?(): void;
   openKnowledgeAnswerSettings?(): void;
+  /** Opens Settings at the LLM (AI) section, where the image role and its consent live. */
+  openImageSettings?(): void;
   closeKnowledgeSearch(paneId: PaneId, tabId: TabId): void;
   openThemePassage(passage: ThemePassage): Promise<void>;
   searchThemeSources(sourceIds: readonly string[], subject: string): void;
@@ -1158,6 +1164,7 @@ export function createPaneContentBuilder(
       },
       ...(image !== undefined
         ? {
+            viewerOwnsTabActions: true,
             viewerContent: m(ImagePane, {
               entry: image,
               saveFolder: context.imageSaveFolder?.(image.key)?.location,
@@ -1169,7 +1176,11 @@ export function createPaneContentBuilder(
               onSave: (input) => context.imageActions?.save(image.key, input),
               onDiscard: () => context.imageActions?.discard(image.key),
               onRegenerate: () => context.imageActions?.regenerate(image.key),
-              onOpenSettings: () => context.openKnowledgeAnswerSettings?.(),
+              onSelectGeneration: (generationId) =>
+                context.imageActions?.selectGeneration(image.key, generationId),
+              onNewPrompt: () => context.imageActions?.newPrompt(image.key),
+              onNewTab: () => context.openNewTab?.(paneId),
+              onOpenSettings: () => context.openImageSettings?.(),
             }),
           }
         : chat !== undefined

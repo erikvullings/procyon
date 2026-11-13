@@ -1211,6 +1211,15 @@ export class MockSemanticClient implements SemanticClient {
           capabilities: ['dashscopeTasks'],
           redactFilenames: true,
         },
+        {
+          ...defaults,
+          name: 'Qwen Image (Alibaba Cloud)',
+          preset: 'qwenImage',
+          baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+          model: 'qwen-image',
+          capabilities: ['dashscopeTasks'],
+          redactFilenames: true,
+        },
       ];
     });
   }

@@ -16,4 +16,5 @@ export const LlmPresetDto = {
   openAiCompatible: 'openAiCompatible',
   azureOpenAi: 'azureOpenAi',
   modelStudio: 'modelStudio',
+  qwenImage: 'qwenImage',
 } as const;

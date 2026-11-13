@@ -1,17 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import type { ImageBatch, Location } from '../../models';
 import { isValidImageFileName } from '../../models';
+import type { ImageGenerationRecord } from './image-pane-state';
 import {
+  activeGeneration,
   canGenerate,
+  crumbLabel,
   destinationFor,
   emptyImagePane,
   failureNeedsSettings,
   firstImageId,
+  forgetGeneration,
   hasPreview,
   imagePlacementPaneId,
   imageRequestProblem,
   imageSaveFolderPaneId,
   isSaveConflict,
+  MAX_GENERATION_CRUMBS,
+  rememberGeneration,
   suggestedFileName,
 } from './image-pane-state';
 
@@ -212,5 +218,76 @@ describe('placement', () => {
   it('takes the other pane as the save folder', () => {
     expect(imageSaveFolderPaneId(['pane-1', 'pane-2'], 'pane-1')).toBe('pane-2');
     expect(imageSaveFolderPaneId(['pane-1'], 'pane-1')).toBeUndefined();
+  });
+});
+
+function record(generationId: string, prompt = 'a lighthouse at dusk'): ImageGenerationRecord {
+  return {
+    generationId,
+    batch: { ...batch, generationId, prompt },
+    views: [{ imageId: 'image-1', loading: false, previewUrl: `blob:${generationId}` }],
+    selectedImageId: 'image-1',
+  };
+}
+
+describe('the list of previous generations', () => {
+  it('is empty until something has been generated', () => {
+    expect(pane().history).toEqual([]);
+    expect(activeGeneration(pane())).toBeUndefined();
+  });
+
+  it('remembers a generation and points the preview at it', () => {
+    const entry = pane({
+      batch,
+      views: record('generation-1').views,
+      activeGenerationId: 'generation-1',
+    });
+    entry.history = rememberGeneration([], record('generation-1'));
+    expect(entry.history.map((item) => item.generationId)).toEqual(['generation-1']);
+    expect(activeGeneration(entry)?.batch.generationId).toBe('generation-1');
+  });
+
+  it('keeps one entry per generation, however often it is revisited', () => {
+    const history = rememberGeneration(
+      rememberGeneration([], record('generation-1')),
+      record('generation-1'),
+    );
+    expect(history.map((item) => item.generationId)).toEqual(['generation-1']);
+  });
+
+  it('keeps the oldest on screen out of the crumb bar rather than growing without bound', () => {
+    let history: ImageGenerationRecord[] = [];
+    for (let index = 0; index < MAX_GENERATION_CRUMBS + 4; index += 1) {
+      history = rememberGeneration(history, record(`generation-${index}`));
+    }
+    expect(history).toHaveLength(MAX_GENERATION_CRUMBS);
+    expect(history[0]?.generationId).toBe('generation-4');
+    expect(history[history.length - 1]?.generationId).toBe(
+      `generation-${MAX_GENERATION_CRUMBS + 3}`,
+    );
+  });
+
+  it('drops a discarded generation from the bar', () => {
+    const history = forgetGeneration(
+      rememberGeneration(rememberGeneration([], record('generation-1')), record('generation-2')),
+      'generation-1',
+    );
+    expect(history.map((item) => item.generationId)).toEqual(['generation-2']);
+  });
+});
+
+describe('crumbLabel', () => {
+  it('shows the start of the prompt, not the whole thing', () => {
+    expect(crumbLabel('a lighthouse at dusk, loose watercolour illustration, soft washes')).toBe(
+      'a lighthouse at dusk, loose watercolour…',
+    );
+  });
+
+  it('collapses the whitespace of a multi-line prompt', () => {
+    expect(crumbLabel('  a fox\n\n  on a wall  ')).toBe('a fox on a wall');
+  });
+
+  it('says so when nothing was typed', () => {
+    expect(crumbLabel('   ')).toBe('');
   });
 });

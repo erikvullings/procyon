@@ -12,7 +12,21 @@ export interface GeneratedImageView {
   savedLocation?: string | undefined;
 }
 
-/** An image tab (task 0325): a prompt on one side, the resulting pictures on the other. */
+/** One generation this pane has asked for, kept so the crumb bar can go back to it. */
+export interface ImageGenerationRecord {
+  readonly generationId: string;
+  /** What the endpoint returned: its prompt, size and images. */
+  readonly batch: ImageBatch;
+  /** How each of its images is displayed; held so revisiting costs no fetch. */
+  views: GeneratedImageView[];
+  /** Which of its images was shown large. */
+  selectedImageId?: string | undefined;
+}
+
+/** How many previous generations the crumb bar keeps before the oldest falls off. */
+export const MAX_GENERATION_CRUMBS = 12;
+
+/** An image tab (task 0325): a prompt at the bottom, the resulting pictures above it. */
 export interface ImagePaneEntry {
   key: string;
   paneId: PaneId;
@@ -22,8 +36,8 @@ export interface ImagePaneEntry {
   subject: string;
   /** What the person wants avoided, on top of what the preset already excludes. */
   negativePrompt: string;
-  /** Chosen style preset id, or `NO_PRESET`. */
-  presetId: string;
+  /** Chosen style preset ids; at most one medium, plus any treatment. */
+  presetIds: string[];
   /** Chosen lens and aperture ids; only used by photographic presets. */
   lensId: string;
   apertureId: string;
@@ -32,9 +46,13 @@ export interface ImagePaneEntry {
   count: number;
   /** Reproducibility seed; `undefined` lets the provider choose. */
   seed?: number | undefined;
-  /** The batch on screen, and how each of its images is displayed. */
+  /** The generation on screen, and how each of its images is displayed. */
   batch?: ImageBatch | undefined;
   views: GeneratedImageView[];
+  /** The generations this pane has asked for, oldest first; the crumb bar walks them. */
+  history: ImageGenerationRecord[];
+  /** Which of them the preview shows. */
+  activeGenerationId?: string | undefined;
   /** Which stored image the preview pane shows large. */
   selectedImageId?: string | undefined;
   /** Identity of the running request, so Stop can reach it. */
@@ -61,13 +79,14 @@ export function emptyImagePane(
     workspaceId,
     subject: '',
     negativePrompt: '',
-    presetId: '',
+    presetIds: [],
     lensId: '',
     apertureId: '',
     width: IMAGE_SIZES[0]?.width ?? 1_024,
     height: IMAGE_SIZES[0]?.height ?? 1_024,
     count: 1,
     views: [],
+    history: [],
   };
 }
 
@@ -174,6 +193,44 @@ export function imageSaveFolderPaneId(
 ): PaneId | undefined {
   return paneOrder.find((candidate) => candidate !== imagePaneId);
 }
+
+/** The generation the preview shows, when the pane is looking at one. */
+export function activeGeneration(entry: ImagePaneEntry): ImageGenerationRecord | undefined {
+  return entry.activeGenerationId === undefined
+    ? undefined
+    : entry.history.find((record) => record.generationId === entry.activeGenerationId);
+}
+
+/**
+ * The generation bar after remembering one: a generation appears once however often it is
+ * revisited, and the oldest falls off once the bar is full.
+ */
+export function rememberGeneration(
+  history: readonly ImageGenerationRecord[],
+  record: ImageGenerationRecord,
+): ImageGenerationRecord[] {
+  const kept = history.filter((item) => item.generationId !== record.generationId);
+  return [...kept, record].slice(-MAX_GENERATION_CRUMBS);
+}
+
+/** The generation bar without one of its generations, once it has been discarded. */
+export function forgetGeneration(
+  history: readonly ImageGenerationRecord[],
+  generationId: string,
+): ImageGenerationRecord[] {
+  return history.filter((record) => record.generationId !== generationId);
+}
+
+/** How a generation is named in the crumb bar: the start of its prompt, on one line. */
+export function crumbLabel(prompt: string): string {
+  const collapsed = prompt.replace(/\s+/gu, ' ').trim();
+  if (collapsed.length <= CRUMB_MAX) return collapsed;
+  const cut = collapsed.slice(0, CRUMB_MAX + 1);
+  const space = cut.lastIndexOf(' ');
+  return `${space > CRUMB_MAX / 2 ? cut.slice(0, space) : cut}…`;
+}
+
+const CRUMB_MAX = 40;
 
 /** The image of a batch the preview should select: the first, or the one still held. */
 export function firstImageId(batch: ImageBatch | undefined): string | undefined {

@@ -4,15 +4,14 @@ import type { FileManagerClient } from '../api/client/file-manager-client';
 import {
   emptyImagePane,
   firstImageId,
+  forgetGeneration,
+  type ImageGenerationRecord,
   type ImagePaneEntry,
   imagePlacementPaneId,
   imageSaveFolderPaneId,
+  rememberGeneration,
 } from '../features/image-generation/image-pane-state';
-import {
-  composeNegativePrompt,
-  composePrompt,
-  presetById,
-} from '../features/image-generation/image-presets';
+import { composeNegativePrompt, composePrompt } from '../features/image-generation/image-presets';
 import { dispatchWorkspaceCommand } from '../features/workspace/dispatch-workspace-command';
 import { t } from '../i18n';
 import type { GeneratedImage, Location, PaneId } from '../models';
@@ -109,9 +108,38 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     m.redraw();
   }
 
-  /** Fills the preview side's state for a batch: one loading view per image, first one selected. */
+  /**
+   * Puts a generation into the crumb bar. The pictures of a generation the bar drops are revoked,
+   * since nothing on screen can reach them any more.
+   */
+  function remember(entry: ImagePaneEntry, record: ImageGenerationRecord): void {
+    const before = entry.history;
+    const after = rememberGeneration(before, record);
+    const kept = new Set(after);
+    for (const dropped of before) {
+      // Revisiting a generation hands back the very same views, so those stay alive.
+      if (kept.has(dropped) || dropped.views === record.views) continue;
+      revoke(dropped.views);
+    }
+    entry.history = after;
+  }
+
+  /** Puts the generation on screen into the crumb bar, so it stays reachable. */
+  function archive(entry: ImagePaneEntry): void {
+    if (entry.batch === undefined) return;
+    remember(entry, {
+      generationId: entry.batch.generationId,
+      batch: entry.batch,
+      views: entry.views,
+      selectedImageId: entry.selectedImageId,
+    });
+  }
+
+  /**
+   * Fills the preview side's state for a batch: one loading view per image, first one selected.
+   * The pictures it replaces belong to a crumb now, so their URLs are left alone.
+   */
   function startViews(client: FileManagerClient, key: string, entry: ImagePaneEntry): void {
-    revoke(entry.views);
     entry.views = (entry.batch?.images ?? []).map((image) => ({
       imageId: image.id,
       loading: true,
@@ -161,7 +189,7 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
   async function generate(client: FileManagerClient, key: string): Promise<void> {
     const entry = entryOf(key);
     if (entry === undefined || entry.pendingRequestId !== undefined) return;
-    const prompt = composePrompt(entry.subject, entry.presetId, entry.lensId, entry.apertureId);
+    const prompt = composePrompt(entry.subject, entry.presetIds, entry.lensId, entry.apertureId);
     if (prompt.trim() === '') return;
     const requestId = crypto.randomUUID();
     entry.pendingRequestId = requestId;
@@ -173,7 +201,7 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
         requestId,
         workspaceId: entry.workspaceId,
         prompt,
-        negativePrompt: composeNegativePrompt(entry.negativePrompt, entry.presetId) || null,
+        negativePrompt: composeNegativePrompt(entry.negativePrompt, entry.presetIds) || null,
         width: entry.width,
         height: entry.height,
         count: entry.count,
@@ -181,11 +209,20 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
       });
       if (entryOf(key) !== entry || entry.pendingRequestId !== requestId) return;
       entry.pendingRequestId = undefined;
-      revoke(entry.views);
+      // What was on screen becomes a crumb rather than disappearing.
+      archive(entry);
       entry.batch = batch;
+      entry.activeGenerationId = batch.generationId;
       // The seed the batch came back with is kept, so "regenerate" can repeat or vary it deliberately.
       if (batch.seed !== undefined && batch.seed !== null) entry.seed = Number(batch.seed);
       startViews(client, key, entry);
+      // The bar holds every generation the pane asked for, the one on screen included.
+      remember(entry, {
+        generationId: batch.generationId,
+        batch,
+        views: entry.views,
+        selectedImageId: entry.selectedImageId,
+      });
     } catch (error: unknown) {
       if (entryOf(key) !== entry) return;
       entry.pendingRequestId = undefined;
@@ -215,6 +252,57 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     m.redraw();
     const image = entry.batch?.images.find((candidate) => candidate.id === imageId);
     if (image?.downscaled === true) void loadBytes(client, key, image, true);
+  }
+
+  /**
+   * Shows a generation the crumb bar holds again. Its prompt comes back with it, and only the
+   * pictures the backend has let go of are fetched again.
+   */
+  function selectGeneration(client: FileManagerClient, key: string, generationId: string): void {
+    const entry = entryOf(key);
+    if (entry === undefined || entry.activeGenerationId === generationId) return;
+    const record = entry.history.find((item) => item.generationId === generationId);
+    if (record === undefined) return;
+    archive(entry);
+    entry.batch = record.batch;
+    entry.views = record.views;
+    entry.selectedImageId = record.selectedImageId ?? firstImageId(record.batch);
+    entry.activeGenerationId = generationId;
+    entry.failure = undefined;
+    entry.error = undefined;
+    // The prompt on screen is what produced these pictures, so it comes back too.
+    entry.subject = record.batch.prompt;
+    entry.negativePrompt = record.batch.negativePrompt ?? entry.negativePrompt;
+    entry.width = record.batch.width;
+    entry.height = record.batch.height;
+    m.redraw();
+    for (const image of record.batch.images) {
+      const view = record.views.find((item) => item.imageId === image.id);
+      if (view?.previewUrl === undefined) void loadBytes(client, key, image, false);
+    }
+  }
+
+  /**
+   * Clears the prompt for a fresh idea. What has already been generated stays in the crumb bar -
+   * the backend still holds those bytes, and dropping them is the person's call, not this one.
+   */
+  function newPrompt(client: FileManagerClient, key: string): void {
+    const entry = entryOf(key);
+    if (entry === undefined) return;
+    if (entry.pendingRequestId !== undefined) stop(client, key);
+    entry.subject = '';
+    entry.negativePrompt = '';
+    entry.presetIds = [];
+    entry.lensId = '';
+    entry.apertureId = '';
+    entry.seed = undefined;
+    entry.batch = undefined;
+    entry.views = [];
+    entry.selectedImageId = undefined;
+    entry.activeGenerationId = undefined;
+    entry.failure = undefined;
+    entry.error = undefined;
+    m.redraw();
   }
 
   /** Writes one stored image to disk. An existing file is refused until the person agrees to replace it. */
@@ -263,9 +351,11 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     const generationId = entry?.batch?.generationId;
     if (entry === undefined || generationId === undefined) return;
     revoke(entry.views);
+    entry.history = forgetGeneration(entry.history, generationId);
     entry.batch = undefined;
     entry.views = [];
     entry.selectedImageId = undefined;
+    entry.activeGenerationId = undefined;
     entry.failure = undefined;
     entry.error = undefined;
     m.redraw();
@@ -285,18 +375,23 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     await generate(client, key);
   }
 
-  /** Forgets a closed pane: its pending request is stopped and its batch is dropped. */
+  /** Forgets a closed pane: its pending request is stopped and every batch it held is dropped. */
   function forget(client: FileManagerClient, key: string): void {
     const entry = shellState.imageByTab.get(key);
     shellState.imageByTab.delete(key);
     if (entry === undefined) return;
-    const generationId = entry.batch?.generationId;
+    const held = [
+      ...entry.history.map((record) => record.generationId),
+      ...(entry.batch === undefined ? [] : [entry.batch.generationId]),
+    ];
     revoke(entry.views);
+    for (const record of entry.history) revoke(record.views);
     if (entry.pendingRequestId !== undefined) {
       void client.cancelImageGeneration(entry.pendingRequestId).catch(() => undefined);
     }
-    if (generationId !== undefined)
+    for (const generationId of new Set(held)) {
       void client.discardImageBatch(generationId).catch(() => undefined);
+    }
   }
 
   /** The other pane's folder, which a save defaults to. */
@@ -318,11 +413,6 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     return { location: view.location, name };
   }
 
-  /** The preset a batch came from, so the pane can show which chip produced it. */
-  function presetOf(key: string): string | undefined {
-    return presetById(entryOf(key)?.presetId ?? '')?.id;
-  }
-
   return {
     openImage,
     patch,
@@ -336,7 +426,9 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     regenerate: (client: FileManagerClient, key: string) => void regenerate(client, key),
     forget,
     saveFolder,
-    presetOf,
+    selectGeneration: (client: FileManagerClient, key: string, generationId: string) =>
+      selectGeneration(client, key, generationId),
+    newPrompt,
   };
 }
 
