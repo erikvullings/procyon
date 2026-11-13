@@ -52,6 +52,7 @@ export function settingsFromDto(settings: SettingsDto): Settings {
     rememberFolderViews: settings.rememberFolderViews ?? true,
     checkForBetaUpdates: settings.checkForBetaUpdates ?? false,
     quickFilterMatchMode: settings.quickFilterMatchMode ?? DEFAULT_QUICK_FILTER_MATCH_MODE,
+    terminalShellIntegration: settings.terminalShellIntegration ?? 'unset',
     map: settings.map ?? DEFAULT_MAP_SETTINGS,
   };
 }

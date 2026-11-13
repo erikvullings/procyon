@@ -9,6 +9,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use crate::shell_integration;
 use fm_application::{FileManagerService, RemoteShellChannel, RemoteShellEvent, RemoteShellWriter};
 use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 use serde::Serialize;
@@ -19,7 +20,11 @@ use uuid::Uuid;
 /// `%ComSpec%` on Windows) so it sees the same `PATH` as a regular terminal
 /// rather than the minimal environment a GUI app inherits.
 fn local_shell_command(cwd: &Path) -> CommandBuilder {
-    let mut command = CommandBuilder::new_default_prog();
+    with_terminal_env(CommandBuilder::new_default_prog(), cwd)
+}
+
+/// The same terminal environment for any shell command this module starts.
+fn with_terminal_env(mut command: CommandBuilder, cwd: &Path) -> CommandBuilder {
     command.cwd(cwd);
     command.env("TERM", "xterm-256color");
     command.env("COLORTERM", "truecolor");
@@ -151,6 +156,9 @@ enum SessionBackend {
 }
 
 struct Session {
+    /// Identifies this session even after a later one reuses its key, so an exiting reader only
+    /// removes the session it was reading.
+    id: Uuid,
     backend: SessionBackend,
     subscribers: Arc<Mutex<Vec<Channel<TerminalEvent>>>>,
     history: Arc<Mutex<Vec<u8>>>,
@@ -180,9 +188,29 @@ enum ReuseOutcome {
 #[derive(Default)]
 pub(crate) struct TerminalRegistry {
     sessions: Arc<Mutex<HashMap<String, Session>>>,
+    /// Folder for the shell-integration wrapper files (task 0333). `None` disables integration.
+    wrapper_dir: Option<PathBuf>,
 }
 
 impl TerminalRegistry {
+    /// A registry whose new local shells may be started with command-block integration, using
+    /// wrapper files kept in `wrapper_dir`.
+    pub(crate) fn with_wrapper_dir(wrapper_dir: PathBuf) -> Self {
+        Self {
+            sessions: Arc::default(),
+            wrapper_dir: Some(wrapper_dir),
+        }
+    }
+
+    /// Ends one session and its shell. Returns whether a session with that id existed.
+    pub(crate) fn close(&self, id: &str) -> bool {
+        self.sessions
+            .lock()
+            .expect("terminal registry poisoned")
+            .remove(id)
+            .is_some()
+    }
+
     /// Opens (or reuses) the terminal session for `location_uri`, dispatching
     /// to a local PTY (`native_path` must be `Some`) or a remote SSH shell
     /// channel (opened through `service`, task 0105) depending on the
@@ -193,6 +221,7 @@ impl TerminalRegistry {
         location_uri: &str,
         native_path: Option<&Path>,
         size: PtySize,
+        shell_integration: bool,
         channel: Channel<TerminalEvent>,
     ) -> Result<String, TerminalError> {
         let location = TerminalLocation::parse(location_uri)?;
@@ -213,7 +242,7 @@ impl TerminalRegistry {
         match location {
             TerminalLocation::Local(_) => {
                 let cwd = native_path.ok_or(TerminalError::UnsupportedLocation)?;
-                self.open_local(key, cwd, size, channel)
+                self.open_local(key, cwd, size, shell_integration, channel)
             }
             TerminalLocation::Remote {
                 connection_id,
@@ -275,10 +304,16 @@ impl TerminalRegistry {
         key: String,
         cwd: &Path,
         size: PtySize,
+        shell_integration: bool,
         channel: Channel<TerminalEvent>,
     ) -> Result<String, TerminalError> {
         let pair = native_pty_system().openpty(size).map_err(backend)?;
-        let command = local_shell_command(cwd);
+        let command = if shell_integration {
+            self.integrated_shell_command(cwd)
+                .unwrap_or_else(|| local_shell_command(cwd))
+        } else {
+            local_shell_command(cwd)
+        };
         let child = pair.slave.spawn_command(command).map_err(backend)?;
         let writer = pair.master.take_writer().map_err(backend)?;
         let mut reader = pair.master.try_clone_reader().map_err(backend)?;
@@ -288,6 +323,7 @@ impl TerminalRegistry {
         let thread_history = Arc::clone(&history);
         let cleanup_sessions = Arc::clone(&self.sessions);
         let cleanup_key = key.clone();
+        let session_id = Uuid::new_v4();
         std::thread::spawn(move || {
             let mut buffer = [0_u8; 8192];
             loop {
@@ -299,10 +335,7 @@ impl TerminalRegistry {
                 }
             }
             broadcast_exit(&thread_subscribers);
-            cleanup_sessions
-                .lock()
-                .expect("terminal registry poisoned")
-                .remove(&cleanup_key);
+            remove_if_current(&cleanup_sessions, &cleanup_key, session_id);
         });
         self.sessions
             .lock()
@@ -310,6 +343,7 @@ impl TerminalRegistry {
             .insert(
                 key.clone(),
                 Session {
+                    id: session_id,
                     backend: SessionBackend::Local {
                         master: pair.master,
                         writer,
@@ -335,15 +369,13 @@ impl TerminalRegistry {
         let thread_history = Arc::clone(&history);
         let cleanup_sessions = Arc::clone(&self.sessions);
         let cleanup_key = key.clone();
+        let session_id = Uuid::new_v4();
         tokio::spawn(async move {
             while let Some(RemoteShellEvent::Data(bytes)) = reader.next().await {
                 record_and_broadcast(&thread_history, &thread_subscribers, &bytes);
             }
             broadcast_exit(&thread_subscribers);
-            cleanup_sessions
-                .lock()
-                .expect("terminal registry poisoned")
-                .remove(&cleanup_key);
+            remove_if_current(&cleanup_sessions, &cleanup_key, session_id);
         });
         self.sessions
             .lock()
@@ -351,12 +383,31 @@ impl TerminalRegistry {
             .insert(
                 key.clone(),
                 Session {
+                    id: session_id,
                     backend: SessionBackend::Remote { writer },
                     subscribers,
                     history,
                 },
             );
         Ok(key)
+    }
+
+    /// The shell started with command-block integration, or `None` when integration is not
+    /// available (no wrapper folder, an unsupported shell, or the wrappers cannot be written).
+    fn integrated_shell_command(&self, cwd: &Path) -> Option<CommandBuilder> {
+        let dir = self.wrapper_dir.as_deref()?;
+        let program = std::env::var_os("SHELL")?;
+        shell_integration::write_wrappers(dir).ok()?;
+        let home = std::env::var_os("HOME").map(PathBuf::from);
+        let zdotdir = std::env::var_os("ZDOTDIR").map(PathBuf::from);
+        let command = shell_integration::integrated_command(
+            Path::new(&program),
+            dir,
+            cwd,
+            home.as_deref(),
+            zdotdir.as_deref(),
+        )?;
+        Some(with_terminal_env(command, cwd))
     }
 
     pub(crate) async fn write(&self, id: &str, data: &[u8]) -> Result<(), TerminalError> {
@@ -403,6 +454,15 @@ impl TerminalRegistry {
                 .map_err(backend)?;
         }
         Ok(())
+    }
+}
+
+/// Removes the session under `key` only when it is still the session `id`: a closed session's
+/// reader must not remove a newer session that reused the same location.
+fn remove_if_current(sessions: &Mutex<HashMap<String, Session>>, key: &str, id: Uuid) {
+    let mut sessions = sessions.lock().expect("terminal registry poisoned");
+    if sessions.get(key).is_some_and(|session| session.id == id) {
+        sessions.remove(key);
     }
 }
 

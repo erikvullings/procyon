@@ -257,7 +257,7 @@ pub use settings::{
     MultiRenamePresetDto, MultiRenameRulesDto, MultiRenameSequenceDto, QuickFilterMatchModeDto,
     SavedSearchDto, SettingsDto, SizeFormatDto, SyncProfileDto, SyncRunOutcomeDto,
     SyncRunSummaryDto, SyncRunTriggerDto, SyncScheduleConfirmationDto, SyncScheduleDto,
-    TerminalAppDto, ThemeDto,
+    TerminalAppDto, TerminalShellIntegrationDto, ThemeDto,
 };
 pub use snapshot::{DirectorySnapshotDto, LoadingStateDto, VolumeCapacityDto};
 pub use snapshots::{

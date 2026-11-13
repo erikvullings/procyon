@@ -1673,13 +1673,12 @@ export const nl = {
     size: 'Afmeting',
     seed: 'Startwaarde',
     negative: 'Weglaten',
-    negativePlaceholder: 'tekst, watermerk',
+    negativePlaceholder: 'bijv. tekst, watermerk',
     lens: 'Objectief',
     lensNone: 'Geen lens',
     aperture: 'Diafragma',
     apertureNone: 'Geen diafragma',
     sent: 'Naar het model',
-    nothingYet: 'Nog niets — beschrijf wat je wilt zien.',
     generate: 'Genereren',
     stop: 'Stoppen',
     showImage: 'Toon afbeelding {number}',
@@ -2596,11 +2595,11 @@ export const nl = {
     blockSucceeded: 'Geslaagd',
     blockFailed: 'Mislukt',
     suggestionAccept: 'Druk op → om te accepteren',
-    shellIntegrationTitle: 'Shell-integratie',
-    shellIntegrationHint:
-      'Voeg het fragment voor je shell toe aan het opstartbestand en open daarna een nieuwe terminal. Daarna verschijnen commandoblokken met Uitleggen en Oplossen.',
-    askHint:
-      'Typ # en een vraag bij de prompt om de assistent te vragen. Er wordt niets uitgevoerd.',
+    consentTitle: 'Opdrachtblokken',
+    consentText:
+      'Opdrachtblokken inschakelen? Procyon start zsh en bash met eigen hooks en laadt je eigen opstartbestanden zoals gebruikelijk. Je dotfiles blijven ongewijzigd. Vragen met # werken in beide gevallen.',
+    consentEnable: 'Inschakelen',
+    consentDecline: 'Niet nu',
   },
   contextMenu: {
     directoryActions: 'Mapacties',

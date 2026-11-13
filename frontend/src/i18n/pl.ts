@@ -1273,13 +1273,12 @@ export const pl = {
     size: 'Rozmiar',
     seed: 'Ziarno',
     negative: 'Do pominięcia',
-    negativePlaceholder: 'tekst, znak wodny',
+    negativePlaceholder: 'np. tekst, znak wodny',
     lens: 'Obiektyw',
     lensNone: 'Bez obiektywu',
     aperture: 'Przysłona',
     apertureNone: 'Bez przysłony',
     sent: 'Wysyłane do modelu',
-    nothingYet: 'Nic jeszcze — opisz, co chcesz zobaczyć.',
     generate: 'Generuj',
     stop: 'Zatrzymaj',
     showImage: 'Pokaż obraz {number}',
@@ -2597,11 +2596,11 @@ export const pl = {
     blockSucceeded: 'Zakończono sukcesem',
     blockFailed: 'Zakończono błędem',
     suggestionAccept: 'Naciśnij →, aby zaakceptować',
-    shellIntegrationTitle: 'Integracja powłoki',
-    shellIntegrationHint:
-      'Dodaj fragment dla swojej powłoki do pliku startowego, a następnie otwórz nowy terminal. Bloki poleceń z przyciskami Wyjaśnij i Napraw pojawią się wtedy.',
-    askHint:
-      'Wpisz # i pytanie w wierszu poleceń, aby zapytać asystenta. Nic nie jest uruchamiane.',
+    consentTitle: 'Bloki poleceń',
+    consentText:
+      'Włączyć bloki poleceń? Procyon uruchamia zsh i bash z własnymi hookami i nadal wczytuje Twoje pliki startowe. Twoje pliki dotfiles się nie zmieniają. Pytania z # działają w obu przypadkach.',
+    consentEnable: 'Włącz',
+    consentDecline: 'Nie teraz',
   },
   contextMenu: {
     directoryActions: 'Akcje katalogu',

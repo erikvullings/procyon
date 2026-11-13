@@ -1293,13 +1293,12 @@ export const de = {
     size: 'Größe',
     seed: 'Startwert',
     negative: 'Weglassen',
-    negativePlaceholder: 'Text, Wasserzeichen',
+    negativePlaceholder: 'z. B. Text, Wasserzeichen',
     lens: 'Objektiv',
     lensNone: 'Kein Objektiv',
     aperture: 'Blende',
     apertureNone: 'Keine Blende',
     sent: 'An das Modell gesendet',
-    nothingYet: 'Noch nichts – beschreibe, was du sehen willst.',
     generate: 'Erzeugen',
     stop: 'Stopp',
     showImage: 'Bild {number} anzeigen',
@@ -2625,11 +2624,11 @@ export const de = {
     blockSucceeded: 'Erfolgreich',
     blockFailed: 'Fehlgeschlagen',
     suggestionAccept: '→ zum Übernehmen drücken',
-    shellIntegrationTitle: 'Shell-Integration',
-    shellIntegrationHint:
-      'Fügen Sie das Snippet für Ihre Shell in deren Startdatei ein und öffnen Sie danach ein neues Terminal. Danach erscheinen Befehlsblöcke mit Erklären und Beheben.',
-    askHint:
-      'Geben Sie am Prompt # und eine Frage ein, um den Assistenten zu fragen. Es wird nichts ausgeführt.',
+    consentTitle: 'Befehlsblöcke',
+    consentText:
+      'Befehlsblöcke aktivieren? Procyon startet zsh und bash mit eigenen Hooks und lädt weiterhin Ihre eigenen Startdateien. Ihre Dotfiles bleiben unverändert. Fragen mit # funktionieren in beiden Fällen.',
+    consentEnable: 'Aktivieren',
+    consentDecline: 'Nicht jetzt',
   },
   contextMenu: {
     directoryActions: 'Verzeichnisaktionen',

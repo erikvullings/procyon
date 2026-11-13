@@ -135,6 +135,20 @@ pub enum QuickFilterMatchMode {
     Contains,
 }
 
+/// Whether new terminals start their shell with command-block integration (task 0333). `Unset`
+/// asks the person once; the choice then applies to every new terminal session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum TerminalShellIntegration {
+    /// Not decided yet: the terminal asks the person.
+    #[default]
+    Unset,
+    /// Shells start through the Procyon wrappers; the person's own startup files still load.
+    Enabled,
+    /// Shells start unwrapped; the person declined.
+    Disabled,
+}
+
 /// Reserved `icon_theme` value selecting the built-in generic glyphs, rather than a distributable
 /// icon theme plugin's id (task 0095).
 pub const GENERIC_ICON_THEME: &str = "generic";
@@ -687,6 +701,8 @@ pub struct Settings {
     pub semantic_theme_root_ids: Vec<String>,
     /// Quick-filter (and type-to-select) match mode; global for every tab (task 0314).
     pub quick_filter_match_mode: QuickFilterMatchMode,
+    /// Command-block shell integration for new terminals (task 0333).
+    pub terminal_shell_integration: TerminalShellIntegration,
 }
 
 impl Settings {
@@ -782,6 +798,7 @@ impl Default for Settings {
             semantic_max_source_mib: DEFAULT_SEMANTIC_MAX_SOURCE_MIB,
             semantic_theme_root_ids: Vec::new(),
             quick_filter_match_mode: QuickFilterMatchMode::default(),
+            terminal_shell_integration: TerminalShellIntegration::default(),
         }
     }
 }

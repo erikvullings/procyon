@@ -1279,13 +1279,12 @@ export const fr = {
     size: 'Taille',
     seed: 'Valeur initiale',
     negative: 'À exclure',
-    negativePlaceholder: 'texte, filigrane',
+    negativePlaceholder: 'par ex. texte, filigrane',
     lens: 'Objectif',
     lensNone: 'Sans objectif',
     aperture: 'Ouverture',
     apertureNone: 'Sans ouverture',
     sent: 'Envoyé au modèle',
-    nothingYet: 'Rien pour l’instant — décrivez ce que vous voulez voir.',
     generate: 'Générer',
     stop: 'Arrêter',
     showImage: 'Afficher l’image {number}',
@@ -2617,11 +2616,11 @@ export const fr = {
     blockSucceeded: 'Réussi',
     blockFailed: 'Échoué',
     suggestionAccept: 'Appuyez sur → pour accepter',
-    shellIntegrationTitle: 'Intégration du shell',
-    shellIntegrationHint:
-      'Ajoutez l’extrait de votre shell à son fichier de démarrage, puis ouvrez un nouveau terminal. Les blocs de commandes avec Expliquer et Corriger apparaîtront ensuite.',
-    askHint:
-      'Tapez # puis une question à l’invite pour interroger l’assistant. Rien n’est exécuté.',
+    consentTitle: 'Blocs de commandes',
+    consentText:
+      'Activer les blocs de commandes ? Procyon lance zsh et bash avec ses crochets et charge toujours vos propres fichiers de démarrage. Vos fichiers de configuration restent inchangés. Les questions avec # fonctionnent dans les deux cas.',
+    consentEnable: 'Activer',
+    consentDecline: 'Pas maintenant',
   },
   contextMenu: {
     directoryActions: 'Actions de répertoire',

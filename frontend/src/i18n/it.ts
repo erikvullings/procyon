@@ -1273,13 +1273,12 @@ export const it = {
     size: 'Dimensione',
     seed: 'Seme',
     negative: 'Da escludere',
-    negativePlaceholder: 'testo, filigrana',
+    negativePlaceholder: 'es. testo, filigrana',
     lens: 'Obiettivo',
     lensNone: 'Nessun obiettivo',
     aperture: 'Apertura',
     apertureNone: 'Nessuna apertura',
     sent: 'Inviato al modello',
-    nothingYet: 'Niente per ora: descrivi cosa vuoi vedere.',
     generate: 'Genera',
     stop: 'Ferma',
     showImage: 'Mostra immagine {number}',
@@ -2597,11 +2596,11 @@ export const it = {
     blockSucceeded: 'Riuscito',
     blockFailed: 'Non riuscito',
     suggestionAccept: 'Premi → per accettare',
-    shellIntegrationTitle: 'Integrazione della shell',
-    shellIntegrationHint:
-      'Aggiungi il frammento per la tua shell al suo file di avvio, poi apri un nuovo terminale. Dopo appariranno i blocchi di comandi con Spiega e Correggi.',
-    askHint:
-      'Scrivi # e una domanda al prompt per chiedere all’assistente. Non viene eseguito nulla.',
+    consentTitle: 'Blocchi di comandi',
+    consentText:
+      'Attivare i blocchi di comandi? Procyon avvia zsh e bash con i propri hook e carica comunque i tuoi file di avvio. I tuoi dotfile non cambiano. Le domande con # funzionano in entrambi i casi.',
+    consentEnable: 'Attiva',
+    consentDecline: 'Non ora',
   },
   contextMenu: {
     directoryActions: 'Azioni cartella',

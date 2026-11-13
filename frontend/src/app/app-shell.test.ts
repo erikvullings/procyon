@@ -5960,6 +5960,7 @@ describe('AppShell', () => {
       semanticMaxSourceMib: 64,
       semanticThemeRootIds: [],
       quickFilterMatchMode: 'fuzzy',
+      terminalShellIntegration: 'unset',
       schemaVersion: 2,
       theme: 'auto',
       language: 'en',

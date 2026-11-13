@@ -4730,6 +4730,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 tabKey: treeWiring.activeTerminalTabKey(),
                 location: activeDirectory()?.location,
                 client: tauriTerminalClient,
+                shellIntegration: shellState.currentSettings?.terminalShellIntegration ?? 'unset',
+                onShellIntegrationChoice: (choice) =>
+                  updateLocationSettings(shellState.client, (settings) => ({
+                    ...settings,
+                    terminalShellIntegration: choice,
+                  })),
                 onToggle: globalKeydownHandlerContext.toggleTerminal,
                 onSwitchPane: () => {
                   if (shellState.workspace === undefined) return;

@@ -7,7 +7,8 @@ use crate::sync_profile_mapping::{sync_profile_from_dto, sync_profile_to_dto};
 use fm_settings::{
     ConflictPolicy, DateFormat, DefaultPaneLayout, FilterCriteria, FilterKind, FilterPreset,
     FilterToggle, Language, MapBasemap, MapSettings, MultiRenameCaseTransform, MultiRenamePreset,
-    MultiRenameRules, MultiRenameSequence, QuickFilterMatchMode, Settings, SizeFormat, Theme,
+    MultiRenameRules, MultiRenameSequence, QuickFilterMatchMode, Settings, SizeFormat,
+    TerminalShellIntegration, Theme,
 };
 use fm_transport_dto::{
     ConceptHierarchyScopeDto, ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto,
@@ -16,7 +17,8 @@ use fm_transport_dto::{
     MultiRenameRulesDto, MultiRenameSequenceDto, QuickFilterMatchModeDto, SavedSearchDto,
     SearchConceptPredicateDto, SearchContentPredicateDto, SearchEntryKindDto, SearchGitStatusDto,
     SearchModeDto, SearchNameModeDto, SearchNamePredicateDto, SearchQueryDto, SearchScopeDto,
-    SearchSemanticPredicateDto, SemanticSearchScopeDto, SettingsDto, SizeFormatDto, ThemeDto,
+    SearchSemanticPredicateDto, SemanticSearchScopeDto, SettingsDto, SizeFormatDto,
+    TerminalShellIntegrationDto, ThemeDto,
 };
 
 pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
@@ -186,6 +188,11 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
         quick_filter_match_mode: match settings.quick_filter_match_mode {
             QuickFilterMatchMode::Fuzzy => QuickFilterMatchModeDto::Fuzzy,
             QuickFilterMatchMode::Contains => QuickFilterMatchModeDto::Contains,
+        },
+        terminal_shell_integration: match settings.terminal_shell_integration {
+            TerminalShellIntegration::Unset => TerminalShellIntegrationDto::Unset,
+            TerminalShellIntegration::Enabled => TerminalShellIntegrationDto::Enabled,
+            TerminalShellIntegration::Disabled => TerminalShellIntegrationDto::Disabled,
         },
     }
 }
@@ -358,6 +365,11 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
         quick_filter_match_mode: match settings.quick_filter_match_mode {
             QuickFilterMatchModeDto::Fuzzy => QuickFilterMatchMode::Fuzzy,
             QuickFilterMatchModeDto::Contains => QuickFilterMatchMode::Contains,
+        },
+        terminal_shell_integration: match settings.terminal_shell_integration {
+            TerminalShellIntegrationDto::Unset => TerminalShellIntegration::Unset,
+            TerminalShellIntegrationDto::Enabled => TerminalShellIntegration::Enabled,
+            TerminalShellIntegrationDto::Disabled => TerminalShellIntegration::Disabled,
         },
     }
 }

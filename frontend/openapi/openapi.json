@@ -27107,6 +27107,10 @@
             ],
             "description": "Optional terminal command."
           },
+          "terminalShellIntegration": {
+            "$ref": "#/components/schemas/TerminalShellIntegrationDto",
+            "description": "Command-block shell integration for new terminals (task 0333)."
+          },
           "theme": {
             "$ref": "#/components/schemas/ThemeDto",
             "description": "Application theme."
@@ -29247,6 +29251,15 @@
             "description": "Unique user-visible name."
           }
         }
+      },
+      "TerminalShellIntegrationDto": {
+        "type": "string",
+        "description": "Command-block shell integration for new terminals (task 0333).",
+        "enum": [
+          "unset",
+          "enabled",
+          "disabled"
+        ]
       },
       "ThemeConceptDto": {
         "type": "object",

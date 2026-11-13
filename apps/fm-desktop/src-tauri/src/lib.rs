@@ -21,6 +21,7 @@ mod plugin_spa;
 #[cfg(debug_assertions)]
 mod semantic_developer;
 mod semantic_production;
+mod shell_integration;
 mod terminal;
 mod tile_protocol;
 
@@ -248,6 +249,9 @@ pub fn run() {
                 .unwrap_or_else(|| std::path::Path::new(".procyon-config/procyon"))
                 .to_path_buf();
             let resource_directory = app.path().resource_dir().ok();
+            app.manage(terminal::TerminalRegistry::with_wrapper_dir(
+                shell_integration::wrapper_dir(&app_data_directory),
+            ));
             #[cfg(not(debug_assertions))]
             if std::env::var_os("PROCYON_SEMANTIC_DEVELOPER_BUNDLE").is_some() {
                 return Err(std::io::Error::other(
@@ -491,7 +495,6 @@ pub fn run() {
                 .build(),
         )
         .manage(event_stream::EventSubscriptionRegistry::default())
-        .manage(terminal::TerminalRegistry::default())
         .manage(native_menu::NativeMenuActionChannel::default())
         .manage(app_update::PendingAppUpdate::default())
         .manage(QuittingFlag::default())
@@ -833,6 +836,7 @@ pub fn run() {
             commands::open_embedded_terminal,
             commands::write_embedded_terminal,
             commands::resize_embedded_terminal,
+            commands::close_embedded_terminal,
             commands::set_caption_colours,
             commands::set_window_decorations,
             commands::get_diagnostics,

@@ -89,3 +89,20 @@ Cross-cutting:
   - Not verified in the app: decoration rendering and icon placement. Needs a Tauri run.
   - Unrelated failures in the working tree: `frontend/src/features/image-generation/*` (someone's
     uncommitted work) breaks tsc and 21 tests. Not touched.
+- 2026-11-13 Claude: Shell integration is now automatic, with one-time consent (replaces the manual
+  snippets). Not committed yet at the time of writing; see git log for the commit.
+  - Setting `terminalShellIntegration` (`unset` | `enabled` | `disabled`) in fm-settings, DTO,
+    mapping, and the generated client. Default `unset`: the drawer asks once. "Enable" restarts the
+    current tab's shell; the other tabs pick it up when they next start.
+  - Rust `apps/fm-desktop/src-tauri/src/shell_integration.rs`: wrapper files in the app data folder
+    (`shell-integration/`). zsh: `ZDOTDIR` points at the wrappers, which source the person's own
+    `.zshenv`/`.zprofile`/`.zshrc` and then install the hooks. bash: `--init-file` wrapper that runs
+    the login startup (`/etc/profile`, first of `.bash_profile`/`.bash_login`/`.profile`), then
+    `.bashrc` unless the profile already reads it, then the hooks. Dotfiles are not changed.
+  - Sessions carry a generation id, so a closed session's exit cannot remove a restarted one.
+    `close_embedded_terminal` ends a session; events and ids from a superseded open are ignored.
+  - Verified: wrapper unit tests, and real zsh and bash PTY tests (the person's rc loads, `C` and
+    `D;1` marks appear), clippy `-D warnings`, frontend suite (except the in-progress image pane),
+    typecheck.
+  - Not done: fish (its `$status` in `fish_postexec` is unverified; not installed here); remote SSH
+    shells; a Settings toggle to change the choice later (only the consent prompt sets it).

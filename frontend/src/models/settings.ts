@@ -57,6 +57,9 @@ export interface FilterPreset {
  * choice applies to every tab. */
 export type QuickFilterMatchMode = 'fuzzy' | 'contains';
 
+/** Command-block shell integration for new terminals (task 0333); `unset` asks once. */
+export type TerminalShellIntegration = 'unset' | 'enabled' | 'disabled';
+
 export const DEFAULT_QUICK_FILTER_MATCH_MODE: QuickFilterMatchMode = 'fuzzy';
 
 export type SyncScheduleConfirmation = 'required' | 'autoApplyAdditions';
@@ -184,6 +187,8 @@ export interface Settings {
   readonly semanticThemeRootIds: string[];
   /** Quick-filter (and type-to-select) match mode; global for every tab (task 0314). */
   readonly quickFilterMatchMode: QuickFilterMatchMode;
+  /** Command-block shell integration for new terminal sessions (task 0333). */
+  readonly terminalShellIntegration: TerminalShellIntegration;
   /** Remembers and restores the view (sort, columns, mode) chosen for each folder (task 0270). */
   readonly rememberFolderViews: boolean;
   /** Basemap of the shared map component (task 0275). */

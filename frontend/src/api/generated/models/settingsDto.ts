@@ -20,6 +20,7 @@ import type { SettingsDtoRecentLocationsByWorkspace } from './settingsDtoRecentL
 import type { SizeFormatDto } from './sizeFormatDto.ts';
 import type { SyncProfileDto } from './syncProfileDto.ts';
 import type { TerminalAppDto } from './terminalAppDto.ts';
+import type { TerminalShellIntegrationDto } from './terminalShellIntegrationDto.ts';
 import type { ThemeDto } from './themeDto.ts';
 
 /**
@@ -130,6 +131,8 @@ export interface SettingsDto {
      * @nullable
      */
   terminalCommand?: string | null;
+  /** Command-block shell integration for new terminals (task 0333). */
+  terminalShellIntegration?: TerminalShellIntegrationDto;
   /** Application theme. */
   theme: ThemeDto;
   /** Whether F3 opens the viewer in its own window instead of a tab in the active pane. */

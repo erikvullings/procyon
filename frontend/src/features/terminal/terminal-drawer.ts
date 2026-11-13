@@ -6,8 +6,9 @@ import m, { type FactoryComponent } from 'mithril';
 import { copyIcon, refreshIcon, sparklesIcon, wrenchIcon } from '../../components/tabler-icons';
 import { t } from '../../i18n';
 import type { Location } from '../../models';
+import type { TerminalShellIntegration } from '../../models/settings';
 import { type BlockTracker, type CommandBlock, createBlockTracker } from './block-tracker';
-import { parseShellMark, SHELL_INTEGRATION } from './shell-integration';
+import { parseShellMark } from './shell-integration';
 import {
   cleanCommand,
   commandFromAnswer,
@@ -32,6 +33,10 @@ export interface TerminalDrawerAttrs {
   readonly registerFocus?: (focus: () => boolean) => void;
   /** Lets the owner tear down a specific tab's terminal when that tab closes. */
   readonly registerDisposeTab?: (dispose: (tabKey: string) => void) => void;
+  /** The person's choice for command-block shell integration (task 0333). */
+  readonly shellIntegration?: TerminalShellIntegration;
+  /** Saves the choice; `undefined` hides the consent prompt. */
+  readonly onShellIntegrationChoice?: (choice: 'enabled' | 'disabled') => Promise<void>;
 }
 
 /**
@@ -58,6 +63,8 @@ type LiveTerminal = {
   readonly decorations: Map<number, IDecoration>;
   sessionId?: string | undefined;
   opening?: Promise<void> | undefined;
+  /** Identifies the session being opened; events and ids from any other open are ignored. */
+  openToken?: object | undefined;
   /** What the person has typed on the current shell line. */
   typed: TypedInput;
   /** Commands run in this session, oldest first, for suggestions. */
@@ -460,20 +467,34 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     live.fit.fit();
     const session = live;
     if (session.sessionId === undefined && session.opening === undefined) {
+      const token = {};
+      session.openToken = token;
       session.opening = attrs.client
-        .open(location, session.terminal.cols, session.terminal.rows, (event) => {
-          if (event.type === 'output') session.terminal.write(new Uint8Array(event.data));
-          else if (event.type === 'exited') {
-            session.terminal.write(`\r\n\x1b[90m[${t('terminal', 'sessionEnded')}]\x1b[0m\r\n`);
-            // Clear the dead session id so the next toggle/reopen redials
-            // instead of silently reusing a session the backend already
-            // discarded (the backend removes it from its own registry too).
-            session.sessionId = undefined;
-          }
-        })
+        .open(
+          location,
+          session.terminal.cols,
+          session.terminal.rows,
+          (event) => {
+            if (session.openToken !== token) return;
+            if (event.type === 'output') session.terminal.write(new Uint8Array(event.data));
+            else if (event.type === 'exited') {
+              session.terminal.write(`\r\n\x1b[90m[${t('terminal', 'sessionEnded')}]\x1b[0m\r\n`);
+              // Clear the dead session id so the next toggle/reopen redials
+              // instead of silently reusing a session the backend already
+              // discarded (the backend removes it from its own registry too).
+              session.sessionId = undefined;
+            }
+          },
+          attrs.shellIntegration === 'enabled',
+        )
         .then((id) => {
-          session.sessionId = id;
           session.opening = undefined;
+          if (session.openToken !== token) {
+            // The session was restarted while it opened: this one is no longer wanted.
+            void attrs.client.close(id);
+            return;
+          }
+          session.sessionId = id;
         })
         .catch(() => {
           session.opening = undefined;
@@ -495,8 +516,8 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
             m('span.fm-terminal-suggestion-hint', t('terminal', 'suggestionAccept')),
             m('code', `${live.typed.text}${live.suggestion}`),
           ]),
+      consentView(attrs, live),
       shown === undefined ? undefined : answerPanel(shown, live),
-      live !== undefined && !live.markSeen ? shellSetupHelp() : undefined,
     ]);
   }
 
@@ -543,16 +564,51 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     ]);
   }
 
-  /** Shown until the shell reports command marks: the snippet for each shell, and how to ask. */
-  function shellSetupHelp(): m.Children {
-    return m('details.fm-terminal-shell-help', [
-      m('summary', t('terminal', 'shellIntegrationTitle')),
-      m('p', t('terminal', 'shellIntegrationHint')),
-      m('p', t('terminal', 'askHint')),
-      ...Object.entries(SHELL_INTEGRATION).map(([shell, snippet]) =>
-        m('figure', [m('figcaption', shell), m('pre', snippet)]),
-      ),
-    ]);
+  /** Ends the tab's shell so the next open starts it with the current integration setting. */
+  function restartSession(live: LiveTerminal): void {
+    const id = live.sessionId;
+    live.sessionId = undefined;
+    live.openToken = undefined;
+    live.suggestion = undefined;
+    live.typed = EMPTY_INPUT;
+    live.terminal.reset();
+    if (id !== undefined && currentAttrs !== undefined) void currentAttrs.client.close(id);
+    m.redraw();
+  }
+
+  /** Records the person's answer to the consent prompt; enabling restarts this tab's shell. */
+  function chooseShellIntegration(live: LiveTerminal | undefined, choice: 'enabled' | 'disabled') {
+    const save = currentAttrs?.onShellIntegrationChoice;
+    if (save === undefined) return;
+    void save(choice).then(() => {
+      if (choice === 'enabled' && live !== undefined) restartSession(live);
+    });
+  }
+
+  /** Asked once, until answered: explains what changes and lets the person decide. */
+  function consentView(attrs: TerminalDrawerAttrs, live: LiveTerminal | undefined): m.Children {
+    if (attrs.shellIntegration !== 'unset' || attrs.onShellIntegrationChoice === undefined) {
+      return undefined;
+    }
+    return m(
+      '.fm-terminal-consent',
+      { role: 'region', 'aria-label': t('terminal', 'consentTitle') },
+      [
+        m('p.fm-terminal-consent-text', t('terminal', 'consentText')),
+        m('.fm-terminal-assist-buttons', [
+          m(
+            'button.fm-terminal-assist-action',
+            { type: 'button', onclick: () => chooseShellIntegration(live, 'enabled') },
+            t('terminal', 'consentEnable'),
+          ),
+          m(
+            'button.fm-terminal-assist-action',
+            { type: 'button', onclick: () => chooseShellIntegration(live, 'disabled') },
+            t('terminal', 'consentDecline'),
+          ),
+        ]),
+      ],
+    );
   }
 
   return {

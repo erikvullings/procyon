@@ -109,6 +109,7 @@ pub(crate) async fn open_embedded_terminal(
     location: LocationDto,
     columns: u16,
     rows: u16,
+    shell_integration: bool,
     channel: Channel<TerminalEvent>,
 ) -> Result<String, TerminalError> {
     let location_uri = location.uri.clone();
@@ -124,9 +125,20 @@ pub(crate) async fn open_embedded_terminal(
                 pixel_width: 0,
                 pixel_height: 0,
             },
+            shell_integration,
             channel,
         )
         .await
+}
+
+/// Ends one embedded terminal session, so its shell can restart with command-block integration
+/// (task 0333). Returns whether the session existed.
+#[tauri::command]
+pub(crate) fn close_embedded_terminal(
+    registry: State<'_, TerminalRegistry>,
+    session_id: String,
+) -> bool {
+    registry.close(&session_id)
 }
 
 #[tauri::command]

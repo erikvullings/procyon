@@ -26,6 +26,7 @@ describe('TerminalDrawer', () => {
       open: vi.fn(async () => 'session-1'),
       write: vi.fn(async () => undefined),
       resize: vi.fn(async () => undefined),
+      close: vi.fn(async () => true),
       assist: vi.fn(async () => ({ text: '' })),
     };
 
@@ -58,6 +59,7 @@ describe('TerminalDrawer', () => {
       ),
       write: vi.fn(async () => undefined),
       resize: vi.fn(async () => undefined),
+      close: vi.fn(async () => true),
       assist: vi.fn(async () => ({ text: '' })),
     };
     const location = { providerId: 'local', uri: 'file:///home' };
@@ -96,6 +98,7 @@ describe('TerminalDrawer', () => {
       open: vi.fn(async () => 'session'),
       write: vi.fn(async () => undefined),
       resize: vi.fn(async () => undefined),
+      close: vi.fn(async () => true),
       assist: vi.fn(async () => ({ text: '' })),
     };
     let location = { providerId: 'local', uri: 'file:///home' };
@@ -132,6 +135,7 @@ describe('TerminalDrawer', () => {
       open: vi.fn(async () => 'session-1'),
       write,
       resize: vi.fn(async () => undefined),
+      close: vi.fn(async () => true),
       assist: vi.fn(async () => ({ text: '' })),
     };
     m.mount(root, {
@@ -185,6 +189,7 @@ describe('TerminalDrawer', () => {
       open: vi.fn(async () => 'session-1'),
       write,
       resize: vi.fn(async () => undefined),
+      close: vi.fn(async () => true),
       assist: vi.fn(async () => ({ text: '' })),
     };
     m.mount(root, {
@@ -377,6 +382,7 @@ describe('TerminalDrawer questions with #', () => {
       open: vi.fn(async () => 'session-1'),
       write,
       resize: vi.fn(async () => undefined),
+      close: vi.fn(async () => true),
       assist,
     });
     await vi.waitFor(() =>
@@ -412,6 +418,7 @@ describe('TerminalDrawer questions with #', () => {
       open: vi.fn(async () => 'session-1'),
       write,
       resize: vi.fn(async () => undefined),
+      close: vi.fn(async () => true),
       assist: vi.fn(async () => ({ text: 'ls -la' })),
     });
     await vi.waitFor(() =>

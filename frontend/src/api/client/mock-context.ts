@@ -248,6 +248,7 @@ export class MockContext {
     checkForUpdatesAutomatically: true,
     checkForBetaUpdates: false,
     viewerInSeparateWindow: false,
+    terminalShellIntegration: 'unset',
     semanticMaxSourceMib: 64,
     semanticThemeRootIds: [],
     quickFilterMatchMode: 'fuzzy',

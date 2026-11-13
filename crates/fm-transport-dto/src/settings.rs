@@ -104,6 +104,22 @@ fn quick_filter_match_mode_default() -> QuickFilterMatchModeDto {
     QuickFilterMatchModeDto::Fuzzy
 }
 
+/// Command-block shell integration for new terminals (task 0333).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum TerminalShellIntegrationDto {
+    /// Not decided yet: the terminal asks the person.
+    Unset,
+    /// Shells start through the Procyon wrappers.
+    Enabled,
+    /// Shells start unwrapped.
+    Disabled,
+}
+
+fn terminal_shell_integration_default() -> TerminalShellIntegrationDto {
+    TerminalShellIntegrationDto::Unset
+}
+
 /// A named, provider-neutral location saved by the user.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -459,6 +475,9 @@ pub struct SettingsDto {
     /// Quick-filter (and type-to-select) match mode; global for every tab (task 0314).
     #[serde(default = "quick_filter_match_mode_default")]
     pub quick_filter_match_mode: QuickFilterMatchModeDto,
+    /// Command-block shell integration for new terminals (task 0333).
+    #[serde(default = "terminal_shell_integration_default")]
+    pub terminal_shell_integration: TerminalShellIntegrationDto,
 }
 
 const fn default_semantic_max_source_mib() -> u32 {
