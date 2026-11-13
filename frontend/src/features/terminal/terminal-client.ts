@@ -1,5 +1,6 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import type { Location } from '../../models';
+import type { TerminalAssistReply, TerminalAssistRequest } from './terminal-assist';
 
 export type TerminalEvent =
   | { readonly type: 'output'; readonly data: number[] }
@@ -14,6 +15,8 @@ export interface TerminalClient {
   ): Promise<string>;
   write(sessionId: string, data: Uint8Array): Promise<void>;
   resize(sessionId: string, columns: number, rows: number): Promise<void>;
+  /** Asks the configured chat endpoint about the terminal (task 0333). Nothing is run. */
+  assist(request: TerminalAssistRequest): Promise<TerminalAssistReply>;
 }
 
 /** Desktop PTY IPC boundary; the browser host deliberately has no PTY implementation. */
@@ -26,4 +29,5 @@ export const tauriTerminalClient: TerminalClient = {
   write: (sessionId, data) => invoke('write_embedded_terminal', { sessionId, data: [...data] }),
   resize: (sessionId, columns, rows) =>
     invoke('resize_embedded_terminal', { sessionId, columns, rows }),
+  assist: (request) => invoke<TerminalAssistReply>('terminal_assist', { request }),
 };

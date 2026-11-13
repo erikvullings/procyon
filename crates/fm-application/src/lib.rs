@@ -102,6 +102,7 @@ mod sqlite_view;
 mod ssh;
 mod structured_view;
 mod sync_profile_mapping;
+mod terminal_assist;
 mod thumbnails;
 mod transfer_conflicts;
 mod transfer_recovery;

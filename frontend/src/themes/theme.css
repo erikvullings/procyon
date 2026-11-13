@@ -600,6 +600,148 @@ main.fm-workspace {
   color: var(--fm-text);
 }
 
+/* Terminal assistance and command blocks (task 0333). The overlay floats over the output so the
+   terminal keeps its full size; only its children take pointer events. */
+.fm-terminal-overlay {
+  position: absolute;
+  top: 4px;
+  right: 36px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: calc(100% - 80px);
+  pointer-events: none;
+}
+
+.fm-terminal-overlay > * {
+  pointer-events: auto;
+}
+
+.fm-terminal-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface);
+  color: var(--fm-text-muted);
+  font-size: 12px;
+}
+
+.fm-terminal-suggestion code {
+  font-family: var(--fm-font-mono);
+  color: var(--fm-text);
+}
+
+.fm-terminal-assist-buttons {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.fm-terminal-assist-action {
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 8px;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  cursor: pointer;
+}
+
+.fm-terminal-assist-action:hover:not(:disabled) {
+  background: var(--fm-hover);
+}
+
+.fm-terminal-assist-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.fm-terminal-assist-panel,
+.fm-terminal-shell-help {
+  width: min(520px, 70vw);
+  max-height: 60%;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  font-size: 12px;
+}
+
+.fm-terminal-assist-text {
+  margin: 0 0 6px;
+  font-family: var(--fm-font-mono);
+  white-space: pre-wrap;
+}
+
+.fm-terminal-assist-status,
+.fm-terminal-assist-note {
+  margin: 0 0 6px;
+  color: var(--fm-text-muted);
+}
+
+.fm-terminal-shell-help p {
+  margin: 4px 0;
+}
+
+.fm-terminal-shell-help pre {
+  margin: 4px 0 8px;
+  font-family: var(--fm-font-mono);
+  white-space: pre-wrap;
+}
+
+/* Actions on a finished command, drawn on its prompt line by an xterm decoration. */
+.fm-terminal-block {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  padding: 0 4px;
+  background: var(--fm-surface);
+}
+
+.fm-terminal-block-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--fm-radius);
+  background: transparent;
+  color: var(--fm-text-muted);
+  cursor: pointer;
+}
+
+.fm-terminal-block-action:hover {
+  background: var(--fm-hover);
+  color: var(--fm-text);
+}
+
+.fm-terminal-block-status {
+  width: 6px;
+  height: 6px;
+  margin-right: 2px;
+  border-radius: var(--fm-radius-pill);
+}
+
+.fm-terminal-block-status--ok {
+  background: var(--fm-success);
+}
+
+.fm-terminal-block-status--failed {
+  background: var(--fm-error);
+}
+
 .fm-terminal-host {
   height: calc(100% - 1px);
   padding: 4px 8px;

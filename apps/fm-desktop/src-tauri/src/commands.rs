@@ -2855,6 +2855,16 @@ pub(crate) fn delete_chat_conversation(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Answers one terminal assistance question (task 0333, phase 1). The result is text; the command
+/// it may contain is only inserted at the prompt by the person, never run.
+#[tauri::command]
+pub(crate) async fn terminal_assist(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::TerminalAssistRequestDto,
+) -> Result<fm_transport_dto::TerminalAssistReplyDto, fm_transport_dto::ChatFailureDto> {
+    state.service.terminal_assist(request).await
+}
+
 /// Streams the next chat reply (task 0324): fragments, then one final event on `events`. Every
 /// outcome arrives as an event, so the command itself succeeds.
 #[tauri::command]

@@ -26,6 +26,7 @@ describe('TerminalDrawer', () => {
       open: vi.fn(async () => 'session-1'),
       write: vi.fn(async () => undefined),
       resize: vi.fn(async () => undefined),
+      assist: vi.fn(async () => ({ text: '' })),
     };
 
     expect(() =>
@@ -57,6 +58,7 @@ describe('TerminalDrawer', () => {
       ),
       write: vi.fn(async () => undefined),
       resize: vi.fn(async () => undefined),
+      assist: vi.fn(async () => ({ text: '' })),
     };
     const location = { providerId: 'local', uri: 'file:///home' };
     m.mount(root, {
@@ -94,6 +96,7 @@ describe('TerminalDrawer', () => {
       open: vi.fn(async () => 'session'),
       write: vi.fn(async () => undefined),
       resize: vi.fn(async () => undefined),
+      assist: vi.fn(async () => ({ text: '' })),
     };
     let location = { providerId: 'local', uri: 'file:///home' };
     m.mount(root, {
@@ -129,6 +132,7 @@ describe('TerminalDrawer', () => {
       open: vi.fn(async () => 'session-1'),
       write,
       resize: vi.fn(async () => undefined),
+      assist: vi.fn(async () => ({ text: '' })),
     };
     m.mount(root, {
       view: () =>
@@ -181,6 +185,7 @@ describe('TerminalDrawer', () => {
       open: vi.fn(async () => 'session-1'),
       write,
       resize: vi.fn(async () => undefined),
+      assist: vi.fn(async () => ({ text: '' })),
     };
     m.mount(root, {
       view: () =>
@@ -317,5 +322,119 @@ describe('TerminalDrawer', () => {
     showTerminalSurface(drawerHost, folder2Terminal);
 
     expect(drawerHost.firstElementChild).toBe(folder2Terminal);
+  });
+});
+
+describe('TerminalDrawer questions with #', () => {
+  let root: HTMLElement;
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false, addListener: vi.fn(), removeListener: vi.fn() })),
+    );
+    root = document.createElement('div');
+    document.body.append(root);
+  });
+
+  afterEach(() => {
+    m.mount(root, null);
+    root.remove();
+    vi.unstubAllGlobals();
+  });
+
+  function mount(client: TerminalClient): void {
+    m.mount(root, {
+      view: () =>
+        m(TerminalDrawer, {
+          open: true,
+          tabKey: 'pane-1:tab-1',
+          location: { providerId: 'local', uri: 'file:///home' },
+          client,
+          onToggle: vi.fn(),
+        }),
+    });
+  }
+
+  function pasteText(textarea: HTMLTextAreaElement, text: string): void {
+    const event = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', {
+      value: { getData: (type: string) => (type === 'text/plain' ? text : '') },
+    });
+    textarea.dispatchEvent(event);
+  }
+
+  function pressEnter(textarea: HTMLTextAreaElement): void {
+    const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'keyCode', { value: 13 });
+    textarea.dispatchEvent(event);
+  }
+
+  it('sends a # question to the assistant and clears the line instead of running it', async () => {
+    const write = vi.fn<TerminalClient['write']>(async () => undefined);
+    const assist = vi.fn(async () => ({ text: 'ls -la' }));
+    mount({
+      open: vi.fn(async () => 'session-1'),
+      write,
+      resize: vi.fn(async () => undefined),
+      assist,
+    });
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')).not.toBeNull(),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const textarea = root.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea');
+    if (textarea === null) throw new Error('xterm textarea missing');
+
+    pasteText(textarea, '#list files');
+    await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+    pressEnter(textarea);
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-terminal-assist-text')?.textContent).toBe('ls -la'),
+    );
+    expect(assist).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'command',
+        request: 'list files',
+        workingDirectory: 'file:///home',
+      }),
+    );
+    const sent = write.mock.calls.map(([, data]) => new TextDecoder().decode(data));
+    expect(sent).toContain('\x15');
+    expect(sent).not.toContain('\r');
+    expect(sent).not.toContain('\n');
+  });
+
+  it('inserts an answer at the prompt without running it', async () => {
+    const write = vi.fn<TerminalClient['write']>(async () => undefined);
+    mount({
+      open: vi.fn(async () => 'session-1'),
+      write,
+      resize: vi.fn(async () => undefined),
+      assist: vi.fn(async () => ({ text: 'ls -la' })),
+    });
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')).not.toBeNull(),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const textarea = root.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea');
+    if (textarea === null) throw new Error('xterm textarea missing');
+    pasteText(textarea, '#list files');
+    await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+    pressEnter(textarea);
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-terminal-assist-text')?.textContent).toBe('ls -la'),
+    );
+
+    const insert = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'Insert at prompt',
+    );
+    insert?.click();
+
+    await vi.waitFor(() =>
+      expect(write).toHaveBeenLastCalledWith('session-1', new TextEncoder().encode('ls -la')),
+    );
+    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-assist-panel')).toBeNull());
   });
 });

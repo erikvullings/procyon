@@ -732,6 +732,7 @@ pub fn run() {
             commands::rename_chat_conversation,
             commands::delete_chat_conversation,
             commands::stream_chat_reply,
+            commands::terminal_assist,
             commands::cancel_chat_reply,
             commands::generate_images,
             commands::cancel_image_generation,
@@ -1178,6 +1179,7 @@ mod tests {
             commands::rename_chat_conversation,
             commands::delete_chat_conversation,
             commands::stream_chat_reply,
+            commands::terminal_assist,
             commands::cancel_chat_reply,
             commands::generate_images,
             commands::cancel_image_generation,
@@ -1943,7 +1945,7 @@ mod tests {
             .expect("profile presets command must succeed")
             .deserialize::<Vec<fm_transport_dto::LlmProfilePresetDto>>()
             .expect("presets response must deserialize");
-        assert_eq!(presets.len(), 9);
+        assert_eq!(presets.len(), 10);
         assert_eq!(presets[5].preset, fm_transport_dto::LlmPresetDto::MlxServe);
         let studio = presets
             .iter()
@@ -1956,6 +1958,12 @@ mod tests {
                 .contains(&fm_transport_dto::LlmApiCapabilityDto::DashscopeTasks),
             "its images API is the asynchronous task API"
         );
+        let qwen = presets
+            .iter()
+            .find(|preset| preset.preset == fm_transport_dto::LlmPresetDto::QwenImage)
+            .expect("the desktop host can fill the image role with one choice");
+        assert_eq!(qwen.model, "qwen-image");
+        assert!(qwen.redact_filenames);
 
         let created = invoke!(
             "create_llm_profile",

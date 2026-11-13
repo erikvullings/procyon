@@ -303,6 +303,12 @@ export const brainIcon = trustedStrokeIcon(
   'fm-icon-brain',
 );
 
+/** "tool" wrench — terminal block: suggest a fix for a failed command. */
+export const wrenchIcon = trustedStrokeIcon(
+  '<path d="M7 10h3v-3l-3.5 -3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1 -3 3l-6 -6a6 6 0 0 1 -8 -8l3.5 3.5" />',
+  'fm-icon-wrench',
+);
+
 /** "sparkles" — knowledge search: the ask bar for generated answers. */
 export const sparklesIcon = trustedStrokeIcon(
   '<path d="M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm0 -12a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm-7 12a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z" />',

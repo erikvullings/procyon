@@ -3436,6 +3436,15 @@ impl FileManagerService {
             .delete(workspace_id, conversation_id)?)
     }
 
+    /// Answers one terminal assistance question through the chat role (task 0333, phase 1). Nothing
+    /// is saved; the answer is text the person may choose to run, and nothing is run here.
+    pub async fn terminal_assist(
+        &self,
+        request: fm_transport_dto::TerminalAssistRequestDto,
+    ) -> Result<fm_transport_dto::TerminalAssistReplyDto, fm_transport_dto::ChatFailureDto> {
+        crate::terminal_assist::reply(&self.llm_profiles, request).await
+    }
+
     /// Streams the next reply in a saved conversation through the chat role (task 0324): fragments
     /// as they arrive, then one final event. Nothing is written to disk except the conversation.
     pub async fn stream_chat_reply(
