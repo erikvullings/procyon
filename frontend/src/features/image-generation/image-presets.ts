@@ -160,25 +160,27 @@ export const NO_PRESET = '';
 /** Lens wording, offered only for presets where a camera makes sense. */
 export interface ImageLens {
   readonly id: string;
+  /** What the status bar shows; the id is a slug and not always something to read out. */
+  readonly label: string;
   readonly clause: string;
 }
 
 /** Focal lengths a non-specialist recognises from a camera. */
 export const IMAGE_LENSES: readonly ImageLens[] = [
-  { id: '', clause: '' },
-  { id: '24mm', clause: 'shot on a 24mm wide-angle lens' },
-  { id: '35mm', clause: 'shot on a 35mm lens' },
-  { id: '50mm', clause: 'shot on a 50mm lens' },
-  { id: '85mm', clause: 'shot on an 85mm portrait lens' },
-  { id: '100mm-macro', clause: 'shot on a 100mm macro lens' },
+  { id: '', label: '', clause: '' },
+  { id: '24mm', label: '24mm wide', clause: 'shot on a 24mm wide-angle lens' },
+  { id: '35mm', label: '35mm', clause: 'shot on a 35mm lens' },
+  { id: '50mm', label: '50mm', clause: 'shot on a 50mm lens' },
+  { id: '85mm', label: '85mm portrait', clause: 'shot on an 85mm portrait lens' },
+  { id: '100mm-macro', label: '100mm macro', clause: 'shot on a 100mm macro lens' },
 ] as const;
 
 /** Apertures, phrased by what they do rather than by the number alone. */
 export const IMAGE_APERTURES: readonly ImageLens[] = [
-  { id: '', clause: '' },
-  { id: 'f1.8', clause: 'wide open at f/1.8 with a blurred background' },
-  { id: 'f4', clause: 'at f/4 with the subject sharp' },
-  { id: 'f8', clause: 'stopped down to f/8 with everything in focus' },
+  { id: '', label: '', clause: '' },
+  { id: 'f1.8', label: 'f/1.8 wide open', clause: 'wide open at f/1.8 with a blurred background' },
+  { id: 'f4', label: 'f/4', clause: 'at f/4 with the subject sharp' },
+  { id: 'f8', label: 'f/8 all in focus', clause: 'stopped down to f/8 with everything in focus' },
 ] as const;
 
 /** The preset with this id, or `undefined`. */

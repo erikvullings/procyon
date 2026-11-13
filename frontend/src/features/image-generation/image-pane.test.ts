@@ -221,6 +221,35 @@ describe('the prompt and the preview', () => {
     expect(root.querySelector<HTMLButtonElement>('.fm-image-send')?.disabled).toBe(true);
   });
 
+  it('says nothing under an empty prompt', () => {
+    mountLoaded();
+    expect(root.querySelector('.fm-image-composed')).toBeNull();
+    expect(root.textContent, 'a missing subject is shown by the disabled send key').not.toContain(
+      'Describe what you want to see first',
+    );
+  });
+
+  it('shows the wording that will be sent once there are words', () => {
+    mountLoaded({ subject: 'a lighthouse at dusk', presetIds: ['clipart'] });
+    const line = root.querySelector('.fm-image-composed');
+    expect(line?.textContent).toContain('a lighthouse at dusk');
+    expect(line?.textContent).toContain('Sent to the model');
+  });
+
+  it('names the leave-out field, so its example is not read as a feature', () => {
+    mountLoaded();
+    const row = root.querySelector('.fm-image-avoid-row');
+    expect(row?.textContent).toContain('Leave out');
+    expect(row?.querySelector('input')?.getAttribute('placeholder')).toContain('e.g.');
+  });
+
+  it('sends with the Enter glyph, as the chat composer does', () => {
+    mountLoaded({ subject: 'a lighthouse at dusk' });
+    const send = root.querySelector('.fm-image-send');
+    expect(send?.querySelector('.fm-icon-corner-down-left'), 'the Enter key glyph').not.toBeNull();
+    expect(send?.querySelector('svg path[d="M5 12l14 0"]'), 'not a plus').toBeNull();
+  });
+
   it('keeps the leave-out list with the prompt it belongs to', () => {
     const { attrs } = mountLoaded({ subject: 'a fox', negativePrompt: 'text' });
     const avoid = root.querySelector<HTMLInputElement>('.fm-image-avoid');
@@ -299,6 +328,54 @@ describe('the status bar', () => {
     expect(attrs.onPatch).toHaveBeenCalledWith(
       expect.objectContaining({ presetIds: ['blackAndWhite', 'portrait'] }),
     );
+  });
+
+  it('draws its own choices, because Materialize hides a native select', () => {
+    mountLoaded({ width: 1_216, height: 832 });
+    expect(root.querySelector('select'), 'no native select to be hidden').toBeNull();
+
+    const trigger = root.querySelector<HTMLButtonElement>('.fm-image-choice-trigger');
+    expect(trigger?.getAttribute('aria-label')).toBe('Size');
+    expect(trigger?.textContent).toContain('1216 × 832');
+    expect(trigger?.querySelector('.fm-icon-chevron-down'), 'a caret to open it').not.toBeNull();
+
+    trigger?.click();
+    m.redraw.sync();
+    const list = root.querySelector('.fm-image-choice-list');
+    expect(list, 'the list of sizes').not.toBeNull();
+    expect(list?.getAttribute('role')).toBe('listbox');
+    const options = [...(list?.querySelectorAll('[role="option"]') ?? [])];
+    expect(options).toHaveLength(5);
+    expect(
+      options
+        .find((option) => option.textContent?.includes('1024 × 1024'))
+        ?.getAttribute('aria-selected'),
+    ).toBe('false');
+  });
+
+  it('patches the shape the size choice picks, and closes the list', () => {
+    const { attrs } = mountLoaded();
+    root.querySelector<HTMLButtonElement>('.fm-image-choice-trigger')?.click();
+    m.redraw.sync();
+    const option = [...root.querySelectorAll<HTMLElement>('.fm-image-choice-option')].find((row) =>
+      row.textContent?.includes('832 × 1216'),
+    );
+    option?.click();
+    m.redraw.sync();
+    expect(attrs.onPatch).toHaveBeenCalledWith({ width: 832, height: 1_216 });
+    expect(root.querySelector('.fm-image-choice-list'), 'the list folds away').toBeNull();
+  });
+
+  it('opens only one choice at a time', () => {
+    mountLoaded({ presetIds: ['portrait'] });
+    root.querySelector<HTMLButtonElement>('.fm-image-preset-trigger')?.click();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-image-preset-list')).not.toBeNull();
+    const triggers = root.querySelectorAll<HTMLButtonElement>('.fm-image-choice-trigger');
+    triggers[0]?.click();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-image-preset-list'), 'the styles folded').toBeNull();
+    expect(root.querySelectorAll('.fm-image-choice-list')).toHaveLength(1);
   });
 
   it('offers lens wording only when a photographic preset is on', () => {

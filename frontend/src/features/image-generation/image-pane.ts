@@ -1,6 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import {
-  checkIcon,
+  chevronDownIcon,
+  cornerDownLeftIcon,
   folderOpenIcon,
   heartIcon,
   photoIcon,
@@ -20,7 +21,6 @@ import {
   failureNeedsSettings,
   hasPreview,
   type ImagePaneEntry,
-  imageRequestProblem,
   isSaveConflict,
   suggestedFileName,
 } from './image-pane-state';
@@ -80,6 +80,8 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
   let confirmingReplace = false;
   /** The list of styles is folded into the status bar; there is no room to show which are on. */
   let stylesOpen = false;
+  /** Which status choice has its list open, so at most one is ever drawn. */
+  let openChoice: string | undefined;
 
   const openSaveForm = (attrs: ImagePaneAttrs, image: GeneratedImage, index: number): void => {
     saveImageId = image.id;
@@ -123,30 +125,71 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
     );
 
   /**
-   * A choice in the status bar. A native select keeps the 20px row, needs no script to open and
-   * speaks its own name to a screen reader, so nothing has to be drawn beside it.
+   * A choice in the status bar, drawn rather than left to the browser: Materialize hides every
+   * `select` it is not told about, and a 20px row cannot carry the field it builds in their place.
+   * The trigger names the setting, so the value alone is what the row has to fit.
    */
-  const nativeSelect = (
+  const statusChoice = (
+    key: string,
     label: string,
     checkedId: string,
     options: readonly { readonly id: string; readonly label: string }[],
     disabled: boolean,
     onchange: (id: string) => void,
-  ) =>
-    m(
-      // No `browser-default`: the shell makes those full width, and this row has none to spare.
-      'select.fm-image-select',
-      {
-        'aria-label': label,
-        disabled,
-        value: checkedId,
-        onchange: (event: Event) => {
-          const target = event.target as HTMLSelectElement;
-          onchange(target.value);
+  ) => {
+    const current = options.find((option) => option.id === checkedId) ?? options[0];
+    const open = openChoice === key;
+    const listId = `fm-image-choice-${key}`;
+    return m('.fm-image-choice', [
+      m(
+        'button.btn-flat.fm-image-chrome.fm-image-choice-trigger',
+        {
+          type: 'button',
+          'aria-label': label,
+          'aria-haspopup': 'listbox',
+          'aria-expanded': String(open),
+          'aria-controls': open ? listId : undefined,
+          disabled,
+          onclick: () => {
+            stylesOpen = false;
+            openChoice = open ? undefined : key;
+          },
+          onkeydown: (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+            openChoice = undefined;
+          },
         },
-      },
-      options.map((option) => m('option', { value: option.id }, option.label)),
-    );
+        [m('span.fm-image-choice-value', current?.label ?? ''), chevronDownIcon({ size: 12 })],
+      ),
+      open
+        ? m(
+            `ul#${listId}.fm-image-choice-list`,
+            { role: 'listbox', 'aria-label': label },
+            options.map((option) =>
+              m(
+                'li.fm-image-choice-option',
+                {
+                  role: 'option',
+                  'aria-selected': String(option.id === checkedId),
+                  tabindex: '0',
+                  onclick: () => {
+                    openChoice = undefined;
+                    onchange(option.id);
+                  },
+                  onkeydown: (event: KeyboardEvent) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    openChoice = undefined;
+                    onchange(option.id);
+                  },
+                },
+                option.label,
+              ),
+            ),
+          )
+        : undefined,
+    ]);
+  };
 
   const crumbs = (attrs: ImagePaneAttrs) => {
     const { entry } = attrs;
@@ -185,6 +228,7 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
           'aria-controls': stylesOpen ? 'fm-image-preset-list' : undefined,
           disabled: pending,
           onclick: () => {
+            openChoice = undefined;
             stylesOpen = !stylesOpen;
           },
           onkeydown: (event: KeyboardEvent) => {
@@ -240,7 +284,8 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
     const photographic = selectionIsPhotographic(entry.presetIds);
     return m('footer.fm-image-status', [
       styleControl(attrs),
-      nativeSelect(
+      statusChoice(
+        'size',
         t('image', 'size'),
         `${entry.width}x${entry.height}`,
         IMAGE_SIZES.map((size) => ({
@@ -255,24 +300,26 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
         },
       ),
       photographic
-        ? nativeSelect(
+        ? statusChoice(
+            'lens',
             t('image', 'lens'),
             entry.lensId,
             IMAGE_LENSES.map((lens) => ({
               id: lens.id,
-              label: lens.id === '' ? t('image', 'lensNone') : lens.id,
+              label: lens.id === '' ? t('image', 'lensNone') : lens.label,
             })),
             pending,
             (value) => attrs.onPatch({ lensId: value }),
           )
         : undefined,
       photographic
-        ? nativeSelect(
+        ? statusChoice(
+            'aperture',
             t('image', 'aperture'),
             entry.apertureId,
             IMAGE_APERTURES.map((aperture) => ({
               id: aperture.id,
-              label: aperture.id === '' ? t('image', 'apertureNone') : aperture.id,
+              label: aperture.id === '' ? t('image', 'apertureNone') : aperture.label,
             })),
             pending,
             (value) => attrs.onPatch({ apertureId: value }),
@@ -463,7 +510,6 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
   const composer = (attrs: ImagePaneAttrs) => {
     const { entry } = attrs;
     const pending = entry.pendingRequestId !== undefined;
-    const problem = imageRequestProblem(entry);
     const composed = composePrompt(entry.subject, entry.presetIds, entry.lensId, entry.apertureId);
     const negative = composeNegativePrompt(entry.negativePrompt, entry.presetIds);
     return m(
@@ -515,37 +561,41 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
                       'aria-label': t('image', 'generate'),
                       disabled: !canGenerate(entry),
                     },
-                    checkIcon({ size: 14 }),
+                    cornerDownLeftIcon({ size: 14 }),
                   ),
                 ),
           ]),
         ]),
-        // What to leave out travels with the prompt it belongs to, in the same box.
-        m('input.fm-image-avoid', {
-          type: 'text',
-          'aria-label': t('image', 'negative'),
-          placeholder: t('image', 'negativePlaceholder'),
-          disabled: pending,
-          value: entry.negativePrompt,
-          oninput: (event: Event) => {
-            attrs.onPatch({ negativePrompt: (event.target as HTMLInputElement).value });
-          },
-        }),
-        // The wording the presets and lens picks added is what the model will be sent; a person
-        // who cannot see it cannot trust it.
-        m('p.fm-image-composed', { 'aria-live': 'polite' }, [
-          m('span.fm-image-composed-label', t('image', 'sent')),
-          m('span.fm-image-composed-text', composed === '' ? t('image', 'nothingYet') : composed),
-          negative === ''
-            ? undefined
-            : [
-                m('span.fm-image-composed-label', t('image', 'negative')),
-                m('span.fm-image-composed-text', negative),
-              ],
-          problem === undefined || pending
-            ? undefined
-            : m('span.fm-image-problem', t('image', problem)),
+        // What to leave out travels with the prompt it belongs to, in the same box - named, because
+        // an unlabelled example list reads like a feature of its own.
+        m('.fm-image-avoid-row', [
+          m('span.fm-image-avoid-label', t('image', 'negative')),
+          m('input.fm-image-avoid', {
+            type: 'text',
+            'aria-label': t('image', 'negative'),
+            placeholder: t('image', 'negativePlaceholder'),
+            disabled: pending,
+            value: entry.negativePrompt,
+            oninput: (event: Event) => {
+              attrs.onPatch({ negativePrompt: (event.target as HTMLInputElement).value });
+            },
+          }),
         ]),
+        // The wording the presets and lens picks added is what the model will be sent; a person who
+        // cannot see it cannot trust it. An empty prompt says nothing, so nothing is said: the
+        // disabled send key already shows a subject is missing, and failures reach the preview.
+        composed === ''
+          ? undefined
+          : m('p.fm-image-composed', { 'aria-live': 'polite' }, [
+              m('span.fm-image-composed-label', t('image', 'sent')),
+              m('span.fm-image-composed-text', composed),
+              negative === ''
+                ? undefined
+                : [
+                    m('span.fm-image-composed-label', t('image', 'negative')),
+                    m('span.fm-image-composed-text', negative),
+                  ],
+            ]),
       ],
     );
   };

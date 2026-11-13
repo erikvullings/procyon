@@ -231,7 +231,18 @@
   gap: var(--fm-space-1);
 }
 
-/* The leave-out line reads as part of the same box: no label of its own, only a placeholder. */
+.fm-image-avoid-row {
+  display: flex;
+  align-items: center;
+  gap: var(--fm-space-2);
+}
+
+.fm-image-avoid-label {
+  flex: 0 0 auto;
+  color: var(--fm-text-muted);
+  font-size: var(--fm-type-label);
+}
+
 .fm-image-avoid,
 .fm-image-folder,
 .fm-image-name {
@@ -283,25 +294,38 @@
   overflow-wrap: anywhere;
 }
 
-.fm-image-problem {
+/* The status bar holds the settings that shape the request. Each is a drawn choice rather than a
+   native select: Materialize hides every `select` it was not told about, and the field it builds in
+   its place is a form control, far too tall for this row. */
+.fm-image-choice {
+  position: relative;
+  display: flex;
   flex: 0 0 auto;
-  color: var(--fm-error);
+  align-items: center;
 }
 
-/* The status bar holds the settings that shape the request. A choice is a native select at chrome
-   density, so the row stays one line tall. */
-/* Materialize hides and stretches bare selects and text inputs, so these carry
-   `browser-default` and the rules below are scoped under the status row to outweigh it. */
-.fm-image-status .fm-image-select,
+.fm-image-choice-trigger {
+  gap: var(--fm-space-1);
+  color: var(--fm-text);
+}
+
+.fm-image-choice-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The seed is the one real field here, and carries `browser-default` so Materialize leaves it alone. */
 .fm-image-status .fm-image-seed {
   box-sizing: border-box;
   flex: 0 0 auto;
-  width: auto;
+  width: 6.5rem;
   height: var(--fm-row-height);
   min-width: 0;
   margin: 0;
   padding: 0 var(--fm-space-1);
-  border: 1px solid transparent;
+  border: 1px solid var(--fm-border);
   border-radius: var(--fm-radius-control);
   background: transparent;
   color: var(--fm-text);
@@ -310,12 +334,10 @@
   opacity: 1;
 }
 
-.fm-image-status .fm-image-select:hover,
 .fm-image-status .fm-image-seed:hover {
   background: var(--fm-hover);
 }
 
-.fm-image-status .fm-image-select:focus-visible,
 .fm-image-status .fm-image-seed:focus-visible {
   outline: 2px solid var(--fm-focus, var(--fm-accent));
   outline-offset: 1px;
@@ -352,10 +374,12 @@
   color: var(--fm-text);
 }
 
-.fm-image-preset-list {
+/* Both lists hang above the row they were opened from, because that row is the bottom of the pane. */
+.fm-image-preset-list,
+.fm-image-choice-list {
   position: absolute;
   z-index: 10;
-  top: calc(var(--fm-row-height) + var(--fm-space-1));
+  bottom: calc(100% + var(--fm-space-1));
   left: 0;
   display: flex;
   flex-direction: column;
@@ -368,6 +392,25 @@
   border-radius: var(--fm-radius);
   background: var(--fm-surface-elevated);
   box-shadow: var(--fm-shadow);
+}
+
+.fm-image-choice-option {
+  min-height: var(--fm-row-height);
+  padding: 0 var(--fm-space-1);
+  border-radius: var(--fm-radius-control);
+  color: var(--fm-text);
+  font-size: var(--fm-type-body);
+  cursor: pointer;
+}
+
+.fm-image-choice-option:hover,
+.fm-image-choice-option:focus {
+  background: var(--fm-hover);
+  outline: none;
+}
+
+.fm-image-choice-option[aria-selected="true"] {
+  color: var(--fm-accent);
 }
 
 /* A preset is a row of the list: its label only. An icon name is drawn as an icon, never spelled

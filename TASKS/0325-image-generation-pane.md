@@ -96,6 +96,18 @@ must review before anything is written. It gets its own role in 0322 and its own
     now carry `browser-default` on the field only, with the row's own rules scoped under `.fm-image-status`
     to outweigh the shell's `select.browser-default { width: 100% }`), and no reachable command existed to
     open the pane at all.
+  - 2026-11-13, second pass from the person's own look at the pane: the three status choices became
+    drawn controls (a chrome-density trigger with a caret plus a `role=listbox` list that hangs above
+    the row, since the row is the bottom of the pane). A native `select` is not usable here - Materialize
+    hides every one it was not told about, and the field it substitutes is a form control several times
+    the row's height. Lens and aperture gained readable labels (`85mm portrait`, `f/1.8 wide open`)
+    because the ids are slugs.
+  - The composer now says nothing under an empty prompt: the "Nothing yet - describe what you want to
+    see." line and the red "Describe what you want to see first." were both removed, since a disabled
+    send key already says a subject is missing and failures reach the preview's alert. The wording that
+    will be sent still appears once there are words, because the presets add words the person did not
+    type. The leave-out field is named on its left and its placeholder is marked as an example, so
+    "text, watermark" is not read as a feature of its own. The send key is the Enter glyph, as in chat.
   - Still unverified: a live generation end to end. Driving the mock settings UI saved the Qwen profile and
     showed the Image row in Roles, but the role never stuck, and the pane stayed on its "No image model is
     set" state - which is itself covered by wiring tests, not by a real reply.
