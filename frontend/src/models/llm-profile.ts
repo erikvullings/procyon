@@ -19,5 +19,5 @@ export type {
   SaveLlmRoleRequestDto as SaveLlmRoleRequest,
 } from '../api/generated/models';
 
-/** A feature that uses a model: chat, or semantic embeddings (task 0322). */
-export type LlmRole = 'chat' | 'embeddings';
+/** A feature that uses a model: chat, semantic embeddings, or image generation (tasks 0322, 0325). */
+export type LlmRole = 'chat' | 'embeddings' | 'image';

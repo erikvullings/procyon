@@ -22,6 +22,7 @@ import type {
   CalculateFolderSizeResponseDto,
   CancelChatReplyRequestDto,
   CancelFileAssistantRequestDto,
+  CancelImageGenerationRequestDto,
   CancelKnowledgeAnswerRequestDto,
   CancelKnowledgeSearchRequestDto,
   ChatConversationDto,
@@ -58,6 +59,7 @@ import type {
   DiffFilesRequestDto,
   DiffFilesResponseDto,
   DirectorySnapshotDto,
+  DiscardImageBatchRequestDto,
   DiscoverApplicationUninstallCandidatesRequestDto,
   DiscoverApplicationUninstallCandidatesResponseDto,
   DocumentSummaryDto,
@@ -79,10 +81,12 @@ import type {
   FinderTagsDto,
   ForgetFolderViewRequestDto,
   GenerateDocumentSummaryRequestDto,
+  GenerateImagesRequestDto,
   GenerateKnowledgeAnswerRequestDto,
   GenerateRagAnswerRequestDto,
   GenerateRagAnswerResponseDto,
   GenerateSyncPlanRequestDto,
+  GeneratedImageBytesParams,
   GeoDocumentDto,
   GetChecksumsParams,
   GetComparisonParams,
@@ -103,6 +107,7 @@ import type {
   GetThumbnailParams,
   HealthDto,
   HostKeyProbeDto,
+  ImageBatchDto,
   ImageMetadataDto,
   ImportSemanticLocalModelRequestDto,
   ImportSemanticVocabularyRequestDto,
@@ -206,6 +211,8 @@ import type {
   SaveChecksumFileResponseDto,
   SaveEditableFileRequestDto,
   SaveEditableFileResponseDto,
+  SaveGeneratedImageRequestDto,
+  SaveGeneratedImageResponseDto,
   SaveLlmProfileRequestDto,
   SaveLlmRoleRequestDto,
   SaveRagConversationRequestDto,
@@ -5106,6 +5113,287 @@ export const getFileIcon = async (params: GetFileIconParams, options?: Parameter
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type generatedImageBytesResponse200 = {
+  data: Blob
+  status: 200
+}
+
+export type generatedImageBytesResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type generatedImageBytesResponseSuccess = (generatedImageBytesResponse200) & {
+  headers: Headers;
+};
+export type generatedImageBytesResponseError = (generatedImageBytesResponse404) & {
+  headers: Headers;
+};
+
+export type generatedImageBytesResponse = (generatedImageBytesResponseSuccess | generatedImageBytesResponseError)
+
+export const getGeneratedImageBytesUrl = (params: GeneratedImageBytesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/images/bytes?${stringifiedParams}` : `/api/v1/images/bytes`
+}
+
+/**
+ * @summary Serves the bytes of one stored image: the preview downscale, or the original when asked for.
+ */
+export const generatedImageBytes = async (params: GeneratedImageBytesParams, options?: Parameters<typeof fetchMutator>[1]): Promise<generatedImageBytesResponse> => {
+
+  return fetchMutator<generatedImageBytesResponse>(getGeneratedImageBytesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type cancelImageGenerationResponse204 = {
+  data: void
+  status: 204
+}
+
+export type cancelImageGenerationResponseSuccess = (cancelImageGenerationResponse204) & {
+  headers: Headers;
+};
+;
+
+export type cancelImageGenerationResponse = (cancelImageGenerationResponseSuccess)
+
+export const getCancelImageGenerationUrl = () => {
+
+
+
+
+  return `/api/v1/images/cancel`
+}
+
+/**
+ * @summary Stops one running generation.
+ */
+export const cancelImageGeneration = async (cancelImageGenerationRequestDto: CancelImageGenerationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<cancelImageGenerationResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<cancelImageGenerationResponse>(getCancelImageGenerationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(cancelImageGenerationRequestDto)
+  }
+);}
+
+
+
+export type discardImageBatchResponse204 = {
+  data: void
+  status: 204
+}
+
+export type discardImageBatchResponseSuccess = (discardImageBatchResponse204) & {
+  headers: Headers;
+};
+;
+
+export type discardImageBatchResponse = (discardImageBatchResponseSuccess)
+
+export const getDiscardImageBatchUrl = () => {
+
+
+
+
+  return `/api/v1/images/discard`
+}
+
+/**
+ * @summary Drops a batch from the store without saving any of its images.
+ */
+export const discardImageBatch = async (discardImageBatchRequestDto: DiscardImageBatchRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<discardImageBatchResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<discardImageBatchResponse>(getDiscardImageBatchUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(discardImageBatchRequestDto)
+  }
+);}
+
+
+
+export type generateImagesResponse200 = {
+  data: ImageBatchDto
+  status: 200
+}
+
+export type generateImagesResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type generateImagesResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type generateImagesResponseSuccess = (generateImagesResponse200) & {
+  headers: Headers;
+};
+export type generateImagesResponseError = (generateImagesResponse400 | generateImagesResponse403) & {
+  headers: Headers;
+};
+
+export type generateImagesResponse = (generateImagesResponseSuccess | generateImagesResponseError)
+
+export const getGenerateImagesUrl = () => {
+
+
+
+
+  return `/api/v1/images/generate`
+}
+
+/**
+ * @summary Asks the image role's endpoint for a bounded batch. Nothing is written to disk: the images are
+held in a short-lived store until they are saved or discarded.
+ */
+export const generateImages = async (generateImagesRequestDto: GenerateImagesRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<generateImagesResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<generateImagesResponse>(getGenerateImagesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(generateImagesRequestDto)
+  }
+);}
+
+
+
+export type saveGeneratedImageResponse200 = {
+  data: SaveGeneratedImageResponseDto
+  status: 200
+}
+
+export type saveGeneratedImageResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type saveGeneratedImageResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type saveGeneratedImageResponse409 = {
+  data: ApplicationErrorDto
+  status: 409
+}
+
+export type saveGeneratedImageResponseSuccess = (saveGeneratedImageResponse200) & {
+  headers: Headers;
+};
+export type saveGeneratedImageResponseError = (saveGeneratedImageResponse400 | saveGeneratedImageResponse404 | saveGeneratedImageResponse409) & {
+  headers: Headers;
+};
+
+export type saveGeneratedImageResponse = (saveGeneratedImageResponseSuccess | saveGeneratedImageResponseError)
+
+export const getSaveGeneratedImageUrl = () => {
+
+
+
+
+  return `/api/v1/images/save`
+}
+
+/**
+ * @summary Writes one stored image to the chosen folder and file name. An existing file is refused until the
+person asks for it to be replaced.
+ */
+export const saveGeneratedImage = async (saveGeneratedImageRequestDto: SaveGeneratedImageRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<saveGeneratedImageResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<saveGeneratedImageResponse>(getSaveGeneratedImageUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(saveGeneratedImageRequestDto)
   }
 );}
 

@@ -75,6 +75,8 @@ import type {
   FindLinkReplacementsResult,
   FrontendDiagnostic,
   GenerateDocumentSummaryRequest,
+  GeneratedImageBytes,
+  GenerateImagesRequest,
   GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
   GenerateRagAnswerResponse,
@@ -92,6 +94,7 @@ import type {
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImageBatch,
   ImageGpsEntry,
   ImageMetadata,
   ImportSemanticLocalModelRequest,
@@ -169,6 +172,8 @@ import type {
   SavedChecksumFile,
   SavedRagConversation,
   SaveEditableFileRequest,
+  SaveGeneratedImageRequest,
+  SaveGeneratedImageResponse,
   SaveLlmProfileRequest,
   SaveLlmRoleRequest,
   SaveRagConversationRequest,
@@ -329,8 +334,13 @@ import {
   updateGemmaMedia as requestGemmaMediaUpdate,
   readGeoFile as requestGeoFile,
   getFileGitHistory as requestGitFileHistory,
+  discardImageBatch as requestImageBatchDiscard,
+  generatedImageBytes as requestImageBytes,
+  generateImages as requestImageGeneration,
+  cancelImageGeneration as requestImageGenerationCancel,
   readImageGps as requestImageGps,
   readImageMetadata as requestImageMetadata,
+  saveGeneratedImage as requestImageSave,
   inspectAttributes as requestInspectAttributes,
   inspectSplitSet as requestInspectSplitSet,
   discardInterruptedTransfer as requestInterruptedTransferDiscard,
@@ -2857,6 +2867,61 @@ export class HttpFileManagerClient implements FileManagerClient {
 
   async cancelChatReply(requestId: string): Promise<void> {
     await requestChatReplyCancel({ requestId });
+  }
+
+  async generateImages(request: GenerateImagesRequest, signal?: AbortSignal): Promise<ImageBatch> {
+    const response = await requestImageGeneration(
+      request,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw unexpectedResponseError('generateImages', response.status);
+    }
+    return response.data;
+  }
+
+  async cancelImageGeneration(requestId: string): Promise<void> {
+    await requestImageGenerationCancel({ requestId });
+  }
+
+  async generatedImageBytes(
+    generationId: string,
+    imageId: string,
+    original: boolean,
+    signal?: AbortSignal,
+  ): Promise<GeneratedImageBytes> {
+    const response = await requestImageBytes(
+      { generation_id: generationId, image_id: imageId, original },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw unexpectedResponseError('generatedImageBytes', response.status);
+    }
+    return {
+      bytes: new Uint8Array(await response.data.arrayBuffer()),
+      mediaType: response.headers.get('content-type') ?? 'application/octet-stream',
+    };
+  }
+
+  async saveGeneratedImage(
+    request: SaveGeneratedImageRequest,
+    signal?: AbortSignal,
+  ): Promise<SaveGeneratedImageResponse> {
+    const response = await requestImageSave(request, signal === undefined ? undefined : { signal });
+    if (response.status !== 200) {
+      throw unexpectedResponseError('saveGeneratedImage', response.status);
+    }
+    return response.data;
+  }
+
+  async discardImageBatch(generationId: string, signal?: AbortSignal): Promise<void> {
+    const response = await requestImageBatchDiscard(
+      { generationId },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204) {
+      throw unexpectedResponseError('discardImageBatch', response.status);
+    }
   }
 
   async listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {

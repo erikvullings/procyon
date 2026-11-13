@@ -35,6 +35,8 @@ mod folder_views;
 mod ftp;
 mod geo_files;
 mod geo_transform;
+pub mod image_generation;
+pub mod image_generation_transport;
 mod image_metadata;
 mod image_metadata_edit;
 pub mod knowledge;

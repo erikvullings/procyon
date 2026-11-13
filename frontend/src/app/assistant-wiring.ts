@@ -46,7 +46,7 @@ export function createAssistantWiring(shellState: ShellState, core: AssistantCor
       return;
     }
     // Start on the chat role's endpoint when it is still saved (0322); otherwise the first profile.
-    let roles: LlmRoles = { chat: null, embeddings: null };
+    let roles: LlmRoles = { chat: null, embeddings: null, image: null };
     try {
       roles = await shellState.client.listLlmRoles();
     } catch {

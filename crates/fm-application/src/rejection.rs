@@ -82,6 +82,14 @@ pub mod reason {
     pub const LLM_ROLE_NOT_ASSIGNED: &str = "llmRoleNotAssigned";
     /// The embeddings role may not use a cloud endpoint until cloud use is allowed for it.
     pub const LLM_CLOUD_EMBEDDING_NOT_ALLOWED: &str = "llmCloudEmbeddingNotAllowed";
+    /// The image role may not use a cloud endpoint until cloud use is allowed for it.
+    pub const LLM_CLOUD_IMAGE_NOT_ALLOWED: &str = "llmCloudImageNotAllowed";
+    /// The image endpoint could not produce images.
+    pub const IMAGE_GENERATION_FAILED: &str = "imageGenerationFailed";
+    /// A generated image was outside the accepted size or count bounds.
+    pub const IMAGE_TOO_LARGE: &str = "imageTooLarge";
+    /// The generated images are no longer held by the backend.
+    pub const IMAGE_BATCH_EXPIRED: &str = "imageBatchExpired";
     /// The LLM request timed out.
     pub const LLM_TIMEOUT: &str = "llmTimeout";
     /// The LLM TLS policy rejected the endpoint.

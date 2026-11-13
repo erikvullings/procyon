@@ -130,6 +130,8 @@ export interface ActionCommandControllerContext {
   /** Opens Ask or the active folder's semantic enrolment prompt. */
   openSemanticAssistant(): void;
   openChat(): void;
+  /** Opens the image generation pane (task 0325). */
+  openImage?(): void;
   /** Opens search-only Structured Knowledge Search (task 0206). */
   openKnowledgeSearch(): void;
   openThemes(): void;
@@ -524,6 +526,10 @@ export function createActionCommandController(
     }
     if (action.id === 'client.chat') {
       context.openChat();
+      return;
+    }
+    if (action.id === 'client.imageGeneration') {
+      context.openImage?.();
       return;
     }
     if (action.id === 'client.searchKnowledge') {

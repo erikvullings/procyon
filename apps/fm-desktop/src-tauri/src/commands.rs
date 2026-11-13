@@ -2882,6 +2882,70 @@ pub(crate) fn cancel_chat_reply(
     state.service.cancel_chat_reply(request);
 }
 
+/// Generates one bounded batch through the image role (task 0325). Nothing is written to disk: the
+/// images are held in the backend's short-lived store until they are saved or discarded.
+#[tauri::command]
+pub(crate) async fn generate_images(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::GenerateImagesRequestDto,
+) -> Result<fm_transport_dto::ImageBatchDto, ApplicationErrorDto> {
+    state
+        .service
+        .generate_images(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Stops one running generation.
+#[tauri::command]
+pub(crate) fn cancel_image_generation(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::CancelImageGenerationRequestDto,
+) {
+    state.service.cancel_image_generation(request);
+}
+
+/// The bytes of one stored image: the preview the pane shows, or the original for a save.
+#[tauri::command]
+pub(crate) fn get_generated_image_bytes(
+    state: State<'_, AppState>,
+    generation_id: Uuid,
+    image_id: Uuid,
+    original: bool,
+) -> Result<fm_transport_dto::GeneratedImageBytesDto, ApplicationErrorDto> {
+    state
+        .service
+        .generated_image_bytes(generation_id, image_id, original)
+        .map(|image| fm_transport_dto::GeneratedImageBytesDto {
+            bytes: image.bytes,
+            media_type: image.media_type.to_owned(),
+        })
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Writes one stored image to the chosen folder and file name. An existing file is refused until the
+/// person asks for it to be replaced.
+#[tauri::command]
+pub(crate) async fn save_generated_image(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::SaveGeneratedImageRequestDto,
+) -> Result<fm_transport_dto::SaveGeneratedImageResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .save_generated_image(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Drops a batch without saving any of its images.
+#[tauri::command]
+pub(crate) fn discard_image_batch(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::DiscardImageBatchRequestDto,
+) {
+    state.service.discard_image_batch(request.generation_id);
+}
+
 /// Lists plugins through the shared discovery service.
 #[tauri::command]
 pub(crate) fn list_plugins(state: State<'_, AppState>) -> Vec<PluginDescriptorDto> {

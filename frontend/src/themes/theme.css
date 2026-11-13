@@ -1897,6 +1897,44 @@ main.fm-workspace {
   color: var(--fm-text-muted);
 }
 
+.fm-llm-roles {
+  display: grid;
+  gap: var(--fm-space-4);
+  min-width: 0;
+}
+
+.fm-llm-roles-intro,
+.fm-llm-role-notice,
+.fm-llm-role-error,
+.fm-llm-role-message {
+  margin: 0;
+  color: var(--fm-text-muted);
+  font-size: var(--fm-type-label);
+}
+
+.fm-llm-role {
+  display: grid;
+  gap: var(--fm-space-2);
+  min-width: 0;
+  padding-top: var(--fm-space-4);
+  border-top: 1px solid var(--fm-border);
+}
+
+.fm-llm-role-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  align-items: end;
+  gap: var(--fm-space-3);
+  min-width: 0;
+}
+
+.fm-llm-role-title {
+  margin: 0;
+  color: var(--fm-text);
+  font-size: var(--fm-type-title);
+  font-weight: 600;
+}
+
 .fm-semantic-field input,
 .fm-semantic-field select {
   box-sizing: border-box;

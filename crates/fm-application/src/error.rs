@@ -7,6 +7,7 @@ use fm_transport_dto::{ApplicationErrorCode, ApplicationErrorDto};
 use fm_vfs::VfsError;
 use uuid::Uuid;
 
+use crate::image_generation::ImageGenerationError;
 use crate::llm_profiles::LlmProfileError;
 use crate::rejection::{Rejection, reason};
 use crate::workspace::WorkspaceError;
@@ -319,6 +320,11 @@ impl From<LlmProfileError> for ApplicationError {
                 "cloud use must be allowed for this role before its endpoint can be used",
             )
             .into(),
+            LlmProfileError::CloudImageNotAllowed => Rejection::new(
+                reason::LLM_CLOUD_IMAGE_NOT_ALLOWED,
+                "cloud use must be allowed for the image role before its endpoint can be used",
+            )
+            .into(),
             LlmProfileError::ConsentRequired(host) => Rejection::new(
                 reason::CLOUD_CONSENT_REQUIRED,
                 format!("cloud consent is required before using {host}"),
@@ -390,6 +396,41 @@ impl From<VfsError> for ApplicationError {
             VfsError::Io { .. }
             | VfsError::UnsafeArchiveEntry
             | VfsError::ArchiveResourceLimit { .. } => Self::Internal,
+        }
+    }
+}
+
+impl From<ImageGenerationError> for ApplicationError {
+    fn from(error: ImageGenerationError) -> Self {
+        match error {
+            ImageGenerationError::InvalidRequest(detail) => Self::InvalidRequest(detail.to_owned()),
+            ImageGenerationError::RoleNotAssigned => Rejection::new(
+                reason::LLM_ROLE_NOT_ASSIGNED,
+                "no AI endpoint is assigned to this role",
+            )
+            .into(),
+            ImageGenerationError::ConsentRequired(host) => Rejection::new(
+                reason::CLOUD_CONSENT_REQUIRED,
+                format!("cloud consent is required before using {host}"),
+            )
+            .with("host", host)
+            .into(),
+            ImageGenerationError::Unavailable => Rejection::new(
+                reason::IMAGE_GENERATION_FAILED,
+                "the image endpoint could not produce images",
+            )
+            .into(),
+            ImageGenerationError::TooLarge => Rejection::new(
+                reason::IMAGE_TOO_LARGE,
+                "the generated image was too large; ask for a smaller size or fewer images",
+            )
+            .into(),
+            ImageGenerationError::Expired => Rejection::new(
+                reason::IMAGE_BATCH_EXPIRED,
+                "these images are no longer held; generate them again",
+            )
+            .into(),
+            ImageGenerationError::Cancelled => Self::OperationCancelled,
         }
     }
 }

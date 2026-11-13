@@ -1,0 +1,287 @@
+/* Image generation pane (task 0325). Two sides, one dense column each; spacing, type and colour come
+   only from the design tokens (DESIGN.md: Four Steps, Spacing, Two Densities, Signal Rarity). Blue
+   stays on interaction, focus and the selected thumbnail - nothing here paints a decorative fill. */
+
+.fm-image {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fm-space-3);
+  height: 100%;
+  min-height: 0;
+  padding: var(--fm-space-4);
+  box-sizing: border-box;
+  color: var(--fm-text);
+  background: var(--fm-surface);
+  font-size: var(--fm-type-body);
+  line-height: 1.35;
+}
+
+.fm-image-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fm-space-3);
+  min-height: var(--fm-header-height);
+}
+
+.fm-image-title {
+  color: var(--fm-text);
+  font-size: var(--fm-type-title);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* Side by side while there is room for two readable columns, stacked when there is not. */
+.fm-image-split {
+  display: grid;
+  grid-template-columns: minmax(18rem, 1fr) minmax(20rem, 1.2fr);
+  gap: var(--fm-space-4);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+@media (max-width: 52rem) {
+  .fm-image-split {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+}
+
+.fm-image-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fm-space-3);
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--fm-space-3);
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  box-sizing: border-box;
+}
+
+.fm-image-side-title {
+  margin: 0;
+  color: var(--fm-text-muted);
+  font-size: var(--fm-type-label);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.fm-image-subject {
+  min-height: 5.5rem;
+  padding: var(--fm-space-2) var(--fm-space-3);
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius-control);
+  color: var(--fm-text);
+  background: var(--fm-surface);
+  font-family: inherit;
+  font-size: var(--fm-type-body);
+  line-height: 1.35;
+  resize: vertical;
+}
+
+.fm-image-subject:focus-visible {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: 1px;
+}
+
+/* Preset chips: one line, quiet until chosen, then the one selection signal. */
+.fm-image-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fm-space-2);
+}
+
+.fm-image-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--fm-space-2);
+  min-height: var(--fm-row-height);
+  margin: 0;
+  padding: 0 var(--fm-space-3);
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius-pill);
+  color: var(--fm-text);
+  background: var(--fm-surface);
+  font: inherit;
+  font-size: var(--fm-type-label);
+  cursor: pointer;
+}
+
+.fm-image-chip:hover {
+  background: var(--fm-hover);
+}
+
+.fm-image-chip:focus-visible {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: 1px;
+}
+
+.fm-image-chip[aria-pressed="true"] {
+  border-color: var(--fm-accent);
+  color: var(--fm-accent);
+  background: var(--fm-editor-selection);
+}
+
+.fm-image-chip-icon {
+  font-size: var(--fm-type-label);
+  line-height: 1;
+}
+
+.fm-image-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--fm-space-2) var(--fm-space-3);
+}
+
+.fm-image-lens {
+  border-top: 1px solid var(--fm-border);
+  padding-top: var(--fm-space-2);
+}
+
+/* What will actually be sent, so the presets are not a mystery. */
+.fm-image-composed {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--fm-space-1);
+}
+
+.fm-image-composed-label {
+  color: var(--fm-text-muted);
+  font-size: var(--fm-type-label);
+}
+
+.fm-image-composed-text {
+  color: var(--fm-text);
+  font-size: var(--fm-type-label);
+  overflow-wrap: anywhere;
+}
+
+.fm-image-problem,
+.fm-image-save-hint,
+.fm-image-meta,
+.fm-image-saved,
+.fm-image-pending,
+.fm-image-empty,
+.fm-image-footnote {
+  margin: 0;
+  color: var(--fm-text-muted);
+  font-size: var(--fm-type-label);
+}
+
+.fm-image-problem {
+  color: var(--fm-warning);
+}
+
+.fm-image-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--fm-space-2);
+  color: var(--fm-error);
+  font-size: var(--fm-type-label);
+}
+
+.fm-image-saved {
+  color: var(--fm-success);
+}
+
+.fm-image-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--fm-space-2);
+}
+
+.fm-image-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--fm-space-2);
+}
+
+.fm-image-thumb {
+  display: block;
+  width: 4.5rem;
+  height: 4.5rem;
+  margin: 0;
+  padding: var(--fm-space-1);
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius-control);
+  background: var(--fm-background);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.fm-image-thumb:hover {
+  border-color: var(--fm-accent);
+}
+
+.fm-image-thumb:focus-visible {
+  outline: 2px solid var(--fm-accent);
+  outline-offset: 1px;
+}
+
+.fm-image-thumb[aria-pressed="true"] {
+  border-color: var(--fm-accent);
+  box-shadow: inset 0 0 0 1px var(--fm-accent);
+}
+
+.fm-image-thumb-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.fm-image-thumb-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--fm-text-muted);
+}
+
+.fm-image-large {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-height: 12rem;
+  padding: var(--fm-space-2);
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-background);
+  box-sizing: border-box;
+}
+
+.fm-image-large img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.fm-image-large-empty {
+  color: var(--fm-text-muted);
+  font-size: var(--fm-type-label);
+}
+
+.fm-image-preview-actions,
+.fm-image-save {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fm-space-2);
+}
+
+.fm-image-save .fm-image-actions {
+  justify-content: flex-end;
+}
+
+.fm-image-footnote {
+  overflow-wrap: anywhere;
+}

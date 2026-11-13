@@ -73,6 +73,8 @@ import type {
   FindLinkReplacementsResult,
   FrontendDiagnostic,
   GenerateDocumentSummaryRequest,
+  GeneratedImageBytes,
+  GenerateImagesRequest,
   GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
   GenerateRagAnswerResponse,
@@ -90,6 +92,7 @@ import type {
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImageBatch,
   ImageGpsEntry,
   ImageMetadata,
   ImportSemanticLocalModelRequest,
@@ -166,6 +169,8 @@ import type {
   SavedChecksumFile,
   SavedRagConversation,
   SaveEditableFileRequest,
+  SaveGeneratedImageRequest,
+  SaveGeneratedImageResponse,
   SaveLlmProfileRequest,
   SaveLlmRoleRequest,
   SaveRagConversationRequest,
@@ -1190,6 +1195,34 @@ export class MockFileManagerClient implements FileManagerClient {
 
   cancelChatReply(requestId: string): Promise<void> {
     return this.semanticClient.cancelChatReply(requestId);
+  }
+
+  generateImages(request: GenerateImagesRequest, signal?: AbortSignal): Promise<ImageBatch> {
+    return this.semanticClient.generateImages(request, signal);
+  }
+
+  cancelImageGeneration(requestId: string): Promise<void> {
+    return this.semanticClient.cancelImageGeneration(requestId);
+  }
+
+  generatedImageBytes(
+    generationId: string,
+    imageId: string,
+    original: boolean,
+    signal?: AbortSignal,
+  ): Promise<GeneratedImageBytes> {
+    return this.semanticClient.generatedImageBytes(generationId, imageId, original, signal);
+  }
+
+  saveGeneratedImage(
+    request: SaveGeneratedImageRequest,
+    signal?: AbortSignal,
+  ): Promise<SaveGeneratedImageResponse> {
+    return this.semanticClient.saveGeneratedImage(request, signal);
+  }
+
+  discardImageBatch(generationId: string, signal?: AbortSignal): Promise<void> {
+    return this.semanticClient.discardImageBatch(generationId, signal);
   }
 
   listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {

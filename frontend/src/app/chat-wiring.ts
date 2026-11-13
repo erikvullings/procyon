@@ -363,6 +363,18 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
     return folderOf(key)?.view?.location !== undefined;
   }
 
+  /** How many entries, and how many files, the folder pane has selected; zero without a folder. */
+  function folderSelection(key: string): FolderSelection {
+    const found = folderOf(key);
+    if (found === undefined) return { selected: 0, selectedFiles: 0 };
+    const selectedIds = new Set(shellState.selections.get(found.folderKey)?.selectedEntryIds ?? []);
+    const chosen = (found.view?.entries ?? []).filter((item) => selectedIds.has(item.id));
+    return {
+      selected: chosen.length,
+      selectedFiles: chosen.filter((item) => item.kind === 'file').length,
+    };
+  }
+
   /** Forgets a closed chat tab; a reply still in flight is stopped. */
   function forget(client: FileManagerClient, key: string): void {
     const pending = entryOf(key)?.pendingRequestId;
@@ -388,8 +400,15 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
       void attachFileContents(client, key),
     detach,
     folderAvailable,
+    folderSelection,
     forget,
   };
+}
+
+/** What the other pane has selected, for enabling the attach commands. */
+export interface FolderSelection {
+  readonly selected: number;
+  readonly selectedFiles: number;
 }
 
 /** Keys of the messages that explain a failed reply. */

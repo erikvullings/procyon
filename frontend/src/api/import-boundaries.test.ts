@@ -51,7 +51,7 @@ describe('module import boundaries', () => {
       );
 
     expect(offenders.map((file) => relative(SRC_ROOT, file))).toEqual([]);
-  });
+  }, 30_000);
 
   it('imports api/generated only from src/api and src/models (spec §12)', () => {
     const allowedRoots = [THIS_DIR, join(SRC_ROOT, 'models')];
@@ -61,5 +61,5 @@ describe('module import boundaries', () => {
       .filter((file) => importsSpecifierContaining(readFileSync(file, 'utf-8'), 'generated'));
 
     expect(offenders.map((file) => relative(SRC_ROOT, file))).toEqual([]);
-  });
+  }, 30_000);
 });

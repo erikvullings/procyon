@@ -19,6 +19,7 @@ pub(crate) mod files;
 pub(crate) mod folder_views;
 pub(crate) mod health;
 pub(crate) mod icons;
+pub(crate) mod image_generation;
 pub(crate) mod knowledge;
 pub(crate) mod link_doctor;
 pub(crate) mod llm_profile;

@@ -1,37 +1,126 @@
+/* Chat tab (task 0324). The header and status bar match the pane's breadcrumb row and status bar:
+   chrome density (20px rows), the elevated pane background, one hairline. Spacing and type come only
+   from the design tokens (DESIGN.md: Four Steps, Spacing, Two Densities, Cursor Supremacy). */
+
 .fm-chat {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
   height: 100%;
   min-height: 0;
-  padding: 0.75rem;
   box-sizing: border-box;
   color: var(--fm-text);
   background: var(--fm-surface);
+  font-size: var(--fm-type-body);
+  line-height: 1.35;
+}
+
+/* Same geometry and background as `.fm-breadcrumb-row`: one 20px row, a hairline below. */
+.fm-chat-header,
+.fm-chat-status {
+  display: flex;
+  align-items: stretch;
+  gap: var(--fm-space-2);
+  box-sizing: border-box;
+  min-width: 0;
+  height: var(--fm-row-height);
+  padding: 0 var(--fm-space-2);
+  background: var(--fm-pane-breadcrumb-background, var(--fm-surface-elevated));
+  color: var(--fm-text-muted);
+  font-size: var(--fm-type-body);
 }
 
 .fm-chat-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+  border-bottom: 1px solid var(--fm-border);
+  color: var(--fm-text);
+}
+
+.fm-chat-status {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--fm-border);
+}
+
+.fm-chat-header > :last-child {
+  margin-left: auto;
 }
 
 .fm-chat-title {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
   font-weight: 600;
+}
+
+/* Chrome-density flat button (DESIGN.md "button-chrome": 20px, 2px 4px padding, body type). */
+.fm-chat .btn-flat.fm-chat-chrome {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  height: var(--fm-row-height);
+  min-height: 0;
+  margin: 0;
+  padding: var(--fm-space-1) var(--fm-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--fm-radius-control);
+  color: var(--fm-text);
+  font-size: var(--fm-type-body);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.fm-chat .btn-flat.fm-chat-chrome:disabled {
+  color: var(--fm-text-muted);
+}
+
+/* Icon-only chrome button: square 20px hit box, the icon centred. */
+.fm-chat .btn-flat.fm-chat-chrome-icon {
+  justify-content: center;
+  width: var(--fm-row-height);
+  padding: 0;
+}
+
+.fm-chat-toggle {
+  gap: var(--fm-space-2);
+}
+
+/* Equal gap on both sides of the chevron, so the toggle reads as one symmetric segment. */
+.fm-chat-chevron {
+  display: inline-flex;
+  align-items: center;
+  color: var(--fm-text-muted);
+}
+
+.fm-chat-current {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fm-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fm-chat-body {
   display: flex;
   flex: 1 1 auto;
-  gap: 0.75rem;
+  flex-direction: column;
+  gap: var(--fm-space-2);
   min-height: 0;
+  padding: var(--fm-space-2);
 }
 
+/* Folded by default. When open it stacks above the conversation and shows about six 20px rows
+   before it scrolls. */
 .fm-chat-list {
-  flex: 0 0 12rem;
+  flex: 0 0 auto;
+  height: auto;
   min-width: 0;
+  max-height: calc(var(--fm-row-height) * 6);
   overflow-y: auto;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-background);
 }
 
 .fm-chat-list ul {
@@ -42,85 +131,116 @@
 
 .fm-chat-conversation {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.2rem 0.3rem;
-  border-radius: var(--fm-radius);
-}
-
-.fm-chat-conversation-selected {
-  background: var(--fm-surface-muted);
+  gap: var(--fm-space-1);
+  min-height: var(--fm-row-height);
 }
 
 .fm-chat-conversation-open {
-  flex: 1 1 100%;
+  flex: 1 1 auto;
   min-width: 0;
+  height: var(--fm-row-height);
   overflow: hidden;
+  padding: 0 var(--fm-space-2);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: var(--fm-type-body);
+  line-height: var(--fm-row-height);
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
-  background: none;
-  border: 0;
-  color: inherit;
-  font: inherit;
-  padding: 0.2rem 0;
   cursor: pointer;
+}
+
+.fm-chat-conversation-open:hover {
+  background: var(--fm-hover);
+}
+
+/* The open conversation is the cursor row: the strongest state in the list. */
+.fm-chat-conversation-selected {
+  background: var(--fm-cursor-row-background);
+  color: var(--fm-cursor-row-text);
+}
+
+.fm-chat-conversation-selected .fm-chat-conversation-open:hover {
+  background: none;
+}
+
+.fm-chat-conversation-selected .fm-chat-chrome {
+  color: var(--fm-cursor-row-text);
+}
+
+.fm-chat-conversation-actions {
+  display: flex;
+  flex: 0 0 auto;
 }
 
 .fm-chat-rename {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem;
+  align-items: center;
+  gap: var(--fm-space-1);
   width: 100%;
 }
 
 .fm-chat-rename-input {
   flex: 1 1 100%;
+  box-sizing: border-box;
   min-width: 0;
+  height: var(--fm-row-height);
+  padding: 0 var(--fm-space-2);
+  font: inherit;
+  font-size: var(--fm-type-body);
 }
 
 .fm-chat-main {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--fm-space-2);
   min-width: 0;
   min-height: 0;
 }
 
+/* The conversation is a rounded, full-width window. */
 .fm-chat-messages {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: var(--fm-space-2);
   min-height: 0;
+  padding: var(--fm-space-3);
   overflow-y: auto;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-background);
 }
 
 .fm-chat-empty,
 .fm-chat-pending {
-  color: var(--fm-text-secondary);
+  color: var(--fm-text-muted);
   margin: 0;
 }
 
 .fm-chat-message {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.5rem 0.6rem;
+  gap: var(--fm-space-1);
+  padding: var(--fm-space-2) var(--fm-space-3);
   border: 1px solid var(--fm-border);
   border-radius: var(--fm-radius);
-  background: var(--fm-surface-muted);
+  background: var(--fm-surface);
 }
 
 .fm-chat-message-user {
-  margin-left: 2rem;
+  margin-left: var(--fm-space-5);
 }
 
 .fm-chat-author {
+  color: var(--fm-text-muted);
   font-size: var(--fm-type-label);
-  color: var(--fm-text-secondary);
 }
 
 .fm-chat-text,
@@ -129,10 +249,11 @@
   white-space: pre-wrap;
   word-break: break-word;
   font-family: var(--fm-font-mono);
+  font-size: var(--fm-type-label);
 }
 
 .fm-chat-context summary {
-  color: var(--fm-text-secondary);
+  color: var(--fm-text-muted);
   cursor: pointer;
 }
 
@@ -140,15 +261,15 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
-  color: var(--fm-danger);
+  gap: var(--fm-space-3);
+  color: var(--fm-error);
 }
 
 .fm-chat-attachments {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.5rem;
+  gap: var(--fm-space-1);
+  padding: var(--fm-space-2) var(--fm-space-3);
   border: 1px dashed var(--fm-border);
   border-radius: var(--fm-radius);
 }
@@ -161,23 +282,48 @@
 
 .fm-chat-attachments-title {
   margin: 0;
-  color: var(--fm-text-secondary);
+  color: var(--fm-text-muted);
+  font-size: var(--fm-type-label);
 }
 
-.fm-chat-attach-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-}
-
+/* The composer is one rounded box: the text field and its trailing controls share the border. */
 .fm-chat-composer {
   display: flex;
   align-items: flex-end;
-  gap: 0.5rem;
+  gap: var(--fm-space-1);
+  padding: var(--fm-space-2);
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-background);
+}
+
+.fm-chat-composer:focus-within {
+  border-color: var(--fm-text-muted);
 }
 
 .fm-chat-input {
   flex: 1 1 auto;
-  min-height: 3rem;
-  resize: vertical;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: var(--fm-control-height);
+  margin: 0;
+  padding: var(--fm-space-1) var(--fm-space-2);
+  border: 0;
+  background: transparent;
+  color: var(--fm-text);
+  font: inherit;
+  font-size: var(--fm-type-body);
+  resize: none;
+}
+
+.fm-chat-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.fm-chat-composer-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--fm-space-1);
+  flex: 0 0 auto;
 }

@@ -84,6 +84,9 @@ import type {
   FindLinkReplacementsResult,
   FrontendDiagnostic,
   GenerateDocumentSummaryRequest,
+  GeneratedImageBytes,
+  GeneratedImageBytesDto,
+  GenerateImagesRequest,
   GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
   GenerateRagAnswerResponse,
@@ -101,6 +104,7 @@ import type {
   GitFileHistoryRequest,
   GitFileHistoryResult,
   HostKeyProbe,
+  ImageBatch,
   ImageGpsEntry,
   ImageMetadata,
   ImportSemanticLocalModelRequest,
@@ -177,6 +181,8 @@ import type {
   SavedChecksumFile,
   SavedRagConversation,
   SaveEditableFileRequest,
+  SaveGeneratedImageRequest,
+  SaveGeneratedImageResponse,
   SaveLlmProfileRequest,
   SaveLlmRoleRequest,
   SaveRagConversationRequest,
@@ -1797,6 +1803,39 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   cancelChatReply(requestId: string): Promise<void> {
     return invoke<void>('cancel_chat_reply', { request: { requestId } });
+  }
+
+  generateImages(request: GenerateImagesRequest, _signal?: AbortSignal): Promise<ImageBatch> {
+    return invoke<ImageBatch>('generate_images', { request });
+  }
+
+  cancelImageGeneration(requestId: string): Promise<void> {
+    return invoke<void>('cancel_image_generation', { request: { requestId } });
+  }
+
+  async generatedImageBytes(
+    generationId: string,
+    imageId: string,
+    original: boolean,
+    _signal?: AbortSignal,
+  ): Promise<GeneratedImageBytes> {
+    const stored = await invoke<GeneratedImageBytesDto>('get_generated_image_bytes', {
+      generationId,
+      imageId,
+      original,
+    });
+    return { bytes: new Uint8Array(stored.bytes), mediaType: stored.mediaType };
+  }
+
+  saveGeneratedImage(
+    request: SaveGeneratedImageRequest,
+    _signal?: AbortSignal,
+  ): Promise<SaveGeneratedImageResponse> {
+    return invoke<SaveGeneratedImageResponse>('save_generated_image', { request });
+  }
+
+  discardImageBatch(generationId: string, _signal?: AbortSignal): Promise<void> {
+    return invoke<void>('discard_image_batch', { request: { generationId } });
   }
 
   listLlmProfiles(_signal?: AbortSignal): Promise<LlmProfile[]> {

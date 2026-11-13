@@ -43,6 +43,7 @@ import { DEFAULT_ENTRY_FORMAT_SETTINGS } from '../features/entry-formatting/entr
 import type { FileDiffRequest } from '../features/file-diff/file-diff-dialog';
 import type { ConvertGeoRequest } from '../features/geo/convert-geo-dialog';
 import type { MinifyGeoRequest } from '../features/geo/minify-geo-dialog';
+import type { ImagePaneEntry } from '../features/image-generation/image-pane-state';
 import type { ImageMapController } from '../features/image-map/image-map-controller';
 import { type ImageMapState, INITIAL_IMAGE_MAP_STATE } from '../features/image-map/image-map-state';
 import type { EditImageMetadataRequest } from '../features/image-metadata/edit-image-metadata-dialog';
@@ -361,6 +362,8 @@ export function createShellState(client: FileManagerClient) {
     assistantOpening: false,
     chatByTab: new Map<string, ChatTabEntry>(),
     chatOpening: false,
+    imageByTab: new Map<string, ImagePaneEntry>(),
+    imageOpening: false,
     knowledgeSearchOpening: false,
     editorByPane: new Map<
       PaneId,

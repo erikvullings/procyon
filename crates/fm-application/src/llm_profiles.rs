@@ -29,6 +29,8 @@ use tokio_util::sync::CancellationToken;
 use url::{Host, Url};
 use uuid::Uuid;
 
+use crate::image_generation_transport::ImageEndpointRequest;
+
 const PROFILE_SCHEMA_VERSION: u32 = 5;
 const TEST_PROMPT: &str = "Reply with OK.";
 const MAX_STREAM_BYTES: usize = 256 * 1024;
@@ -764,13 +766,16 @@ impl StreamedContent<'_> {
     }
 }
 
-/// A feature that needs a model. Only the roles with a consumer today are listed; image
-/// generation and natural-language search are reserved in the settings model (task 0322).
+/// A feature that needs a model. Only the roles with a consumer today are listed; natural-language
+/// search is reserved in the settings model (task 0322).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum LlmRole {
     Chat,
     Embeddings,
+    /// Text-to-image generation (task 0325). Deliberately separate from `Chat`: a different
+    /// endpoint class, a different request shape, and its own cloud permission.
+    Image,
 }
 
 /// One role's binding: an endpoint profile, the model to use on it, and whether a cloud endpoint
@@ -792,6 +797,9 @@ pub struct LlmRoles {
     pub chat: Option<RoleAssignment>,
     #[serde(default)]
     pub embeddings: Option<RoleAssignment>,
+    /// The text-to-image endpoint (task 0325). Absent until the person assigns one.
+    #[serde(default)]
+    pub image: Option<RoleAssignment>,
 }
 
 /// A role binding requested by the person.
@@ -861,7 +869,11 @@ impl LlmProfilesDocument {
     /// Drops role bindings whose profile no longer exists, for example after an external edit.
     fn prune_dangling_roles(&mut self) {
         let ids: BTreeSet<Uuid> = self.profiles.iter().map(|profile| profile.id).collect();
-        for role in [&mut self.roles.chat, &mut self.roles.embeddings] {
+        for role in [
+            &mut self.roles.chat,
+            &mut self.roles.embeddings,
+            &mut self.roles.image,
+        ] {
             if role
                 .as_ref()
                 .is_some_and(|binding| !ids.contains(&binding.profile_id))
@@ -936,7 +948,7 @@ impl VersionedDocument for LlmProfilesDocument {
         {
             return Err(LlmProfileError::InvalidConfiguration);
         }
-        for assignment in [&self.roles.chat, &self.roles.embeddings]
+        for assignment in [&self.roles.chat, &self.roles.embeddings, &self.roles.image]
             .into_iter()
             .flatten()
         {
@@ -1163,7 +1175,7 @@ impl LlmProfileService {
                 document.active_profile_id = document.profiles.first().map(|profile| profile.id);
             }
             let roles = &mut document.roles;
-            for role in [&mut roles.chat, &mut roles.embeddings] {
+            for role in [&mut roles.chat, &mut roles.embeddings, &mut roles.image] {
                 if role
                     .as_ref()
                     .is_some_and(|binding| binding.profile_id == id)
@@ -1255,7 +1267,8 @@ impl LlmProfileService {
     }
 
     /// Binds a role to an endpoint and model, or clears it. A cloud endpoint is refused for the
-    /// embeddings role until the person allows cloud use for that role.
+    /// embeddings and image roles until the person allows cloud use for that role; chat needs only
+    /// the endpoint consent recorded in the endpoint editor.
     pub fn set_role(
         &self,
         role: LlmRole,
@@ -1274,11 +1287,11 @@ impl LlmProfileService {
                     .find(|profile| profile.id == input.profile_id)
                     .ok_or(LlmProfileError::NotFound)?;
                 let endpoint = normalize_endpoint(&profile.base_url)?;
-                if role == LlmRole::Embeddings
+                if role != LlmRole::Chat
                     && endpoint.locality == EndpointLocality::Cloud
                     && !input.allow_cloud
                 {
-                    return Err(LlmProfileError::CloudEmbeddingNotAllowed);
+                    return Err(cloud_role_denied(role));
                 }
                 Some(RoleAssignment {
                     profile_id: input.profile_id,
@@ -1291,6 +1304,7 @@ impl LlmProfileService {
         match role {
             LlmRole::Chat => document.roles.chat = next,
             LlmRole::Embeddings => document.roles.embeddings = next,
+            LlmRole::Image => document.roles.image = next,
         }
         if let Err(error) = self.persist(&document) {
             document.roles = previous;
@@ -1307,6 +1321,7 @@ impl LlmProfileService {
         let assignment = match role {
             LlmRole::Chat => document.roles.chat.as_ref(),
             LlmRole::Embeddings => document.roles.embeddings.as_ref(),
+            LlmRole::Image => document.roles.image.as_ref(),
         }
         .ok_or(LlmProfileError::RoleNotAssigned)?;
         let profile = document
@@ -1317,8 +1332,8 @@ impl LlmProfileService {
         let endpoint = normalize_endpoint(&profile.base_url)?;
         self.enforce_policy(&endpoint, profile.advanced.tls_policy)?;
         if endpoint.locality == EndpointLocality::Cloud {
-            if role == LlmRole::Embeddings && !assignment.allow_cloud {
-                return Err(LlmProfileError::CloudEmbeddingNotAllowed);
+            if role != LlmRole::Chat && !assignment.allow_cloud {
+                return Err(cloud_role_denied(role));
             }
             if profile.consented_host.as_deref() != Some(endpoint.base_url.as_str()) {
                 return Err(LlmProfileError::ConsentRequired(endpoint.host));
@@ -1736,41 +1751,72 @@ impl LlmProfileService {
         profile: &LlmProfile,
     ) -> Result<LlmProbeRequest, LlmProfileError> {
         let endpoint = normalize_endpoint(&profile.base_url)?;
-        let api_key = match &profile.credential_ref {
-            None => None,
-            Some(reference) => {
-                let resolved = self
-                    .credentials
-                    .resolve(reference)
-                    .await
-                    .map_err(|_| LlmProfileError::Credential)?;
-                match resolved.secret {
-                    SecretMaterial::Password { password } => {
-                        let key = password.to_string();
-                        Some(if profile.preset == LlmPreset::AzureOpenAi {
-                            key
-                        } else {
-                            format!("Bearer {key}")
-                        })
-                    }
-                    _ => return Err(LlmProfileError::Credential),
-                }
-            }
-        };
+        let api_key = self.api_key_for(profile).await?;
         Ok(LlmProbeRequest {
             url: chat_completions_url(profile, &endpoint)?,
             ollama_generation_url: (profile.preset == LlmPreset::Ollama)
                 .then(|| ollama_chat_url(&endpoint)),
             model: profile.model.clone(),
             api_key,
-            api_key_header: if profile.preset == LlmPreset::AzureOpenAi {
-                "api-key"
-            } else {
-                "authorization"
-            },
+            api_key_header: api_key_header(profile),
             headers: profile.advanced.custom_headers.clone(),
             timeout: Duration::from_secs(profile.advanced.timeout_seconds),
             reasoning_switch: ReasoningSwitch::Plain,
+        })
+    }
+
+    /// Resolves the profile's stored key in the shape its provider wants. Secrets stay inside this
+    /// capability: callers get a value for one bounded request, never a stored reference.
+    async fn api_key_for(&self, profile: &LlmProfile) -> Result<Option<String>, LlmProfileError> {
+        let reference = match &profile.credential_ref {
+            None => return Ok(None),
+            Some(reference) => reference,
+        };
+        let resolved = self
+            .credentials
+            .resolve(reference)
+            .await
+            .map_err(|_| LlmProfileError::Credential)?;
+        match resolved.secret {
+            SecretMaterial::Password { password } => {
+                let key = password.to_string();
+                Ok(Some(if profile.preset == LlmPreset::AzureOpenAi {
+                    key
+                } else {
+                    format!("Bearer {key}")
+                }))
+            }
+            _ => Err(LlmProfileError::Credential),
+        }
+    }
+
+    /// Where and how to reach the endpoint the image role points at (task 0325). Like
+    /// [`Self::resolve_role`] it never prompts: a missing consent or a cloud endpoint without the
+    /// role's cloud permission is reported for the caller to surface. The profile's chat timeout is
+    /// raised to the floor image generation needs, because a batch takes far longer than a reply.
+    pub async fn image_request(
+        &self,
+        role: LlmRole,
+    ) -> Result<ImageEndpointRequest, LlmProfileError> {
+        if role != LlmRole::Image {
+            return Err(LlmProfileError::InvalidConfiguration);
+        }
+        let resolved = self.resolve_role(role)?;
+        let profile = resolved.profile;
+        let endpoint = normalize_endpoint(&profile.base_url)?;
+        let api_key = self.api_key_for(&profile).await?;
+        Ok(ImageEndpointRequest {
+            url: images_url(&profile, &endpoint)?,
+            model: resolved.model,
+            api_key,
+            api_key_header: api_key_header(&profile),
+            headers: profile.advanced.custom_headers.clone(),
+            timeout: Duration::from_secs(
+                profile
+                    .advanced
+                    .timeout_seconds
+                    .max(crate::image_generation::MIN_IMAGE_TIMEOUT_SECONDS),
+            ),
         })
     }
 
@@ -1965,6 +2011,46 @@ fn models_url(chat_url: &str) -> Option<String> {
     chat_url
         .strip_suffix("/chat/completions")
         .map(|base| format!("{base}/models"))
+}
+
+/// The header a profile's key travels in.
+fn api_key_header(profile: &LlmProfile) -> &'static str {
+    if profile.preset == LlmPreset::AzureOpenAi {
+        "api-key"
+    } else {
+        "authorization"
+    }
+}
+
+/// The images endpoint of the same OpenAI-style provider (task 0325). Azure addresses a deployment
+/// directly; everything else, local servers included, answers under `/v1/images/generations`.
+fn images_url(
+    profile: &LlmProfile,
+    endpoint: &NormalizedEndpoint,
+) -> Result<String, LlmProfileError> {
+    if profile.preset == LlmPreset::AzureOpenAi {
+        let deployment = profile
+            .deployment
+            .as_deref()
+            .filter(|value| !value.is_empty())
+            .ok_or(LlmProfileError::InvalidConfiguration)?;
+        let api_version = profile
+            .api_version
+            .as_deref()
+            .filter(|value| !value.is_empty())
+            .ok_or(LlmProfileError::InvalidConfiguration)?;
+        return Ok(format!(
+            "{}/openai/deployments/{}/images/generations?api-version={}",
+            endpoint.base_url,
+            percent_encoding::utf8_percent_encode(deployment, percent_encoding::NON_ALPHANUMERIC),
+            percent_encoding::utf8_percent_encode(api_version, percent_encoding::NON_ALPHANUMERIC)
+        ));
+    }
+    let base = endpoint
+        .base_url
+        .strip_suffix("/v1")
+        .unwrap_or(&endpoint.base_url);
+    Ok(format!("{base}/v1/images/generations"))
 }
 
 /// Removes the chain-of-thought a reasoning model may put inline in its answer
@@ -2302,6 +2388,8 @@ pub enum LlmProfileError {
     RoleNotAssigned,
     #[error("this role may not use a cloud endpoint until cloud use is allowed")]
     CloudEmbeddingNotAllowed,
+    #[error("the image role may not use a cloud endpoint until cloud use is allowed for it")]
+    CloudImageNotAllowed,
     #[error("LLM authentication failed")]
     Authentication,
     #[error("LLM model is unavailable")]
@@ -2325,7 +2413,7 @@ impl LlmProfileError {
             Self::InvalidConfiguration | Self::NotFound | Self::Credential | Self::Persistence => {
                 LlmTestErrorCategory::InvalidConfiguration
             }
-            Self::PolicyDenied | Self::CloudEmbeddingNotAllowed => {
+            Self::PolicyDenied | Self::CloudEmbeddingNotAllowed | Self::CloudImageNotAllowed => {
                 LlmTestErrorCategory::PolicyDenied
             }
             Self::ConsentRequired(_) => LlmTestErrorCategory::ConsentRequired,
@@ -2355,6 +2443,7 @@ pub(crate) fn roles_to_dto(roles: LlmRoles) -> LlmRolesDto {
     LlmRolesDto {
         chat: roles.chat.map(assignment_to_dto),
         embeddings: roles.embeddings.map(assignment_to_dto),
+        image: roles.image.map(assignment_to_dto),
     }
 }
 
@@ -2362,6 +2451,16 @@ pub(crate) fn role_from_dto(role: LlmRoleDto) -> LlmRole {
     match role {
         LlmRoleDto::Chat => LlmRole::Chat,
         LlmRoleDto::Embeddings => LlmRole::Embeddings,
+        LlmRoleDto::Image => LlmRole::Image,
+    }
+}
+
+/// The refusal for a role that may not reach a cloud endpoint without the person's flag.
+const fn cloud_role_denied(role: LlmRole) -> LlmProfileError {
+    match role {
+        LlmRole::Embeddings => LlmProfileError::CloudEmbeddingNotAllowed,
+        LlmRole::Image => LlmProfileError::CloudImageNotAllowed,
+        LlmRole::Chat => LlmProfileError::PolicyDenied,
     }
 }
 
@@ -3149,6 +3248,178 @@ mod tests {
         assert_eq!(resolved.profile.id, profile.id);
     }
 
+    /// Creates one endpoint with a key, ready to be assigned to a role.
+    async fn endpoint(
+        service: &LlmProfileService,
+        preset: LlmPreset,
+        base_url: &str,
+    ) -> LlmProfile {
+        let mut draft = draft(preset, base_url);
+        draft.api_key = Some("sk-test-key".to_owned());
+        service.create(draft).await.expect("created")
+    }
+
+    #[tokio::test]
+    async fn the_image_role_is_a_binding_of_its_own() {
+        let (service, _, _) = service(LlmHostPolicy::desktop());
+        let chat = endpoint(&service, LlmPreset::Ollama, "http://127.0.0.1:11434").await;
+        let image = endpoint(&service, LlmPreset::Vllm, "http://127.0.0.1:8000").await;
+        service
+            .set_role(
+                LlmRole::Chat,
+                Some(RoleAssignmentInput {
+                    profile_id: chat.id,
+                    model: "chat-model".to_owned(),
+                    allow_cloud: false,
+                }),
+            )
+            .unwrap();
+        service
+            .set_role(
+                LlmRole::Image,
+                Some(RoleAssignmentInput {
+                    profile_id: image.id,
+                    model: "image-model".to_owned(),
+                    allow_cloud: false,
+                }),
+            )
+            .unwrap();
+        let roles = service.roles().unwrap();
+        assert_eq!(roles.chat.expect("chat").profile_id, chat.id);
+        assert_eq!(roles.image.expect("image").profile_id, image.id);
+        assert!(
+            roles.embeddings.is_none(),
+            "assigning the image role leaves the others alone"
+        );
+        let request = service.image_request(LlmRole::Image).await.unwrap();
+        assert_eq!(
+            request.model, "image-model",
+            "the role's model wins over the one saved on the profile"
+        );
+
+        // Removing the endpoint leaves the role unassigned rather than dangling.
+        service
+            .delete(image.id, OrphanCredentialDisposition::Retain)
+            .await
+            .unwrap();
+        assert!(service.roles().unwrap().image.is_none());
+        assert_eq!(
+            service
+                .image_request(LlmRole::Image)
+                .await
+                .expect_err("unassigned"),
+            LlmProfileError::RoleNotAssigned
+        );
+        assert_eq!(
+            service
+                .image_request(LlmRole::Chat)
+                .await
+                .expect_err("not an image role"),
+            LlmProfileError::InvalidConfiguration,
+            "only the image role has an images endpoint"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_cloud_image_endpoint_needs_the_cloud_flag_and_the_saved_consent() {
+        let (service, _, _) = service(LlmHostPolicy::desktop());
+        let profile = endpoint(
+            &service,
+            LlmPreset::OpenAiCompatible,
+            "https://api.example.test",
+        )
+        .await;
+        let input = |allow_cloud| RoleAssignmentInput {
+            profile_id: profile.id,
+            model: "image-model".to_owned(),
+            allow_cloud,
+        };
+        assert_eq!(
+            service.set_role(LlmRole::Image, Some(input(false))),
+            Err(LlmProfileError::CloudImageNotAllowed)
+        );
+        service
+            .set_role(LlmRole::Image, Some(input(true)))
+            .expect("the person allowed cloud use for this role");
+        assert_eq!(
+            service
+                .image_request(LlmRole::Image)
+                .await
+                .expect_err("no consent yet"),
+            LlmProfileError::ConsentRequired("api.example.test".to_owned()),
+            "the pane never prompts; consent lives in Settings"
+        );
+        service.grant_endpoint_consent(profile.id).expect("consent");
+        let request = service.image_request(LlmRole::Image).await.unwrap();
+        assert_eq!(
+            request.url,
+            "https://api.example.test/v1/images/generations"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_image_request_addresses_the_images_endpoint_within_a_long_enough_window() {
+        let (service, _, _) = service(LlmHostPolicy::desktop());
+        let profile = endpoint(&service, LlmPreset::Ollama, "http://127.0.0.1:11434/v1").await;
+        assert_eq!(
+            profile.advanced.timeout_seconds, 30,
+            "the profile keeps the chat timeout"
+        );
+        service
+            .set_role(
+                LlmRole::Image,
+                Some(RoleAssignmentInput {
+                    profile_id: profile.id,
+                    model: "image-model".to_owned(),
+                    allow_cloud: false,
+                }),
+            )
+            .unwrap();
+        let request = service.image_request(LlmRole::Image).await.unwrap();
+        assert_eq!(
+            request.url, "http://127.0.0.1:11434/v1/images/generations",
+            "a base url that already names /v1 is not doubled"
+        );
+        assert_eq!(request.api_key.as_deref(), Some("Bearer sk-test-key"));
+        assert_eq!(request.api_key_header, "authorization");
+        assert!(
+            request.timeout
+                >= Duration::from_secs(crate::image_generation::MIN_IMAGE_TIMEOUT_SECONDS),
+            "a batch outlives a chat reply"
+        );
+        assert!(
+            !format!("{request:?}").contains("sk-test-key"),
+            "the key is not a debug field"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_azure_image_request_addresses_its_deployment() {
+        let (service, _, _) = service(LlmHostPolicy::desktop());
+        let mut profile_draft = draft(LlmPreset::AzureOpenAi, "https://example.openai.azure.com");
+        profile_draft.deployment = Some("flux".to_owned());
+        profile_draft.api_key = Some("sk-test-key".to_owned());
+        let profile = service.create(profile_draft).await.expect("created");
+        service
+            .set_role(
+                LlmRole::Image,
+                Some(RoleAssignmentInput {
+                    profile_id: profile.id,
+                    model: "flux".to_owned(),
+                    allow_cloud: true,
+                }),
+            )
+            .unwrap();
+        service.grant_endpoint_consent(profile.id).expect("consent");
+        let request = service.image_request(LlmRole::Image).await.unwrap();
+        assert_eq!(
+            request.url,
+            "https://example.openai.azure.com/openai/deployments/flux/images/generations?api-version=2024%2D10%2D21"
+        );
+        assert_eq!(request.api_key.as_deref(), Some("sk-test-key"));
+        assert_eq!(request.api_key_header, "api-key");
+    }
+
     #[tokio::test]
     async fn cloud_chat_role_needs_consent_for_the_saved_host() {
         let (service, _, _) = service(LlmHostPolicy::desktop());
@@ -3265,6 +3536,7 @@ mod tests {
             active_profile_id: Some(profile.id),
             profiles: vec![profile.clone()],
             roles: LlmRoles {
+                image: None,
                 chat: Some(RoleAssignment {
                     profile_id: Uuid::new_v4(),
                     model: "gone".to_owned(),

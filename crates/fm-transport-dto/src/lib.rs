@@ -24,6 +24,7 @@ pub mod files;
 pub mod finder_tags;
 pub mod geo;
 pub mod health;
+pub mod image_generation;
 pub mod image_metadata;
 pub mod knowledge;
 pub mod link_doctor;
@@ -159,6 +160,11 @@ pub use geo::{
     PreviewGeoMinifyResponseDto, ReadGeoFileRequestDto,
 };
 pub use health::{HealthDto, HealthStatusDto};
+pub use image_generation::{
+    CancelImageGenerationRequestDto, DiscardImageBatchRequestDto, GenerateImagesRequestDto,
+    GeneratedImageBytesDto, GeneratedImageDto, ImageBatchDto, SaveGeneratedImageRequestDto,
+    SaveGeneratedImageResponseDto,
+};
 pub use image_metadata::{
     CaptureTimeDto, GpsPositionDto, ImageGpsEntryDto, ImageMetadataDto, ImageMetadataEditDto,
     ImageTagDto, ImageTagGroupDto, ReadImageGpsRequestDto, ReadImageGpsResponseDto,

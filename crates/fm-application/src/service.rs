@@ -234,6 +234,7 @@ pub struct FileManagerService {
     file_assistant: crate::file_assistant::FileAssistantService,
     chat: crate::chat::ChatService,
     chat_conversations: crate::chat_conversations::ChatConversationService,
+    image_generation: crate::image_generation::ImageGenerationService,
     onedrive: crate::onedrive::OneDriveAuthorizationService<JsonFileConnectionRepository>,
     remote_terminals: RemoteTerminalService,
     directories: DirectoryService,
@@ -630,6 +631,7 @@ impl FileManagerService {
             file_assistant: crate::file_assistant::FileAssistantService::default(),
             chat: crate::chat::ChatService::default(),
             chat_conversations,
+            image_generation: crate::image_generation::ImageGenerationService::new(),
             onedrive,
             remote_terminals,
             directories,
@@ -3454,6 +3456,70 @@ impl FileManagerService {
     /// Stops one running chat reply. Returns whether it was still running.
     pub fn cancel_chat_reply(&self, request: fm_transport_dto::CancelChatReplyRequestDto) -> bool {
         self.chat.cancel(request)
+    }
+
+    /// Generates one bounded batch through the image role (task 0325). Nothing is written to disk:
+    /// the bytes are held in the short-lived store until the person saves or discards them.
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError`] for a request outside the bounds, an unassigned or unconsented image
+    /// role, or a provider that produced nothing usable.
+    pub async fn generate_images(
+        &self,
+        request: fm_transport_dto::GenerateImagesRequestDto,
+    ) -> Result<fm_transport_dto::ImageBatchDto, ApplicationError> {
+        let endpoint = self
+            .llm_profiles
+            .image_request(crate::llm_profiles::LlmRole::Image)
+            .await?;
+        let provider = crate::image_generation_transport::OpenAiImagesTransport::new(endpoint);
+        Ok(self.image_generation.generate(&provider, request).await?)
+    }
+
+    /// Stops one running generation. Returns whether it was still running.
+    pub fn cancel_image_generation(
+        &self,
+        request: fm_transport_dto::CancelImageGenerationRequestDto,
+    ) -> bool {
+        self.image_generation.cancel(request)
+    }
+
+    /// The stored bytes of one generated image: the preview downscale, or the original for a save.
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::NotFound`] when the batch has been discarded or has expired.
+    pub fn generated_image_bytes(
+        &self,
+        generation_id: Uuid,
+        image_id: Uuid,
+        original: bool,
+    ) -> Result<crate::image_generation::ImageBytes, ApplicationError> {
+        self.image_generation
+            .bytes(generation_id, image_id, original)
+            .ok_or(ApplicationError::NotFound)
+    }
+
+    /// Drops a batch the person discarded. Returns whether it was still held.
+    pub fn discard_image_batch(&self, generation_id: Uuid) -> bool {
+        self.image_generation.discard(generation_id)
+    }
+
+    /// Writes one stored image to the chosen location through its provider (task 0325). This is the
+    /// only disk write the feature performs, and an existing file is refused unless the person asked
+    /// for `overwrite`.
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::DestinationAlreadyExists`] when the file exists and `overwrite` was not
+    /// asked for, [`ApplicationError::NotFound`] when the batch is gone, and
+    /// [`ApplicationError::InvalidRequest`] for a rejected file name or a read-only provider.
+    pub async fn save_generated_image(
+        &self,
+        request: fm_transport_dto::SaveGeneratedImageRequestDto,
+    ) -> Result<fm_transport_dto::SaveGeneratedImageResponseDto, ApplicationError> {
+        self.image_generation.save(request, &self.providers).await
     }
 
     /// Lists discovered plugins, retaining malformed manifests as disabled records.

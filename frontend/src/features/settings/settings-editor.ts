@@ -816,6 +816,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                     onChanged: notifyLlmChanged,
                   }),
                 ),
+                m('.row', m('h4.fm-settings-section-heading.col.s12', t('llmRoles', 'title'))),
                 m('.row', m(LlmRoleManagement, { client: current.client, revision: llmRevision })),
               ]),
 

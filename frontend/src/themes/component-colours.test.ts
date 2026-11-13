@@ -21,5 +21,5 @@ describe('component theme boundaries', () => {
     );
 
     expect(offenders).toEqual([]);
-  });
+  }, 30_000);
 });

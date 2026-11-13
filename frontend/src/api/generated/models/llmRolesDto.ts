@@ -10,4 +10,5 @@ import type { LlmRoleAssignmentDto } from './llmRoleAssignmentDto.ts';
 export interface LlmRolesDto {
   chat?: null | LlmRoleAssignmentDto;
   embeddings?: null | LlmRoleAssignmentDto;
+  image?: null | LlmRoleAssignmentDto;
 }

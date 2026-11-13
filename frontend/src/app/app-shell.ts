@@ -235,6 +235,7 @@ import { createChatWiring } from './chat-wiring';
 import { buildControllers } from './controller-registry';
 import { createDialogWiring } from './dialogs-wiring';
 import { createImageMapWiring } from './image-map-wiring';
+import { createImageWiring } from './image-wiring';
 import { createKnowledgeWiring } from './knowledge-wiring';
 import { createMiscWiring } from './misc-wiring';
 import { createOperationsWiring } from './operations-wiring';
@@ -279,6 +280,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
   let knowledgeWiring: ReturnType<typeof createKnowledgeWiring>;
   let assistantWiring: ReturnType<typeof createAssistantWiring>;
   let chatWiring: ReturnType<typeof createChatWiring>;
+  let imageWiring: ReturnType<typeof createImageWiring>;
   let treeWiring: ReturnType<typeof createTreeWiring>;
   let settingsWiring: ReturnType<typeof createSettingsWiring>;
   let miscWiring: ReturnType<typeof createMiscWiring>;
@@ -355,6 +357,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
   knowledgeWiring = createKnowledgeWiring(shellState, core);
   assistantWiring = createAssistantWiring(shellState, core);
   chatWiring = createChatWiring(shellState, core);
+  imageWiring = createImageWiring(shellState, core);
   treeWiring = createTreeWiring(shellState, core);
   settingsWiring = createSettingsWiring(shellState, core);
   miscWiring = createMiscWiring(shellState, core);
@@ -1064,6 +1067,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     shellState.themesByTab.delete(key);
     assistantWiring.forget(shellState.client, key);
     chatWiring.forget(shellState.client, key);
+    imageWiring.forget(shellState.client, key);
     shellState.navigation.abort(paneId, tabId);
     shellState.directories.delete(key);
     shellState.selections.delete(key);
@@ -1142,6 +1146,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       chatTab.key = targetKey;
       chatTab.paneId = targetPaneId;
       shellState.chatByTab.set(targetKey, chatTab);
+    }
+    const imageTab = shellState.imageByTab.get(sourceKey);
+    if (imageTab !== undefined) {
+      shellState.imageByTab.delete(sourceKey);
+      imageTab.key = targetKey;
+      imageTab.paneId = targetPaneId;
+      shellState.imageByTab.set(targetKey, imageTab);
     }
     shellState.navigation.moveTab(sourcePaneId, targetPaneId, tabId);
     const quickFilterDraft = shellState.appState?.quickFilterDrafts.byTabKey[sourceKey];
@@ -2129,6 +2140,21 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         }),
       ];
       for (const entry of movedChat) shellState.chatByTab.set(entry.key, entry);
+      const movedImage = [
+        ...[paneA, paneB].flatMap((pane, index) => {
+          const paneId = index === 0 ? paneAId : paneBId;
+          const otherPaneId = index === 0 ? paneBId : paneAId;
+          return pane.tabOrder.flatMap((tabId) => {
+            const entry = shellState.imageByTab.get(tabKey(paneId, tabId));
+            if (entry === undefined) return [];
+            shellState.imageByTab.delete(entry.key);
+            entry.key = tabKey(otherPaneId, tabId);
+            entry.paneId = otherPaneId;
+            return [entry] as const;
+          });
+        }),
+      ];
+      for (const entry of movedImage) shellState.imageByTab.set(entry.key, entry);
       // No backend command swaps a whole tab set atomically (task 0128 Agent Notes) - this
       // mutates the local projection directly, the same optimistic-update pattern
       // `activateTab` uses, rather than round-tripping through `dispatchWorkspaceCommand`.
@@ -2441,6 +2467,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     },
     openSemanticAssistant: knowledgeWiring.openSemanticAssistant,
     openChat: () => void chatWiring.openChat(),
+    openImage: () => void imageWiring.openImage(),
     openKnowledgeSearch: knowledgeWiring.openKnowledgeSearch,
     openThemes: knowledgeWiring.openThemes,
     uninstallApplication: (paneId, entry) =>
@@ -2506,7 +2533,19 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     getAssistantByTab: () => shellState.assistantByTab,
     openAssistant: (paneId) => void assistantWiring.openAssistant(paneId),
     getChatByTab: () => shellState.chatByTab,
+    getImageByTab: () => shellState.imageByTab,
+    imageActions: {
+      patch: (key, changes) => imageWiring.patch(key, changes),
+      generate: (key) => imageWiring.generate(shellState.client, key),
+      stop: (key) => imageWiring.stop(shellState.client, key),
+      select: (key, imageId) => imageWiring.select(shellState.client, key, imageId),
+      save: (key, input) => imageWiring.save(shellState.client, key, input),
+      discard: (key) => imageWiring.discard(shellState.client, key),
+      regenerate: (key) => imageWiring.regenerate(shellState.client, key),
+    },
+    imageSaveFolder: (key) => imageWiring.saveFolder(key),
     chatFolderAvailable: (key) => chatWiring.folderAvailable(key),
+    chatFolderSelection: (key) => chatWiring.folderSelection(key),
     chatActions: {
       newConversation: (key) => chatWiring.newConversation(shellState.client, key),
       select: (key, id) => chatWiring.select(shellState.client, key, id),

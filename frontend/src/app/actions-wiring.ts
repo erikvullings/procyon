@@ -264,6 +264,15 @@ export function createActionsWiring(shellState: ShellState) {
         contextRequirements: {},
         source: { kind: 'core' as const },
       },
+      {
+        id: 'client.imageGeneration',
+        title: t('image', 'title'),
+        description: t('image', 'openDescription'),
+        category: 'tools',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' as const },
+      },
       ...(shellState.semanticAssistantAvailable
         ? [
             {

@@ -1,5 +1,11 @@
 import m, { type FactoryComponent } from 'mithril';
-import { FlatButton } from 'mithril-materialized';
+import {
+  chevronDownIcon,
+  chevronRightIcon,
+  cornerDownLeftIcon,
+  messageCircleIcon,
+} from '../../components/tabler-icons';
+import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { ChatConversationSummary } from '../../models';
 import {
@@ -10,10 +16,17 @@ import {
 } from './chat-tab-state';
 import './chat-tab.css';
 
+/** What the other pane has selected; the attach commands follow it (DESIGN.md "Status bar"). */
+export interface ChatFolderSelection {
+  readonly selected: number;
+  readonly selectedFiles: number;
+}
+
 export interface ChatTabAttrs {
   readonly entry: ChatTabEntry;
-  /** Whether the other pane shows a folder whose listing or selection can be attached. */
+  /** Whether the other pane shows a folder whose listing can be attached. */
   readonly folderAvailable: boolean;
+  readonly folderSelection: ChatFolderSelection;
   readonly onNew: () => void;
   readonly onSelect: (conversationId: string) => void;
   readonly onRename: (conversationId: string, title: string) => void;
@@ -35,6 +48,8 @@ export interface ChatTabAttrs {
  */
 export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
   let draft = '';
+  /** The conversation list is folded away until the person opens it. */
+  let listOpen = false;
   let renaming: { readonly id: string; title: string } | undefined;
   let confirmingDelete: string | undefined;
 
@@ -43,6 +58,29 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
     attrs.onSend(draft);
     draft = '';
   };
+
+  /** A chrome-density flat button (DESIGN.md "button-chrome": 20px, flat). */
+  const chromeButton = (
+    label: string,
+    onclick: () => void,
+    options: { readonly type?: 'button' | 'submit'; readonly disabled?: boolean } = {},
+  ) =>
+    m(
+      'button.btn-flat.fm-chat-chrome',
+      { type: options.type ?? 'button', disabled: options.disabled ?? false, onclick },
+      label,
+    );
+
+  /** An icon-only chrome button; the tooltip gives its name, as DESIGN.md requires. */
+  const iconButton = (label: string, icon: m.Children, onclick: () => void, disabled = false) =>
+    tooltip(
+      label,
+      m(
+        'button.btn-flat.fm-chat-chrome.fm-chat-chrome-icon',
+        { type: 'button', 'aria-label': label, disabled, onclick },
+        icon,
+      ),
+    );
 
   const renameForm = (attrs: ChatTabAttrs, current: { id: string; title: string }) =>
     m(
@@ -62,15 +100,28 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
             current.title = (event.target as HTMLInputElement).value;
           },
         }),
-        m(FlatButton, { label: t('chat', 'save'), type: 'submit' }),
-        m(FlatButton, {
-          label: t('chat', 'cancel'),
-          onclick: () => {
-            renaming = undefined;
-          },
+        chromeButton(t('chat', 'save'), () => undefined, { type: 'submit' }),
+        chromeButton(t('chat', 'cancel'), () => {
+          renaming = undefined;
         }),
       ],
     );
+
+  /** Rename and delete appear only on the open conversation, so each row stays one line. */
+  const rowActions = (attrs: ChatTabAttrs, summary: ChatConversationSummary) =>
+    m('.fm-chat-conversation-actions', [
+      chromeButton(t('chat', 'rename'), () => {
+        renaming = { id: summary.id, title: summary.title };
+      }),
+      confirmingDelete === summary.id
+        ? chromeButton(t('chat', 'confirmDelete'), () => {
+            confirmingDelete = undefined;
+            attrs.onDelete(summary.id);
+          })
+        : chromeButton(t('chat', 'delete'), () => {
+            confirmingDelete = summary.id;
+          }),
+    ]);
 
   const conversationItem = (attrs: ChatTabAttrs, summary: ChatConversationSummary) => {
     if (renaming?.id === summary.id)
@@ -78,7 +129,7 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
     const selected = summary.id === attrs.entry.conversationId;
     return m(
       'li.fm-chat-conversation',
-      { class: selected ? 'fm-chat-conversation-selected' : '' },
+      { class: selected ? 'fm-chat-conversation-selected' : undefined },
       [
         m(
           'button.fm-chat-conversation-open',
@@ -89,28 +140,35 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
           },
           summary.title === '' ? t('chat', 'untitled') : summary.title,
         ),
-        m(FlatButton, {
-          label: t('chat', 'rename'),
-          onclick: () => {
-            renaming = { id: summary.id, title: summary.title };
-          },
-        }),
-        confirmingDelete === summary.id
-          ? m(FlatButton, {
-              label: t('chat', 'confirmDelete'),
-              onclick: () => {
-                confirmingDelete = undefined;
-                attrs.onDelete(summary.id);
-              },
-            })
-          : m(FlatButton, {
-              label: t('chat', 'delete'),
-              onclick: () => {
-                confirmingDelete = summary.id;
-              },
-            }),
+        selected ? rowActions(attrs, summary) : undefined,
       ],
     );
+  };
+
+  const currentTitle = (entry: ChatTabEntry): string | undefined => {
+    const summary = entry.conversations.find((item) => item.id === entry.conversationId);
+    if (summary === undefined) return undefined;
+    return summary.title === '' ? t('chat', 'untitled') : summary.title;
+  };
+
+  /**
+   * The attach commands sit in the status bar and follow the other pane: the listing needs a
+   * folder; the selection needs at least one entry; the file contents need exactly one file.
+   */
+  const attachCommands = (attrs: ChatTabAttrs) => {
+    const pending = attrs.entry.pendingRequestId !== undefined;
+    const { selected, selectedFiles } = attrs.folderSelection;
+    return [
+      chromeButton(t('chat', 'attachFolder'), () => attrs.onAttachFolder(), {
+        disabled: pending || !attrs.folderAvailable,
+      }),
+      chromeButton(t('chat', 'attachSelection'), () => attrs.onAttachSelection(), {
+        disabled: pending || selected === 0,
+      }),
+      chromeButton(t('chat', 'attachFileContents'), () => attrs.onAttachFileContents(), {
+        disabled: pending || selectedFiles !== 1,
+      }),
+    ];
   };
 
   return {
@@ -118,24 +176,54 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
       const { entry } = attrs;
       const pending = entry.pendingRequestId !== undefined;
       const preview = contextForMessage(entry.attachments);
+      const current = currentTitle(entry);
       return m('section.fm-chat', [
         m('header.fm-chat-header', [
           m('span.fm-chat-title', t('chat', 'title')),
-          m(FlatButton, {
-            label: t('chat', 'newChat'),
-            disabled: pending,
-            onclick: () => attrs.onNew(),
-          }),
+          m(
+            'button.btn-flat.fm-chat-chrome.fm-chat-toggle',
+            {
+              type: 'button',
+              'aria-expanded': String(listOpen),
+              'aria-controls': listOpen ? 'fm-chat-list' : undefined,
+              onclick: () => {
+                listOpen = !listOpen;
+              },
+            },
+            [
+              m(
+                'span.fm-chat-chevron',
+                { 'aria-hidden': 'true' },
+                listOpen ? chevronDownIcon({ size: 12 }) : chevronRightIcon({ size: 12 }),
+              ),
+              t('chat', 'conversations'),
+            ],
+          ),
+          !listOpen && current !== undefined
+            ? m('span.fm-chat-current', { title: current }, current)
+            : undefined,
+          iconButton(
+            t('chat', 'newChat'),
+            messageCircleIcon({ size: 14 }),
+            () => attrs.onNew(),
+            pending,
+          ),
         ]),
         m('.fm-chat-body', [
-          m(
-            'nav.fm-chat-list',
-            { 'aria-label': t('chat', 'conversations') },
-            m(
-              'ul',
-              entry.conversations.map((summary) => conversationItem(attrs, summary)),
-            ),
-          ),
+          listOpen
+            ? m(
+                'section.fm-chat-list',
+                {
+                  id: 'fm-chat-list',
+                  role: 'navigation',
+                  'aria-label': t('chat', 'conversations'),
+                },
+                m(
+                  'ul',
+                  entry.conversations.map((summary) => conversationItem(attrs, summary)),
+                ),
+              )
+            : undefined,
           m('.fm-chat-main', [
             m(
               '.fm-chat-messages',
@@ -171,10 +259,14 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
               ? m('.fm-chat-error', { role: 'alert' }, [
                   m('span', entry.error),
                   failureNeedsSettings(entry.failure) && attrs.onOpenSettings
-                    ? m(FlatButton, {
-                        label: t('chat', 'openSettings'),
-                        onclick: () => attrs.onOpenSettings?.(),
-                      })
+                    ? m(
+                        'button.btn-flat.fm-chat-chrome',
+                        {
+                          type: 'button',
+                          onclick: () => attrs.onOpenSettings?.(),
+                        },
+                        t('chat', 'openSettings'),
+                      )
                     : undefined,
                 ])
               : undefined,
@@ -187,33 +279,14 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
                     entry.attachments.map((attachment) =>
                       m('li', [
                         m('span', attachment.label),
-                        m(FlatButton, {
-                          label: t('chat', 'remove'),
+                        chromeButton(t('chat', 'remove'), () => attrs.onDetach(attachment.id), {
                           disabled: pending,
-                          onclick: () => attrs.onDetach(attachment.id),
                         }),
                       ]),
                     ),
                   ),
                   m('pre.fm-chat-preview', preview),
                 ]),
-            m('.fm-chat-attach-actions', [
-              m(FlatButton, {
-                label: t('chat', 'attachFolder'),
-                disabled: pending || !attrs.folderAvailable,
-                onclick: () => attrs.onAttachFolder(),
-              }),
-              m(FlatButton, {
-                label: t('chat', 'attachSelection'),
-                disabled: pending || !attrs.folderAvailable,
-                onclick: () => attrs.onAttachSelection(),
-              }),
-              m(FlatButton, {
-                label: t('chat', 'attachFileContents'),
-                disabled: pending || !attrs.folderAvailable,
-                onclick: () => attrs.onAttachFileContents(),
-              }),
-            ]),
             m(
               'form.fm-chat-composer',
               {
@@ -238,17 +311,28 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
                     }
                   },
                 }),
-                pending
-                  ? m(FlatButton, { label: t('chat', 'stop'), onclick: () => attrs.onStop() })
-                  : m(FlatButton, {
-                      label: t('chat', 'send'),
-                      type: 'submit',
-                      disabled: !canSendMessage(entry, draft),
-                    }),
+                // Trailing controls: the send key is the Enter glyph; a microphone joins here later.
+                m('.fm-chat-composer-actions', [
+                  pending
+                    ? chromeButton(t('chat', 'stop'), () => attrs.onStop())
+                    : tooltip(
+                        t('chat', 'send'),
+                        m(
+                          'button.btn-flat.fm-chat-chrome.fm-chat-chrome-icon.fm-chat-send',
+                          {
+                            type: 'submit',
+                            'aria-label': t('chat', 'send'),
+                            disabled: !canSendMessage(entry, draft),
+                          },
+                          cornerDownLeftIcon({ size: 14 }),
+                        ),
+                      ),
+                ]),
               ],
             ),
           ]),
         ]),
+        m('footer.fm-chat-status', attachCommands(attrs)),
       ]);
     },
   };

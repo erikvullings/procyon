@@ -30,6 +30,8 @@ import type {
   FileAssistantEvent,
   FileAssistantRequest,
   GenerateDocumentSummaryRequest,
+  GeneratedImageBytes,
+  GenerateImagesRequest,
   GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
   GenerateRagAnswerResponse,
@@ -37,6 +39,7 @@ import type {
   GetCorpusThemeStatusRequest,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
+  ImageBatch,
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
   KnowledgeAnswer,
@@ -70,6 +73,8 @@ import type {
   ResumeSemanticCleanupRequest,
   ReviewConceptCandidateRequest,
   SavedRagConversation,
+  SaveGeneratedImageRequest,
+  SaveGeneratedImageResponse,
   SaveLlmProfileRequest,
   SaveLlmRoleRequest,
   SaveRagConversationRequest,
@@ -382,6 +387,35 @@ export interface SemanticClient {
 
   /** Stops a running chat reply; events that follow are not delivered to the caller. */
   cancelChatReply(requestId: string): Promise<void>;
+
+  /**
+   * Asks the image role's endpoint for a bounded batch (task 0325). Nothing is written to disk: the
+   * backend holds the bytes until each image is saved or the batch is discarded.
+   */
+  generateImages(request: GenerateImagesRequest, signal?: AbortSignal): Promise<ImageBatch>;
+
+  /** Stops a running generation. */
+  cancelImageGeneration(requestId: string): Promise<void>;
+
+  /** The stored bytes of one generated image: the preview, or the original for a save. */
+  generatedImageBytes(
+    generationId: string,
+    imageId: string,
+    original: boolean,
+    signal?: AbortSignal,
+  ): Promise<GeneratedImageBytes>;
+
+  /**
+   * Writes one stored image through its provider. An existing file is refused unless `overwrite` is
+   * set, which the person has to ask for explicitly.
+   */
+  saveGeneratedImage(
+    request: SaveGeneratedImageRequest,
+    signal?: AbortSignal,
+  ): Promise<SaveGeneratedImageResponse>;
+
+  /** Drops a batch from the backend's short-lived store without saving any of its images. */
+  discardImageBatch(generationId: string, signal?: AbortSignal): Promise<void>;
 
   listSavedRagConversations(
     workspaceId: WorkspaceId,

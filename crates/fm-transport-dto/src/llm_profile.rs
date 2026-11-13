@@ -155,6 +155,7 @@ pub struct DeleteLlmProfileRequestDto {
 pub enum LlmRoleDto {
     Chat,
     Embeddings,
+    Image,
 }
 
 /// One role's endpoint, model and cloud permission.
@@ -174,6 +175,7 @@ pub struct LlmRoleAssignmentDto {
 pub struct LlmRolesDto {
     pub chat: Option<LlmRoleAssignmentDto>,
     pub embeddings: Option<LlmRoleAssignmentDto>,
+    pub image: Option<LlmRoleAssignmentDto>,
 }
 
 /// Request to bind a role to an endpoint and model.

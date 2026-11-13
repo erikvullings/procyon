@@ -3759,6 +3759,209 @@
         }
       }
     },
+    "/api/v1/images/bytes": {
+      "get": {
+        "summary": "Serves the bytes of one stored image: the preview downscale, or the original when asked for.",
+        "operationId": "generatedImageBytes",
+        "parameters": [
+          {
+            "name": "generation_id",
+            "in": "query",
+            "description": "Batch the image came from.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "image_id",
+            "in": "query",
+            "description": "Image to fetch.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "original",
+            "in": "query",
+            "description": "Serve the stored original instead of the preview downscale.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The image bytes",
+            "content": {
+              "image/png": {}
+            }
+          },
+          "404": {
+            "description": "The batch is no longer held",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/images/cancel": {
+      "post": {
+        "summary": "Stops one running generation.",
+        "operationId": "cancelImageGeneration",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelImageGenerationRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/images/discard": {
+      "post": {
+        "summary": "Drops a batch from the store without saving any of its images.",
+        "operationId": "discardImageBatch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscardImageBatchRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/v1/images/generate": {
+      "post": {
+        "summary": "Asks the image role's endpoint for a bounded batch. Nothing is written to disk: the images are\nheld in a short-lived store until they are saved or discarded.",
+        "operationId": "generateImages",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateImagesRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The generated batch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageBatchDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request was outside the bounds",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The image role needs consent or cloud permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/images/save": {
+      "post": {
+        "summary": "Writes one stored image to the chosen folder and file name. An existing file is refused until the\nperson asks for it to be replaced.",
+        "operationId": "saveGeneratedImage",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveGeneratedImageRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The saved file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaveGeneratedImageResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The file name was refused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The batch is no longer held",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The file already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/link-doctor-replacements": {
       "post": {
         "operationId": "findLinkReplacements",
@@ -10626,6 +10829,20 @@
           }
         }
       },
+      "CancelImageGenerationRequestDto": {
+        "type": "object",
+        "description": "Requests cancellation of one running generation.",
+        "required": [
+          "requestId"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identity supplied when the batch was requested."
+          }
+        }
+      },
       "CancelKnowledgeAnswerRequestDto": {
         "type": "object",
         "description": "Requests cancellation of one running knowledge answer generation.",
@@ -13072,6 +13289,20 @@
           }
         }
       },
+      "DiscardImageBatchRequestDto": {
+        "type": "object",
+        "description": "Drops a batch from the short-lived backend store without saving it.",
+        "required": [
+          "generationId"
+        ],
+        "properties": {
+          "generationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Batch to drop."
+          }
+        }
+      },
       "DiscoverApplicationUninstallCandidatesRequestDto": {
         "type": "object",
         "description": "Requests discovery of a `.app` bundle's related files\n(`POST /api/v1/applications/uninstall/discover`).",
@@ -14795,6 +15026,77 @@
           }
         }
       },
+      "GenerateImagesRequestDto": {
+        "type": "object",
+        "description": "Asks the image role's endpoint for images. `request_id` is the handle used to cancel.",
+        "required": [
+          "requestId",
+          "workspaceId",
+          "prompt",
+          "width",
+          "height",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many images to produce in one batch.",
+            "minimum": 0
+          },
+          "height": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Requested height in pixels.",
+            "minimum": 0
+          },
+          "negativePrompt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What to avoid; sent only when the endpoint accepts a negative prompt."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "What to draw."
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identity used to cancel this request."
+          },
+          "seed": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Reproducibility seed; absent lets the provider choose.",
+            "minimum": 0
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Requested width in pixels.",
+            "minimum": 0
+          },
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Workspace the pane belongs to; used for logging and event audience only."
+          }
+        },
+        "example": {
+          "requestId": "5b1b6b1e-9b1b-4b1b-8b1b-1b1b1b1b1b1b",
+          "prompt": "a lighthouse at dusk, watercolour",
+          "negativePrompt": "text, watermark",
+          "width": 1024,
+          "height": 1024,
+          "count": 1,
+          "seed": 42
+        }
+      },
       "GenerateKnowledgeAnswerRequestDto": {
         "type": "object",
         "description": "Requests one optional answer from an already inspected evidence set.\n\nNothing in this request re-enters retrieval: the evidence set is addressed\nby the fingerprint an earlier successful search returned, and the answer-only\nfields shape presentation only.",
@@ -14976,6 +15278,56 @@
           "mode": {
             "$ref": "#/components/schemas/SyncModeDto",
             "description": "Which side is authoritative."
+          }
+        }
+      },
+      "GeneratedImageDto": {
+        "type": "object",
+        "description": "One generated image, as the preview pane needs it. Bytes are never part of this DTO.",
+        "required": [
+          "id",
+          "mediaType",
+          "width",
+          "height",
+          "bytes",
+          "downscaled",
+          "extension"
+        ],
+        "properties": {
+          "bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Size of the stored original in bytes.",
+            "minimum": 0
+          },
+          "downscaled": {
+            "type": "boolean",
+            "description": "Whether the preview bytes are a downscale of the original rather than the original itself."
+          },
+          "extension": {
+            "type": "string",
+            "description": "Whether the file name suggested for saving carries this extension."
+          },
+          "height": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Height of the stored original in pixels.",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identity of the stored image; the host fetches its preview bytes with it."
+          },
+          "mediaType": {
+            "type": "string",
+            "description": "Media type of the stored original, e.g. `image/png`."
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Width of the stored original in pixels.",
+            "minimum": 0
           }
         }
       },
@@ -15870,6 +16222,68 @@
           "medium",
           "large"
         ]
+      },
+      "ImageBatchDto": {
+        "type": "object",
+        "description": "A batch of images the person has to review, save or discard. Nothing was written to disk.",
+        "required": [
+          "generationId",
+          "model",
+          "prompt",
+          "width",
+          "height",
+          "images"
+        ],
+        "properties": {
+          "generationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identity of the batch; needed to save or discard its images."
+          },
+          "height": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Requested height in pixels.",
+            "minimum": 0
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeneratedImageDto"
+            },
+            "description": "Images in request order."
+          },
+          "model": {
+            "type": "string",
+            "description": "Model the image role resolved to."
+          },
+          "negativePrompt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Negative prompt the batch was generated from, when one was given."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Prompt the batch was generated from, so \"regenerate\" can reuse it."
+          },
+          "seed": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Seed the batch was generated with, when the person supplied one.",
+            "minimum": 0
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Requested width and height in pixels.",
+            "minimum": 0
+          }
+        }
       },
       "ImageDimensionsDto": {
         "type": "object",
@@ -18759,6 +19173,16 @@
             ]
           },
           "embeddings": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LlmRoleAssignmentDto"
+              }
+            ]
+          },
+          "image": {
             "oneOf": [
               {
                 "type": "null"
@@ -22958,6 +23382,60 @@
             "format": "int64",
             "description": "Saved UTF-8 byte length.",
             "minimum": 0
+          }
+        }
+      },
+      "SaveGeneratedImageRequestDto": {
+        "type": "object",
+        "description": "Saves one stored image to disk. Nothing is written before this request.",
+        "required": [
+          "generationId",
+          "imageId",
+          "destination"
+        ],
+        "properties": {
+          "destination": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Chosen folder and file name."
+          },
+          "generationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Batch the image came from."
+          },
+          "imageId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Image to save."
+          },
+          "overwrite": {
+            "type": "boolean",
+            "description": "Whether the person explicitly agreed to replace an existing file."
+          }
+        }
+      },
+      "SaveGeneratedImageResponseDto": {
+        "type": "object",
+        "description": "What a save wrote.",
+        "required": [
+          "location",
+          "bytesWritten",
+          "promptEmbedded"
+        ],
+        "properties": {
+          "bytesWritten": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bytes written.",
+            "minimum": 0
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Where the file landed."
+          },
+          "promptEmbedded": {
+            "type": "boolean",
+            "description": "Whether the prompt was written into the file's metadata; false when the format does not\nsupport it."
           }
         }
       },

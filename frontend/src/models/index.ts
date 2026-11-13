@@ -17,6 +17,7 @@ export * from './finder-tags';
 export * from './frontend-diagnostic';
 export * from './geo';
 export * from './ids';
+export * from './image-generation';
 export * from './image-metadata';
 export * from './knowledge';
 export * from './link-doctor';

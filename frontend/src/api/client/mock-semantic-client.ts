@@ -30,6 +30,8 @@ import type {
   FileAssistantEvent,
   FileAssistantRequest,
   GenerateDocumentSummaryRequest,
+  GeneratedImageBytes,
+  GenerateImagesRequest,
   GenerateKnowledgeAnswerRequest,
   GenerateRagAnswerRequest,
   GenerateRagAnswerResponse,
@@ -37,6 +39,7 @@ import type {
   GetCorpusThemeStatusRequest,
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
+  ImageBatch,
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
   KnowledgeAnswer,
@@ -71,6 +74,8 @@ import type {
   ResumeSemanticCleanupRequest,
   ReviewConceptCandidateRequest,
   SavedRagConversation,
+  SaveGeneratedImageRequest,
+  SaveGeneratedImageResponse,
   SaveLlmProfileRequest,
   SaveLlmRoleRequest,
   SaveRagConversationRequest,
@@ -106,6 +111,12 @@ import type {
 } from '../../models';
 import type { MockContext } from './mock-context';
 import { mockCorpusThemeStatus, mockCorpusThemes } from './mock-corpus-themes';
+import {
+  batchIsLive,
+  mockImageBatch,
+  mockImageRequestProblem,
+  mockImageSave,
+} from './mock-image-generation';
 import {
   buildMockKnowledgeAnswer,
   executeMockKnowledgeSearch,
@@ -1327,6 +1338,98 @@ export class MockSemanticClient implements SemanticClient {
     return Promise.resolve();
   }
 
+  async generateImages(request: GenerateImagesRequest, signal?: AbortSignal): Promise<ImageBatch> {
+    const batch = await this.ctx.perform('generateImages', signal, () => {
+      const problem = mockImageRequestProblem(request);
+      if (problem !== undefined) {
+        throw new MockClientError('invalidRequest', problem);
+      }
+      // The mock follows the backend's rules: an unassigned image role and cloud consent both stop it.
+      const assignment = this.ctx.llmRoles.image;
+      const profile =
+        assignment == null ? undefined : this.ctx.llmProfiles.get(assignment.profileId);
+      if (assignment == null) {
+        throw new MockClientError('roleNotAssigned', 'No image model is set.');
+      }
+      if (profile === undefined) {
+        throw new MockClientError('roleNotAssigned', 'The image endpoint no longer exists.');
+      }
+      if (profile.locality === 'cloud' && profile.consentedHost == null) {
+        throw new MockClientError(
+          'cloudImageNotAllowed',
+          'This image endpoint is in the cloud and has no consent.',
+        );
+      }
+      if (this.ctx.cancelledImageRequests.has(request.requestId)) {
+        throw new MockClientError('cancelled', 'The generation was stopped.');
+      }
+      const generated = mockImageBatch(assignment.model, request);
+      this.ctx.imageBatches.set(generated.generationId, generated.batch);
+      return generated.dto;
+    });
+    // A stop asked for while the request was in flight is reported as one.
+    if (this.ctx.cancelledImageRequests.has(request.requestId)) {
+      this.ctx.imageBatches.delete(batch.generationId);
+      throw new MockClientError('cancelled', 'The generation was stopped.');
+    }
+    return batch;
+  }
+
+  cancelImageGeneration(requestId: string): Promise<void> {
+    return this.ctx.perform('cancelImageGeneration', undefined, () => {
+      this.ctx.cancelledImageRequests.add(requestId);
+    });
+  }
+
+  generatedImageBytes(
+    generationId: string,
+    imageId: string,
+    original: boolean,
+    signal?: AbortSignal,
+  ): Promise<GeneratedImageBytes> {
+    return this.ctx.perform('generatedImageBytes', signal, () => {
+      const batch = this.ctx.imageBatches.get(generationId);
+      if (batch === undefined || !batchIsLive(batch)) {
+        throw new MockClientError('imageBatchExpired', 'These images are no longer held.');
+      }
+      const image = batch.images.get(imageId);
+      if (image === undefined) {
+        throw new MockClientError('notFound', 'No such generated image.');
+      }
+      return {
+        // The mock's fixtures are already small, so the preview and the original are the same bytes.
+        bytes: original ? image.bytes.slice() : image.bytes.slice(),
+        mediaType: image.mediaType,
+      };
+    });
+  }
+
+  saveGeneratedImage(
+    request: SaveGeneratedImageRequest,
+    signal?: AbortSignal,
+  ): Promise<SaveGeneratedImageResponse> {
+    return this.ctx.perform('saveGeneratedImage', signal, () => {
+      const receipt = mockImageSave(this.ctx.imageBatches, this.ctx.savedImages, {
+        generationId: request.generationId,
+        imageId: request.imageId,
+        destination: request.destination,
+        overwrite: request.overwrite ?? false,
+      });
+      // The mock has no disk; the saved location is recorded so a repeat save sees a conflict.
+      this.ctx.savedImages.set(receipt.location.uri, {
+        bytes: receipt.bytesWritten,
+        promptEmbedded: receipt.promptEmbedded,
+      });
+      return receipt;
+    });
+  }
+
+  discardImageBatch(generationId: string, signal?: AbortSignal): Promise<void> {
+    return this.ctx.perform('discardImageBatch', signal, () => {
+      this.ctx.imageBatches.delete(generationId);
+    });
+  }
+
   listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]> {
     return this.ctx.perform('listLlmProfiles', signal, () =>
       [...this.ctx.llmProfiles.values()]
@@ -1446,9 +1549,10 @@ export class MockSemanticClient implements SemanticClient {
       if (request.model.trim() === '') {
         throw new MockClientError('invalidRequest', 'A model is required');
       }
-      if (profile.locality === 'cloud' && role === 'embeddings' && !request.allowCloud) {
+      // Only chat may reach the cloud without the flag; embeddings and images need it (0322, 0325).
+      if (profile.locality === 'cloud' && role !== 'chat' && !request.allowCloud) {
         throw new MockClientError('invalidRequest', 'Cloud use is not allowed for this role', {
-          reason: 'llmCloudEmbeddingNotAllowed',
+          reason: role === 'image' ? 'llmCloudImageNotAllowed' : 'llmCloudEmbeddingNotAllowed',
         });
       }
       this.ctx.llmRoles = {

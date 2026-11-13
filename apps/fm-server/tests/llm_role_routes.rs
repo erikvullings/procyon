@@ -52,7 +52,33 @@ async fn roles_bind_gate_cloud_embeddings_and_clear_with_their_profile() {
         .json()
         .await
         .unwrap();
-    assert_eq!(empty, json!({ "chat": null, "embeddings": null }));
+    assert_eq!(
+        empty,
+        json!({ "chat": null, "embeddings": null, "image": null })
+    );
+
+    // The image role is gated the same way: a cloud endpoint needs cloud use allowed for it.
+    let image_blocked = client
+        .put(format!("{base}/api/v1/llm-roles/image"))
+        .json(&json!({ "profileId": profile_id, "model": "flux", "allowCloud": false }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(image_blocked.status(), reqwest::StatusCode::BAD_REQUEST);
+    let image_body: Value = image_blocked.json().await.unwrap();
+    assert_eq!(image_body["details"]["reason"], "llmCloudImageNotAllowed");
+
+    let image_allowed = client
+        .put(format!("{base}/api/v1/llm-roles/image"))
+        .json(&json!({ "profileId": profile_id, "model": "flux", "allowCloud": true }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(image_allowed.status(), reqwest::StatusCode::OK);
+    let image_roles: Value = image_allowed.json().await.unwrap();
+    assert_eq!(image_roles["image"]["allowCloud"], true);
+    assert_eq!(image_roles["image"]["model"], "flux");
+    assert_eq!(image_roles["embeddings"], Value::Null);
 
     // A cloud endpoint may not serve embeddings until cloud use is allowed for that role.
     let blocked = client
@@ -127,5 +153,9 @@ async fn roles_bind_gate_cloud_embeddings_and_clear_with_their_profile() {
         .json()
         .await
         .unwrap();
-    assert_eq!(after, json!({ "chat": null, "embeddings": null }));
+    // Deleting the endpoint cleared every binding it held, the image role included.
+    assert_eq!(
+        after,
+        json!({ "chat": null, "embeddings": null, "image": null })
+    );
 }

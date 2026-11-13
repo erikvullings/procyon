@@ -431,6 +431,21 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::chat::stream_chat_reply))
         .routes(utoipa_axum::routes!(routes::chat::cancel_chat_reply))
         .routes(utoipa_axum::routes!(
+            routes::image_generation::generate_images
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::image_generation::cancel_image_generation
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::image_generation::generated_image_bytes
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::image_generation::save_generated_image
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::image_generation::discard_image_batch
+        ))
+        .routes(utoipa_axum::routes!(
             routes::knowledge::resolve_knowledge_source
         ))
         .routes(utoipa_axum::routes!(

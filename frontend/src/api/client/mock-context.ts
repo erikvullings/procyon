@@ -59,6 +59,7 @@ import { EventStreamSignalRegistry, MutableEventStreamStatus } from '../events/e
 import type { MockConnectionClient } from './mock-connection-client';
 import type { GeneratedDirectorySize } from './mock-directory-generator';
 import { createGeneratedDirectory, GENERATED_DIRECTORY_SIZES } from './mock-directory-generator';
+import type { MockImageBatch } from './mock-image-generation';
 import {
   MockKnowledgeEvidenceCache,
   MockKnowledgeScopeError,
@@ -186,6 +187,15 @@ export class MockContext {
     { workspaceId: string; conversation: ChatConversation }
   >();
 
+  /** Batches the mock image endpoint produced, by generation id (task 0325). */
+  readonly imageBatches = new Map<string, MockImageBatch>();
+
+  /** Files the mock image save wrote; the mock has no disk, so a save is recorded here. */
+  readonly savedImages = new Map<string, { bytes: number; promptEmbedded: boolean }>();
+
+  /** Requests the person stopped; a generate that has not finished yet reports the stop. */
+  readonly cancelledImageRequests = new Set<string>();
+
   readonly knowledgeSearches = new Map<string, AbortController>();
 
   readonly knowledgeAnswers = new Map<string, AbortController>();
@@ -259,7 +269,7 @@ export class MockContext {
   activeLlmProfileId: string | undefined;
 
   /** Role bindings (task 0322); cleared when a bound profile is deleted, as the backend does. */
-  llmRoles: LlmRoles = { chat: null, embeddings: null };
+  llmRoles: LlmRoles = { chat: null, embeddings: null, image: null };
 
   oneDriveAuthorizationSequence = 0;
 
