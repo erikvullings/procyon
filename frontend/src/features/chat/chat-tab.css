@@ -43,6 +43,7 @@
   display: flex;
   align-items: center;
   flex: 0 0 auto;
+  padding-left: var(--fm-space-3);
   font-weight: 600;
 }
 
@@ -78,7 +79,8 @@
 /* Pushes the trailing actions (new chat, new tab, favourites) to the right edge, as in the
    breadcrumb bar. The current title grows into the space when the list is folded. */
 .fm-chat-toggle {
-  gap: var(--fm-space-2);
+  /* Header gap (4px) + button padding (4px) sit left of the chevron, so match them on the right. */
+  gap: var(--fm-space-3);
   margin-right: auto;
 }
 
