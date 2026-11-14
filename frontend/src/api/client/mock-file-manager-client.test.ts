@@ -1439,3 +1439,55 @@ describe('MockFileManagerClient file diff (task 0256)', () => {
     expect(page.criteria).toBe('content');
   });
 });
+
+describe('MockFileManagerClient image prompts', () => {
+  const form = {
+    id: '11111111-1111-1111-1111-111111111111',
+    title: '',
+    updatedAt: '',
+    subject: 'A lighthouse at dusk, watercolour',
+    negativePrompt: '',
+    presetIds: [],
+    lensId: '',
+    apertureId: '',
+    width: 1_024,
+    height: 1_024,
+    count: 1,
+    seed: 7,
+    quality: 'good' as const,
+    steps: null,
+  };
+
+  it('keeps every setting, titles the prompt and lists the newest first', async () => {
+    const client = new MockFileManagerClient();
+    const first = await client.saveImagePrompt(form);
+    const second = await client.saveImagePrompt({
+      ...form,
+      id: '22222222-2222-2222-2222-222222222222',
+      subject: 'A fox in a boat',
+      seed: 8,
+    });
+
+    expect(first.title).toBe('A lighthouse at dusk');
+    expect(first).toMatchObject({ seed: 7, quality: 'good', width: 1_024 });
+    expect((await client.listImagePrompts()).map((prompt) => prompt.id)).toEqual([
+      second.id,
+      first.id,
+    ]);
+  });
+
+  it('folds an identical form into the earlier entry and forgets on request', async () => {
+    const client = new MockFileManagerClient();
+    const first = await client.saveImagePrompt(form);
+    const again = await client.saveImagePrompt({
+      ...form,
+      id: '33333333-3333-3333-3333-333333333333',
+    });
+
+    expect(again.id).toBe(first.id);
+    expect(await client.listImagePrompts()).toHaveLength(1);
+    await client.deleteImagePrompt(first.id);
+    expect(await client.listImagePrompts()).toHaveLength(0);
+    await expect(client.deleteImagePrompt(first.id)).rejects.toThrow();
+  });
+});

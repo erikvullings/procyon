@@ -1,6 +1,8 @@
 import m, { type FactoryComponent } from 'mithril';
 import {
+  checkIcon,
   chevronDownIcon,
+  chevronRightIcon,
   cornerDownLeftIcon,
   folderOpenIcon,
   heartIcon,
@@ -13,7 +15,7 @@ import {
 } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
-import type { GeneratedImage, Location } from '../../models';
+import type { GeneratedImage, ImagePrompt, Location } from '../../models';
 import { IMAGE_QUALITIES, IMAGE_SIZES, isValidImageFileName, qualityIdOf } from '../../models';
 import {
   canGenerate,
@@ -66,6 +68,10 @@ export interface ImagePaneAttrs {
   readonly onSelectGeneration: (generationId: string) => void;
   /** Clears the prompt for a fresh idea, leaving the generations already made alone. */
   readonly onNewPrompt: () => void;
+  /** Puts a remembered prompt, with every setting it was used with, back in the form. */
+  readonly onApplyPrompt: (prompt: ImagePrompt) => void;
+  /** Forgets a remembered prompt. */
+  readonly onDeletePrompt: (promptId: string) => void;
   /** Opens a new tab in the pane; the header offers it after the new-prompt control. */
   readonly onNewTab?: () => void;
   /** Opens the AI settings, where the image role and consent are set. */
@@ -88,6 +94,9 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
   let confirmingReplace = false;
   /** Which status choice has its list open, so at most one is ever drawn. */
   let openChoice: string | undefined;
+  /** Whether the list of remembered prompts is unfolded, and which one is asking to be deleted. */
+  let promptsOpen = false;
+  let confirmingDelete: string | undefined;
 
   const openSaveForm = (attrs: ImagePaneAttrs, image: GeneratedImage, index: number): void => {
     saveImageId = image.id;
@@ -218,6 +227,44 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
       }),
     );
   };
+
+  /** One remembered prompt: its title opens it in the form; the trash forgets it after a second click. */
+  const promptItem = (attrs: ImagePaneAttrs, prompt: ImagePrompt) =>
+    m('li.fm-image-prompt', { key: prompt.id }, [
+      m(
+        'button.fm-image-prompt-open',
+        {
+          type: 'button',
+          title: prompt.subject,
+          onclick: () => {
+            attrs.onApplyPrompt(prompt);
+            promptsOpen = false;
+            confirmingDelete = undefined;
+          },
+        },
+        prompt.title === '' ? crumbLabel(prompt.subject) : prompt.title,
+      ),
+      confirmingDelete === prompt.id
+        ? iconButton(t('image', 'confirmDeletePrompt'), checkIcon({ size: 14 }), () => {
+            confirmingDelete = undefined;
+            attrs.onDeletePrompt(prompt.id);
+          })
+        : iconButton(t('image', 'deletePrompt'), trashIcon({ size: 14 }), () => {
+            confirmingDelete = prompt.id;
+          }),
+    ]);
+
+  const promptList = (attrs: ImagePaneAttrs) =>
+    m(
+      'section.fm-image-prompts',
+      { id: 'fm-image-prompts', role: 'navigation', 'aria-label': t('image', 'prompts') },
+      attrs.entry.prompts.length === 0
+        ? m('.fm-image-prompts-empty', t('image', 'noPrompts'))
+        : m(
+            'ul',
+            attrs.entry.prompts.map((prompt) => promptItem(attrs, prompt)),
+          ),
+    );
 
   const status = (attrs: ImagePaneAttrs) => {
     const { entry } = attrs;
@@ -632,7 +679,29 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
       const { entry } = attrs;
       return m('section.fm-image', [
         m('header.fm-image-header', [
-          crumbs(attrs),
+          m('span.fm-image-title', t('image', 'title')),
+          m(
+            'button.btn-flat.fm-image-chrome.fm-image-toggle',
+            {
+              type: 'button',
+              'aria-expanded': String(promptsOpen),
+              'aria-controls': promptsOpen ? 'fm-image-prompts' : undefined,
+              onclick: () => {
+                promptsOpen = !promptsOpen;
+                confirmingDelete = undefined;
+              },
+            },
+            [
+              m(
+                'span.fm-image-chevron',
+                { 'aria-hidden': 'true' },
+                promptsOpen ? chevronDownIcon({ size: 12 }) : chevronRightIcon({ size: 12 }),
+              ),
+              t('image', 'prompts'),
+            ],
+          ),
+          // While the list is open it is the thing being looked at; the generations step aside.
+          promptsOpen ? m('.fm-image-crumbs') : crumbs(attrs),
           iconButton(
             t('image', 'newPrompt'),
             photoIcon({ size: 16 }),
@@ -649,7 +718,11 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
             attrs.onOpenSettings?.(),
           ),
         ]),
-        m('.fm-image-body', [preview(attrs), composer(attrs)]),
+        m('.fm-image-body', [
+          promptsOpen ? promptList(attrs) : undefined,
+          preview(attrs),
+          composer(attrs),
+        ]),
         status(attrs),
       ]);
     },

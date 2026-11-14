@@ -97,6 +97,7 @@ import type {
   ImageBatch,
   ImageGpsEntry,
   ImageMetadata,
+  ImagePrompt,
   ImportSemanticLocalModelRequest,
   InspectAttributesResult,
   InspectSplitSetResult,
@@ -340,6 +341,9 @@ import {
   cancelImageGeneration as requestImageGenerationCancel,
   readImageGps as requestImageGps,
   readImageMetadata as requestImageMetadata,
+  deleteImagePrompt as requestImagePromptDelete,
+  saveImagePrompt as requestImagePromptSave,
+  listImagePrompts as requestImagePrompts,
   saveGeneratedImage as requestImageSave,
   inspectAttributes as requestInspectAttributes,
   inspectSplitSet as requestInspectSplitSet,
@@ -2879,6 +2883,29 @@ export class HttpFileManagerClient implements FileManagerClient {
       throw unexpectedResponseError('generateImages', response.status);
     }
     return response.data;
+  }
+
+  async listImagePrompts(signal?: AbortSignal): Promise<ImagePrompt[]> {
+    const response = await requestImagePrompts(signal === undefined ? undefined : { signal });
+    if (response.status !== 200) {
+      throw unexpectedResponseError('listImagePrompts', response.status);
+    }
+    return response.data;
+  }
+
+  async saveImagePrompt(prompt: ImagePrompt, signal?: AbortSignal): Promise<ImagePrompt> {
+    const response = await requestImagePromptSave(
+      prompt,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw unexpectedResponseError('saveImagePrompt', response.status);
+    }
+    return response.data;
+  }
+
+  async deleteImagePrompt(promptId: string, signal?: AbortSignal): Promise<void> {
+    await requestImagePromptDelete(promptId, signal === undefined ? undefined : { signal });
   }
 
   async cancelImageGeneration(requestId: string): Promise<void> {

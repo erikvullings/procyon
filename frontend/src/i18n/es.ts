@@ -1286,6 +1286,10 @@ export const es = {
     sourceNotFile: 'Eso no es un archivo de imagen. Selecciona uno en el otro panel.',
     generations: 'Generaciones',
     untitledGeneration: 'Una generación',
+    prompts: 'Prompts',
+    noPrompts: 'Aún no hay prompts. Cada prompt con el que generes se guarda aquí.',
+    deletePrompt: 'Olvidar este prompt',
+    confirmDeletePrompt: 'Haz clic de nuevo para olvidar este prompt',
     newPrompt: 'Nueva indicación de imagen',
     seedPlaceholder: 'semilla cualquiera',
     waitingForModel: 'Esperando al modelo…',
@@ -1329,6 +1333,14 @@ export const es = {
     countNotAllowed: 'Elige entre una y cuatro imágenes.',
     seedTooLarge: 'La semilla es demasiado grande.',
     roleNotAssigned: 'No hay modelo de imagen. Elige uno en Ajustes.',
+    consentRequired:
+      'El uso de un modelo de imágenes en la nube debe permitirse primero. Permítelo en Ajustes.',
+    endpointInvalid:
+      'Ese punto de acceso de imágenes no está bien configurado. Compruébalo en Ajustes.',
+    hostNotAllowed:
+      'Este servidor no puede alcanzar ese punto de acceso de imágenes. Pide al administrador que permita su host.',
+    timedOut:
+      'El modelo de imágenes se quedó sin tiempo. Un modelo en este equipo puede necesitar varios minutos por imagen: prueba con menos pasos o aumenta el tiempo de espera de ese punto de acceso en Ajustes.',
     cloudImageNotAllowed:
       'Este punto de acceso de imágenes está en la nube. Permite primero su uso en Ajustes.',
     invalidRequest: 'La instrucción, el tamaño o la semilla exceden lo que el modelo acepta.',
@@ -1927,13 +1939,18 @@ export const es = {
     unreachable: 'No se pudo contactar con el servicio de IA del perfil «{name}».',
   },
   llmRoles: {
+    addConnection: 'Añadir conexión…',
+    chatPurpose: 'Conversaciones, resúmenes y preguntas sobre archivos.',
+    imagePurpose: 'Crea imágenes con un modelo de imágenes independiente.',
+    embeddingsPurpose: 'Elige un modelo de embeddings para la búsqueda semántica.',
+    imageModelPlaceholder: 'Nombre del modelo de imágenes',
     provider: 'Proveedor',
     providerUnassigned: 'Elegir proveedor',
     providerCreateHint:
       '{name} aún no tiene un punto de conexión. El formulario de arriba ya está relleno con él: guárdelo allí y elíjalo como punto de conexión de imágenes.',
     advanced: 'Usar otros endpoints o modelos por función',
     endpoint: 'Punto de conexión',
-    title: 'Funciones',
+    title: 'Modelos por tarea',
     intro:
       'Elige qué endpoint y modelo usa cada función. Los endpoints locales no requieren consentimiento.',
     chat: 'Chat y resúmenes',
@@ -1961,11 +1978,12 @@ export const es = {
   },
 
   llmProfiles: {
+    connectionsTitle: 'Conexiones',
     consentRequired:
       'Permitir uso en la nube: confirma el consentimiento antes de guardar un endpoint en la nube.',
     title: 'Resúmenes y respuestas con IA',
     description:
-      'Conecta un modelo para redactar resúmenes de documentos y responder preguntas usando tus archivos. Guarda las conexiones como perfiles y elige uno predeterminado. Un modelo local se ejecuta en tu dispositivo; un servicio en la nube recibe preguntas y extractos. La búsqueda semántica funciona sin perfil.',
+      'Configura los proveedores una vez y elige una conexión y un modelo para cada tarea.',
     loading: 'Cargando perfiles de generación…',
     unavailable: 'Los perfiles de generación no están disponibles.',
     unknownError: 'Error desconocido del perfil de generación',

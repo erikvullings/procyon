@@ -2918,6 +2918,41 @@ pub(crate) async fn generate_images(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Lists the remembered image prompts, most recently used first.
+#[tauri::command]
+pub(crate) fn list_image_prompts(
+    state: State<'_, AppState>,
+) -> Result<Vec<fm_transport_dto::ImagePromptDto>, ApplicationErrorDto> {
+    state
+        .service
+        .list_image_prompts()
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Remembers an image prompt with its settings.
+#[tauri::command]
+pub(crate) fn save_image_prompt(
+    state: State<'_, AppState>,
+    prompt: fm_transport_dto::ImagePromptDto,
+) -> Result<fm_transport_dto::ImagePromptDto, ApplicationErrorDto> {
+    state
+        .service
+        .save_image_prompt(prompt)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Forgets one remembered image prompt.
+#[tauri::command]
+pub(crate) fn delete_image_prompt(
+    state: State<'_, AppState>,
+    prompt_id: Uuid,
+) -> Result<(), ApplicationErrorDto> {
+    state
+        .service
+        .delete_image_prompt(prompt_id)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Stops one running generation.
 #[tauri::command]
 pub(crate) fn cancel_image_generation(

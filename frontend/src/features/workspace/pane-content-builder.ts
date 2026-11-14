@@ -9,6 +9,7 @@ import type {
   Connection,
   EntryId,
   EntrySummary,
+  ImagePrompt,
   KnowledgeEvidence,
   Location,
   Operation,
@@ -255,6 +256,10 @@ export interface PaneContentContext {
     selectGeneration(key: string, generationId: string): void;
     /** Clears the prompt for a fresh idea. */
     newPrompt(key: string): void;
+    /** Puts a remembered prompt, with all its settings, back in the form. */
+    applyPrompt(key: string, prompt: ImagePrompt): void;
+    /** Forgets a remembered prompt. */
+    deletePrompt(promptId: string): void;
     /** Takes the other pane's selected picture as the one this prompt starts from. */
     useSource(key: string): void;
     /** Stops starting from a picture. */
@@ -1199,6 +1204,8 @@ export function createPaneContentBuilder(
               onSelectGeneration: (generationId) =>
                 context.imageActions?.selectGeneration(image.key, generationId),
               onNewPrompt: () => context.imageActions?.newPrompt(image.key),
+              onApplyPrompt: (prompt) => context.imageActions?.applyPrompt(image.key, prompt),
+              onDeletePrompt: (promptId) => context.imageActions?.deletePrompt(promptId),
               onNewTab: () => context.openNewTab?.(paneId),
               onOpenSettings: () => context.openImageSettings?.(),
             }),

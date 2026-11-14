@@ -431,6 +431,13 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::chat::stream_chat_reply))
         .routes(utoipa_axum::routes!(routes::chat::cancel_chat_reply))
         .routes(utoipa_axum::routes!(
+            routes::image_prompts::list_image_prompts,
+            routes::image_prompts::save_image_prompt
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::image_prompts::delete_image_prompt
+        ))
+        .routes(utoipa_axum::routes!(
             routes::image_generation::generate_images
         ))
         .routes(utoipa_axum::routes!(

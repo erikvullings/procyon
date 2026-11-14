@@ -1303,6 +1303,10 @@ export const de = {
     sourceNotFile: 'Das ist keine Bilddatei. Wählen Sie eine im anderen Bereich.',
     generations: 'Generierungen',
     untitledGeneration: 'Eine Generierung',
+    prompts: 'Prompts',
+    noPrompts: 'Noch keine Prompts. Jeder Prompt, mit dem Sie generieren, wird hier gespeichert.',
+    deletePrompt: 'Diesen Prompt vergessen',
+    confirmDeletePrompt: 'Erneut klicken, um diesen Prompt zu vergessen',
     newPrompt: 'Neue Bildaufforderung',
     seedPlaceholder: 'beliebiges Seed',
     waitingForModel: 'Warten auf das Modell…',
@@ -1347,6 +1351,14 @@ export const de = {
     countNotAllowed: 'Wähle zwischen einem und vier Bildern.',
     seedTooLarge: 'Der Startwert ist zu groß.',
     roleNotAssigned: 'Kein Bildmodell ausgewählt. Wähle eines in den Einstellungen.',
+    consentRequired:
+      'Die Nutzung eines Bildmodells in der Cloud musst du zuerst erlauben. Erlaube sie in den Einstellungen.',
+    endpointInvalid:
+      'Dieser Bild-Endpunkt ist nicht richtig eingerichtet. Prüfe ihn in den Einstellungen.',
+    hostNotAllowed:
+      'Dieser Server darf den Bild-Endpunkt nicht erreichen. Bitte die Administration, den Host zu erlauben.',
+    timedOut:
+      'Das Bildmodell hatte zu wenig Zeit. Ein Modell auf diesem Computer braucht pro Bild oft mehrere Minuten - versuche weniger Schritte oder erhöhe die Zeitüberschreitung für diesen Endpunkt in den Einstellungen.',
     cloudImageNotAllowed:
       'Dieser Bild-Endpunkt liegt in der Cloud. Erlaube die Cloud-Nutzung zuerst in den Einstellungen.',
     invalidRequest: 'Prompt, Größe oder Seed liegen außerhalb dessen, was das Modell annimmt.',
@@ -1950,13 +1962,18 @@ export const de = {
     unreachable: 'Der KI-Dienst des Profils „{name}“ ist nicht erreichbar.',
   },
   llmRoles: {
+    addConnection: 'Verbindung hinzufügen…',
+    chatPurpose: 'Gespräche, Zusammenfassungen und Fragen zu Dateien.',
+    imagePurpose: 'Bilder mit einem eigenen Bildmodell erstellen.',
+    embeddingsPurpose: 'Ein Embedding-Modell für die semantische Suche wählen.',
+    imageModelPlaceholder: 'Name des Bildmodells',
     provider: 'Anbieter',
     providerUnassigned: 'Anbieter wählen',
     providerCreateHint:
       '{name} hat noch keinen Endpunkt. Das Formular oben ist bereits damit ausgefüllt - speichern Sie es dort und wählen Sie es danach als Endpunkt für die Bildgenerierung.',
     advanced: 'Verschiedene Endpunkte oder Modelle pro Funktion verwenden',
     endpoint: 'Endpunkt',
-    title: 'Rollen',
+    title: 'Modelle nach Aufgabe',
     intro:
       'Lege fest, welcher Endpunkt und welches Modell jede Funktion übernimmt. Lokale Endpunkte brauchen keine Zustimmung.',
     chat: 'Chat und Zusammenfassungen',
@@ -1984,11 +2001,11 @@ export const de = {
   },
 
   llmProfiles: {
+    connectionsTitle: 'Verbindungen',
     consentRequired:
       'Cloud-Nutzung erlauben: Zustimmung bestätigen, bevor ein Cloud-Endpunkt gespeichert wird.',
     title: 'KI-Zusammenfassungen und -Antworten',
-    description:
-      'Verbinden Sie ein Modell, um Dokumentzusammenfassungen zu schreiben und Fragen anhand Ihrer Dateien zu beantworten. Speichern Sie Verbindungen als Profile und wählen Sie ein Standardprofil. Ein lokales Modell läuft auf Ihrem Gerät; ein Cloud-Dienst erhält Fragen und Auszüge. Die semantische Suche funktioniert auch ohne Profil.',
+    description: 'Anbieter einmal einrichten, dann je Aufgabe Verbindung und Modell wählen.',
     loading: 'Generierungsprofile werden geladen…',
     unavailable: 'Generierungsprofile sind nicht verfügbar.',
     unknownError: 'Unbekannter Fehler beim Generierungsprofil',

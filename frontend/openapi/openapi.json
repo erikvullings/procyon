@@ -3904,6 +3904,96 @@
         }
       }
     },
+    "/api/v1/images/prompts": {
+      "get": {
+        "summary": "Lists the remembered prompts, most recently used first.",
+        "operationId": "listImagePrompts",
+        "responses": {
+          "200": {
+            "description": "The remembered prompts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ImagePromptDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Remembers a prompt with its settings. A prompt that matches an earlier one only refreshes it.",
+        "operationId": "saveImagePrompt",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImagePromptDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The stored prompt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImagePromptDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The prompt was outside the bounds",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/images/prompts/{prompt_id}": {
+      "delete": {
+        "summary": "Forgets one remembered prompt.",
+        "operationId": "deleteImagePrompt",
+        "parameters": [
+          {
+            "name": "prompt_id",
+            "in": "path",
+            "description": "Prompt to forget",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The prompt was forgotten"
+          },
+          "404": {
+            "description": "No such prompt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/images/save": {
       "post": {
         "summary": "Writes one stored image to the chosen folder and file name. An existing file is refused until the\nperson asks for it to be replaced.",
@@ -16585,6 +16675,108 @@
               "null"
             ],
             "description": "New title."
+          }
+        }
+      },
+      "ImagePromptDto": {
+        "type": "object",
+        "description": "One remembered prompt and the settings it was used with.",
+        "required": [
+          "id",
+          "title",
+          "updatedAt",
+          "subject",
+          "negativePrompt",
+          "presetIds",
+          "lensId",
+          "apertureId",
+          "width",
+          "height",
+          "count"
+        ],
+        "properties": {
+          "apertureId": {
+            "type": "string",
+            "description": "Chosen aperture id; empty when none."
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many images one batch produces.",
+            "minimum": 0
+          },
+          "height": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Requested height in pixels.",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identity of this entry."
+          },
+          "lensId": {
+            "type": "string",
+            "description": "Chosen lens id; empty when none."
+          },
+          "negativePrompt": {
+            "type": "string",
+            "description": "What to avoid, on top of what the chosen presets exclude."
+          },
+          "presetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Chosen style preset ids."
+          },
+          "quality": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ImageQualityDto",
+                "description": "Quality level, when one was chosen."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "seed": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Reproducibility seed, when one was set.",
+            "minimum": 0
+          },
+          "steps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Sampler step count, when one was chosen.",
+            "minimum": 0
+          },
+          "subject": {
+            "type": "string",
+            "description": "What to draw."
+          },
+          "title": {
+            "type": "string",
+            "description": "Short name for the list. Blank on a save asks the backend to derive one from the subject."
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "RFC 3339 time of the last use; assigned by the backend, ignored on a save."
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Requested width in pixels.",
+            "minimum": 0
           }
         }
       },

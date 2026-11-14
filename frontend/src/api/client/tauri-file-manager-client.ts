@@ -107,6 +107,7 @@ import type {
   ImageBatch,
   ImageGpsEntry,
   ImageMetadata,
+  ImagePrompt,
   ImportSemanticLocalModelRequest,
   InspectAttributesResult,
   InspectSplitSetResult,
@@ -1807,6 +1808,18 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   generateImages(request: GenerateImagesRequest, _signal?: AbortSignal): Promise<ImageBatch> {
     return invoke<ImageBatch>('generate_images', { request });
+  }
+
+  listImagePrompts(_signal?: AbortSignal): Promise<ImagePrompt[]> {
+    return invoke<ImagePrompt[]>('list_image_prompts');
+  }
+
+  saveImagePrompt(prompt: ImagePrompt, _signal?: AbortSignal): Promise<ImagePrompt> {
+    return invoke<ImagePrompt>('save_image_prompt', { prompt });
+  }
+
+  deleteImagePrompt(promptId: string, _signal?: AbortSignal): Promise<void> {
+    return invoke<void>('delete_image_prompt', { promptId });
   }
 
   cancelImageGeneration(requestId: string): Promise<void> {

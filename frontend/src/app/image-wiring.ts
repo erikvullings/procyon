@@ -5,16 +5,19 @@ import {
   emptyImagePane,
   firstImageId,
   forgetGeneration,
+  type ImageFailureKey,
   type ImageGenerationRecord,
   type ImagePaneEntry,
   imagePlacementPaneId,
   imageSaveFolderPaneId,
+  promptOf,
+  promptPatch,
   rememberGeneration,
 } from '../features/image-generation/image-pane-state';
 import { composeNegativePrompt, composePrompt } from '../features/image-generation/image-presets';
 import { dispatchWorkspaceCommand } from '../features/workspace/dispatch-workspace-command';
 import { t } from '../i18n';
-import type { GeneratedImage, Location, PaneId } from '../models';
+import type { GeneratedImage, ImagePrompt, Location, PaneId } from '../models';
 import { qualityIdOf } from '../models';
 import { tabKey } from './shell-helpers';
 import type { ShellState } from './shell-state';
@@ -94,6 +97,7 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
           if (tabId === undefined) return;
           const key = tabKey(targetPaneId, tabId);
           shellState.imageByTab.set(key, emptyImagePane(key, targetPaneId, tabId, workspace.id));
+          void loadPrompts(shellState.client);
           m.redraw();
         },
       );
@@ -102,6 +106,34 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     } finally {
       shellState.imageOpening = false;
     }
+  }
+
+  /**
+   * Refreshes the prompt history every image pane shows. It is one list for all of them, so a prompt
+   * saved in one pane is there in the next without reopening it. A failed read leaves the old list.
+   */
+  async function loadPrompts(client: FileManagerClient): Promise<void> {
+    try {
+      const prompts = await client.listImagePrompts();
+      for (const entry of shellState.imageByTab.values()) entry.prompts = prompts;
+    } catch {
+      // The history is a convenience; it must never get in the way of generating.
+    }
+    m.redraw();
+  }
+
+  /** Puts a remembered prompt, with all its settings, back in the form. */
+  function applyPrompt(key: string, prompt: ImagePrompt): void {
+    patch(key, promptPatch(prompt));
+  }
+
+  async function deletePrompt(client: FileManagerClient, promptId: string): Promise<void> {
+    try {
+      await client.deleteImagePrompt(promptId);
+    } catch {
+      // Already gone is the outcome the person asked for; the reload shows what is really there.
+    }
+    await loadPrompts(client);
   }
 
   /** Applies an edit to the prompt side; every control writes straight back to the entry. */
@@ -196,6 +228,8 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     const prompt = composePrompt(entry.subject, entry.presetIds, entry.lensId, entry.apertureId);
     if (prompt.trim() === '') return;
     const requestId = crypto.randomUUID();
+    // The form as it is now is what gets remembered, whatever is edited while the batch is made.
+    const remembered = promptOf(entry);
     entry.pendingRequestId = requestId;
     entry.failure = undefined;
     entry.error = undefined;
@@ -225,6 +259,11 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
       // The seed the batch came back with is kept, so "regenerate" can repeat or vary it deliberately.
       if (batch.seed !== undefined && batch.seed !== null) entry.seed = Number(batch.seed);
       startViews(client, key, entry);
+      // Only a prompt that produced pictures is worth coming back to.
+      void client.saveImagePrompt(remembered).then(
+        () => loadPrompts(client),
+        () => undefined,
+      );
       // The bar holds every generation the pane asked for, the one on screen included.
       remember(entry, {
         generationId: batch.generationId,
@@ -236,8 +275,8 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
       if (entryOf(key) !== entry) return;
       entry.pendingRequestId = undefined;
       const reason = imageFailureReason(error);
-      entry.failure = reason;
-      entry.error = t('image', imageFailureKey(reason));
+      entry.failure = imageFailureKey(reason);
+      entry.error = t('image', entry.failure);
     } finally {
       m.redraw();
     }
@@ -352,13 +391,10 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     } catch (error: unknown) {
       if (entryOf(key) !== entry) return;
       const reason = imageFailureReason(error);
-      entry.failure = reason;
       // Only the folder and the name are in the person's hands at this point, so an invalid
       // request here is about the destination - the prompt has already been accepted.
-      entry.error = t(
-        'image',
-        reason === 'invalidRequest' ? 'destinationInvalid' : imageFailureKey(reason),
-      );
+      entry.failure = reason === 'invalidRequest' ? 'destinationInvalid' : imageFailureKey(reason);
+      entry.error = t('image', entry.failure);
     } finally {
       if (entryOf(key) === entry) entry.savingImageId = undefined;
       m.redraw();
@@ -516,13 +552,28 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     selectGeneration: (client: FileManagerClient, key: string, generationId: string) =>
       selectGeneration(client, key, generationId),
     newPrompt,
+    applyPrompt,
+    deletePrompt: (client: FileManagerClient, promptId: string) =>
+      void deletePrompt(client, promptId),
   };
 }
 
 /** The rejection reason of a failed request, as the backend reported it. */
 export function imageFailureReason(error: unknown): string {
   if (typeof error !== 'object' || error === null) return 'failed';
-  const record = error as { code?: unknown; reason?: unknown; status?: unknown };
+  const record = error as {
+    code?: unknown;
+    reason?: unknown;
+    status?: unknown;
+    details?: unknown;
+  };
+  // Every rejection shares the `invalidRequest` code, so the reason the person is told about is
+  // read from `details` first; the bare code is a last resort, not the primary key.
+  const details = record.details;
+  if (typeof details === 'object' && details !== null) {
+    const reason = (details as { reason?: unknown }).reason;
+    if (typeof reason === 'string') return reason;
+  }
   if (typeof record.reason === 'string') return record.reason;
   if (typeof record.code === 'string') return record.code;
   if (record.status === 403) return 'cloudImageNotAllowed';
@@ -536,30 +587,29 @@ export function imageFailureReason(error: unknown): string {
 }
 
 /** Which message explains a rejection reason. */
-export type ImageFailureKey =
-  | 'roleNotAssigned'
-  | 'cloudImageNotAllowed'
-  | 'invalidRequest'
-  | 'notFound'
-  | 'batchExpired'
-  | 'imageTooLarge'
-  | 'sourceUnsupported'
-  | 'sourceUnusable'
-  | 'sourceTooLarge'
-  | 'destinationExists'
-  | 'destinationInvalid'
-  | 'cancelled'
-  | 'generationFailed'
-  | 'failed';
+export type { ImageFailureKey } from '../features/image-generation/image-pane-state';
 
 /** Maps a rejection reason to its message key; nothing here repeats the endpoint's own words. */
 export function imageFailureKey(reason: string): ImageFailureKey {
   switch (reason) {
     case 'roleNotAssigned':
+    case 'llmRoleNotAssigned':
       return 'roleNotAssigned';
     case 'cloudImageNotAllowed':
     case 'llmCloudImageNotAllowed':
       return 'cloudImageNotAllowed';
+    case 'cloudConsentRequired':
+      return 'consentRequired';
+    case 'llmProfileInvalid':
+      return 'endpointInvalid';
+    case 'llmTimeout':
+      return 'timedOut';
+    case 'permissionDenied':
+      return 'hostNotAllowed';
+    case 'providerUnavailable':
+    case 'operationCancelled':
+      // A generation the backend itself cancelled is the same outcome as the person pressing Stop.
+      return reason === 'operationCancelled' ? 'cancelled' : 'generationFailed';
     case 'invalidRequest':
       return 'invalidRequest';
     case 'notFound':

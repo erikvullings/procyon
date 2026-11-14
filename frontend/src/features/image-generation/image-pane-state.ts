@@ -1,6 +1,7 @@
 import type {
   GeneratedImageSource,
   ImageBatch,
+  ImagePrompt,
   ImageQualityId,
   Location,
   PaneId,
@@ -68,6 +69,8 @@ export interface ImagePaneEntry {
   /** The generation on screen, and how each of its images is displayed. */
   batch?: ImageBatch | undefined;
   views: GeneratedImageView[];
+  /** Every prompt ever generated from, with its settings, most recently used first. */
+  prompts: ImagePrompt[];
   /** The generations this pane has asked for, oldest first; the crumb bar walks them. */
   history: ImageGenerationRecord[];
   /** Which of them the preview shows. */
@@ -77,7 +80,7 @@ export interface ImagePaneEntry {
   /** Identity of the running request, so Stop can reach it. */
   pendingRequestId?: string | undefined;
   /** Why the last generation was refused, as a rejection reason. */
-  failure?: string | undefined;
+  failure?: ImageFailureKey | undefined;
   /** Anything else that went wrong, already worded for display. */
   error?: string | undefined;
   /** Image whose save is in flight. */
@@ -106,6 +109,7 @@ export function emptyImagePane(
     count: 1,
     qualityId: '',
     views: [],
+    prompts: [],
     history: [],
   };
 }
@@ -195,13 +199,48 @@ export function destinationFor(folder: Location, fileName: string): Location {
 }
 
 /** Whether a save failed because the file is already there: the person must agree to replace it. */
+/**
+ * Which sentence explains a failure. The pane holds this key rather than the backend's reason, so
+ * the decisions below - "go to Settings", "offer to replace" - compare one thing and one only.
+ */
+export type ImageFailureKey =
+  | 'roleNotAssigned'
+  | 'cloudImageNotAllowed'
+  | 'consentRequired'
+  | 'endpointInvalid'
+  | 'hostNotAllowed'
+  | 'timedOut'
+  | 'invalidRequest'
+  | 'notFound'
+  | 'batchExpired'
+  | 'imageTooLarge'
+  | 'sourceUnsupported'
+  | 'sourceUnusable'
+  | 'sourceTooLarge'
+  | 'destinationExists'
+  | 'destinationInvalid'
+  | 'cancelled'
+  | 'generationFailed'
+  | 'failed';
+
+/**
+ * Whether the failure is the save refusing a destination that is already taken: the pane then
+ * offers to replace it instead of only complaining.
+ */
 export function isSaveConflict(failure: string | undefined): boolean {
-  return failure === 'destinationAlreadyExists';
+  return failure === 'destinationExists';
 }
 
 /** Whether a failure is fixed in Settings rather than by the person retrying. */
 export function failureNeedsSettings(failure: string | undefined): boolean {
-  return failure === 'roleNotAssigned' || failure === 'cloudImageNotAllowed';
+  return (
+    failure === 'roleNotAssigned' ||
+    failure === 'cloudImageNotAllowed' ||
+    failure === 'consentRequired' ||
+    failure === 'endpointInvalid' ||
+    // A model that ran out of time is usually a timeout the person can raise in Settings.
+    failure === 'timedOut'
+  );
 }
 
 /** Whether the preview pane has anything to show. */
@@ -271,4 +310,43 @@ const CRUMB_MAX = 40;
 /** The image of a batch the preview should select: the first, or the one still held. */
 export function firstImageId(batch: ImageBatch | undefined): string | undefined {
   return batch?.images[0]?.id;
+}
+
+/** The changes that put a remembered prompt, with every setting it was used with, back in the form. */
+export function promptPatch(prompt: ImagePrompt): Partial<ImagePaneEntry> {
+  return {
+    subject: prompt.subject,
+    negativePrompt: prompt.negativePrompt,
+    presetIds: [...prompt.presetIds],
+    lensId: prompt.lensId,
+    apertureId: prompt.apertureId,
+    width: prompt.width,
+    height: prompt.height,
+    count: prompt.count,
+    seed: prompt.seed ?? undefined,
+    qualityId: prompt.quality ?? '',
+    steps: prompt.steps ?? undefined,
+    failure: undefined,
+    error: undefined,
+  };
+}
+
+/** The prompt a generation is remembered as: the form as it was when Generate was pressed. */
+export function promptOf(entry: ImagePaneEntry): ImagePrompt {
+  return {
+    id: crypto.randomUUID(),
+    title: '',
+    updatedAt: '',
+    subject: entry.subject.trim(),
+    negativePrompt: entry.negativePrompt.trim(),
+    presetIds: [...entry.presetIds],
+    lensId: entry.lensId,
+    apertureId: entry.apertureId,
+    width: entry.width,
+    height: entry.height,
+    count: entry.count,
+    seed: entry.seed ?? null,
+    quality: entry.qualityId === '' ? null : entry.qualityId,
+    steps: entry.steps ?? null,
+  };
 }

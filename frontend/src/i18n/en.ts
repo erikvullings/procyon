@@ -1654,6 +1654,10 @@ export const en = {
     sourceNotFile: 'That is not a picture file. Select one in the other pane.',
     generations: 'Generations',
     untitledGeneration: 'A generation',
+    prompts: 'Prompts',
+    noPrompts: 'No prompts yet. Each prompt you generate from is kept here.',
+    deletePrompt: 'Forget this prompt',
+    confirmDeletePrompt: 'Click again to forget this prompt',
     newPrompt: 'New image prompt',
     seedPlaceholder: 'any seed',
     waitingForModel: 'Waiting for the model…',
@@ -1697,6 +1701,13 @@ export const en = {
     countNotAllowed: 'Choose between one and four images.',
     seedTooLarge: 'The seed is too large.',
     roleNotAssigned: 'No image model is set. Choose one in Settings.',
+    consentRequired:
+      'Using an image model in the cloud needs your consent first. Allow it in Settings.',
+    endpointInvalid: 'That image endpoint is not set up right. Check it in Settings.',
+    hostNotAllowed:
+      'This server is not allowed to reach that image endpoint. Ask your administrator to allow its host.',
+    timedOut:
+      'The image model ran out of time. A model on this computer can need several minutes per picture - try fewer steps, or raise the timeout for this endpoint in Settings.',
     cloudImageNotAllowed: 'This image endpoint is in the cloud. Allow cloud use in Settings first.',
     invalidRequest: 'The prompt, size or seed is outside what the model accepts.',
     notFound: 'That image is no longer available.',
@@ -2284,13 +2295,18 @@ export const en = {
     unreachable: 'The AI service of profile "{name}" could not be reached.',
   },
   llmRoles: {
+    addConnection: 'Add connection…',
+    chatPurpose: 'Conversations, summaries and questions about files.',
+    imagePurpose: 'Create images with a dedicated image model.',
+    embeddingsPurpose: 'Choose an embedding model for semantic search.',
+    imageModelPlaceholder: 'Image model name',
     provider: 'Provider',
     providerUnassigned: 'Choose a provider',
     providerCreateHint:
       '{name} has no endpoint yet. The endpoint editor above is already filled from it - save it there, then pick it as the image endpoint.',
     advanced: 'Use different endpoints or models per feature',
     endpoint: 'Endpoint',
-    title: 'Roles',
+    title: 'Models by task',
     intro: 'Choose which endpoint and model handle each feature. Local endpoints need no consent.',
     chat: 'Chat and summaries',
     embeddings: 'Semantic search (embeddings)',
@@ -2316,10 +2332,10 @@ export const en = {
   },
 
   llmProfiles: {
+    connectionsTitle: 'Connections',
     consentRequired: 'Allow cloud use: confirm consent before saving a cloud endpoint.',
     title: 'AI summaries and answers',
-    description:
-      'Connect a model to write document summaries and answer questions using your files. Save connections as profiles and choose a default. A local model runs on your device; a cloud service receives questions and excerpts. Semantic search works without a profile.',
+    description: 'Configure providers once, then choose a connection and model for each task.',
     loading: 'Loading generation profiles…',
     unavailable: 'Generation profiles are unavailable.',
     unknownError: 'Unknown generation-profile error',

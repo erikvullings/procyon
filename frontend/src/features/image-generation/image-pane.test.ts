@@ -51,6 +51,8 @@ function mountLoaded(
     onClearSource: vi.fn(),
     onSelectGeneration: vi.fn(),
     onNewPrompt: vi.fn(),
+    onApplyPrompt: vi.fn(),
+    onDeletePrompt: vi.fn(),
     onNewTab: vi.fn(),
     onOpenSettings: vi.fn(),
     ...attrOverrides,
@@ -118,15 +120,18 @@ describe('the image pane header', () => {
     expect(attrs.onSelectGeneration).toHaveBeenCalledWith('g0');
   });
 
-  it('drops the word Image from the header', () => {
+  it('reads Image > Prompts, as the chat pane reads Chat > Conversations', () => {
     mountLoaded();
-    expect(root.querySelector('.fm-image-title'), 'no title in the header').toBeNull();
+    expect(root.querySelector('.fm-image-title')?.textContent).toBe('Image');
+    expect(root.querySelector('.fm-image-toggle')?.textContent).toBe('Prompts');
   });
 
   it('carries the four header actions after the crumbs, each named by a tooltip', () => {
     mountLoaded();
     const header = root.querySelector('.fm-image-header');
-    const actions = [...(header?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+    const actions = [
+      ...(header?.querySelectorAll<HTMLButtonElement>('button:not(.fm-image-toggle)') ?? []),
+    ];
     expect(actions.map((button) => button.getAttribute('aria-label'))).toEqual([
       'New image prompt',
       'New tab',
@@ -508,5 +513,75 @@ describe('the picture and its actions', () => {
     toSettings?.click();
     m.redraw.sync();
     expect(attrs.onOpenSettings).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the remembered prompts', () => {
+  const prompt = {
+    id: 'p1',
+    title: 'A lighthouse at dusk',
+    updatedAt: '2026-11-14T10:00:00.000Z',
+    subject: 'A lighthouse at dusk, watercolour',
+    negativePrompt: 'text',
+    presetIds: ['watercolour'],
+    lensId: '',
+    apertureId: '',
+    width: 1_024,
+    height: 768,
+    count: 2,
+    seed: 7,
+    quality: 'good' as const,
+    steps: 30,
+  };
+
+  const toggle = () => root.querySelector<HTMLButtonElement>('.fm-image-toggle');
+
+  it('stays folded until the Prompts toggle is pressed', () => {
+    mountLoaded({ prompts: [prompt] });
+    expect(root.querySelector('.fm-image-prompts')).toBeNull();
+    expect(toggle()?.getAttribute('aria-expanded')).toBe('false');
+
+    toggle()?.click();
+    m.redraw.sync();
+
+    expect(toggle()?.getAttribute('aria-expanded')).toBe('true');
+    const titles = [...root.querySelectorAll('.fm-image-prompt-open')].map(
+      (item) => item.textContent,
+    );
+    expect(titles).toEqual(['A lighthouse at dusk']);
+    // The whole prompt is one hover away, since the title is only its first clause.
+    expect(root.querySelector('.fm-image-prompt-open')?.getAttribute('title')).toBe(prompt.subject);
+  });
+
+  it('puts the chosen prompt back in the form and folds the list', () => {
+    const { attrs } = mountLoaded({ prompts: [prompt] });
+    toggle()?.click();
+    m.redraw.sync();
+    root.querySelector<HTMLButtonElement>('.fm-image-prompt-open')?.click();
+    m.redraw.sync();
+
+    expect(attrs.onApplyPrompt).toHaveBeenCalledWith(prompt);
+    expect(root.querySelector('.fm-image-prompts')).toBeNull();
+  });
+
+  it('forgets a prompt only on the second click', () => {
+    const { attrs } = mountLoaded({ prompts: [prompt] });
+    toggle()?.click();
+    m.redraw.sync();
+
+    labelled(root, 'Forget this prompt')?.click();
+    m.redraw.sync();
+    expect(attrs.onDeletePrompt).not.toHaveBeenCalled();
+
+    labelled(root, 'Click again to forget this prompt')?.click();
+    m.redraw.sync();
+    expect(attrs.onDeletePrompt).toHaveBeenCalledWith('p1');
+  });
+
+  it('says what the list is for when it is empty', () => {
+    mountLoaded();
+    toggle()?.click();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-image-prompts-empty')?.textContent).toContain('No prompts yet');
   });
 });

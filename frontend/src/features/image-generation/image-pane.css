@@ -72,6 +72,80 @@
   padding: 0;
 }
 
+/* "Image > Prompts": the same two-part title as the chat pane's "Chat > Conversations". The toggle's
+   gap (8px) plus the header gap and button padding (4px + 4px) put equal space either side of the
+   chevron. */
+.fm-image-title {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding-left: var(--fm-space-3);
+  font-weight: 600;
+}
+
+.fm-image-toggle {
+  gap: var(--fm-space-3);
+}
+
+.fm-image-chevron {
+  display: inline-flex;
+  align-items: center;
+  color: var(--fm-text-muted);
+}
+
+/* The remembered prompts unfold above the pictures and scroll after about six rows, as the chat's
+   conversation list does. */
+.fm-image-prompts {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-height: calc(var(--fm-row-height) * 6);
+  overflow-y: auto;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-background);
+}
+
+.fm-image-prompts ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fm-image-prompt {
+  display: flex;
+  align-items: center;
+  gap: var(--fm-space-1);
+  min-height: var(--fm-row-height);
+}
+
+.fm-image-prompt-open {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--fm-row-height);
+  overflow: hidden;
+  padding: 0 var(--fm-space-2);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: var(--fm-type-body);
+  line-height: var(--fm-row-height);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.fm-image-prompt:hover {
+  background: var(--fm-hover);
+}
+
+.fm-image-prompts-empty {
+  padding: 0 var(--fm-space-2);
+  color: var(--fm-text-muted);
+  line-height: var(--fm-row-height);
+}
+
 /* The crumbs. They take the row's spare width, which is what pushes the header's actions to the
    trailing edge, as in the breadcrumb bar. */
 .fm-image-crumbs {

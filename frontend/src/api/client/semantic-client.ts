@@ -40,6 +40,7 @@ import type {
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   ImageBatch,
+  ImagePrompt,
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
   KnowledgeAnswer,
@@ -393,6 +394,18 @@ export interface SemanticClient {
    * backend holds the bytes until each image is saved or the batch is discarded.
    */
   generateImages(request: GenerateImagesRequest, signal?: AbortSignal): Promise<ImageBatch>;
+
+  /** The remembered image prompts with their settings, most recently used first. */
+  listImagePrompts(signal?: AbortSignal): Promise<ImagePrompt[]>;
+
+  /**
+   * Remembers a prompt. A blank title is derived by the backend; a prompt matching an earlier one in
+   * everything but identity refreshes that entry instead of adding another.
+   */
+  saveImagePrompt(prompt: ImagePrompt, signal?: AbortSignal): Promise<ImagePrompt>;
+
+  /** Forgets one remembered prompt. */
+  deleteImagePrompt(promptId: string, signal?: AbortSignal): Promise<void>;
 
   /** Stops a running generation. */
   cancelImageGeneration(requestId: string): Promise<void>;

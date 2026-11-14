@@ -18,6 +18,7 @@ import type {
   ExecuteKnowledgeSearchRequest,
   FinderTags,
   FrontendDiagnostic,
+  ImagePrompt,
   InterruptedTransfer,
   KnowledgeScope,
   KnowledgeSearchPlan,
@@ -195,6 +196,8 @@ export class MockContext {
 
   /** Requests the person stopped; a generate that has not finished yet reports the stop. */
   readonly cancelledImageRequests = new Set<string>();
+  /** The image pane's prompt history, by id. */
+  readonly imagePrompts = new Map<string, ImagePrompt>();
 
   readonly knowledgeSearches = new Map<string, AbortController>();
 

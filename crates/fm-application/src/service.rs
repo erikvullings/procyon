@@ -234,6 +234,7 @@ pub struct FileManagerService {
     file_assistant: crate::file_assistant::FileAssistantService,
     chat: crate::chat::ChatService,
     chat_conversations: crate::chat_conversations::ChatConversationService,
+    image_prompts: crate::image_prompts::ImagePromptService,
     image_generation: crate::image_generation::ImageGenerationService,
     onedrive: crate::onedrive::OneDriveAuthorizationService<JsonFileConnectionRepository>,
     remote_terminals: RemoteTerminalService,
@@ -460,6 +461,10 @@ impl FileManagerService {
                 .unwrap_or_else(|_| {
                     crate::chat_conversations::ChatConversationService::unavailable(&settings_store)
                 });
+        let image_prompts = crate::image_prompts::ImagePromptService::new(&settings_store)
+            .unwrap_or_else(|_| {
+                crate::image_prompts::ImagePromptService::unavailable(&settings_store)
+            });
         let loaded = match settings_store.load() {
             Ok(loaded) => loaded,
             Err(error @ SettingsError::NewerSchema { .. }) => fm_settings::LoadOutcome {
@@ -631,6 +636,7 @@ impl FileManagerService {
             file_assistant: crate::file_assistant::FileAssistantService::default(),
             chat: crate::chat::ChatService::default(),
             chat_conversations,
+            image_prompts,
             image_generation: crate::image_generation::ImageGenerationService::new(),
             onedrive,
             remote_terminals,
@@ -3487,6 +3493,46 @@ impl FileManagerService {
             .image_generation
             .generate(&provider, &self.providers, request)
             .await?)
+    }
+
+    /// Lists the remembered image prompts, most recently used first.
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError`] when the history could not be read.
+    pub fn list_image_prompts(
+        &self,
+    ) -> Result<Vec<fm_transport_dto::ImagePromptDto>, ApplicationError> {
+        Ok(self
+            .image_prompts
+            .list()?
+            .into_iter()
+            .map(crate::image_prompts::to_dto)
+            .collect())
+    }
+
+    /// Remembers a prompt with its settings, deriving a title when it has none.
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError`] for a prompt outside the bounds or a history that cannot be written.
+    pub fn save_image_prompt(
+        &self,
+        prompt: fm_transport_dto::ImagePromptDto,
+    ) -> Result<fm_transport_dto::ImagePromptDto, ApplicationError> {
+        Ok(crate::image_prompts::to_dto(
+            self.image_prompts
+                .save(crate::image_prompts::from_dto(prompt))?,
+        ))
+    }
+
+    /// Forgets one remembered image prompt.
+    ///
+    /// # Errors
+    ///
+    /// [`ApplicationError::NotFound`] when no such prompt is stored.
+    pub fn delete_image_prompt(&self, id: Uuid) -> Result<(), ApplicationError> {
+        Ok(self.image_prompts.delete(id)?)
     }
 
     /// Stops one running generation. Returns whether it was still running.

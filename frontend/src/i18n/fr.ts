@@ -1290,6 +1290,10 @@ export const fr = {
     sourceNotFile: 'Ce n’est pas un fichier image. Sélectionnez-en un dans l’autre volet.',
     generations: 'Générations',
     untitledGeneration: 'Une génération',
+    prompts: 'Prompts',
+    noPrompts: 'Aucun prompt pour l’instant. Chaque prompt utilisé pour générer est conservé ici.',
+    deletePrompt: 'Oublier ce prompt',
+    confirmDeletePrompt: 'Cliquez de nouveau pour oublier ce prompt',
     newPrompt: 'Nouvelle invite d’image',
     seedPlaceholder: 'graine au hasard',
     waitingForModel: 'En attente du modèle…',
@@ -1334,6 +1338,14 @@ export const fr = {
     countNotAllowed: 'Choisissez entre une et quatre images.',
     seedTooLarge: 'La valeur initiale est trop grande.',
     roleNotAssigned: 'Aucun modèle d’image n’est défini. Choisissez-en un dans les paramètres.',
+    consentRequired:
+      'L’utilisation d’un modèle d’image dans le nuage doit d’abord être autorisée. Autorisez-la dans les paramètres.',
+    endpointInvalid:
+      'Ce point de terminaison image est mal configuré. Vérifiez-le dans les paramètres.',
+    hostNotAllowed:
+      'Ce serveur ne peut pas atteindre ce point de terminaison image. Demandez à l’administrateur d’autoriser son hôte.',
+    timedOut:
+      'Le modèle d’image a manqué de temps. Un modèle sur cet ordinateur peut demander plusieurs minutes par image - essayez moins d’étapes, ou augmentez le délai d’attente de ce point de terminaison dans les paramètres.',
     cloudImageNotAllowed:
       'Ce point de terminaison image est dans le nuage. Autorisez d’abord son usage dans les paramètres.',
     invalidRequest: 'La requête, la taille ou la valeur initiale dépasse ce que le modèle accepte.',
@@ -1936,13 +1948,18 @@ export const fr = {
     unreachable: 'Le service d’IA du profil « {name} » est injoignable.',
   },
   llmRoles: {
+    addConnection: 'Ajouter une connexion…',
+    chatPurpose: 'Conversations, résumés et questions sur les fichiers.',
+    imagePurpose: 'Créer des images avec un modèle dédié.',
+    embeddingsPurpose: 'Choisir un modèle d’embeddings pour la recherche sémantique.',
+    imageModelPlaceholder: 'Nom du modèle d’images',
     provider: 'Fournisseur',
     providerUnassigned: 'Choisir un fournisseur',
     providerCreateHint:
       "{name} n'a pas encore de point de terminaison. Le formulaire ci-dessus est déjà prérempli avec - enregistrez-le là, puis choisissez-le comme point de terminaison d'image.",
     advanced: 'Utiliser d’autres points ou modèles par fonctionnalité',
     endpoint: 'Point de terminaison',
-    title: 'Rôles',
+    title: 'Modèles par tâche',
     intro:
       'Choisissez le point de terminaison et le modèle de chaque fonctionnalité. Les points locaux ne demandent pas de consentement.',
     chat: 'Discussion et résumés',
@@ -1970,6 +1987,7 @@ export const fr = {
   },
 
   llmProfiles: {
+    connectionsTitle: 'Connexions',
     consentRequired:
       "Autoriser l'usage cloud : confirmez le consentement avant d'enregistrer un point de terminaison cloud.",
     title: 'Résumés et réponses par IA',
@@ -3736,7 +3754,8 @@ export const fr = {
     latitude: 'Latitude',
     longitude: 'Longitude',
     titleField: 'Titre',
-    description: 'Description',
+    description:
+      'Configurez les fournisseurs une fois, puis choisissez une connexion et un modèle par tâche.',
     copyright: "Droits d'auteur",
     author: 'Auteur',
     keywords: 'Mots-clés (séparés par des virgules)',

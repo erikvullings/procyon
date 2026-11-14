@@ -2556,6 +2556,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       selectGeneration: (key, generationId) =>
         imageWiring.selectGeneration(shellState.client, key, generationId),
       newPrompt: (key) => imageWiring.newPrompt(shellState.client, key),
+      applyPrompt: (key, prompt) => imageWiring.applyPrompt(key, prompt),
+      deletePrompt: (promptId) => imageWiring.deletePrompt(shellState.client, promptId),
       useSource: (key) => imageWiring.useSource(key),
       clearSource: (key) => imageWiring.clearSource(key),
     },

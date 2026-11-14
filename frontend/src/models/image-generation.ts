@@ -4,6 +4,7 @@ import type {
   GeneratedImageDto,
   GenerateImagesRequestDto,
   ImageBatchDto,
+  ImagePromptDto,
   SaveGeneratedImageRequestDto,
   SaveGeneratedImageResponseDto,
 } from '../api/generated/models';
@@ -19,6 +20,7 @@ export type {
   GeneratedImageDto as GeneratedImage,
   GenerateImagesRequestDto as GenerateImagesRequest,
   ImageBatchDto as ImageBatch,
+  ImagePromptDto as ImagePrompt,
   SaveGeneratedImageRequestDto as SaveGeneratedImageRequest,
   SaveGeneratedImageResponseDto as SaveGeneratedImageResponse,
 };
@@ -80,8 +82,12 @@ export const IMAGE_MAX_STEPS = 64;
 /**
  * Step counts worth offering. Some endpoints have no sampler to step, so leaving this unset sends
  * no step count at all rather than a number the endpoint would have to guess at.
+ *
+ * The low end matters on a model running on this computer: one local model was measured at about
+ * 12 seconds for a picture at 2 steps and about 260 seconds at its default of 20, so a quick draft
+ * is worth being one choice away.
  */
-export const IMAGE_STEP_CHOICES: readonly number[] = [10, 20, 30, 50];
+export const IMAGE_STEP_CHOICES: readonly number[] = [2, 4, 8, 20, 30, 50];
 
 /**
  * A picture already on disk the new one should start from, named the way a save names its

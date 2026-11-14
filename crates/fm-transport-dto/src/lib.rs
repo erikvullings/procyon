@@ -26,6 +26,7 @@ pub mod geo;
 pub mod health;
 pub mod image_generation;
 pub mod image_metadata;
+pub mod image_prompts;
 pub mod knowledge;
 pub mod link_doctor;
 pub mod llm_profile;
@@ -171,6 +172,7 @@ pub use image_metadata::{
     ImageTagDto, ImageTagGroupDto, ReadImageGpsRequestDto, ReadImageGpsResponseDto,
     ReadImageMetadataRequestDto,
 };
+pub use image_prompts::ImagePromptDto;
 pub use knowledge::{
     CancelKnowledgeAnswerRequestDto, CancelKnowledgeSearchRequestDto,
     ExecuteKnowledgeSearchRequestDto, GenerateKnowledgeAnswerRequestDto, KnowledgeActionDto,

@@ -95,6 +95,7 @@ import type {
   ImageBatch,
   ImageGpsEntry,
   ImageMetadata,
+  ImagePrompt,
   ImportSemanticLocalModelRequest,
   InspectAttributesResult,
   InspectSplitSetResult,
@@ -1199,6 +1200,18 @@ export class MockFileManagerClient implements FileManagerClient {
 
   generateImages(request: GenerateImagesRequest, signal?: AbortSignal): Promise<ImageBatch> {
     return this.semanticClient.generateImages(request, signal);
+  }
+
+  listImagePrompts(signal?: AbortSignal): Promise<ImagePrompt[]> {
+    return this.semanticClient.listImagePrompts(signal);
+  }
+
+  saveImagePrompt(prompt: ImagePrompt, signal?: AbortSignal): Promise<ImagePrompt> {
+    return this.semanticClient.saveImagePrompt(prompt, signal);
+  }
+
+  deleteImagePrompt(promptId: string, signal?: AbortSignal): Promise<void> {
+    return this.semanticClient.deleteImagePrompt(promptId, signal);
   }
 
   cancelImageGeneration(requestId: string): Promise<void> {

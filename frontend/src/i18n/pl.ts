@@ -1283,6 +1283,10 @@ export const pl = {
     sourceNotFile: 'To nie jest plik obrazu. Zaznacz taki w innym panelu.',
     generations: 'Generacje',
     untitledGeneration: 'Jedna generacja',
+    prompts: 'Prompty',
+    noPrompts: 'Brak promptów. Każdy prompt użyty do generowania jest zapisywany tutaj.',
+    deletePrompt: 'Zapomnij ten prompt',
+    confirmDeletePrompt: 'Kliknij ponownie, aby zapomnieć ten prompt',
     newPrompt: 'Nowa podpowiedź obrazu',
     seedPlaceholder: 'dowolny seed',
     waitingForModel: 'Oczekiwanie na model…',
@@ -1327,6 +1331,14 @@ export const pl = {
     countNotAllowed: 'Wybierz od jednego do czterech obrazów.',
     seedTooLarge: 'Ziarno jest za duże.',
     roleNotAssigned: 'Nie ustawiono modelu obrazów. Wybierz go w ustawieniach.',
+    consentRequired:
+      'Korzystanie z modelu obrazów w chmurze wymaga najpierw Twojej zgody. Zezwól na nią w ustawieniach.',
+    endpointInvalid:
+      'Ten punkt końcowy obrazów nie jest prawidłowo ustawiony. Sprawdź go w ustawieniach.',
+    hostNotAllowed:
+      'Ten serwer nie może połączyć się z tym punktem końcowym obrazów. Poproś administratora o dozwolenie tego hosta.',
+    timedOut:
+      'Modelowi obrazów zabrakło czasu. Model na tym komputerze może potrzebować kilku minut na obraz - spróbuj mniejszej liczby kroków lub zwiększ limit czasu tego punktu końcowego w ustawieniach.',
     cloudImageNotAllowed:
       'Ten punkt końcowy obrazów jest w chmurze. Najpierw zezwól na jej użycie w ustawieniach.',
     invalidRequest: 'Podpowiedź, rozmiar lub ziarno wykraczają poza to, co model przyjmuje.',
@@ -1923,13 +1935,18 @@ export const pl = {
     unreachable: 'Nie można połączyć się z usługą AI profilu „{name}”.',
   },
   llmRoles: {
+    addConnection: 'Dodaj połączenie…',
+    chatPurpose: 'Rozmowy, podsumowania i pytania o pliki.',
+    imagePurpose: 'Twórz obrazy za pomocą osobnego modelu obrazów.',
+    embeddingsPurpose: 'Wybierz model embeddingów do wyszukiwania semantycznego.',
+    imageModelPlaceholder: 'Nazwa modelu obrazów',
     provider: 'Dostawca',
     providerUnassigned: 'Wybierz dostawcę',
     providerCreateHint:
       '{name} nie ma jeszcze punktu końcowego. Formularz powyżej jest już nim wypełniony - zapisz go tam, a następnie wybierz jako punkt końcowy generowania obrazów.',
     advanced: 'Używaj innych punktów końcowych lub modeli dla każdej funkcji',
     endpoint: 'Punkt końcowy',
-    title: 'Role',
+    title: 'Modele według zadań',
     intro:
       'Wybierz, który punkt końcowy i model obsługuje każdą funkcję. Lokalne punkty końcowe nie wymagają zgody.',
     chat: 'Czat i podsumowania',
@@ -1957,11 +1974,12 @@ export const pl = {
   },
 
   llmProfiles: {
+    connectionsTitle: 'Połączenia',
     consentRequired:
       'Zezwól na użycie w chmurze: potwierdź zgodę przed zapisaniem punktu końcowego w chmurze.',
     title: 'Podsumowania i odpowiedzi AI',
     description:
-      'Połącz model, aby pisał podsumowania dokumentów i odpowiadał na pytania na podstawie Twoich plików. Zapisuj połączenia jako profile i wybierz domyślny. Model lokalny działa na Twoim urządzeniu; usługa w chmurze otrzymuje pytania i fragmenty. Wyszukiwanie semantyczne działa bez profilu.',
+      'Skonfiguruj dostawców raz, a następnie wybierz połączenie i model dla każdego zadania.',
     loading: 'Wczytywanie profilów generowania…',
     unavailable: 'Profile generowania są niedostępne.',
     unknownError: 'Nieznany błąd profilu generowania',

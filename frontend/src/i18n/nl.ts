@@ -1683,6 +1683,10 @@ export const nl = {
     sourceNotFile: 'Dat is geen afbeeldingsbestand. Selecteer er een in het andere paneel.',
     generations: 'Generaties',
     untitledGeneration: 'Een generatie',
+    prompts: 'Prompts',
+    noPrompts: 'Nog geen prompts. Elke prompt waarmee je genereert, wordt hier bewaard.',
+    deletePrompt: 'Deze prompt vergeten',
+    confirmDeletePrompt: 'Klik nogmaals om deze prompt te vergeten',
     newPrompt: 'Nieuwe afbeeldingsprompt',
     seedPlaceholder: 'willekeurige seed',
     waitingForModel: 'Wachten op het model…',
@@ -1726,6 +1730,13 @@ export const nl = {
     countNotAllowed: 'Kies tussen één en vier afbeeldingen.',
     seedTooLarge: 'De startwaarde is te groot.',
     roleNotAssigned: 'Er is geen beeldmodel ingesteld. Kies er een in Instellingen.',
+    consentRequired:
+      'Een beeldmodel in de cloud gebruiken moet je eerst toestaan. Sta het toe in Instellingen.',
+    endpointInvalid: 'Dat beeldendpoint is niet goed ingesteld. Controleer het in Instellingen.',
+    hostNotAllowed:
+      'Deze server mag dat beeldendpoint niet bereiken. Vraag je beheerder de host toe te staan.',
+    timedOut:
+      'Het beeldmodel had meer tijd nodig. Een model op deze computer kan per afbeelding enkele minuten nodig hebben - probeer minder stappen, of verhoog de time-out voor dit endpoint in Instellingen.',
     cloudImageNotAllowed:
       'Deze beeldendpoint staat in de cloud. Sta cloudgebruik eerst toe in Instellingen.',
     invalidRequest: 'De prompt, afmeting of seed valt buiten wat het model accepteert.',
@@ -2322,13 +2333,18 @@ export const nl = {
     unreachable: 'De AI-dienst van profiel "{name}" is niet bereikbaar.',
   },
   llmRoles: {
+    addConnection: 'Verbinding toevoegen…',
+    chatPurpose: 'Gesprekken, samenvattingen en vragen over bestanden.',
+    imagePurpose: 'Maak afbeeldingen met een afzonderlijk afbeeldingsmodel.',
+    embeddingsPurpose: 'Kies een embeddingmodel voor semantisch zoeken.',
+    imageModelPlaceholder: 'Naam van het afbeeldingsmodel',
     provider: 'Leverancier',
     providerUnassigned: 'Kies een leverancier',
     providerCreateHint:
       '{name} heeft nog geen eindpunt. Het formulier hierboven is er al mee ingevuld - sla het daar op en kies het daarna als eindpunt voor beeldgeneratie.',
     advanced: 'Andere eindpunten of modellen per functie gebruiken',
     endpoint: 'Eindpunt',
-    title: 'Rollen',
+    title: 'Modellen per taak',
     intro:
       'Kies welk eindpunt en model elke functie gebruikt. Lokale eindpunten vragen geen toestemming.',
     chat: 'Chat en samenvattingen',
@@ -2356,11 +2372,11 @@ export const nl = {
   },
 
   llmProfiles: {
+    connectionsTitle: 'Verbindingen',
     consentRequired:
       'Cloudgebruik toestaan: bevestig toestemming voordat je een cloud-eindpunt opslaat.',
     title: 'AI-samenvattingen en antwoorden',
-    description:
-      'Verbind een model dat documentsamenvattingen schrijft en vragen beantwoordt met informatie uit je bestanden. Bewaar verbindingen als profielen en kies een standaardprofiel. Een lokaal model werkt op je apparaat; een clouddienst ontvangt vragen en fragmenten. Semantisch zoeken werkt ook zonder profiel.',
+    description: 'Stel aanbieders één keer in en kies per taak een verbinding en model.',
     loading: 'Generatieprofielen laden…',
     unavailable: 'Generatieprofielen zijn niet beschikbaar.',
     unknownError: 'Onbekende fout in generatieprofiel',

@@ -1,10 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FileManagerClient } from '../api/client/file-manager-client';
-import { emptyImagePane, type ImagePaneEntry } from '../features/image-generation/image-pane-state';
+import {
+  emptyImagePane,
+  failureNeedsSettings,
+  type ImagePaneEntry,
+} from '../features/image-generation/image-pane-state';
 import { t } from '../i18n';
 import type {
   GeneratedImageBytes,
   ImageBatch,
+  ImagePrompt,
   Location,
   SaveGeneratedImageResponse,
 } from '../models';
@@ -73,6 +78,9 @@ function imageClient(overrides: Partial<FileManagerClient> = {}): Partial<FileMa
       }),
     ),
     discardImageBatch: vi.fn(() => Promise.resolve()),
+    listImagePrompts: vi.fn(() => Promise.resolve([])),
+    saveImagePrompt: vi.fn((prompt: ImagePrompt) => Promise.resolve(prompt)),
+    deleteImagePrompt: vi.fn(() => Promise.resolve()),
     ...overrides,
   };
 }
@@ -84,6 +92,19 @@ const originalRevoke = URL.revokeObjectURL;
 /** Lets the fired-off byte fetches run to their end. */
 async function settle(): Promise<void> {
   for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+}
+
+/**
+ * A refusal as the backend serialises it: one shared `invalidRequest` code, and the reason the
+ * person is told about tucked into `details` (task 0325).
+ */
+function rejection(reason: string): Error {
+  return Object.assign(new Error(`refused: ${reason}`), {
+    code: 'invalidRequest',
+    message: 'the image endpoint refused the request',
+    requestId: 'req-1',
+    details: { reason },
+  });
 }
 
 beforeEach(() => {
@@ -104,6 +125,108 @@ afterEach(() => {
 });
 
 describe('image wiring', () => {
+  it('remembers the form with every setting once a generation produced pictures', async () => {
+    const client = imageClient();
+    const { shell, entry } = fakeShell(client);
+    entry.subject = '  a fox  ';
+    entry.negativePrompt = 'blur';
+    entry.presetIds = ['watercolour'];
+    entry.width = 768;
+    entry.height = 512;
+    entry.count = 2;
+    entry.seed = 9;
+    entry.qualityId = 'good';
+    entry.steps = 20;
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.generate(client as unknown as FileManagerClient, entry.key);
+    await settle();
+
+    expect(client.saveImagePrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: 'a fox',
+        negativePrompt: 'blur',
+        presetIds: ['watercolour'],
+        width: 768,
+        height: 512,
+        count: 2,
+        seed: 9,
+        quality: 'good',
+        steps: 20,
+      }),
+    );
+    expect(client.listImagePrompts).toHaveBeenCalled();
+  });
+
+  it('remembers nothing when the generation failed', async () => {
+    const client = imageClient({
+      generateImages: () => Promise.reject(rejection('cloudImageNotAllowed')),
+    });
+    const { shell, entry } = fakeShell(client);
+    entry.subject = 'a fox';
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.generate(client as unknown as FileManagerClient, entry.key);
+    await settle();
+
+    expect(client.saveImagePrompt).not.toHaveBeenCalled();
+  });
+
+  it('still shows the pictures when the history cannot be written', async () => {
+    const client = imageClient({ saveImagePrompt: () => Promise.reject(new Error('disk full')) });
+    const { shell, entry } = fakeShell(client);
+    entry.subject = 'a fox';
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.generate(client as unknown as FileManagerClient, entry.key);
+    await settle();
+
+    expect(entry.batch).toEqual(batch);
+    expect(entry.error).toBeUndefined();
+  });
+
+  it('puts a remembered prompt back with all its settings, and reloads after forgetting one', async () => {
+    const stored: ImagePrompt = {
+      id: 'p1',
+      title: 'A fox',
+      updatedAt: '2026-11-14T10:00:00.000Z',
+      subject: 'a fox',
+      negativePrompt: 'blur',
+      presetIds: ['watercolour'],
+      lensId: 'l1',
+      apertureId: 'a1',
+      width: 768,
+      height: 512,
+      count: 3,
+      seed: 5,
+      quality: 'quality',
+      steps: 25,
+    };
+    const client = imageClient({ listImagePrompts: vi.fn(() => Promise.resolve([stored])) });
+    const { shell, entry } = fakeShell(client);
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    wiring.applyPrompt(entry.key, stored);
+    expect(entry).toMatchObject({
+      subject: 'a fox',
+      negativePrompt: 'blur',
+      presetIds: ['watercolour'],
+      lensId: 'l1',
+      apertureId: 'a1',
+      width: 768,
+      height: 512,
+      count: 3,
+      seed: 5,
+      qualityId: 'quality',
+      steps: 25,
+    });
+
+    wiring.deletePrompt(client as unknown as FileManagerClient, 'p1');
+    await settle();
+    expect(client.deleteImagePrompt).toHaveBeenCalledWith('p1');
+    expect(entry.prompts).toEqual([stored]);
+  });
+
   it('sends the composed prompt and holds the batch without writing anything', async () => {
     const client = imageClient();
     const { shell, entry } = fakeShell(client);
@@ -203,7 +326,7 @@ describe('image wiring', () => {
       overwrite: false,
     });
 
-    expect(entry.failure).toBe('destinationAlreadyExists');
+    expect(entry.failure).toBe('destinationExists');
     expect(entry.views[0]?.savedLocation).toBeUndefined();
 
     await wiring.save(client as unknown as FileManagerClient, entry.key, {
@@ -244,7 +367,7 @@ describe('image wiring', () => {
       overwrite: false,
     });
 
-    expect(entry.failure).toBe('invalidRequest');
+    expect(entry.failure).toBe('destinationInvalid');
     expect(entry.error).toBe(t('image', 'destinationInvalid'));
     // The model already took the prompt, so sending the person back to it would be a lie.
     expect(entry.error).not.toBe(t('image', 'invalidRequest'));
@@ -296,7 +419,7 @@ describe('image wiring', () => {
   });
 
   it('explains a refusal without repeating the endpoint', async () => {
-    const refused = Object.assign(new Error('cloud'), { code: 'cloudImageNotAllowed' });
+    const refused = rejection('llmCloudImageNotAllowed');
     const client = imageClient({
       generateImages: vi.fn(() => Promise.reject(refused)),
     });
@@ -311,15 +434,85 @@ describe('image wiring', () => {
       'This image endpoint is in the cloud. Allow cloud use in Settings first.',
     );
   });
+
+  it('does not blame the prompt when the endpoint never answered', async () => {
+    const client = imageClient({
+      generateImages: vi.fn(() => Promise.reject(rejection('imageGenerationFailed'))),
+    });
+    const { shell, entry } = fakeShell(client);
+    entry.subject = 'a fox';
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.generate(client as unknown as FileManagerClient, entry.key);
+
+    expect(entry.failure).toBe('generationFailed');
+    expect(entry.error).toBe('The image model could not answer. Check the endpoint in Settings.');
+    expect(entry.error).not.toContain('prompt');
+  });
+
+  it('says a slow model needs more time, and offers the setting that governs it', async () => {
+    const client = imageClient({
+      generateImages: vi.fn(() => Promise.reject(rejection('llmTimeout'))),
+    });
+    const { shell, entry } = fakeShell(client);
+    entry.subject = 'a fox';
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.generate(client as unknown as FileManagerClient, entry.key);
+
+    expect(entry.failure).toBe('timedOut');
+    expect(entry.error).toContain('ran out of time');
+    // A timeout is worth a route out of, not just a sentence: Settings holds the timeout.
+    expect(failureNeedsSettings(entry.failure)).toBe(true);
+  });
+
+  it('points at Settings when the endpoint itself is set up wrong', async () => {
+    const client = imageClient({
+      generateImages: vi.fn(() => Promise.reject(rejection('llmProfileInvalid'))),
+    });
+    const { shell, entry } = fakeShell(client);
+    entry.subject = 'a fox';
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.generate(client as unknown as FileManagerClient, entry.key);
+
+    expect(entry.failure).toBe('endpointInvalid');
+    expect(entry.error).toBe('That image endpoint is not set up right. Check it in Settings.');
+    expect(failureNeedsSettings(entry.failure)).toBe(true);
+  });
+
+  it('names the reason a stopped generation ended on', async () => {
+    const client = imageClient({
+      generateImages: vi.fn(() =>
+        Promise.reject(Object.assign(new Error('stopped'), { code: 'operationCancelled' })),
+      ),
+    });
+    const { shell, entry } = fakeShell(client);
+    entry.subject = 'a fox';
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.generate(client as unknown as FileManagerClient, entry.key);
+
+    expect(entry.failure).toBe('cancelled');
+    expect(entry.error).toBe('The generation was stopped.');
+  });
 });
 
 describe('failure mapping', () => {
   it('reads the reason the backend reported', () => {
+    // Every rejection arrives under the shared `invalidRequest` code with its stable reason in
+    // `details`: reading the code alone would blame the prompt for everything the endpoint refused.
+    expect(imageFailureReason(rejection('imageBatchExpired'))).toBe('imageBatchExpired');
+    expect(imageFailureReason(rejection('imageGenerationFailed'))).toBe('imageGenerationFailed');
+    expect(imageFailureReason(rejection('llmTimeout'))).toBe('llmTimeout');
     expect(imageFailureReason(Object.assign(new Error('x'), { reason: 'imageBatchExpired' }))).toBe(
       'imageBatchExpired',
     );
     expect(imageFailureReason(Object.assign(new Error('x'), { code: 'invalidRequest' }))).toBe(
       'invalidRequest',
+    );
+    expect(imageFailureReason(Object.assign(new Error('x'), { code: 'operationCancelled' }))).toBe(
+      'operationCancelled',
     );
     expect(imageFailureReason({ status: 409 })).toBe('destinationAlreadyExists');
     expect(imageFailureReason({ status: 403 })).toBe('cloudImageNotAllowed');
@@ -329,8 +522,14 @@ describe('failure mapping', () => {
   it('has a message for every reason a generation or save can fail with', () => {
     const reasons = [
       'roleNotAssigned',
+      'llmRoleNotAssigned',
       'cloudImageNotAllowed',
       'llmCloudImageNotAllowed',
+      'cloudConsentRequired',
+      'llmProfileInvalid',
+      'permissionDenied',
+      'providerUnavailable',
+      'operationCancelled',
       'invalidRequest',
       'notFound',
       'imageBatchExpired',
@@ -338,6 +537,7 @@ describe('failure mapping', () => {
       'destinationAlreadyExists',
       'cancelled',
       'imageGenerationFailed',
+      'llmTimeout',
       'anything-else',
     ];
     for (const reason of reasons) {

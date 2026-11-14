@@ -109,6 +109,7 @@ import type {
   HostKeyProbeDto,
   ImageBatchDto,
   ImageMetadataDto,
+  ImagePromptDto,
   ImportSemanticLocalModelRequestDto,
   ImportSemanticVocabularyRequestDto,
   InspectAttributesRequestDto,
@@ -5326,6 +5327,142 @@ return fetchMutator<generateImagesResponse>(getGenerateImagesUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(generateImagesRequestDto)
+  }
+);}
+
+
+
+export type listImagePromptsResponse200 = {
+  data: ImagePromptDto[]
+  status: 200
+}
+
+export type listImagePromptsResponseSuccess = (listImagePromptsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listImagePromptsResponse = (listImagePromptsResponseSuccess)
+
+export const getListImagePromptsUrl = () => {
+
+
+
+
+  return `/api/v1/images/prompts`
+}
+
+/**
+ * @summary Lists the remembered prompts, most recently used first.
+ */
+export const listImagePrompts = async ( options?: Parameters<typeof fetchMutator>[1]): Promise<listImagePromptsResponse> => {
+
+  return fetchMutator<listImagePromptsResponse>(getListImagePromptsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type saveImagePromptResponse200 = {
+  data: ImagePromptDto
+  status: 200
+}
+
+export type saveImagePromptResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type saveImagePromptResponseSuccess = (saveImagePromptResponse200) & {
+  headers: Headers;
+};
+export type saveImagePromptResponseError = (saveImagePromptResponse400) & {
+  headers: Headers;
+};
+
+export type saveImagePromptResponse = (saveImagePromptResponseSuccess | saveImagePromptResponseError)
+
+export const getSaveImagePromptUrl = () => {
+
+
+
+
+  return `/api/v1/images/prompts`
+}
+
+/**
+ * @summary Remembers a prompt with its settings. A prompt that matches an earlier one only refreshes it.
+ */
+export const saveImagePrompt = async (imagePromptDto: ImagePromptDto, options?: Parameters<typeof fetchMutator>[1]): Promise<saveImagePromptResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return fetchMutator<saveImagePromptResponse>(getSaveImagePromptUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(imagePromptDto)
+  }
+);}
+
+
+
+export type deleteImagePromptResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteImagePromptResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type deleteImagePromptResponseSuccess = (deleteImagePromptResponse204) & {
+  headers: Headers;
+};
+export type deleteImagePromptResponseError = (deleteImagePromptResponse404) & {
+  headers: Headers;
+};
+
+export type deleteImagePromptResponse = (deleteImagePromptResponseSuccess | deleteImagePromptResponseError)
+
+export const getDeleteImagePromptUrl = (promptId: string,) => {
+
+
+
+
+  return `/api/v1/images/prompts/${promptId}`
+}
+
+/**
+ * @summary Forgets one remembered prompt.
+ */
+export const deleteImagePrompt = async (promptId: string, options?: Parameters<typeof fetchMutator>[1]): Promise<deleteImagePromptResponse> => {
+
+  return fetchMutator<deleteImagePromptResponse>(getDeleteImagePromptUrl(promptId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
   }
 );}
 

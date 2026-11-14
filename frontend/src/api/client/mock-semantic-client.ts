@@ -40,6 +40,7 @@ import type {
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   ImageBatch,
+  ImagePrompt,
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
   KnowledgeAnswer,
@@ -165,6 +166,34 @@ function mockEndpointLocality(baseUrl: string): LlmEndpointLocality {
   }
   const ipv6Local = host.includes(':') && (/^f[cd]/u.test(host) || /^fe[89ab]/u.test(host));
   return ipv6Local ? 'loopback' : 'cloud';
+}
+
+/** The backend's cheap title: the subject's first clause, cut at a word boundary. */
+function mockPromptTitle(subject: string): string {
+  const line =
+    subject
+      .split('\n')
+      .find((text) => text.trim() !== '')
+      ?.trim() ?? '';
+  const clause =
+    line
+      .split(/[.,;:!?]/)
+      .find((part) => part.trim() !== '')
+      ?.trim() ?? line;
+  if (clause.length <= 80) return clause;
+  let title = '';
+  for (const word of clause.split(/\s+/)) {
+    if ((title === '' ? word : `${title} ${word}`).length > 79) break;
+    title = title === '' ? word : `${title} ${word}`;
+  }
+  return `${title || clause.slice(0, 79)}…`;
+}
+
+/** Whether two prompts would make the same request: everything but identity, title and time. */
+function sameMockPromptContent(left: ImagePrompt, right: ImagePrompt): boolean {
+  const { id: _a, title: _b, updatedAt: _c, ...leftContent } = left;
+  const { id: _d, title: _e, updatedAt: _f, ...rightContent } = right;
+  return JSON.stringify(leftContent) === JSON.stringify(rightContent);
 }
 
 export class MockSemanticClient implements SemanticClient {
@@ -1355,6 +1384,42 @@ export class MockSemanticClient implements SemanticClient {
 
   cancelChatReply(_requestId: string): Promise<void> {
     return Promise.resolve();
+  }
+
+  listImagePrompts(signal?: AbortSignal): Promise<ImagePrompt[]> {
+    return this.ctx.perform('listImagePrompts', signal, () =>
+      [...this.ctx.imagePrompts.values()].sort((left, right) =>
+        right.updatedAt.localeCompare(left.updatedAt),
+      ),
+    );
+  }
+
+  saveImagePrompt(prompt: ImagePrompt, signal?: AbortSignal): Promise<ImagePrompt> {
+    return this.ctx.perform('saveImagePrompt', signal, () => {
+      const subject = prompt.subject.trim();
+      if (subject === '') throw new MockClientError('invalidRequest', 'The subject is empty.');
+      const next: ImagePrompt = {
+        ...prompt,
+        subject,
+        title: prompt.title?.trim() || mockPromptTitle(subject),
+        updatedAt: new Date().toISOString(),
+      };
+      // The backend folds a prompt identical in everything but identity into the earlier entry.
+      const same = [...this.ctx.imagePrompts.values()].find(
+        (stored) => stored.id === next.id || sameMockPromptContent(stored, next),
+      );
+      const stored = same === undefined ? next : { ...next, id: same.id };
+      this.ctx.imagePrompts.set(stored.id, stored);
+      return stored;
+    });
+  }
+
+  deleteImagePrompt(promptId: string, signal?: AbortSignal): Promise<void> {
+    return this.ctx.perform('deleteImagePrompt', signal, () => {
+      if (!this.ctx.imagePrompts.delete(promptId)) {
+        throw new MockClientError('notFound', 'No such prompt.');
+      }
+    });
   }
 
   async generateImages(request: GenerateImagesRequest, signal?: AbortSignal): Promise<ImageBatch> {
