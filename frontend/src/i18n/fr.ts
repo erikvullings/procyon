@@ -3754,8 +3754,7 @@ export const fr = {
     latitude: 'Latitude',
     longitude: 'Longitude',
     titleField: 'Titre',
-    description:
-      'Configurez les fournisseurs une fois, puis choisissez une connexion et un modèle par tâche.',
+    description: 'Description',
     copyright: "Droits d'auteur",
     author: 'Auteur',
     keywords: 'Mots-clés (séparés par des virgules)',
