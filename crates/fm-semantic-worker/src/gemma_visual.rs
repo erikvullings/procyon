@@ -90,20 +90,11 @@ pub struct PreparedFrame {
     pub soft_tokens: usize,
 }
 
-/// Converts a PNG/JPEG image or previously sampled video frame into vision patches.
-pub fn prepare_frame(encoded: &[u8], kind: VisualKind) -> Result<PreparedFrame, GemmaVisualError> {
-    prepare_frame_cancellable(encoded, kind, || false)
-}
-
-/// Prepare an image while honoring cancellation during resize and patch extraction.
-pub fn prepare_frame_cancellable(
+/// Decodes a bounded PNG/JPEG into RGB8 pixels, enforcing source size and pixel limits.
+pub fn decode_rgb8_bounded(
     encoded: &[u8],
-    kind: VisualKind,
-    is_cancelled: impl Fn() -> bool,
-) -> Result<PreparedFrame, GemmaVisualError> {
-    if is_cancelled() {
-        return Err(GemmaVisualError::Cancelled);
-    }
+    is_cancelled: &impl Fn() -> bool,
+) -> Result<image::RgbImage, GemmaVisualError> {
     if encoded.is_empty() || encoded.len() > MAX_SOURCE_BYTES {
         return Err(GemmaVisualError::SourceTooLarge);
     }
@@ -126,6 +117,25 @@ pub fn prepare_frame_cancellable(
     if is_cancelled() {
         return Err(GemmaVisualError::Cancelled);
     }
+    Ok(source)
+}
+
+/// Converts a PNG/JPEG image or previously sampled video frame into vision patches.
+pub fn prepare_frame(encoded: &[u8], kind: VisualKind) -> Result<PreparedFrame, GemmaVisualError> {
+    prepare_frame_cancellable(encoded, kind, || false)
+}
+
+/// Prepare an image while honoring cancellation during resize and patch extraction.
+pub fn prepare_frame_cancellable(
+    encoded: &[u8],
+    kind: VisualKind,
+    is_cancelled: impl Fn() -> bool,
+) -> Result<PreparedFrame, GemmaVisualError> {
+    if is_cancelled() {
+        return Err(GemmaVisualError::Cancelled);
+    }
+    let source = decode_rgb8_bounded(encoded, &is_cancelled)?;
+    let (width, height) = (source.width(), source.height());
     let maximum = kind.soft_token_limit() * POOL_SIDE * POOL_SIDE;
     let (target_height, target_width) = resized_shape(height, width, maximum)?;
     let resized = if source.width() == target_width && source.height() == target_height {

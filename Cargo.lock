@@ -3423,6 +3423,7 @@ dependencies = [
  "image",
  "interprocess",
  "lattice-inference",
+ "lattice-model-embeddinggemma2",
  "lopdf 0.44.0",
  "ort",
  "pdfium-render",
@@ -5706,10 +5707,39 @@ dependencies = [
 ]
 
 [[package]]
-name = "lattice-fann"
-version = "0.11.0"
-source = "git+https://github.com/ohdearquant/lattice.git?rev=17915f3748a4047c0af61bd8bc7066d1dccf24b4#17915f3748a4047c0af61bd8bc7066d1dccf24b4"
+name = "lattice-arch"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
 dependencies = [
+ "lattice-grammar",
+ "lattice-inference-core",
+ "lattice-weights",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lattice-compute"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
+dependencies = [
+ "half",
+ "indexmap 2.14.0",
+ "lattice-arch",
+ "lattice-inference-core",
+ "lattice-lora",
+ "lattice-tokenizer",
+ "lattice-weights",
+ "rayon",
+ "rustc-hash",
+]
+
+[[package]]
+name = "lattice-fann"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
+dependencies = [
+ "lattice-lora",
  "rand 0.8.8",
  "rand_distr",
  "thiserror 2.0.20",
@@ -5717,17 +5747,53 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-forecast"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
+dependencies = [
+ "lattice-compute",
+ "lattice-inference-core",
+ "lattice-weights",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lattice-grammar"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
+dependencies = [
+ "lattice-inference-core",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "lattice-inference"
-version = "0.11.0"
-source = "git+https://github.com/ohdearquant/lattice.git?rev=17915f3748a4047c0af61bd8bc7066d1dccf24b4#17915f3748a4047c0af61bd8bc7066d1dccf24b4"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
 dependencies = [
  "base64 0.22.1",
- "clap",
+ "bytemuck",
  "half",
- "image",
  "indexmap 2.14.0",
+ "lattice-arch",
+ "lattice-compute",
  "lattice-fann",
- "libc",
+ "lattice-forecast",
+ "lattice-grammar",
+ "lattice-inference-core",
+ "lattice-metal-runtime",
+ "lattice-model-bert",
+ "lattice-model-embeddinggemma2",
+ "lattice-model-ernie45",
+ "lattice-model-io",
+ "lattice-model-qwen3-embedding",
+ "lattice-model-qwen35",
+ "lattice-quant",
+ "lattice-router",
+ "lattice-tokenizer",
+ "lattice-weights",
  "memmap2",
  "metal",
  "objc",
@@ -5738,6 +5804,202 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 2.0.20",
  "tracing",
+]
+
+[[package]]
+name = "lattice-inference-core"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
+
+[[package]]
+name = "lattice-lora"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
+dependencies = [
+ "regex",
+ "safetensors",
+ "serde_json",
+]
+
+[[package]]
+name = "lattice-metal-runtime"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
+dependencies = [
+ "bytemuck",
+ "lattice-inference-core",
+ "libc",
+ "metal",
+ "objc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lattice-model-bert"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
+dependencies = [
+ "lattice-arch",
+ "lattice-compute",
+ "lattice-inference-core",
+ "lattice-model-io",
+ "lattice-tokenizer",
+ "lattice-weights",
+ "tracing",
+]
+
+[[package]]
+name = "lattice-model-embeddinggemma2"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
+dependencies = [
+ "bytemuck",
+ "lattice-arch",
+ "lattice-compute",
+ "lattice-inference-core",
+ "lattice-metal-runtime",
+ "lattice-model-io",
+ "lattice-tokenizer",
+ "lattice-weights",
+ "metal",
+ "objc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lattice-model-ernie45"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
+dependencies = [
+ "bytemuck",
+ "lattice-compute",
+ "lattice-inference-core",
+ "lattice-metal-runtime",
+ "lattice-weights",
+ "metal",
+ "objc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lattice-model-io"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
+dependencies = [
+ "lattice-inference-core",
+ "sha2 0.10.9",
+ "tracing",
+]
+
+[[package]]
+name = "lattice-model-qwen3-embedding"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
+dependencies = [
+ "lattice-arch",
+ "lattice-compute",
+ "lattice-inference-core",
+ "lattice-metal-runtime",
+ "lattice-model-io",
+ "lattice-tokenizer",
+ "lattice-weights",
+ "metal",
+ "objc",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tracing",
+]
+
+[[package]]
+name = "lattice-model-qwen35"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
+dependencies = [
+ "half",
+ "lattice-arch",
+ "lattice-compute",
+ "lattice-fann",
+ "lattice-grammar",
+ "lattice-inference-core",
+ "lattice-lora",
+ "lattice-metal-runtime",
+ "lattice-model-io",
+ "lattice-quant",
+ "lattice-tokenizer",
+ "lattice-weights",
+ "memmap2",
+ "metal",
+ "objc",
+ "rayon",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "lattice-quant"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
+dependencies = [
+ "lattice-arch",
+ "lattice-inference-core",
+ "lattice-weights",
+ "memmap2",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lattice-router"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
+dependencies = [
+ "lattice-compute",
+ "lattice-fann",
+ "lattice-lora",
+ "lattice-model-qwen35",
+ "lattice-quant",
+ "lattice-tokenizer",
+ "lattice-weights",
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "lattice-tokenizer"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
+dependencies = [
+ "base64 0.22.1",
+ "lattice-inference-core",
+ "rayon",
+ "regex",
+ "sha2 0.10.9",
+ "tracing",
+ "unicode-normalization-alignments",
+ "unicode-segmentation",
+ "unicode_categories",
+]
+
+[[package]]
+name = "lattice-weights"
+version = "0.16.0"
+source = "git+https://github.com/ohdearquant/lattice.git?rev=583e2c1c86d1722877e21ff384b7979b1a308588#583e2c1c86d1722877e21ff384b7979b1a308588"
+dependencies = [
+ "lattice-inference-core",
+ "libc",
+ "memmap2",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -9432,6 +9694,16 @@ dependencies = [
 ]
 
 [[package]]
+[[package]]
+name = "safetensors"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc0cdb7198d738a111f6df8fef42cb175412c311d0c4ac9126ff4e550ad1a0e8"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
 name = "salsa20"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -100,8 +100,8 @@ fn metal_image_matches_cpu_and_upstream_at_every_dimension() {
         let dispatches = metal.metal_dispatches() - before;
         drop(metal);
         assert_eq!(
-            dispatches, 1004,
-            "vision attention, projection and fusion must dispatch on Metal at dimension {dimensions}"
+            dispatches, 1,
+            "the upstream image pass must run on Metal at dimension {dimensions}"
         );
         assert_eq!(actual.len(), dimensions);
         let cosine = |a: &[f32], b: &[f32]| -> f64 {
@@ -531,7 +531,7 @@ fn concurrent_metal_images_match_sequential_embedding() {
             assert!(cosine > 0.99999, "concurrent image cosine {cosine}");
         }
     });
-    assert_eq!(encoder.metal_dispatches(), 3 * 1004);
+    assert_eq!(encoder.metal_dispatches(), 3);
 }
 
 #[test]

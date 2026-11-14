@@ -2,8 +2,15 @@
 
 use std::fs::File;
 use std::path::Path;
+#[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use fm_metadata::{VideoSamplingError, sample_video_frames_cancellable};
+use lattice_model_embeddinggemma2::image::EmbeddingGemma2Rgb8Image;
+#[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+use lattice_model_embeddinggemma2::metal::MetalEmbeddingGemma2State;
+use lattice_model_embeddinggemma2::model::{EmbeddingGemma2Model, EmbeddingGemma2Part};
 use tokenizers::Tokenizer;
 use tokio_util::sync::CancellationToken;
 
@@ -16,7 +23,8 @@ use crate::gemma_multimodal::{GemmaModality, GemmaProjection, GemmaProjectionErr
 use crate::gemma_probe::{GemmaProbeError, GemmaTextTask};
 use crate::gemma_vision::{GemmaVisionError, GemmaVisionTower};
 use crate::gemma_visual::{
-    GemmaVisualError, VisualKind, prepare_frame_cancellable, validate_processor_config_file,
+    GemmaVisualError, VisualKind, decode_rgb8_bounded, prepare_frame_cancellable,
+    validate_processor_config_file,
 };
 
 pub use crate::gemma_launch::{GemmaMedia, GemmaNativeFiles};
@@ -29,11 +37,19 @@ pub struct GemmaVideoEmbedding {
     pub timestamps_ms: Vec<u64>,
 }
 
-/// Native text and optional media encoder. A single language model serves all modalities.
+/// Native text and optional media encoder.
+///
+/// Text and still images run on the upstream Lattice EmbeddingGemma 2 model, which keeps the
+/// whole forward pass resident on the GPU when Metal is selected. Audio and video need the
+/// fusion encoder and towers owned here, so those are loaded only when the consent asks for
+/// them.
 pub struct GemmaNativeEncoder {
     compute: GemmaCompute,
-    language: GemmaFusionEncoder,
-    tokenizer: Tokenizer,
+    upstream: EmbeddingGemma2Model,
+    #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+    upstream_metal: Option<Mutex<MetalEmbeddingGemma2State>>,
+    upstream_gpu_passes: AtomicUsize,
+    language: Option<GemmaFusionEncoder>,
     vision: Option<(GemmaVisionTower, GemmaProjection)>,
     audio: Option<(GemmaAudioFeatureExtractor, GemmaAudioTower, GemmaProjection)>,
     media: GemmaMedia,
@@ -67,10 +83,11 @@ impl GemmaNativeEncoder {
         self.compute.uses_metal()
     }
 
-    /// Number of FP32 GEMM dispatches actually executed on the GPU.
+    /// GPU work actually executed: upstream whole-model Metal passes plus FP32 GEMM dispatches
+    /// made by the audio/video fusion path.
     #[must_use]
     pub fn metal_dispatches(&self) -> usize {
-        self.compute.dispatches()
+        self.compute.dispatches() + self.upstream_gpu_passes.load(Ordering::Relaxed)
     }
 
     /// Explicit local-only Metal probe.
@@ -155,12 +172,26 @@ impl GemmaNativeEncoder {
         let eoa = tokenizer
             .token_to_id("<audio|>")
             .ok_or(GemmaNativeError::Input("missing end-of-audio token"))?;
-        let language = GemmaFusionEncoder::open_files_with_compute(
-            &files.config,
-            &files.weights,
-            compute.clone(),
-        )?;
-        let vision = if media.images || media.video {
+        let upstream = open_upstream(files)?;
+        #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+        let upstream_metal = if compute.uses_metal() {
+            Some(Mutex::new(
+                MetalEmbeddingGemma2State::new(&upstream)
+                    .map_err(|_| GemmaNativeError::MetalUnavailable)?,
+            ))
+        } else {
+            None
+        };
+        let language = if media.audio || media.video {
+            Some(GemmaFusionEncoder::open_files_with_compute(
+                &files.config,
+                &files.weights,
+                compute.clone(),
+            )?)
+        } else {
+            None
+        };
+        let vision = if media.video {
             validate_processor_config_file(&files.visual_processor)?;
             Some((
                 GemmaVisionTower::open_files_with_compute(
@@ -189,8 +220,11 @@ impl GemmaNativeEncoder {
         };
         Ok(Self {
             compute,
+            upstream,
+            #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+            upstream_metal,
+            upstream_gpu_passes: AtomicUsize::new(0),
             language,
-            tokenizer,
             vision,
             audio,
             media,
@@ -229,16 +263,27 @@ impl GemmaNativeEncoder {
             return Err(GemmaNativeError::Cancelled);
         }
         let formatted = task.format(text, title)?;
-        let tokens = self
-            .tokenizer
-            .encode(formatted, true)
-            .map_err(GemmaNativeError::Tokenizer)?;
-        Ok(self.language.encode_cancellable(
-            tokens.get_ids(),
-            &[],
-            self.dimensions,
-            cancellation,
-        )?)
+        let ids = self.upstream.tokenize(&formatted)?;
+        if cancellation.is_cancelled() {
+            return Err(GemmaNativeError::Cancelled);
+        }
+        #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+        if let Some(state) = &self.upstream_metal {
+            let mut state = state.lock().map_err(|_| GemmaNativeError::Poisoned)?;
+            let mut vectors =
+                self.upstream
+                    .encode_ids_at_widths_metal(&mut state, &ids, &[self.dimensions])?;
+            self.upstream_gpu_passes.fetch_add(1, Ordering::Relaxed);
+            return vectors
+                .pop()
+                .ok_or(GemmaNativeError::Input("empty embedding"));
+        }
+        let mut vectors = self
+            .upstream
+            .encode_ids_at_widths(&ids, &[self.dimensions])?;
+        vectors
+            .pop()
+            .ok_or(GemmaNativeError::Input("empty embedding"))
     }
 
     /// Embed a standalone bounded PNG or JPEG image.
@@ -258,17 +303,42 @@ impl GemmaNativeEncoder {
         if !self.media.images {
             return Err(GemmaNativeError::Input("image embedding is disabled"));
         }
-        let mut ids = vec![self.bos];
-        let mut replacements = Vec::new();
-        self.append_frame(
-            encoded,
-            VisualKind::Image,
-            &mut ids,
-            &mut replacements,
-            cancellation,
+        let rgb = decode_rgb8_bounded(encoded, &|| cancellation.is_cancelled())?;
+        let image = EmbeddingGemma2Rgb8Image::new(
+            rgb.width() as usize,
+            rgb.height() as usize,
+            rgb.into_raw(),
         )?;
-        ids.push(self.eos);
-        self.fuse(&ids, &replacements, cancellation)
+        let parts = [EmbeddingGemma2Part::Image(image)];
+        let widths = [self.dimensions];
+        let mut cancelled = || cancellation.is_cancelled();
+        #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
+        let encoding = if let Some(state) = &self.upstream_metal {
+            let mut state = state.lock().map_err(|_| GemmaNativeError::Poisoned)?;
+            let (encoding, _) = self.upstream.encode_parts_at_widths_metal(
+                &mut state,
+                &parts,
+                &widths,
+                &mut cancelled,
+            )?;
+            self.upstream_gpu_passes.fetch_add(1, Ordering::Relaxed);
+            encoding
+        } else {
+            self.upstream
+                .encode_parts_at_widths(&parts, &widths, &mut cancelled)?
+        };
+        #[cfg(not(all(target_os = "macos", feature = "gemma-metal")))]
+        let encoding = self
+            .upstream
+            .encode_parts_at_widths(&parts, &widths, &mut cancelled)?;
+        if cancellation.is_cancelled() {
+            return Err(GemmaNativeError::Cancelled);
+        }
+        encoding
+            .embeddings
+            .into_iter()
+            .next()
+            .ok_or(GemmaNativeError::Input("empty embedding"))
     }
 
     /// Embed up to 32 timestamped, already decoded video frames. The caller
@@ -464,10 +534,51 @@ impl GemmaNativeEncoder {
         if replacements.len() != tokens.len() {
             return Err(GemmaNativeError::Input("media token count mismatch"));
         }
-        Ok(self
+        let language = self
             .language
-            .encode_cancellable(ids, &replacements, self.dimensions, cancellation)?)
+            .as_ref()
+            .ok_or(GemmaNativeError::Input("fusion encoder is not loaded"))?;
+        Ok(language.encode_cancellable(ids, &replacements, self.dimensions, cancellation)?)
     }
+}
+
+/// Loads the upstream model from independently located verified files.
+///
+/// Upstream loads from a directory with canonical names, so files that do not already share
+/// one are exposed through a private staging directory of links; the weights stay memory
+/// mapped from their original location.
+fn open_upstream(files: &GemmaNativeFiles) -> Result<EmbeddingGemma2Model, GemmaNativeError> {
+    let canonical = |path: &Path, name: &str| path.file_name().is_some_and(|value| value == name);
+    let shared = files.weights.parent().filter(|directory| {
+        canonical(&files.weights, "model.safetensors")
+            && canonical(&files.config, "config.json")
+            && canonical(&files.tokenizer, "tokenizer.json")
+            && files.config.parent() == Some(*directory)
+            && files.tokenizer.parent() == Some(*directory)
+    });
+    if let Some(directory) = shared {
+        return Ok(EmbeddingGemma2Model::from_model_dir(directory)?);
+    }
+    let staging = tempfile::tempdir()?;
+    for (source, name) in [
+        (&files.weights, "model.safetensors"),
+        (&files.config, "config.json"),
+        (&files.tokenizer, "tokenizer.json"),
+    ] {
+        link_file(&std::fs::canonicalize(source)?, &staging.path().join(name))?;
+    }
+    Ok(EmbeddingGemma2Model::from_model_dir(staging.path())?)
+}
+
+#[cfg(unix)]
+fn link_file(source: &Path, target: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(source, target)
+}
+
+#[cfg(windows)]
+fn link_file(source: &Path, target: &Path) -> std::io::Result<()> {
+    std::fs::hard_link(source, target)
+        .or_else(|_| std::os::windows::fs::symlink_file(source, target))
 }
 
 /// Rejected native checkpoint, media input, or inference result.
@@ -519,6 +630,12 @@ pub enum GemmaNativeError {
     /// Language-model fusion failed.
     #[error(transparent)]
     Fusion(GemmaFusionError),
+    /// The upstream text/image model failed.
+    #[error(transparent)]
+    Upstream(#[from] lattice_inference::InferenceError),
+    /// A previous GPU pass panicked and left the shared Metal state unusable.
+    #[error("Gemma Metal state is poisoned")]
+    Poisoned,
 }
 
 macro_rules! map_stage_cancellation {

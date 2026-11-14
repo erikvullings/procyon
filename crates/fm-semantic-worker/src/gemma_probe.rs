@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use lattice_inference::model::embeddinggemma2::{
+use lattice_model_embeddinggemma2::model::{
     EmbeddingGemma2Model, EmbeddingGemma2Task, format_titled_document,
 };
 
