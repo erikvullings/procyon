@@ -52,7 +52,12 @@ const BATCH_TTL: Duration = Duration::from_secs(30 * 60);
 /// Largest total size of the store; the oldest batch goes first.
 const STORE_MAX_BYTES: usize = 128 * 1024 * 1024;
 /// Shortest timeout allowed for one batch, whatever the profile's chat timeout says.
-pub const MIN_IMAGE_TIMEOUT_SECONDS: u64 = 120;
+///
+/// A local diffusion model is measured at roughly 260 seconds for one 1024x1024 picture at its
+/// default step count on Apple silicon, so a chat-length timeout would refuse work the model is
+/// still doing correctly. Ten minutes leaves room for a slower machine or a larger size; the
+/// person can always stop a generation that has clearly stalled.
+pub const MIN_IMAGE_TIMEOUT_SECONDS: u64 = 600;
 
 /// Why a generation or a save did not produce a file.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -70,6 +75,11 @@ pub enum ImageGenerationError {
     /// The provider or the decode failed.
     #[error("image generation is unavailable")]
     Unavailable,
+    /// The endpoint accepted the work and then did not answer within the endpoint's timeout. Said
+    /// apart from [`Self::Unavailable`] because the way out is different: wait, ask for less, or
+    /// raise the timeout, rather than check the endpoint's setup.
+    #[error("the image model did not answer in time")]
+    TimedOut,
     /// An image was outside the accepted byte bounds.
     #[error("the generated image is too large")]
     TooLarge,

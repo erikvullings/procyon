@@ -1387,11 +1387,17 @@ export class MockSemanticClient implements SemanticClient {
   }
 
   listImagePrompts(signal?: AbortSignal): Promise<ImagePrompt[]> {
-    return this.ctx.perform('listImagePrompts', signal, () =>
-      [...this.ctx.imagePrompts.values()].sort((left, right) =>
-        right.updatedAt.localeCompare(left.updatedAt),
-      ),
-    );
+    return this.ctx.perform('listImagePrompts', signal, () => {
+      // Newest first, with the order they were saved breaking a tie: two prompts saved in the same
+      // millisecond are still newer and older than each other, and a sort that leaves that to the
+      // clock makes the pane's order depend on how fast the machine is.
+      const held = [...this.ctx.imagePrompts.values()].map((prompt, index) => ({ prompt, index }));
+      held.sort((left, right) => {
+        const byTime = right.prompt.updatedAt.localeCompare(left.prompt.updatedAt);
+        return byTime !== 0 ? byTime : right.index - left.index;
+      });
+      return held.map((entry) => entry.prompt);
+    });
   }
 
   saveImagePrompt(prompt: ImagePrompt, signal?: AbortSignal): Promise<ImagePrompt> {

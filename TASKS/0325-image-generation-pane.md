@@ -157,3 +157,38 @@ must review before anything is written. It gets its own role in 0322 and its own
     named the missing provider; after saving that endpoint, choosing it again bound the role, `Save
     role` enabled and the pane opened from the overflow item; with the role cleared the item read
     disabled and clicking it opened nothing.
+
+## 2026-11-14: a slow local model was being blamed on the prompt
+
+- Tested against a live `mlx-serve` (`ddalcu/Qwen-Image-2.1-MLX-Serve-8bit`). It answers the
+  OpenAI-shaped body Procyon sends at `POST /v1/images/generations`, and accepts `negative_prompt`,
+  `quality`, `seed` and `steps` beside the required fields: one 1024x1024 picture came back after
+  **261 s** at the model's own default step count, and after **12 s** at `steps: 2`.
+- The person was told "The prompt, size or seed is outside what the model accepts." for a request the
+  model was still drawing correctly. Two faults stacked up:
+  - Every rejection reaches the client under one `invalidRequest` code with the reason the person
+    should see in `details.reason`. The pane read the top-level `reason` - which is never there -
+    and fell back to the code, so a timeout, a cloud rule and a misconfigured endpoint all read as a
+    bad prompt. It reads `details` first now.
+  - `entry.failure` held the backend's reason while its two readers (`isSaveConflict`,
+    `failureNeedsSettings`) compared message keys, so neither the "Open AI settings" hint nor the
+    "Replace the existing file" offer had ever appeared. `failure` holds an `ImageFailureKey` now,
+    which is what both readers were always comparing against.
+- A timeout is its own outcome: `ImageGenerationError::TimedOut`, reported as the existing
+  `llmTimeout` reason and worded as running out of time with a way out (fewer steps, or the
+  endpoint's timeout in Settings) instead of "could not be reached", which sends the person to check
+  wiring that is fine.
+- The shortest timeout a generation may run went from 120 s to **600 s**, measured against the run
+  above, and the Steps row gained 2, 4 and 8 next to 20, 30 and 50: on this machine a quick draft was
+  12 s and a full one 260 s, and a chat-length timeout was refusing work the model was doing right.
+- The mock's prompt list ordered by a millisecond clock, so two prompts saved in the same
+  millisecond came back oldest-first and the Prompts list order depended on machine speed. Saving
+  later now wins a tie.
+- Known browser-host limit found on the way: `LlmHostPolicy::server` sets `allow_loopback: false`, so
+  an `fm-server` host refuses to reach a model on its own localhost and says `permissionDenied`. The
+  desktop host allows loopback and is unaffected; a browser-host person with a local model needs the
+  host allowed by the administrator, and the pane now has a sentence for that (`hostNotAllowed`).
+- Verified: 41 `image_generation` Rust tests (including an endpoint that accepts the request and
+  never answers), 53 `llm_profiles` tests, 247 frontend tests across the pane, the wiring, the mock
+  client and i18n; clippy and rustfmt clean for `fm-application`. Still unverified in this host: the
+  Tauri window and a live cloud endpoint of either contract.

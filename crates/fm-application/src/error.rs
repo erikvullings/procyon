@@ -420,6 +420,13 @@ impl From<ImageGenerationError> for ApplicationError {
                 "the image endpoint could not produce images",
             )
             .into(),
+            // Named apart from a refusal: the model was working, it just needed longer than the
+            // endpoint allows, so the person is pointed at the timeout and at asking for less.
+            ImageGenerationError::TimedOut => Rejection::new(
+                reason::LLM_TIMEOUT,
+                "the image model did not answer in time",
+            )
+            .into(),
             ImageGenerationError::TooLarge => Rejection::new(
                 reason::IMAGE_TOO_LARGE,
                 "the generated image was too large; ask for a smaller size or fewer images",
@@ -676,6 +683,29 @@ mod tests {
                 expected_revision: 14,
                 actual_revision: 16,
             }
+        );
+    }
+
+    /// The pane reads this reason out of the rejection's details to decide what to say; the code
+    /// alone is shared by every refusal and would blame the prompt for a model that was drawing.
+    #[test]
+    fn a_model_that_ran_out_of_time_is_reported_under_the_timeout_reason() {
+        let ApplicationError::Rejected(rejection) =
+            ApplicationError::from(ImageGenerationError::TimedOut)
+        else {
+            panic!("a timeout is a rejection the person can act on");
+        };
+        assert_eq!(rejection.reason, reason::LLM_TIMEOUT);
+
+        let ApplicationError::Rejected(refused) =
+            ApplicationError::from(ImageGenerationError::Unavailable)
+        else {
+            panic!("a refusal is a rejection too");
+        };
+        assert_eq!(refused.reason, reason::IMAGE_GENERATION_FAILED);
+        assert_ne!(
+            refused.reason, rejection.reason,
+            "an endpoint nobody reached and one that needed longer are said apart"
         );
     }
 }

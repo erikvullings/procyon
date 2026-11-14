@@ -126,7 +126,13 @@ impl ImageEndpointTransport {
     ) -> Result<reqwest::Response, ImageGenerationError> {
         tokio::select! {
             () = cancellation.cancelled() => Err(ImageGenerationError::Cancelled),
-            result = builder.send() => result.map_err(|_| {
+            result = builder.send() => result.map_err(|error| {
+                if error.is_timeout() {
+                    // The endpoint took the work and is still drawing: that is a different way out
+                    // for the person than an endpoint nobody reached.
+                    tracing::debug!("the image endpoint did not answer in time");
+                    return ImageGenerationError::TimedOut;
+                }
                 tracing::debug!("the image endpoint could not be reached");
                 ImageGenerationError::Unavailable
             }),
@@ -708,6 +714,24 @@ mod tests {
             .expect_err("refused");
         assert_eq!(error, ImageGenerationError::Unavailable);
         server.await.expect("server finished");
+    }
+
+    #[tokio::test]
+    async fn an_endpoint_that_keeps_drawing_is_reported_as_running_out_of_time() {
+        // A local model can be minutes into a correct picture; saying "could not be reached" would
+        // send the person to check a wiring that is fine, so a timeout keeps its own name.
+        let endpoint = Endpoint::start(None).await;
+        let transport = ImageEndpointTransport::new(ImageEndpointRequest {
+            timeout: Duration::from_millis(50),
+            ..endpoint.request()
+        });
+        assert_eq!(
+            transport
+                .generate(&validated(), None, &CancellationToken::new())
+                .await
+                .expect_err("timed out"),
+            ImageGenerationError::TimedOut
+        );
     }
 
     #[tokio::test]

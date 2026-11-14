@@ -181,15 +181,23 @@ describe('destinationFor', () => {
 
 describe('failures', () => {
   it('recognises a conflict as something to confirm, not to report', () => {
-    expect(isSaveConflict('destinationAlreadyExists')).toBe(true);
+    expect(isSaveConflict('destinationExists')).toBe(true);
     expect(isSaveConflict('invalidRequest')).toBe(false);
     expect(isSaveConflict(undefined)).toBe(false);
   });
 
-  it('points role and consent failures at Settings', () => {
+  it('points the failures Settings can fix at Settings', () => {
     expect(failureNeedsSettings('roleNotAssigned')).toBe(true);
     expect(failureNeedsSettings('cloudImageNotAllowed')).toBe(true);
-    expect(failureNeedsSettings('imageGenerationFailed')).toBe(false);
+    expect(failureNeedsSettings('consentRequired')).toBe(true);
+    expect(failureNeedsSettings('endpointInvalid')).toBe(true);
+    // A model that needed longer than the endpoint allows is answered by that endpoint's timeout,
+    // which is also in Settings.
+    expect(failureNeedsSettings('timedOut')).toBe(true);
+    // Nothing in Settings fixes a picture that was simply stopped, or one that came back too big.
+    expect(failureNeedsSettings('generationFailed')).toBe(false);
+    expect(failureNeedsSettings('cancelled')).toBe(false);
+    expect(failureNeedsSettings('imageTooLarge')).toBe(false);
   });
 });
 
