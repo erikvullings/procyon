@@ -297,7 +297,8 @@ describe('SettingsEditor', () => {
     await vi.waitFor(() => expect(root.textContent).toContain('Semantic library'));
     expect(root.textContent).toContain('Concept vocabularies');
     openSection('LLM (AI)');
-    expect(root.textContent).toContain('AI summaries and answers');
+    expect(root.textContent).toContain('Models by task');
+    expect(root.textContent).toContain('Image generation');
     const ocr = [...root.querySelectorAll<HTMLDetailsElement>('.fm-settings-semantic-tools')].find(
       (section) =>
         section.querySelector('summary')?.textContent?.startsWith('Make scanned PDFs searchable'),

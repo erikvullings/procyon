@@ -865,3 +865,8 @@ button.fm-busy-button[aria-busy="true"]::before {
 .fm-app-shell button.fm-inline-action:disabled {
   opacity: 0.45;
 }
+
+/* Grid-owned settings fields have no Materialize column margins or gutters. */
+.fm-app-shell .fm-llm-field {
+  margin: 0;
+}

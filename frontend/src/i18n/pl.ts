@@ -1974,6 +1974,7 @@ export const pl = {
   },
 
   llmProfiles: {
+    saveConnection: 'Zapisz połączenie',
     connectionsTitle: 'Połączenia',
     consentRequired:
       'Zezwól na użycie w chmurze: potwierdź zgodę przed zapisaniem punktu końcowego w chmurze.',

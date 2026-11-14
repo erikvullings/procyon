@@ -89,6 +89,18 @@ describe('the images API choice', () => {
 });
 
 describe('LlmProfileManagement', () => {
+  it('saves a new connection in place without closing its editor', async () => {
+    const client = new MockFileManagerClient();
+    const create = vi.spyOn(client, 'createLlmProfile');
+    await mountLoaded(client);
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Save connection')
+      ?.click();
+    await vi.waitFor(() => expect(create).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(root.textContent).toContain('Generation profile saved.'));
+    expect(root.querySelector('[aria-label="Connections"]')).not.toBeNull();
+  });
+
   it('asks which images contract the endpoint answers, in the advanced settings', async () => {
     const client = new MockFileManagerClient();
     await mountLoaded(client);
@@ -135,7 +147,7 @@ describe('LlmProfileManagement', () => {
         redactFilenames: true,
       }),
     );
-    expect(root.querySelector('[aria-label="AI summaries and answers"]')).not.toBeNull();
+    expect(root.querySelector('[aria-label="Connections"]')).not.toBeNull();
     expect(root.textContent).toContain('No generation profiles configured.');
     expect(await client.listLlmProfiles()).toEqual([]);
     expect(
@@ -146,8 +158,7 @@ describe('LlmProfileManagement', () => {
     expect(root.textContent).toContain('Provider preset');
     expect(root.textContent).toContain('Base URL');
     expect(root.textContent).toContain('API key or token');
-    expect(root.textContent).toContain('write document summaries and answer questions');
-    expect(root.textContent).toContain('Semantic search works without a profile');
+    expect(root.textContent).toContain('choose a connection and model for each task');
   });
 
   it('does not repeat the advanced disclosure label inside a fieldset', async () => {

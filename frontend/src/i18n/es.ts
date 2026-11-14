@@ -1978,6 +1978,7 @@ export const es = {
   },
 
   llmProfiles: {
+    saveConnection: 'Guardar conexión',
     connectionsTitle: 'Conexiones',
     consentRequired:
       'Permitir uso en la nube: confirma el consentimiento antes de guardar un endpoint en la nube.',

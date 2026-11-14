@@ -262,13 +262,17 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     }
     const revision = modelTestRevision;
     const isCurrent = () => revision === modelTestRevision && selectedId === profile.id && !dirty;
-    void run(async () => {
-      const models = await client.discoverLlmProfileModels(profile.id);
-      if (isCurrent()) {
-        availableModels = models;
-        discoverLimits(client);
-      }
-    }, isCurrent);
+    void run(
+      async () => {
+        const models = await client.discoverLlmProfileModels(profile.id);
+        if (isCurrent()) {
+          availableModels = models;
+          discoverLimits(client);
+        }
+      },
+      isCurrent,
+      true,
+    );
   }
 
   function discoverDraftModels(client: SemanticClient): void {
@@ -285,19 +289,23 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
       credential: editor.apiKey.trim() === '' ? null : { apiKey: editor.apiKey },
     };
     const isCurrent = () => revision === modelTestRevision && selectedId === undefined;
-    void run(async () => {
-      const models = await client.discoverLlmProfileDraftModels(request);
-      if (!isCurrent()) return;
-      availableModels = models;
-      if (editor !== undefined && editor.request.model.trim() === '' && models[0] !== undefined) {
-        editor = {
-          ...editor,
-          request: { ...editor.request, model: models[0] },
-        };
-        dirty = true;
-      }
-      discoverLimits(client);
-    }, isCurrent);
+    void run(
+      async () => {
+        const models = await client.discoverLlmProfileDraftModels(request);
+        if (!isCurrent()) return;
+        availableModels = models;
+        if (editor !== undefined && editor.request.model.trim() === '' && models[0] !== undefined) {
+          editor = {
+            ...editor,
+            request: { ...editor.request, model: models[0] },
+          };
+          dirty = true;
+        }
+        discoverLimits(client);
+      },
+      isCurrent,
+      true,
+    );
   }
 
   function discoverLimits(client: SemanticClient): void {
@@ -314,37 +322,45 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
       credential: editor.apiKey.trim() === '' ? null : { apiKey: editor.apiKey },
     };
     const isCurrent = () => revision === modelTestRevision;
-    void run(async () => {
-      const limits = await client.discoverLlmProfileDraftModelLimits(request);
-      if (!isCurrent() || editor === undefined) return;
-      modelLimits = limits;
-      if (editor.profileId !== undefined) return;
-      const defaults = presets.find((preset) => preset.preset === editor?.request.preset)?.advanced;
-      const contextWindow = !contextEdited
-        ? (limits.contextWindow ?? defaults?.contextWindow ?? editor.request.advanced.contextWindow)
-        : editor.request.advanced.contextWindow;
-      const maximumAnswerTokens = !outputEdited
-        ? Math.min(
-            limits.maximumAnswerTokens ??
-              defaults?.maximumAnswerTokens ??
-              editor.request.advanced.maximumAnswerTokens,
-            Math.max(1, Math.floor(contextWindow / 2)),
-          )
-        : editor.request.advanced.maximumAnswerTokens;
-      if (
-        contextWindow !== editor.request.advanced.contextWindow ||
-        maximumAnswerTokens !== editor.request.advanced.maximumAnswerTokens
-      ) {
-        editor = {
-          ...editor,
-          request: {
-            ...editor.request,
-            advanced: { ...editor.request.advanced, contextWindow, maximumAnswerTokens },
-          },
-        };
-        dirty = true;
-      }
-    }, isCurrent);
+    void run(
+      async () => {
+        const limits = await client.discoverLlmProfileDraftModelLimits(request);
+        if (!isCurrent() || editor === undefined) return;
+        modelLimits = limits;
+        if (editor.profileId !== undefined) return;
+        const defaults = presets.find(
+          (preset) => preset.preset === editor?.request.preset,
+        )?.advanced;
+        const contextWindow = !contextEdited
+          ? (limits.contextWindow ??
+            defaults?.contextWindow ??
+            editor.request.advanced.contextWindow)
+          : editor.request.advanced.contextWindow;
+        const maximumAnswerTokens = !outputEdited
+          ? Math.min(
+              limits.maximumAnswerTokens ??
+                defaults?.maximumAnswerTokens ??
+                editor.request.advanced.maximumAnswerTokens,
+              Math.max(1, Math.floor(contextWindow / 2)),
+            )
+          : editor.request.advanced.maximumAnswerTokens;
+        if (
+          contextWindow !== editor.request.advanced.contextWindow ||
+          maximumAnswerTokens !== editor.request.advanced.maximumAnswerTokens
+        ) {
+          editor = {
+            ...editor,
+            request: {
+              ...editor.request,
+              advanced: { ...editor.request.advanced, contextWindow, maximumAnswerTokens },
+            },
+          };
+          dirty = true;
+        }
+      },
+      isCurrent,
+      true,
+    );
   }
 
   function choosePreset(client: SemanticClient, presetId: string): void {
@@ -366,10 +382,11 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
   async function run(
     action: () => Promise<void>,
     isCurrent: () => boolean = () => true,
+    preserveMessage = false,
   ): Promise<void> {
     busy = true;
     error = undefined;
-    message = undefined;
+    if (!preserveMessage) message = undefined;
     try {
       await action();
     } catch (reason) {
@@ -534,7 +551,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
         modelLimits?.maximumAnswerTokensCap ?? FALLBACK_OUTPUT_CAP,
         Math.max(1, Math.floor(request.advanced.contextWindow / 2)),
       );
-      return m('.fm-llm-profiles', { 'aria-label': t('llmProfiles', 'title') }, [
+      return m('.fm-llm-profiles', { 'aria-label': t('llmProfiles', 'connectionsTitle') }, [
         m('p', t('llmProfiles', 'description')),
         m('.fm-llm-profile-list', [
           profiles.length === 0
@@ -569,24 +586,24 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
             t('llmProfiles', 'newProfile'),
           ),
         ]),
-        m('.row', [
+        m('.fm-llm-profile-fields', [
           m(Select<string>, {
-            className: 'col s12 m6',
+            className: 'fm-llm-field',
             label: t('llmProfiles', 'preset'),
             options: presets.map((preset) => ({ id: preset.preset, label: preset.name })),
             checkedId: request.preset,
             onchange: ([value]) => value !== undefined && choosePreset(attrs.client, value),
           }),
           m(TextInput, {
-            className: 'col s12 m6',
+            className: 'fm-llm-field',
             label: t('llmProfiles', 'name'),
             value: request.name,
             oninput: (value: string) => updateRequest({ name: value }),
           }),
         ]),
-        m('.row', [
+        m('.fm-llm-profile-fields', [
           m(TextInput, {
-            className: 'col s12 m6',
+            className: 'fm-llm-field',
             label: t('llmProfiles', 'baseUrl'),
             value: request.baseUrl,
             oninput: (value: string) => {
@@ -597,7 +614,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
           }),
           modelOptions.length === 0
             ? m(TextInput, {
-                className: 'col s12 m6',
+                className: 'fm-llm-field',
                 label: t('llmProfiles', 'model'),
                 value: request.model,
                 oninput: (value: string) => {
@@ -607,7 +624,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                 onchange: () => discoverLimits(attrs.client),
               })
             : m(Select<string>, {
-                className: 'col s12 m6',
+                className: 'fm-llm-field',
                 label: t('llmProfiles', 'model'),
                 options: modelOptions.map((model) => ({ id: model, label: model })),
                 checkedId: request.model,
@@ -620,24 +637,24 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
               }),
         ]),
         request.preset === 'azureOpenAi'
-          ? m('.row', [
+          ? m('.fm-llm-profile-fields', [
               m(TextInput, {
-                className: 'col s12 m6',
+                className: 'fm-llm-field',
                 label: t('llmProfiles', 'deployment'),
                 value: request.deployment ?? '',
                 oninput: (value: string) => updateRequest({ deployment: value }),
               }),
               m(TextInput, {
-                className: 'col s12 m6',
+                className: 'fm-llm-field',
                 label: t('llmProfiles', 'apiVersion'),
                 value: request.apiVersion ?? '',
                 oninput: (value: string) => updateRequest({ apiVersion: value }),
               }),
             ])
           : undefined,
-        m('.row', [
+        m('.fm-llm-profile-fields', [
           m(TextInput, {
-            className: 'col s12',
+            className: 'fm-llm-field',
             type: 'password',
             label: active?.hasCredential
               ? t('llmProfiles', 'replaceApiKey')
@@ -654,9 +671,9 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
         ),
         advanced
           ? m('.fm-llm-advanced-settings', [
-              m('.row', [
+              m('.fm-llm-profile-fields', [
                 m(Select<string>, {
-                  className: 'col s6 m3',
+                  className: 'fm-llm-field',
                   label: t('llmProfiles', 'contextWindow'),
                   options: tokenOptions(request.advanced.contextWindow, 8_192, contextCap),
                   checkedId: customContext ? 'custom' : String(request.advanced.contextWindow),
@@ -672,7 +689,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                   },
                 }),
                 m(Select<string>, {
-                  className: 'col s6 m3',
+                  className: 'fm-llm-field',
                   label: t('llmProfiles', 'maximumAnswerTokens'),
                   options: tokenOptions(request.advanced.maximumAnswerTokens, 1_024, outputCap),
                   checkedId: customOutput ? 'custom' : String(request.advanced.maximumAnswerTokens),
@@ -688,7 +705,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                   },
                 }),
                 m(NumberInput, {
-                  className: 'col s6 m3',
+                  className: 'fm-llm-field',
                   label: t('llmProfiles', 'temperature'),
                   min: 0,
                   max: 2,
@@ -698,7 +715,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                     updateRequest({ advanced: { ...request.advanced, temperature: value } }),
                 }),
                 m(NumberInput, {
-                  className: 'col s6 m3',
+                  className: 'fm-llm-field',
                   label: t('llmProfiles', 'timeout'),
                   min: 1,
                   max: 600,
@@ -708,10 +725,10 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                 }),
               ]),
               customContext || customOutput
-                ? m('.row', [
+                ? m('.fm-llm-profile-fields', [
                     customContext
                       ? m(NumberInput, {
-                          className: 'col s6 m3',
+                          className: 'fm-llm-field',
                           label: t('llmProfiles', 'customContextWindow'),
                           min: 1,
                           max: contextCap,
@@ -726,7 +743,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                       : undefined,
                     customOutput
                       ? m(NumberInput, {
-                          className: 'col s6 m3',
+                          className: 'fm-llm-field',
                           label: t('llmProfiles', 'customAnswerTokens'),
                           min: 1,
                           max: outputCap,
@@ -866,7 +883,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
               }),
             ])
           : undefined,
-        m('.fm-llm-profile-actions', [
+        m('.fm-llm-profile-actions.fm-form-actions', [
           request.capabilities.includes('modelDiscovery') && request.preset !== 'azureOpenAi'
             ? m(
                 'button.fm-semantic-action',
@@ -934,7 +951,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                 },
                 t('llmProfiles', activeIsDefault ? 'defaultProfile' : 'activate'),
               ),
-          active === undefined
+          active === undefined || !advanced
             ? undefined
             : m(
                 'button.fm-semantic-action',
@@ -950,7 +967,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                 },
                 t('llmProfiles', 'clone'),
               ),
-          active === undefined
+          active === undefined || !advanced
             ? undefined
             : m(
                 'button.fm-semantic-action',
@@ -964,9 +981,10 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                 },
                 t('llmProfiles', 'export'),
               ),
-          active === undefined
+          active === undefined || !advanced
             ? undefined
             : m(Select<OrphanLlmCredentialDisposition>, {
+                className: 'fm-llm-field fm-llm-credential-policy',
                 label: t('llmProfiles', 'credentialOnDelete'),
                 options: [
                   { id: 'delete', label: t('llmProfiles', 'deleteCredential') },
@@ -977,7 +995,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                   if (value !== undefined) deleteDisposition = value;
                 },
               }),
-          active === undefined
+          active === undefined || !advanced
             ? undefined
             : m(
                 'button.fm-semantic-action',
@@ -1000,6 +1018,18 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                 },
                 t('button', 'delete'),
               ),
+          m(
+            'button.btn-flat.fm-primary-action',
+            {
+              type: 'button',
+              disabled: busy,
+              onclick: () => {
+                if (editor?.profileId === undefined) dirty = true;
+                void save(attrs);
+              },
+            },
+            t('llmProfiles', 'saveConnection'),
+          ),
         ]),
         message === undefined ? undefined : m('p.fm-llm-message', { role: 'status' }, message),
         error === undefined ? undefined : m('p.fm-settings-save-error', { role: 'alert' }, error),

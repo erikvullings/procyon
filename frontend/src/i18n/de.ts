@@ -2001,6 +2001,7 @@ export const de = {
   },
 
   llmProfiles: {
+    saveConnection: 'Verbindung speichern',
     connectionsTitle: 'Verbindungen',
     consentRequired:
       'Cloud-Nutzung erlauben: Zustimmung bestätigen, bevor ein Cloud-Endpunkt gespeichert wird.',

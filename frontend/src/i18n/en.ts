@@ -2332,6 +2332,7 @@ export const en = {
   },
 
   llmProfiles: {
+    saveConnection: 'Save connection',
     connectionsTitle: 'Connections',
     consentRequired: 'Allow cloud use: confirm consent before saving a cloud endpoint.',
     title: 'AI summaries and answers',

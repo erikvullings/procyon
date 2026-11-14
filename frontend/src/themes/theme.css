@@ -2099,10 +2099,96 @@ main.fm-workspace {
   font-size: var(--fm-type-label);
 }
 
-.fm-llm-profiles .row {
-  /* Cancel materialize's column gutter so form fields line up with the text above them. */
-  margin-left: -0.75rem;
-  margin-right: -0.75rem;
+.fm-llm-settings {
+  display: grid;
+  gap: var(--fm-space-4);
+  min-width: 0;
+}
+
+.fm-llm-settings-title {
+  margin: 0;
+  color: var(--fm-text);
+  font-size: var(--fm-type-title);
+  font-weight: 600;
+}
+
+.fm-llm-settings[hidden] {
+  display: none;
+}
+
+.fm-llm-profile-fields,
+.fm-llm-role-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--fm-space-3) var(--fm-space-5);
+  min-width: 0;
+}
+
+.fm-llm-profile-fields > :only-child {
+  grid-column: 1 / -1;
+}
+
+.fm-llm-profiles,
+.fm-llm-role-heading {
+  display: grid;
+  gap: var(--fm-space-2);
+  min-width: 0;
+}
+
+.fm-llm-profiles > p {
+  margin: 0;
+  max-width: 75ch;
+  color: var(--fm-text-muted);
+}
+
+.fm-llm-profile-list,
+.fm-llm-profile-actions {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: var(--fm-space-2);
+}
+
+.fm-llm-profile-list button[aria-pressed="true"] {
+  background: var(--fm-selection-inactive);
+}
+
+.fm-llm-field {
+  min-width: 0;
+}
+
+.fm-llm-field button.select-dropdown {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-llm-connections {
+  min-width: 0;
+  padding-top: var(--fm-space-4);
+  border-top: 1px solid var(--fm-border);
+}
+
+.fm-llm-connections > summary {
+  padding-block: var(--fm-space-2);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.fm-llm-connections:where([open]) > summary {
+  margin-bottom: var(--fm-space-3);
+}
+
+.fm-llm-credential-policy {
+  flex-basis: 100%;
+}
+
+@media (max-width: 40rem) {
+  .fm-llm-profile-fields,
+  .fm-llm-role-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .fm-llm-advanced-settings > p {
@@ -2131,14 +2217,6 @@ main.fm-workspace {
   min-width: 0;
   padding-top: var(--fm-space-4);
   border-top: 1px solid var(--fm-border);
-}
-
-.fm-llm-role-fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-  align-items: end;
-  gap: var(--fm-space-3);
-  min-width: 0;
 }
 
 .fm-llm-role-title {

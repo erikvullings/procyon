@@ -1987,6 +1987,7 @@ export const fr = {
   },
 
   llmProfiles: {
+    saveConnection: 'Enregistrer la connexion',
     connectionsTitle: 'Connexions',
     consentRequired:
       "Autoriser l'usage cloud : confirmez le consentement avant d'enregistrer un point de terminaison cloud.",

@@ -2372,6 +2372,7 @@ export const nl = {
   },
 
   llmProfiles: {
+    saveConnection: 'Verbinding opslaan',
     connectionsTitle: 'Verbindingen',
     consentRequired:
       'Cloudgebruik toestaan: bevestig toestemming voordat je een cloud-eindpunt opslaat.',

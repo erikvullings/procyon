@@ -1977,6 +1977,7 @@ export const it = {
   },
 
   llmProfiles: {
+    saveConnection: 'Salva connessione',
     connectionsTitle: 'Connessioni',
     consentRequired:
       "Consenti l'uso nel cloud: conferma il consenso prima di salvare un endpoint cloud.",

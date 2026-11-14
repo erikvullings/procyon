@@ -143,6 +143,8 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
   // A provider chosen in the roles section opens the endpoint editor above with that preset (0325).
   let llmPresetRequest: { presetId: string; revision: number } | undefined;
   let llmPresetRevision = 0;
+  let llmConnectionsOpen = false;
+  let focusLlmConnection = false;
 
   function resetDraft(current: SettingsEditorAttrs): void {
     draft = cloneSettings(current.settings);
@@ -807,32 +809,49 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                   : m('p.fm-settings-semantic-gate', t('settings', 'semanticEnableHint')),
               ]),
 
-              m('.fm-settings-section-content', { hidden: activeSection !== 'llm' }, [
-                m('.row', m('h4.fm-settings-section-heading.col.s12', t('llmProfiles', 'title'))),
-                m(
-                  '.row',
-                  m(LlmProfileManagement, {
-                    client: current.client,
-                    onSaveHandlerChange: (handler) => {
-                      saveLlmProfile = handler;
-                    },
-                    onChanged: notifyLlmChanged,
-                    openPreset: llmPresetRequest,
-                  }),
-                ),
-                m('.row', m('h4.fm-settings-section-heading.col.s12', t('llmRoles', 'title'))),
-                m(
-                  '.row',
+              m(
+                '.fm-settings-section-content.fm-llm-settings',
+                { hidden: activeSection !== 'llm' },
+                [
+                  m('h4.fm-llm-settings-title', t('llmRoles', 'title')),
                   m(LlmRoleManagement, {
                     client: current.client,
                     revision: llmRevision,
                     onCreateEndpoint: (presetId: string) => {
+                      llmConnectionsOpen = true;
+                      focusLlmConnection = true;
                       llmPresetRevision += 1;
                       llmPresetRequest = { presetId, revision: llmPresetRevision };
                     },
                   }),
-                ),
-              ]),
+                  m(
+                    'details.fm-llm-connections',
+                    {
+                      open: llmConnectionsOpen,
+                      ontoggle: (event: Event) => {
+                        llmConnectionsOpen = (event.currentTarget as HTMLDetailsElement).open;
+                      },
+                      onupdate: ({ dom }: { dom: Element }) => {
+                        if (!focusLlmConnection) return;
+                        focusLlmConnection = false;
+                        dom.scrollIntoView?.({ block: 'nearest' });
+                        dom.querySelector<HTMLElement>('button.select-dropdown')?.focus();
+                      },
+                    },
+                    [
+                      m('summary', t('llmProfiles', 'connectionsTitle')),
+                      m(LlmProfileManagement, {
+                        client: current.client,
+                        onSaveHandlerChange: (handler) => {
+                          saveLlmProfile = handler;
+                        },
+                        onChanged: notifyLlmChanged,
+                        openPreset: llmPresetRequest,
+                      }),
+                    ],
+                  ),
+                ],
+              ),
 
               activeSection === 'plugins'
                 ? [
