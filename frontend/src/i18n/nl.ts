@@ -1662,6 +1662,7 @@ export const nl = {
     loadFailed: 'Gesprekken konden niet worden geladen.',
   },
   image: {
+    checkingAvailability: 'Controleren op een beeldmodel…',
     sourceUnsupported: 'Dit beeldmodel kan niet vanuit een bestaande afbeelding beginnen.',
     sourceUnusable:
       'Dat bestand kan niet als startbeeld worden gebruikt. Kies een PNG-, JPEG- of WebP-afbeelding.',
@@ -2321,6 +2322,10 @@ export const nl = {
     unreachable: 'De AI-dienst van profiel "{name}" is niet bereikbaar.',
   },
   llmRoles: {
+    provider: 'Leverancier',
+    providerUnassigned: 'Kies een leverancier',
+    providerCreateHint:
+      '{name} heeft nog geen eindpunt. Het formulier hierboven is er al mee ingevuld - sla het daar op en kies het daarna als eindpunt voor beeldgeneratie.',
     advanced: 'Andere eindpunten of modellen per functie gebruiken',
     endpoint: 'Eindpunt',
     title: 'Rollen',

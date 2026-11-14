@@ -18,6 +18,11 @@ export interface LlmProfileManagementAttrs {
   readonly onSaveHandlerChange?: (handler: (() => Promise<boolean>) | undefined) => void;
   /** Called after an endpoint, its consent, or the active endpoint changes (0322). */
   readonly onChanged?: () => void;
+  /**
+   * Set by the roles section to open this editor with one provider's preset (0325): the picture model
+   * is chosen there, and the provider behind it may not have an endpoint yet.
+   */
+  readonly openPreset?: { presetId: string; revision: number } | undefined;
 }
 
 interface EditorState {
@@ -174,6 +179,28 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
   let modelLimits: LlmModelLimits | undefined;
   let contextEdited = false;
   let outputEdited = false;
+  /** The provider choice the roles section asked for, and whether it has been applied yet. */
+  let pendingPreset: LlmProfileManagementAttrs['openPreset'];
+  let openedPresetRevision: number | undefined;
+
+  /**
+   * Opens the editor with a provider's preset. The presets have to be loaded first, so a request that
+   * arrives before they are is kept and applied as soon as they are.
+   */
+  function applyOpenPreset(
+    client: SemanticClient,
+    request: LlmProfileManagementAttrs['openPreset'],
+  ): void {
+    if (request === undefined || request.revision === openedPresetRevision) return;
+    if (presets.length === 0) {
+      pendingPreset = request;
+      return;
+    }
+    openedPresetRevision = request.revision;
+    pendingPreset = undefined;
+    choosePreset(client, request.presetId);
+    m.redraw();
+  }
 
   function clearAvailableModels(): void {
     modelTestRevision += 1;
@@ -200,6 +227,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
           discoverDraftModels(client);
         }
       }
+      if (pendingPreset !== undefined) applyOpenPreset(client, pendingPreset);
     } catch (reason) {
       error = errorMessage(reason);
     } finally {
@@ -475,6 +503,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
       attrs.onSaveHandlerChange?.(() => save(attrs));
       void load(attrs.client);
     },
+    onupdate: ({ attrs }) => applyOpenPreset(attrs.client, attrs.openPreset),
     onremove: ({ attrs }) => attrs.onSaveHandlerChange?.(undefined),
     view: ({ attrs }) => {
       if (loading) return m('p', t('llmProfiles', 'loading'));

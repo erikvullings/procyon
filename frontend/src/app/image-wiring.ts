@@ -64,6 +64,9 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
   async function openImage(): Promise<void> {
     const workspace = shellState.workspace;
     if (workspace === undefined || shellState.imageOpening) return;
+    // The pane is entered from a gated command, so the answer may be a moment stale; asking again
+    // costs one call and lets a model named in Settings enable it without a restart.
+    void refreshRoles(shellState.client);
     const targetPaneId = imagePlacementPaneId(
       workspace.paneOrder,
       workspace.activePaneId,
@@ -471,8 +474,32 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     return { location: view.location, name };
   }
 
+  /**
+   * Whether an image model is assigned. Without one the pane can only say so, so its command and its
+   * overflow entry stay disabled until the person names a model in Settings (0325).
+   */
+  async function refreshRoles(client: FileManagerClient): Promise<void> {
+    try {
+      const roles = await client.listLlmRoles();
+      shellState.imageGenerationAvailable = roles.image != null;
+    } catch {
+      // A host that cannot answer says nothing either way; unavailable keeps the pane's own
+      // "No image model is set" explanation the last word.
+      shellState.imageGenerationAvailable = false;
+    } finally {
+      shellState.imageGenerationChecked = true;
+      m.redraw();
+    }
+  }
+
+  function imageRoleAvailable(): boolean {
+    return shellState.imageGenerationAvailable;
+  }
+
   return {
     openImage,
+    refreshRoles: (client: FileManagerClient) => refreshRoles(client),
+    imageRoleAvailable,
     patch,
     generate: (client: FileManagerClient, key: string) => void generate(client, key),
     stop,

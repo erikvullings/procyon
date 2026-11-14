@@ -1262,6 +1262,7 @@ export const it = {
     loadFailed: 'Impossibile caricare le conversazioni.',
   },
   image: {
+    checkingAvailability: 'Ricerca di un modello di immagini…',
     sourceUnsupported: 'Questo modello di immagini non può partire da un’immagine esistente.',
     sourceUnusable:
       'Questo file non può essere usato come immagine di partenza. Scegli un’immagine PNG, JPEG o WebP.',
@@ -1925,6 +1926,10 @@ export const it = {
     unreachable: 'Impossibile raggiungere il servizio di IA del profilo «{name}».',
   },
   llmRoles: {
+    provider: 'Fornitore',
+    providerUnassigned: 'Scegli fornitore',
+    providerCreateHint:
+      '{name} non ha ancora un endpoint. Il modulo qui sopra è già compilato - salvalo lì e poi selezionalo come endpoint per le immagini.',
     advanced: 'Usa endpoint o modelli diversi per ogni funzione',
     endpoint: 'Punto finale',
     title: 'Ruoli',

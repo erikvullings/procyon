@@ -1282,6 +1282,7 @@ export const de = {
     loadFailed: 'Unterhaltungen konnten nicht geladen werden.',
   },
   image: {
+    checkingAvailability: 'Nach einem Bildmodell suchen…',
     sourceUnsupported: 'Dieses Bildmodell kann nicht mit einem vorhandenen Bild beginnen.',
     sourceUnusable:
       'Diese Datei kann nicht als Ausgangsbild verwendet werden. Wählen Sie ein PNG-, JPEG- oder WebP-Bild.',
@@ -1949,6 +1950,10 @@ export const de = {
     unreachable: 'Der KI-Dienst des Profils „{name}“ ist nicht erreichbar.',
   },
   llmRoles: {
+    provider: 'Anbieter',
+    providerUnassigned: 'Anbieter wählen',
+    providerCreateHint:
+      '{name} hat noch keinen Endpunkt. Das Formular oben ist bereits damit ausgefüllt - speichern Sie es dort und wählen Sie es danach als Endpunkt für die Bildgenerierung.',
     advanced: 'Verschiedene Endpunkte oder Modelle pro Funktion verwenden',
     endpoint: 'Endpunkt',
     title: 'Rollen',

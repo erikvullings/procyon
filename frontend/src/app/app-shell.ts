@@ -350,6 +350,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     refreshSemanticAssistantAvailability: (currentComponents?: SemanticComponentStatus) =>
       knowledgeWiring.refreshSemanticAssistantAvailability(currentComponents),
     refreshKnowledgeSearchAvailability: () => knowledgeWiring.refreshKnowledgeSearchAvailability(),
+    refreshImageRoleAvailability: () => imageWiring.refreshRoles(shellState.client),
   };
   opsWiring = createOperationsWiring(shellState, core);
   basketWiring = createBasketWiring(shellState, core);
@@ -3027,6 +3028,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       shellState.client = attrs.client;
       void knowledgeWiring.refreshSemanticAssistantAvailability();
       void knowledgeWiring.refreshKnowledgeSearchAvailability();
+      // The image pane is offered only where an image model is assigned (0325), so the roles are read
+      // alongside the other features whose availability the shell advertises.
+      void imageWiring.refreshRoles(shellState.client);
       // Composition seam (task 0153, controller-registry.ts): every shell-lifetime controller is
       // constructed and torn down through this one registry instead of by-hand `let` +
       // `create*Controller(...)` + a matching teardown call hand-placed in `onremove`.
@@ -3616,8 +3620,12 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         {
           // Reachable the way the chat pane is: the pane's own overflow menu.
           id: 'image',
-          label: t('image', 'actionTitle'),
+          // Without a model of its own the pane can only say so, so the entry waits for one (0325).
+          label: !shellState.imageGenerationChecked
+            ? t('image', 'checkingAvailability')
+            : t('image', 'actionTitle'),
           icon: photoIcon(),
+          disabled: !shellState.imageGenerationAvailable,
           onclick: () => void imageWiring.openImage(),
         },
         {

@@ -13,6 +13,8 @@ export interface SettingsCore {
     currentComponents?: SemanticComponentStatus,
   ) => Promise<void>;
   readonly refreshKnowledgeSearchAvailability: () => Promise<void>;
+  /** Re-reads the LLM roles, so an image model named here enables the image pane (0325). */
+  readonly refreshImageRoleAvailability: () => Promise<void>;
 }
 
 export function createSettingsWiring(shellState: ShellState, core: SettingsCore) {
@@ -37,6 +39,7 @@ export function createSettingsWiring(shellState: ShellState, core: SettingsCore)
     shellState.knowledgeAnswerRevision++;
     void core.refreshSemanticAssistantAvailability();
     void core.refreshKnowledgeSearchAvailability();
+    void core.refreshImageRoleAvailability();
     m.redraw();
   }
 

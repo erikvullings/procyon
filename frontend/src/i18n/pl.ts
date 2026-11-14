@@ -1262,6 +1262,7 @@ export const pl = {
     loadFailed: 'Nie udało się wczytać rozmów.',
   },
   image: {
+    checkingAvailability: 'Szukanie modelu obrazów…',
     sourceUnsupported: 'Ten model obrazów nie może zacząć od istniejącego obrazu.',
     sourceUnusable:
       'Ten plik nie może być użyty jako obraz początkowy. Wybierz obraz PNG, JPEG lub WebP.',
@@ -1922,6 +1923,10 @@ export const pl = {
     unreachable: 'Nie można połączyć się z usługą AI profilu „{name}”.',
   },
   llmRoles: {
+    provider: 'Dostawca',
+    providerUnassigned: 'Wybierz dostawcę',
+    providerCreateHint:
+      '{name} nie ma jeszcze punktu końcowego. Formularz powyżej jest już nim wypełniony - zapisz go tam, a następnie wybierz jako punkt końcowy generowania obrazów.',
     advanced: 'Używaj innych punktów końcowych lub modeli dla każdej funkcji',
     endpoint: 'Punkt końcowy',
     title: 'Role',

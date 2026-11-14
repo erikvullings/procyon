@@ -1633,6 +1633,7 @@ export const en = {
     loadFailed: 'Could not load conversations.',
   },
   image: {
+    checkingAvailability: 'Checking for an image model…',
     sourceUnsupported: 'This image model cannot start from an existing picture.',
     sourceUnusable:
       'That file cannot be used as a starting picture. Pick a PNG, JPEG or WebP image.',
@@ -2283,6 +2284,10 @@ export const en = {
     unreachable: 'The AI service of profile "{name}" could not be reached.',
   },
   llmRoles: {
+    provider: 'Provider',
+    providerUnassigned: 'Choose a provider',
+    providerCreateHint:
+      '{name} has no endpoint yet. The endpoint editor above is already filled from it - save it there, then pick it as the image endpoint.',
     advanced: 'Use different endpoints or models per feature',
     endpoint: 'Endpoint',
     title: 'Roles',

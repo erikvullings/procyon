@@ -271,7 +271,8 @@ export function createActionsWiring(shellState: ShellState) {
         description: t('image', 'openDescription'),
         category: 'tools',
         defaultShortcuts: [],
-        contextRequirements: {},
+        // Without a model of its own the pane can only say so, so the command stays unavailable (0325).
+        contextRequirements: { featureAvailable: shellState.imageGenerationAvailable },
         source: { kind: 'core' as const },
       },
       ...(shellState.semanticAssistantAvailable

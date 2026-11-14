@@ -143,3 +143,17 @@ must review before anything is written. It gets its own role in 0322 and its own
     to start from, and the save was reached while a concurrent session's in-flight frontend edits had the
     shell on "Loading..."), the Tauri host, and a live endpoint of either contract. The write itself, the
     no-overwrite rule and the metadata are covered by wiring and mock-client tests.
+  - The tool is offered only where it can work. The pane's command and its overflow entry wait for an
+    image model to be assigned (`imageGenerationAvailable`, read at startup, re-read when Settings
+    closes), because a pane that can only say "no image model is set" is not worth a keystroke.
+  - The picture model's provider is chosen beside it. An endpoint that answers chat is rarely one that
+    can draw, so the image row names a provider from every server the app knows - Ollama, LM Studio,
+    vLLM, SGLang, OMLX, mlx-serve, Unsloth Studio, OpenAI-compatible, Azure, Model Studio, Qwen Image.
+    A server already added is bound; one not added yet fills the endpoint editor above and says which
+    provider is missing, because a role may not be bound to an endpoint that does not exist. The
+    decision itself is `providerChoice`, tested apart from the widget: the endpoint's saved model wins
+    over the preset's, and a typed model wins over both.
+  - 2026-11-14, browser host again: choosing `LM Studio` with no endpoint for it filled the editor and
+    named the missing provider; after saving that endpoint, choosing it again bound the role, `Save
+    role` enabled and the pane opened from the overflow item; with the role cleared the item read
+    disabled and clicking it opened nothing.

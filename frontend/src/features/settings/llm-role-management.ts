@@ -3,7 +3,13 @@ import { Select, Switch, TextInput } from 'mithril-materialized';
 
 import type { SemanticClient } from '../../api/client/semantic-client.ts';
 import { t } from '../../i18n';
-import type { LlmProfile, LlmRole, LlmRoleAssignment, LlmRoles } from '../../models';
+import type {
+  LlmProfile,
+  LlmProfilePreset,
+  LlmRole,
+  LlmRoleAssignment,
+  LlmRoles,
+} from '../../models';
 import { canAssignRole, LLM_ROLES, type RoleStatus, roleStatus } from '../../models/llm-roles';
 import { errorMessage } from './llm-profile-management';
 
@@ -11,6 +17,40 @@ export interface LlmRoleManagementAttrs {
   readonly client: SemanticClient;
   /** Changes whenever an endpoint changes; a new value reloads the bindings and profiles. */
   readonly revision: number;
+  /**
+   * Asks the endpoint editor above to open with one provider's preset, so a provider the person has
+   * no endpoint for yet is one choice away rather than a trip through the section above.
+   */
+  readonly onCreateEndpoint?: ((presetId: string) => void) | undefined;
+}
+
+/** What picking a provider for the picture role amounts to. */
+export type ProviderChoice =
+  | { readonly kind: 'bind'; readonly profileId: string; readonly model: string }
+  | { readonly kind: 'create'; readonly name: string }
+  | { readonly kind: 'none' };
+
+/**
+ * Decides what choosing a provider means (0325). A server the person already added is bound as the
+ * image endpoint; one they have not added yet is filled into the endpoint editor above, because a
+ * role may not be bound to an endpoint that does not exist. A drawing model is typed rather than
+ * picked, so only a preset that names one can fill that field.
+ */
+export function providerChoice(
+  presets: readonly LlmProfilePreset[],
+  profiles: readonly LlmProfile[],
+  presetId: string,
+  currentModel: string,
+): ProviderChoice {
+  if (presetId === '') return { kind: 'none' };
+  const preset = presets.find((candidate) => candidate.preset === presetId);
+  const existing = profiles.find((candidate) => candidate.preset === presetId);
+  if (existing === undefined) return { kind: 'create', name: preset?.name ?? presetId };
+  return {
+    kind: 'bind',
+    profileId: existing.id,
+    model: currentModel === '' ? existing.model || preset?.model || '' : currentModel,
+  };
 }
 
 /** The editable binding of one role; `profileId` empty means unassigned. */
@@ -66,6 +106,10 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
   };
   /** Models each profile offers, from discovery when the endpoint supports it. */
   let choices: Record<string, string[]> = {};
+  /** Provider presets the app knows, so the picture role can name a server it has no endpoint for. */
+  let presets: LlmProfilePreset[] = [];
+  /** Why the provider choice did not bind yet, e.g. the endpoint still has to be saved. */
+  let providerNotice: string | undefined;
   let loading = true;
   let busy = false;
   let advanced = false;
@@ -93,7 +137,12 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
     loading = true;
     error = undefined;
     try {
-      [profiles, roles] = await Promise.all([client.listLlmProfiles(), client.listLlmRoles()]);
+      [profiles, roles, presets] = await Promise.all([
+        client.listLlmProfiles(),
+        client.listLlmRoles(),
+        client.listLlmProfilePresets(),
+      ]);
+      providerNotice = undefined;
       drafts = {
         chat: draftFrom(roles.chat),
         embeddings: draftFrom(roles.embeddings),
@@ -126,6 +175,25 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
     }
   }
 
+  /** Applies a provider choice to the draft; see {@link providerChoice} for what it decides. */
+  function chooseProvider(attrs: LlmRoleManagementAttrs, presetId: string): void {
+    const choice = providerChoice(presets, profiles, presetId, drafts.image.model);
+    if (choice.kind === 'none') return;
+    if (choice.kind === 'create') {
+      providerNotice = t('llmRoles', 'providerCreateHint', { name: choice.name });
+      attrs.onCreateEndpoint?.(presetId);
+      m.redraw();
+      return;
+    }
+    providerNotice = undefined;
+    drafts = {
+      ...drafts,
+      image: { ...drafts.image, profileId: choice.profileId, model: choice.model },
+    };
+    void loadChoices(attrs.client, choice.profileId);
+    m.redraw();
+  }
+
   function roleBlock(attrs: LlmRoleManagementAttrs, role: LlmRole) {
     const draft = drafts[role];
     const selected = profiles.find((profile) => profile.id === draft.profileId);
@@ -135,6 +203,23 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
     return m('.fm-llm-role', { 'aria-label': t('llmRoles', role) }, [
       m('h5.fm-llm-role-title', t('llmRoles', role)),
       m('.fm-llm-role-fields', [
+        // Only the picture role offers this: an endpoint that answers chat is rarely one that can
+        // draw, so the provider of the picture model is a choice of its own.
+        role === 'image'
+          ? m(Select<string>, {
+              label: t('llmRoles', 'provider'),
+              disabled: busy || presets.length === 0,
+              options: [
+                { id: '', label: t('llmRoles', 'providerUnassigned') },
+                ...presets.map((preset) => ({ id: preset.preset, label: preset.name })),
+              ],
+              checkedId: selected?.preset ?? '',
+              onchange: ([value]) => {
+                if (value === undefined) return;
+                chooseProvider(attrs, value);
+              },
+            })
+          : undefined,
         m(Select<string>, {
           label: t('llmRoles', 'endpoint'),
           disabled: busy,
@@ -183,6 +268,9 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
             }),
         role === 'image' && draft.profileId !== ''
           ? m('p.fm-llm-role-notice', t('llmRoles', 'imageModelHint'))
+          : undefined,
+        role === 'image' && providerNotice !== undefined
+          ? m('p.fm-llm-role-notice', { role: 'status' }, providerNotice)
           : undefined,
       ]),
       // Only chat may reach the cloud without the flag; embeddings and images need it turned on.

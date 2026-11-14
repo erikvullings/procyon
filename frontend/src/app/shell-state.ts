@@ -366,6 +366,10 @@ export function createShellState(client: FileManagerClient) {
     chatOpening: false,
     imageByTab: new Map<string, ImagePaneEntry>(),
     imageOpening: false,
+    /** Whether an image model is assigned; without one the pane can only say so (0325). */
+    imageGenerationAvailable: false,
+    /** Whether that answer has been read from the backend yet. */
+    imageGenerationChecked: false,
     knowledgeSearchOpening: false,
     editorByPane: new Map<
       PaneId,

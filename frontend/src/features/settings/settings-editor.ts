@@ -140,6 +140,9 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
   const notifyLlmChanged = (): void => {
     llmRevision += 1;
   };
+  // A provider chosen in the roles section opens the endpoint editor above with that preset (0325).
+  let llmPresetRequest: { presetId: string; revision: number } | undefined;
+  let llmPresetRevision = 0;
 
   function resetDraft(current: SettingsEditorAttrs): void {
     draft = cloneSettings(current.settings);
@@ -814,10 +817,21 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                       saveLlmProfile = handler;
                     },
                     onChanged: notifyLlmChanged,
+                    openPreset: llmPresetRequest,
                   }),
                 ),
                 m('.row', m('h4.fm-settings-section-heading.col.s12', t('llmRoles', 'title'))),
-                m('.row', m(LlmRoleManagement, { client: current.client, revision: llmRevision })),
+                m(
+                  '.row',
+                  m(LlmRoleManagement, {
+                    client: current.client,
+                    revision: llmRevision,
+                    onCreateEndpoint: (presetId: string) => {
+                      llmPresetRevision += 1;
+                      llmPresetRequest = { presetId, revision: llmPresetRevision };
+                    },
+                  }),
+                ),
               ]),
 
               activeSection === 'plugins'

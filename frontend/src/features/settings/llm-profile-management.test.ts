@@ -39,6 +39,30 @@ function fieldInput(label: string): HTMLInputElement | undefined {
 }
 
 describe('the images API choice', () => {
+  it('opens filled from the provider chosen in the roles section', async () => {
+    const client = new MockFileManagerClient();
+    m.mount(root, {
+      view: () =>
+        m(LlmProfileManagement, { client, openPreset: { presetId: 'mlxServe', revision: 1 } }),
+    });
+    await vi.waitFor(() => expect(root.textContent).not.toContain('Loading generation profiles'));
+    m.redraw.sync();
+
+    // The picture model is named in the roles section, so its provider arrives from there (0325).
+    await vi.waitFor(() => expect(fieldInput('Base URL')?.value).toBe('http://127.0.0.1:11234'));
+    expect(fieldInput('Profile name')?.value).toBe('mlx-serve');
+
+    // The same request must not be applied twice: what the person typed stays put.
+    const name = fieldInput('Profile name');
+    if (name !== undefined) {
+      name.value = 'Studio box';
+      name.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    }
+    m.redraw.sync();
+    expect(fieldInput('Profile name')?.value).toBe('Studio box');
+    expect(fieldInput('Base URL')?.value).toBe('http://127.0.0.1:11234');
+  });
+
   it('records exactly one contract', () => {
     expect(withImagesApi(['chatCompletions', 'modelDiscovery'], 'dashscopeTasks')).toEqual([
       'chatCompletions',

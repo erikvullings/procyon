@@ -1267,6 +1267,7 @@ export const pt = {
     loadFailed: 'Não foi possível carregar as conversas.',
   },
   image: {
+    checkingAvailability: 'Procurando um modelo de imagens…',
     sourceUnsupported: 'Este modelo de imagens não pode começar a partir de uma imagem existente.',
     sourceUnusable:
       'Esse ficheiro não pode ser usado como imagem inicial. Escolha uma imagem PNG, JPEG ou WebP.',
@@ -1930,6 +1931,10 @@ export const pt = {
     unreachable: 'Não foi possível contactar o serviço de IA do perfil «{name}».',
   },
   llmRoles: {
+    provider: 'Fornecedor',
+    providerUnassigned: 'Escolher fornecedor',
+    providerCreateHint:
+      '{name} ainda não tem um endpoint. O formulário acima já está preenchido com ele - salve-o ali e depois escolha-o como endpoint de imagens.',
     advanced: 'Usar outros endpoints ou modelos por funcionalidade',
     endpoint: 'Ponto final',
     title: 'Funções',

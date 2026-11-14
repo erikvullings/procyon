@@ -1268,6 +1268,7 @@ export const fr = {
     loadFailed: 'Impossible de charger les conversations.',
   },
   image: {
+    checkingAvailability: "Recherche d'un modèle d'image…",
     sourceUnsupported: 'Ce modèle d’image ne peut pas partir d’une image existante.',
     sourceUnusable:
       'Ce fichier ne peut pas servir d’image de départ. Choisissez une image PNG, JPEG ou WebP.',
@@ -1935,6 +1936,10 @@ export const fr = {
     unreachable: 'Le service d’IA du profil « {name} » est injoignable.',
   },
   llmRoles: {
+    provider: 'Fournisseur',
+    providerUnassigned: 'Choisir un fournisseur',
+    providerCreateHint:
+      "{name} n'a pas encore de point de terminaison. Le formulaire ci-dessus est déjà prérempli avec - enregistrez-le là, puis choisissez-le comme point de terminaison d'image.",
     advanced: 'Utiliser d’autres points ou modèles par fonctionnalité',
     endpoint: 'Point de terminaison',
     title: 'Rôles',
