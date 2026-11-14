@@ -143,6 +143,12 @@ export function breadcrumbSegments(path: string): readonly BreadcrumbSegment[] {
   return path.includes('\\') ? windowsSegments(path) : posixSegments(path);
 }
 
+/** Joins a child folder name onto a breadcrumb path using that path's own separator. */
+export function childPath(parent: string, name: string): string {
+  if (parent.endsWith('/') || parent.endsWith('\\')) return `${parent}${name}`;
+  return `${parent}${parent.includes('\\') ? '\\' : '/'}${name}`;
+}
+
 /** A search is a virtual result set, not a navigable filesystem path. */
 export function searchResultTitle(presentation: SearchPresentation | undefined): string {
   const term = presentation?.headerTerm ?? presentation?.label ?? presentation?.term;

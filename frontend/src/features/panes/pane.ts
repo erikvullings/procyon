@@ -102,7 +102,13 @@ import {
   mediaLabel,
   mediaModifiedLabel,
 } from '../semantic/media-evidence';
-import { BreadcrumbTrail, breadcrumbSegments, searchResultTitle } from './breadcrumb-view';
+import {
+  type BreadcrumbSegment,
+  BreadcrumbTrail,
+  breadcrumbSegments,
+  childPath,
+  searchResultTitle,
+} from './breadcrumb-view';
 import { formatListingSummary, sizeLabel } from './pane-status-summary';
 import { isParentEntry } from './parent-entry';
 import { normalizeTypedPath } from './path-input';
@@ -210,6 +216,8 @@ export interface TableConfigAttrs {
 /** Path navigation callbacks and history state. */
 export interface PaneNavigationAttrs {
   readonly onNavigate: (path: string) => void | Promise<void>;
+  /** Names of the directories directly inside `path`; enables the breadcrumb separator menu. */
+  readonly onListSubfolders?: (path: string) => Promise<readonly string[]>;
   readonly onBack: () => void | Promise<void>;
   readonly onForward: () => void | Promise<void>;
   readonly onParent: () => void | Promise<void>;
@@ -724,6 +732,16 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
   let editing = false;
   let draftPath = '';
   let favouritesOpen = false;
+  /** Open breadcrumb separator menu: the folder whose subfolders are listed, anchored below the chevron. */
+  let subfolderMenu:
+    | {
+        readonly path: string;
+        readonly label: string;
+        readonly x: number;
+        readonly y: number;
+        names: readonly string[] | undefined;
+      }
+    | undefined;
   let favouriteLabel = '';
   let favouriteError: string | undefined;
   /** True while an add-favourite request is in flight, so a second click before the first
@@ -898,6 +916,39 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
     renameContext = undefined;
   }
 
+  function closeSubfolderMenu(): void {
+    subfolderMenu = undefined;
+  }
+
+  async function openSubfolderMenu(
+    segment: BreadcrumbSegment,
+    anchor: HTMLElement,
+    attrs: PaneAttrs,
+  ): Promise<void> {
+    const list = attrs.navigation.onListSubfolders;
+    if (list === undefined || renameCtrl.entry !== undefined) return;
+    if (subfolderMenu?.path === segment.path) {
+      closeSubfolderMenu();
+      return;
+    }
+    const rect = anchor.getBoundingClientRect();
+    const menu = {
+      path: segment.path,
+      label: segment.label,
+      x: rect.left,
+      y: rect.bottom,
+      names: undefined as readonly string[] | undefined,
+    };
+    subfolderMenu = menu;
+    m.redraw();
+    try {
+      menu.names = await list(segment.path);
+    } catch {
+      menu.names = [];
+    }
+    m.redraw();
+  }
+
   function beginEditing(path: string): void {
     if (renameCtrl.entry !== undefined) return;
     editing = true;
@@ -1004,6 +1055,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
       const pathChanged = typeaheadPath !== attrs.path;
       if (pathChanged) {
         typeaheadPath = attrs.path;
+        closeSubfolderMenu();
         typeaheadCtrl.reset();
         visibleSearchEntryIndices = undefined;
       }
@@ -1355,6 +1407,62 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
             },
             showActions: false,
           }),
+          subfolderMenu !== undefined && [
+            m('.fm-favourites-menu-backdrop', {
+              onclick: () => {
+                closeSubfolderMenu();
+                m.redraw();
+              },
+            }),
+            m(
+              '.fm-subfolder-menu',
+              {
+                role: 'menu',
+                tabindex: -1,
+                'aria-label': t('pane', 'subfolders', { name: subfolderMenu.label }),
+                style: {
+                  left: `${Math.max(0, Math.min(subfolderMenu.x, window.innerWidth - 240))}px`,
+                  top: `${subfolderMenu.y}px`,
+                },
+                oncreate: ({ dom }: VnodeDOM) => (dom as HTMLElement).focus(),
+                onclick: (event: MouseEvent) => event.stopPropagation(),
+                onkeydown: (event: KeyboardEvent) => {
+                  event.stopPropagation();
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    closeSubfolderMenu();
+                    m.redraw();
+                  } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    moveFavouritesFocus(
+                      event.currentTarget as HTMLElement,
+                      event.key === 'ArrowDown' ? 1 : -1,
+                    );
+                  }
+                },
+              },
+              subfolderMenu.names === undefined
+                ? m('.fm-subfolder-empty', t('pane', 'subfoldersLoading'))
+                : subfolderMenu.names.length === 0
+                  ? m('.fm-subfolder-empty', t('pane', 'noSubfolders'))
+                  : subfolderMenu.names.map((name) => {
+                      const menuPath = subfolderMenu?.path ?? '';
+                      return m(
+                        'button.fm-subfolder-item',
+                        {
+                          key: name,
+                          type: 'button',
+                          role: 'menuitem',
+                          onclick: () => {
+                            closeSubfolderMenu();
+                            void navigate(childPath(menuPath, name), attrs, false);
+                          },
+                        },
+                        name,
+                      );
+                    }),
+            ),
+          ],
           favouritesOpen && [
             m('.fm-favourites-menu-backdrop', {
               onclick: () => {
@@ -1813,15 +1921,34 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                                 ? breadcrumbSegments(attrs.path).slice(1)
                                 : breadcrumbSegments(attrs.path)
                               ).map((segment) =>
-                                m(
-                                  'button.fm-breadcrumb-segment',
-                                  {
-                                    key: segment.path,
-                                    type: 'button',
-                                    onclick: () => void navigate(segment.path, attrs, false),
-                                  },
-                                  segment.label,
-                                ),
+                                m.fragment({ key: segment.path }, [
+                                  m(
+                                    'button.fm-breadcrumb-segment',
+                                    {
+                                      type: 'button',
+                                      onclick: () => void navigate(segment.path, attrs, false),
+                                    },
+                                    segment.label,
+                                  ),
+                                  m(
+                                    'button.fm-breadcrumb-separator',
+                                    {
+                                      type: 'button',
+                                      'aria-label': t('pane', 'subfolders', {
+                                        name: segment.label,
+                                      }),
+                                      'aria-haspopup': 'menu',
+                                      'aria-expanded': String(subfolderMenu?.path === segment.path),
+                                      onclick: (event: MouseEvent) =>
+                                        void openSubfolderMenu(
+                                          segment,
+                                          event.currentTarget as HTMLElement,
+                                          attrs,
+                                        ),
+                                    },
+                                    '›',
+                                  ),
+                                ]),
                               ),
                         ),
                         isSearchLocation && attrs.onRefreshSearch !== undefined

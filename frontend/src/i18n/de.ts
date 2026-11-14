@@ -178,6 +178,9 @@ export const de = {
     remove: 'Entfernen',
     path: 'Pfad',
     currentPath: 'Aktueller Pfad',
+    subfolders: 'Unterordner von {name}',
+    noSubfolders: 'Keine Unterordner',
+    subfoldersLoading: 'Wird geladen…',
     showPathBeginning: 'Pfadanfang anzeigen',
     newTab: 'Neuer Tab',
     emptyDirectory: 'Dieses Verzeichnis ist leer.',
@@ -1279,10 +1282,22 @@ export const de = {
     loadFailed: 'Unterhaltungen konnten nicht geladen werden.',
   },
   image: {
+    actionTitle: 'Bilder erstellen',
+    style: 'Stil',
+    styleNone: 'Kein Stil',
+    finish: 'Ausarbeitung',
+    finishNone: 'Keine Ausarbeitung',
+    quality: 'Qualität',
+    qualityAny: 'Beliebige Qualität',
+    steps: 'Schritte',
+    stepsAny: 'Beliebige Schritte',
+    source: 'Vorlage',
+    sourceHint: 'Mit dem Bild im anderen Bereich beginnen',
+    sourceClear: 'Nicht mehr mit einem Bild beginnen',
+    sourceNeedsOtherPane: 'Wählen Sie zuerst ein Bild im anderen Bereich aus.',
+    sourceNotFile: 'Das ist keine Bilddatei. Wählen Sie eine im anderen Bereich.',
     generations: 'Generierungen',
     untitledGeneration: 'Eine Generierung',
-    styles: 'Stil',
-    stylesCount: 'Stil · {count}',
     newPrompt: 'Neue Bildaufforderung',
     seedPlaceholder: 'beliebiges Seed',
     waitingForModel: 'Warten auf das Modell…',
@@ -1338,6 +1353,12 @@ export const de = {
       'Das Bildmodell konnte nicht antworten. Prüfe den Endpunkt in den Einstellungen.',
     failed: 'Das Bild konnte nicht erzeugt werden. Prüfe den Endpunkt in den Einstellungen.',
     previewFailed: 'Die Vorschau konnte nicht geladen werden.',
+  },
+  imageQuality: {
+    fast: 'Schnell',
+    good: 'Gut',
+    quality: 'Qualität',
+    superQuality: 'Superqualität',
   },
   imagePreset: {
     clipart: 'Vektorgrafik',
@@ -1943,7 +1964,9 @@ export const de = {
       'Cloud-Nutzung muss erlaubt sein, bevor diese Rolle einen Cloud-Endpunkt nutzen kann.',
     statusNeedsConsent:
       'Dieser Endpunkt benötigt eine Zustimmung in den Einstellungen: öffne ihn oben und speichere mit Zustimmung.',
-    image: 'Bild',
+    image: 'Bilder erstellen',
+    imageModelHint:
+      'Die meisten Modelle können nicht zeichnen. Nennen Sie das Modell, das es kann; das Chatmodell eines Endpunkts kann das meist nicht.',
   },
 
   llmProfiles: {
@@ -2909,6 +2932,7 @@ export const de = {
     versatiles: 'Vektorstil, weltweit, Community-Server.',
   },
   rejectionReason: {
+    imageSourceUnsupported: 'Dieses Bildmodell kann nicht mit einem vorhandenen Bild beginnen.',
     workspaceInvalid: 'Der Arbeitsbereich ist ungültig.',
     paneNotFound: 'Dieser Bereich existiert in diesem Arbeitsbereich nicht mehr.',
     tabNotFound: 'Dieser Tab existiert in diesem Bereich nicht mehr.',

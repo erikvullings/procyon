@@ -255,6 +255,10 @@ export interface PaneContentContext {
     selectGeneration(key: string, generationId: string): void;
     /** Clears the prompt for a fresh idea. */
     newPrompt(key: string): void;
+    /** Takes the other pane's selected picture as the one this prompt starts from. */
+    useSource(key: string): void;
+    /** Stops starting from a picture. */
+    clearSource(key: string): void;
   };
 
   // Scalar state setters
@@ -733,6 +737,17 @@ export function createPaneContentBuilder(
             });
         }
       },
+      onListSubfolders: async (path) => {
+        if (tab === undefined) return [];
+        const children = await client.listDirectoryChildren(
+          context.locationForPath(tab.location, path),
+          false,
+        );
+        return children
+          .filter((entry) => entry.kind === 'directory')
+          .map((entry) => entry.name)
+          .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+      },
       onNavigateLocation: async (location) => {
         await context.getNavigation().navigate(paneId, location);
       },
@@ -1179,6 +1194,8 @@ export function createPaneContentBuilder(
               onSave: (input) => context.imageActions?.save(image.key, input),
               onDiscard: () => context.imageActions?.discard(image.key),
               onRegenerate: () => context.imageActions?.regenerate(image.key),
+              onUseSource: () => context.imageActions?.useSource(image.key),
+              onClearSource: () => context.imageActions?.clearSource(image.key),
               onSelectGeneration: (generationId) =>
                 context.imageActions?.selectGeneration(image.key, generationId),
               onNewPrompt: () => context.imageActions?.newPrompt(image.key),

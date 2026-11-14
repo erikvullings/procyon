@@ -128,6 +128,8 @@ export interface WorkspacePaneContent {
   readonly onDeleteFavourite?: (location: Location) => void | Promise<void>;
   readonly onReorderFavourites?: (from: number, to: number) => void | Promise<void>;
   readonly onNavigate: (path: string) => void | Promise<void>;
+  /** Names of the directories directly inside `path`, for the breadcrumb separator menu. */
+  readonly onListSubfolders?: (path: string) => Promise<readonly string[]>;
   readonly onBack: () => void | Promise<void>;
   readonly onForward: () => void | Promise<void>;
   readonly onParent: () => void | Promise<void>;
@@ -706,6 +708,9 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
           } satisfies FilterAttrs,
           navigation: {
             onNavigate: content.onNavigate,
+            ...(content.onListSubfolders === undefined
+              ? {}
+              : { onListSubfolders: content.onListSubfolders }),
             onBack: content.onBack,
             onForward: content.onForward,
             onParent: content.onParent,

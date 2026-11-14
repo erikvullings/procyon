@@ -174,6 +174,9 @@ export const fr = {
     remove: 'Retirer',
     path: 'Chemin',
     currentPath: 'Chemin actuel',
+    subfolders: 'Sous-dossiers de {name}',
+    noSubfolders: 'Aucun sous-dossier',
+    subfoldersLoading: 'Chargement…',
     showPathBeginning: 'Afficher le début du chemin',
     newTab: 'Nouvel onglet',
     emptyDirectory: 'Ce répertoire est vide.',
@@ -1265,10 +1268,22 @@ export const fr = {
     loadFailed: 'Impossible de charger les conversations.',
   },
   image: {
+    actionTitle: 'Génération d’image',
+    style: 'Style',
+    styleNone: 'Sans style',
+    finish: 'Finition',
+    finishNone: 'Sans finition',
+    quality: 'Qualité',
+    qualityAny: 'Qualité au choix',
+    steps: 'Étapes',
+    stepsAny: 'Étapes au choix',
+    source: 'Source',
+    sourceHint: 'Partir de l’image sélectionnée dans l’autre volet',
+    sourceClear: 'Ne plus partir d’une image',
+    sourceNeedsOtherPane: 'Sélectionnez d’abord une image dans l’autre volet.',
+    sourceNotFile: 'Ce n’est pas un fichier image. Sélectionnez-en un dans l’autre volet.',
     generations: 'Générations',
     untitledGeneration: 'Une génération',
-    styles: 'Style',
-    stylesCount: 'Style · {count}',
     newPrompt: 'Nouvelle invite d’image',
     seedPlaceholder: 'graine au hasard',
     waitingForModel: 'En attente du modèle…',
@@ -1324,6 +1339,12 @@ export const fr = {
     failed:
       'L’image n’a pas pu être générée. Vérifiez le point de terminaison dans les paramètres.',
     previewFailed: 'L’aperçu n’a pas pu être chargé.',
+  },
+  imageQuality: {
+    fast: 'Rapide',
+    good: 'Bonne',
+    quality: 'Qualité',
+    superQuality: 'Super qualité',
   },
   imagePreset: {
     clipart: 'Vignette',
@@ -1928,7 +1949,9 @@ export const fr = {
       "L'usage cloud doit être autorisé avant que ce rôle puisse utiliser un point cloud.",
     statusNeedsConsent:
       'Ce point de terminaison nécessite un consentement dans les paramètres : ouvrez-le ci-dessus et enregistrez avec consentement.',
-    image: 'Bildgenerierung',
+    image: 'Génération d’image',
+    imageModelHint:
+      'La plupart des modèles ne savent pas dessiner. Nommez celui qui le sait ; le modèle de discussion d’un point de terminaison ne le sait généralement pas.',
   },
 
   llmProfiles: {
@@ -2891,6 +2914,7 @@ export const fr = {
     versatiles: 'Style vectoriel, monde entier, serveur communautaire.',
   },
   rejectionReason: {
+    imageSourceUnsupported: 'Ce modèle d’image ne peut pas partir d’une image existante.',
     workspaceInvalid: 'L’espace de travail n’est pas valide.',
     paneNotFound: 'Ce panneau n’existe plus dans cet espace de travail.',
     tabNotFound: 'Cet onglet n’existe plus dans ce panneau.',

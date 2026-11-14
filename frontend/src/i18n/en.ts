@@ -173,6 +173,9 @@ export const en = {
     remove: 'Remove',
     path: 'Path',
     currentPath: 'Current path',
+    subfolders: 'Subfolders of {name}',
+    noSubfolders: 'No subfolders',
+    subfoldersLoading: 'Loading…',
     showPathBeginning: 'Show beginning of path',
     newTab: 'New tab',
     emptyDirectory: 'This directory is empty.',
@@ -1630,10 +1633,22 @@ export const en = {
     loadFailed: 'Could not load conversations.',
   },
   image: {
+    actionTitle: 'Image generation',
+    style: 'Style',
+    styleNone: 'No style',
+    finish: 'Finish',
+    finishNone: 'No finish',
+    quality: 'Quality',
+    qualityAny: 'Any quality',
+    steps: 'Steps',
+    stepsAny: 'Any steps',
+    source: 'Source',
+    sourceHint: 'Start from the picture the other pane has selected',
+    sourceClear: 'Stop starting from a picture',
+    sourceNeedsOtherPane: 'Select a picture in the other pane first.',
+    sourceNotFile: 'That is not a picture file. Select one in the other pane.',
     generations: 'Generations',
     untitledGeneration: 'A generation',
-    styles: 'Style',
-    stylesCount: 'Style · {count}',
     newPrompt: 'New image prompt',
     seedPlaceholder: 'any seed',
     waitingForModel: 'Waiting for the model…',
@@ -1685,6 +1700,12 @@ export const en = {
     generationFailed: 'The image model could not answer. Check the endpoint in Settings.',
     failed: 'The image could not be generated. Check the endpoint in Settings.',
     previewFailed: 'The preview could not be loaded.',
+  },
+  imageQuality: {
+    fast: 'Fast',
+    good: 'Good',
+    quality: 'Quality',
+    superQuality: 'Super quality',
   },
   imagePreset: {
     clipart: 'Clipart',
@@ -2275,7 +2296,9 @@ export const en = {
     statusCloudNotAllowed: 'Cloud use must be allowed before this role can use a cloud endpoint.',
     statusNeedsConsent:
       'This endpoint needs consent in Settings: open it above, and save with consent.',
-    image: 'Image',
+    image: 'Image generation',
+    imageModelHint:
+      'Most models cannot draw. Name the model that can; the chat model of an endpoint usually cannot.',
   },
 
   llmProfiles: {
@@ -2814,6 +2837,7 @@ export const en = {
     versatiles: 'Vector style, worldwide, community server.',
   },
   rejectionReason: {
+    imageSourceUnsupported: 'This image model cannot start from an existing picture.',
     workspaceInvalid: 'The workspace is not valid.',
     paneNotFound: 'That pane no longer exists in this workspace.',
     tabNotFound: 'That tab no longer exists in this pane.',

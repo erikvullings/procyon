@@ -174,6 +174,9 @@ export const nl = {
     remove: 'Verwijderen',
     path: 'Pad',
     currentPath: 'Huidig pad',
+    subfolders: 'Submappen van {name}',
+    noSubfolders: 'Geen submappen',
+    subfoldersLoading: 'Laden…',
     showPathBeginning: 'Begin van pad tonen',
     newTab: 'Nieuw tabblad',
     emptyDirectory: 'Deze map is leeg.',
@@ -1659,10 +1662,22 @@ export const nl = {
     loadFailed: 'Gesprekken konden niet worden geladen.',
   },
   image: {
+    actionTitle: 'Afbeelding genereren',
+    style: 'Stijl',
+    styleNone: 'Geen stijl',
+    finish: 'Afwerking',
+    finishNone: 'Geen afwerking',
+    quality: 'Kwaliteit',
+    qualityAny: 'Elke kwaliteit',
+    steps: 'Stappen',
+    stepsAny: 'Elk aantal stappen',
+    source: 'Bron',
+    sourceHint: 'Begin vanuit de afbeelding in het andere paneel',
+    sourceClear: 'Niet meer vanuit een afbeelding beginnen',
+    sourceNeedsOtherPane: 'Selecteer eerst een afbeelding in het andere paneel.',
+    sourceNotFile: 'Dat is geen afbeeldingsbestand. Selecteer er een in het andere paneel.',
     generations: 'Generaties',
     untitledGeneration: 'Een generatie',
-    styles: 'Stijl',
-    stylesCount: 'Stijl · {count}',
     newPrompt: 'Nieuwe afbeeldingsprompt',
     seedPlaceholder: 'willekeurige seed',
     waitingForModel: 'Wachten op het model…',
@@ -1715,6 +1730,12 @@ export const nl = {
     generationFailed: 'Het beeldmodel kon niet antwoorden. Controleer de endpoint in Instellingen.',
     failed: 'De afbeelding kon niet worden gegenereerd. Controleer de endpoint in Instellingen.',
     previewFailed: 'Het voorbeeld kon niet worden geladen.',
+  },
+  imageQuality: {
+    fast: 'Snel',
+    good: 'Goed',
+    quality: 'Kwaliteit',
+    superQuality: 'Superkwaliteit',
   },
   imagePreset: {
     clipart: 'Pictogram',
@@ -2315,7 +2336,9 @@ export const nl = {
       'Cloudgebruik moet worden toegestaan voordat deze rol een cloud-eindpunt kan gebruiken.',
     statusNeedsConsent:
       'Dit eindpunt heeft toestemming nodig in Instellingen: open het hierboven en sla op met toestemming.',
-    image: 'Afbeelding',
+    image: 'Afbeelding genereren',
+    imageModelHint:
+      'De meeste modellen kunnen niet tekenen. Noem het model dat het kan; het chatmodel van een endpoint kan dat meestal niet.',
   },
 
   llmProfiles: {
@@ -2875,6 +2898,7 @@ export const nl = {
     versatiles: 'Vectorstijl, wereldwijd, communityserver.',
   },
   rejectionReason: {
+    imageSourceUnsupported: 'Dit beeldmodel kan niet vanuit een bestaande afbeelding beginnen.',
     workspaceInvalid: 'De werkruimte is niet geldig.',
     paneNotFound: 'Dat paneel bestaat niet meer in deze werkruimte.',
     tabNotFound: 'Dat tabblad bestaat niet meer in dit paneel.',

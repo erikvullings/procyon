@@ -430,6 +430,23 @@ describe('Pane inline rename', () => {
     );
   });
 
+  it('lists subfolders from a breadcrumb separator and navigates into the chosen one', async () => {
+    const onNavigate = vi.fn();
+    const onListSubfolders = vi.fn(async () => ['alpha', 'beta']);
+    const base = attrs({ path: '/home/erik', onNavigate });
+    mount({ ...base, navigation: { ...base.navigation, onListSubfolders } });
+    const separators = root.querySelectorAll<HTMLButtonElement>('.fm-breadcrumb-separator');
+    separators[1]?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    m.redraw.sync();
+
+    expect(onListSubfolders).toHaveBeenCalledWith('/home');
+    const items = [...root.querySelectorAll<HTMLButtonElement>('.fm-subfolder-item')];
+    expect(items.map((item) => item.textContent)).toEqual(['alpha', 'beta']);
+    items[1]?.click();
+    expect(onNavigate).toHaveBeenCalledWith('/home/beta');
+  });
+
   it('blocks folder navigation until inline rename is committed or cancelled', () => {
     const onNavigate = vi.fn();
     const onOpenEntry = vi.fn();
@@ -1905,7 +1922,7 @@ describe('Pane breadcrumb editing', () => {
         }),
       );
       m.redraw.sync();
-      expect(root.querySelector('.fm-breadcrumb-segment:last-child')?.textContent).toBe(last);
+      expect([...root.querySelectorAll('.fm-breadcrumb-segment')].at(-1)?.textContent).toBe(last);
       expectEndVisible();
       expect(root.querySelector<HTMLButtonElement>('.fm-breadcrumb-overflow')?.hidden).toBe(
         path === '/',

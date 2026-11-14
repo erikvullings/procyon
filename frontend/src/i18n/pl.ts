@@ -173,6 +173,9 @@ export const pl = {
     remove: 'Usuń',
     path: 'Ścieżka',
     currentPath: 'Bieżąca ścieżka',
+    subfolders: 'Podfoldery: {name}',
+    noSubfolders: 'Brak podfolderów',
+    subfoldersLoading: 'Wczytywanie…',
     showPathBeginning: 'Pokaż początek ścieżki',
     newTab: 'Nowa karta',
     emptyDirectory: 'Ten katalog jest pusty.',
@@ -1259,10 +1262,22 @@ export const pl = {
     loadFailed: 'Nie udało się wczytać rozmów.',
   },
   image: {
+    actionTitle: 'Generowanie obrazów',
+    style: 'Styl',
+    styleNone: 'Bez stylu',
+    finish: 'Wykończenie',
+    finishNone: 'Bez wykończenia',
+    quality: 'Jakość',
+    qualityAny: 'Dowolna jakość',
+    steps: 'Kroki',
+    stepsAny: 'Dowolna liczba kroków',
+    source: 'Źródło',
+    sourceHint: 'Zacznij od obrazu zaznaczonego w innym panelu',
+    sourceClear: 'Nie zaczynaj już od obrazu',
+    sourceNeedsOtherPane: 'Najpierw zaznacz obraz w innym panelu.',
+    sourceNotFile: 'To nie jest plik obrazu. Zaznacz taki w innym panelu.',
     generations: 'Generacje',
     untitledGeneration: 'Jedna generacja',
-    styles: 'Styl',
-    stylesCount: 'Styl · {count}',
     newPrompt: 'Nowa podpowiedź obrazu',
     seedPlaceholder: 'dowolny seed',
     waitingForModel: 'Oczekiwanie na model…',
@@ -1316,6 +1331,12 @@ export const pl = {
     generationFailed: 'Model obrazów nie odpowiedział. Sprawdź punkt końcowy w ustawieniach.',
     failed: 'Nie udało się wygenerować obrazu. Sprawdź punkt końcowy w ustawieniach.',
     previewFailed: 'Nie udało się wczytać podglądu.',
+  },
+  imageQuality: {
+    fast: 'Szybka',
+    good: 'Dobra',
+    quality: 'Jakość',
+    superQuality: 'Super jakość',
   },
   imagePreset: {
     clipart: 'Klipart',
@@ -1916,7 +1937,9 @@ export const pl = {
       'Przed użyciem punktu w chmurze przez tę rolę trzeba zezwolić na użycie w chmurze.',
     statusNeedsConsent:
       'Ten punkt końcowy wymaga zgody w Ustawieniach: otwórz go powyżej i zapisz ze zgodą.',
-    image: 'Obraz',
+    image: 'Generowanie obrazów',
+    imageModelHint:
+      'Większość modeli nie umie rysować. Podaj model, który umie; model czatu punktu końcowego zwykle nie umie.',
   },
 
   llmProfiles: {
@@ -2869,6 +2892,7 @@ export const pl = {
     versatiles: 'Styl wektorowy, cały świat, serwer społeczności.',
   },
   rejectionReason: {
+    imageSourceUnsupported: 'Ten model obrazów nie może zacząć od istniejącego obrazu.',
     workspaceInvalid: 'Obszar roboczy jest nieprawidłowy.',
     paneNotFound: 'Ten panel już nie istnieje w tym obszarze roboczym.',
     tabNotFound: 'Ta karta już nie istnieje w tym panelu.',

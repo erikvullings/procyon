@@ -173,6 +173,9 @@ export const pt = {
     remove: 'Remover',
     path: 'Caminho',
     currentPath: 'Caminho atual',
+    subfolders: 'Subpastas de {name}',
+    noSubfolders: 'Sem subpastas',
+    subfoldersLoading: 'A carregar…',
     showPathBeginning: 'Mostrar início do caminho',
     newTab: 'Novo separador',
     emptyDirectory: 'Esta pasta está vazia.',
@@ -1264,10 +1267,22 @@ export const pt = {
     loadFailed: 'Não foi possível carregar as conversas.',
   },
   image: {
+    actionTitle: 'Geração de imagens',
+    style: 'Estilo',
+    styleNone: 'Sem estilo',
+    finish: 'Acabamento',
+    finishNone: 'Sem acabamento',
+    quality: 'Qualidade',
+    qualityAny: 'Qualquer qualidade',
+    steps: 'Passos',
+    stepsAny: 'Qualquer número de passos',
+    source: 'Fonte',
+    sourceHint: 'Começar a partir da imagem selecionada no outro painel',
+    sourceClear: 'Deixar de começar a partir de uma imagem',
+    sourceNeedsOtherPane: 'Selecione primeiro uma imagem no outro painel.',
+    sourceNotFile: 'Isso não é um ficheiro de imagem. Selecione um no outro painel.',
     generations: 'Gerações',
     untitledGeneration: 'Uma geração',
-    styles: 'Estilo',
-    stylesCount: 'Estilo · {count}',
     newPrompt: 'Nova indicação de imagem',
     seedPlaceholder: 'semente qualquer',
     waitingForModel: 'Aguardando o modelo…',
@@ -1320,6 +1335,12 @@ export const pt = {
     generationFailed: 'O modelo de imagem não respondeu. Verifique o endpoint nas configurações.',
     failed: 'A imagem não pôde ser gerada. Verifique o endpoint nas configurações.',
     previewFailed: 'A pré-visualização não pôde ser carregada.',
+  },
+  imageQuality: {
+    fast: 'Rápida',
+    good: 'Boa',
+    quality: 'Qualidade',
+    superQuality: 'Super qualidade',
   },
   imagePreset: {
     clipart: 'Recorte',
@@ -1923,7 +1944,9 @@ export const pt = {
       'É preciso permitir o uso na nuvem antes de esta função usar um endpoint na nuvem.',
     statusNeedsConsent:
       'Este endpoint precisa de consentimento nas Definições: abra-o acima e guarde com consentimento.',
-    image: 'Imagem',
+    image: 'Geração de imagens',
+    imageModelHint:
+      'A maioria dos modelos não sabe desenhar. Indique o modelo que sabe; o modelo de chat de um endpoint geralmente não sabe.',
   },
 
   llmProfiles: {
@@ -2883,6 +2906,8 @@ export const pt = {
     versatiles: 'Estilo vetorial, mundial, servidor da comunidade.',
   },
   rejectionReason: {
+    imageSourceUnsupported:
+      'Este modelo de imagens não pode começar a partir de uma imagem existente.',
     workspaceInvalid: 'O espaço de trabalho não é válido.',
     paneNotFound: 'Esse painel já não existe neste espaço de trabalho.',
     tabNotFound: 'Esse separador já não existe neste painel.',

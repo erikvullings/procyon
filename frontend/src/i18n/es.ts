@@ -171,6 +171,9 @@ export const es = {
     remove: 'Quitar',
     path: 'Ruta',
     currentPath: 'Ruta actual',
+    subfolders: 'Subcarpetas de {name}',
+    noSubfolders: 'Sin subcarpetas',
+    subfoldersLoading: 'Cargando…',
     showPathBeginning: 'Mostrar el principio de la ruta',
     newTab: 'Nueva pestaña',
     emptyDirectory: 'Este directorio está vacío.',
@@ -1262,10 +1265,22 @@ export const es = {
     loadFailed: 'No se pudieron cargar las conversaciones.',
   },
   image: {
+    actionTitle: 'Generación de imágenes',
+    style: 'Estilo',
+    styleNone: 'Sin estilo',
+    finish: 'Acabado',
+    finishNone: 'Sin acabado',
+    quality: 'Calidad',
+    qualityAny: 'Cualquier calidad',
+    steps: 'Pasos',
+    stepsAny: 'Cualquier número de pasos',
+    source: 'Fuente',
+    sourceHint: 'Empezar desde la imagen del otro panel',
+    sourceClear: 'Dejar de empezar desde una imagen',
+    sourceNeedsOtherPane: 'Selecciona primero una imagen en el otro panel.',
+    sourceNotFile: 'Eso no es un archivo de imagen. Selecciona uno en el otro panel.',
     generations: 'Generaciones',
     untitledGeneration: 'Una generación',
-    styles: 'Estilo',
-    stylesCount: 'Estilo · {count}',
     newPrompt: 'Nueva indicación de imagen',
     seedPlaceholder: 'semilla cualquiera',
     waitingForModel: 'Esperando al modelo…',
@@ -1319,6 +1334,12 @@ export const es = {
       'El modelo de imágenes no pudo responder. Revisa el punto de acceso en Ajustes.',
     failed: 'No se pudo generar la imagen. Revisa el punto de acceso en Ajustes.',
     previewFailed: 'No se pudo cargar la vista previa.',
+  },
+  imageQuality: {
+    fast: 'Rápida',
+    good: 'Buena',
+    quality: 'Calidad',
+    superQuality: 'Súper calidad',
   },
   imagePreset: {
     clipart: 'Recortable',
@@ -1920,7 +1941,9 @@ export const es = {
       'Hay que permitir el uso en la nube antes de que este rol use un endpoint en la nube.',
     statusNeedsConsent:
       'Este endpoint necesita consentimiento en Ajustes: ábrelo arriba y guarda con consentimiento.',
-    image: 'Imagen',
+    image: 'Generación de imágenes',
+    imageModelHint:
+      'La mayoría de los modelos no pueden dibujar. Nombra el modelo que sí puede; el modelo de chat de un endpoint normalmente no puede.',
   },
 
   llmProfiles: {
@@ -2875,6 +2898,7 @@ export const es = {
     versatiles: 'Estilo vectorial, mundial, servidor comunitario.',
   },
   rejectionReason: {
+    imageSourceUnsupported: 'Este modelo de imágenes no puede partir de una imagen existente.',
     workspaceInvalid: 'El espacio de trabajo no es válido.',
     paneNotFound: 'Ese panel ya no existe en este espacio de trabajo.',
     tabNotFound: 'Esa pestaña ya no existe en este panel.',

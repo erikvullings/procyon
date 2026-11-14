@@ -172,6 +172,9 @@ export const it = {
     remove: 'Rimuovi',
     path: 'Percorso',
     currentPath: 'Percorso corrente',
+    subfolders: 'Sottocartelle di {name}',
+    noSubfolders: 'Nessuna sottocartella',
+    subfoldersLoading: 'Caricamento…',
     showPathBeginning: 'Mostra l’inizio del percorso',
     newTab: 'Nuova scheda',
     emptyDirectory: 'Questa cartella è vuota.',
@@ -1259,10 +1262,22 @@ export const it = {
     loadFailed: 'Impossibile caricare le conversazioni.',
   },
   image: {
+    actionTitle: 'Generazione di immagini',
+    style: 'Stile',
+    styleNone: 'Nessuno stile',
+    finish: 'Finitura',
+    finishNone: 'Nessuna finitura',
+    quality: 'Qualità',
+    qualityAny: 'Qualsiasi qualità',
+    steps: 'Passaggi',
+    stepsAny: 'Qualsiasi numero di passaggi',
+    source: 'Sorgente',
+    sourceHint: 'Inizia dall’immagine selezionata nell’altro riquadro',
+    sourceClear: 'Non iniziare più da un’immagine',
+    sourceNeedsOtherPane: 'Seleziona prima un’immagine nell’altro riquadro.',
+    sourceNotFile: 'Non è un file immagine. Selezionane uno nell’altro riquadro.',
     generations: 'Generazioni',
     untitledGeneration: 'Una generazione',
-    styles: 'Stile',
-    stylesCount: 'Stile · {count}',
     newPrompt: 'Nuovo prompt dell’immagine',
     seedPlaceholder: 'seed qualsiasi',
     waitingForModel: 'In attesa del modello…',
@@ -1316,6 +1331,12 @@ export const it = {
       'Il modello di immagini non ha risposto. Controlla l’endpoint nelle impostazioni.',
     failed: 'L’immagine non può essere generata. Controlla l’endpoint nelle impostazioni.',
     previewFailed: 'L’anteprima non può essere caricata.',
+  },
+  imageQuality: {
+    fast: 'Veloce',
+    good: 'Buona',
+    quality: 'Qualità',
+    superQuality: 'Super qualità',
   },
   imagePreset: {
     clipart: 'Iconcina',
@@ -1919,7 +1940,9 @@ export const it = {
       "Occorre consentire l'uso nel cloud prima che questo ruolo possa usare un endpoint cloud.",
     statusNeedsConsent:
       'Questo endpoint richiede il consenso nelle Impostazioni: aprilo sopra e salva con consenso.',
-    image: 'Immagine',
+    image: 'Generazione di immagini',
+    imageModelHint:
+      'La maggior parte dei modelli non sa disegnare. Indica il modello che sa farlo; il modello di chat di un endpoint di solito non sa farlo.',
   },
 
   llmProfiles: {
@@ -2870,6 +2893,7 @@ export const it = {
     versatiles: 'Stile vettoriale, mondiale, server della community.',
   },
   rejectionReason: {
+    imageSourceUnsupported: 'Questo modello di immagini non può partire da un’immagine esistente.',
     workspaceInvalid: 'Lo spazio di lavoro non è valido.',
     paneNotFound: 'Quel pannello non esiste più in questo spazio di lavoro.',
     tabNotFound: 'Quella scheda non esiste più in questo pannello.',
