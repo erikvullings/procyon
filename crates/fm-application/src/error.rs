@@ -425,6 +425,21 @@ impl From<ImageGenerationError> for ApplicationError {
                 "the generated image was too large; ask for a smaller size or fewer images",
             )
             .into(),
+            ImageGenerationError::SourceUnusable(detail) => Rejection::new(
+                reason::IMAGE_SOURCE_UNUSABLE,
+                format!("that file cannot be used as a starting picture ({detail})"),
+            )
+            .into(),
+            ImageGenerationError::SourceTooLarge => Rejection::new(
+                reason::IMAGE_SOURCE_TOO_LARGE,
+                "the picture to start from is too large; pick a smaller one",
+            )
+            .into(),
+            ImageGenerationError::SourceUnsupported => Rejection::new(
+                reason::IMAGE_SOURCE_UNSUPPORTED,
+                "this image endpoint cannot start from an existing picture",
+            )
+            .into(),
             ImageGenerationError::Expired => Rejection::new(
                 reason::IMAGE_BATCH_EXPIRED,
                 "these images are no longer held; generate them again",

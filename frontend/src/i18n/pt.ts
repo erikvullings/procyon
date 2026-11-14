@@ -1321,6 +1321,8 @@ export const pt = {
     savedTo: 'Salvo em {location}',
     savedWithPrompt: 'Salvo em {location} com a solicitação nos metadados.',
     savedPlain: 'Salvo em {location}. Este formato não comporta a solicitação.',
+    destinationInvalid:
+      'Essa pasta ou nome de arquivo não corresponde a este local. Verifique ambos e tente novamente.',
     openSettings: 'Abrir configurações de IA',
     needSubject: 'Descreva primeiro o que quer ver.',
     promptTooLong: 'A descrição está muito longa. Encurte-a.',

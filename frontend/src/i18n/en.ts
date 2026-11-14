@@ -1686,6 +1686,8 @@ export const en = {
     savedTo: 'Saved to {location}',
     savedWithPrompt: 'Saved to {location} with the prompt in its metadata.',
     savedPlain: 'Saved to {location}. This format cannot carry the prompt.',
+    destinationInvalid:
+      'That folder or file name does not fit this location. Check both and try again.',
     openSettings: 'Open AI settings',
     needSubject: 'Describe what you want to see first.',
     promptTooLong: 'The description is too long. Shorten it.',

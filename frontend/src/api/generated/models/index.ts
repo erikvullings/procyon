@@ -222,6 +222,8 @@ export * from './imageDimensionsDto.ts';
 export * from './imageGpsEntryDto.ts';
 export * from './imageMetadataDto.ts';
 export * from './imageMetadataEditDto.ts';
+export * from './imageQualityDto.ts';
+export * from './imageSourceDto.ts';
 export * from './imageTagDto.ts';
 export * from './imageTagGroupDto.ts';
 export * from './importSemanticLocalModelRequestDto.ts';

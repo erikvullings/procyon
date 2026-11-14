@@ -47,6 +47,8 @@ function mountLoaded(
     onSave: vi.fn(),
     onDiscard: vi.fn(),
     onRegenerate: vi.fn(),
+    onUseSource: vi.fn(),
+    onClearSource: vi.fn(),
     onSelectGeneration: vi.fn(),
     onNewPrompt: vi.fn(),
     onNewTab: vi.fn(),
@@ -264,78 +266,148 @@ describe('the prompt and the preview', () => {
 });
 
 describe('the status bar', () => {
-  it('holds the size and the seed, and no longer asks how many images', () => {
+  /** The drawn choices, found by the group they are named for. */
+  function triggerFor(label: string): HTMLButtonElement | null {
+    return root.querySelector<HTMLButtonElement>(`.fm-image-choice-trigger[aria-label="${label}"]`);
+  }
+
+  /** Opens one drawn choice and returns its option rows. */
+  function openChoice(label: string): HTMLElement[] {
+    triggerFor(label)?.click();
+    m.redraw.sync();
+    return [...root.querySelectorAll<HTMLElement>('.fm-image-choice-option')];
+  }
+
+  function clickOption(label: string, text: string): void {
+    openChoice(label)
+      .find((option) => option.textContent?.includes(text))
+      ?.click();
+    m.redraw.sync();
+  }
+
+  it('holds the size, the seed and the way to start from a picture', () => {
     mountLoaded();
-    expect(
-      root.querySelector('.fm-image-status [aria-label="Size"]'),
-      'a size control',
-    ).not.toBeNull();
+    expect(triggerFor('Size'), 'a size control').not.toBeNull();
     expect(
       root.querySelector('.fm-image-status [aria-label="Seed"]'),
       'a seed field',
     ).not.toBeNull();
+    expect(
+      root.querySelector('.fm-image-source'),
+      'a button to take the other pane’s picture',
+    ).not.toBeNull();
     expect(root.textContent, 'the count is fixed at one image').not.toContain('Images');
-    expect(root.querySelector('.fm-image-status .fm-image-preset-trigger')?.textContent).toContain(
-      'Style',
-    );
   });
 
-  it('names the styles control by how many are on rather than which they are', () => {
+  it('asks about style and finish separately, because they do not exclude each other', () => {
+    mountLoaded();
+    expect(
+      [...root.querySelectorAll<HTMLButtonElement>('.fm-image-choice-trigger')].map((trigger) =>
+        trigger.getAttribute('aria-label'),
+      ),
+    ).toEqual(['Style', 'Finish', 'Size', 'Quality', 'Steps']);
+    expect(triggerFor('Style')?.textContent).toContain('No style');
+    expect(triggerFor('Finish')?.textContent).toContain('No finish');
+  });
+
+  it('names the style that is on rather than describing it', () => {
     mountLoaded({ presetIds: ['clipart', 'blackAndWhite'] });
-    const trigger = root.querySelector<HTMLButtonElement>('.fm-image-preset-trigger');
-    expect(trigger?.textContent).toContain('2');
-    expect(trigger?.textContent, 'no room for the names').not.toContain('Clipart');
-    expect(trigger?.getAttribute('aria-expanded')).toBe('false');
+    expect(triggerFor('Style')?.textContent).toContain('Clipart');
+    expect(triggerFor('Finish')?.textContent).toContain('Black and white');
+    expect(
+      root.querySelector('.fm-image-preset-trigger'),
+      'no list of tick boxes to open',
+    ).toBeNull();
   });
 
-  it('lists the styles with their labels only, once it is opened', () => {
+  it('lists one style per row, with its label only', () => {
     mountLoaded({ presetIds: ['clipart'] });
-    root.querySelector<HTMLButtonElement>('.fm-image-preset-trigger')?.click();
-    m.redraw.sync();
-
-    const list = root.querySelector('.fm-image-preset-list');
-    expect(list, 'the list of styles').not.toBeNull();
-    const labels = [...(list?.querySelectorAll('label') ?? [])].map((label) =>
-      label.textContent?.trim(),
-    );
+    const options = openChoice('Style');
+    const labels = options.map((option) => option.textContent?.trim());
+    expect(labels).toContain('No style');
     expect(labels).toContain('Clipart');
-    expect(labels).toContain('Black and white');
+    expect(labels).toContain('Isometric');
+    // A treatment is asked about in its own choice, so it is not offered here.
+    expect(labels).not.toContain('Black and white');
     // A Material icon name is only ever drawn as an icon, never spelled out beside the label.
     expect(labels.join(' ')).not.toMatch(/vector|camera|brush|movie/u);
-    expect(list?.querySelector('input[aria-label="Clipart"]')).not.toBeNull();
+    expect(
+      options
+        .find((option) => option.textContent?.includes('Clipart'))
+        ?.getAttribute('aria-selected'),
+    ).toBe('true');
   });
 
-  it('takes the medium that is on off when another is switched on', () => {
-    const { attrs, entry } = mountLoaded({ presetIds: ['clipart'] });
-    entry.presetIds = ['clipart'];
-    root.querySelector<HTMLButtonElement>('.fm-image-preset-trigger')?.click();
-    m.redraw.sync();
-
-    root.querySelector<HTMLInputElement>('input[aria-label="Cinematic"]')?.click();
-    m.redraw.sync();
-    // The new medium replaces the old one and brings the shape a film still suits.
+  it('replaces the medium that was on, and brings the shape that suits the new one', () => {
+    const { attrs } = mountLoaded({ presetIds: ['clipart', 'blackAndWhite'] });
+    clickOption('Style', 'Cinematic');
     expect(attrs.onPatch).toHaveBeenCalledWith(
-      expect.objectContaining({ presetIds: ['cinematic'], width: 1_344, height: 768 }),
+      expect.objectContaining({
+        // Kept in the order the presets are declared, not the order they were picked in.
+        presetIds: ['blackAndWhite', 'cinematic'],
+        width: 1_344,
+        height: 768,
+      }),
     );
   });
 
-  it('keeps a treatment alongside the medium it belongs to', () => {
+  it('keeps a finish beside the medium it was asked for', () => {
     const { attrs } = mountLoaded({ presetIds: ['portrait'] });
-    root.querySelector<HTMLButtonElement>('.fm-image-preset-trigger')?.click();
-    m.redraw.sync();
-    root.querySelector<HTMLInputElement>('input[aria-label="Black and white"]')?.click();
-    m.redraw.sync();
+    clickOption('Finish', 'Black and white');
     expect(attrs.onPatch).toHaveBeenCalledWith(
       expect.objectContaining({ presetIds: ['blackAndWhite', 'portrait'] }),
     );
+  });
+
+  it('can be asked for neither style nor finish', () => {
+    const { attrs } = mountLoaded({ presetIds: ['clipart'] });
+    clickOption('Style', 'No style');
+    expect(attrs.onPatch).toHaveBeenCalledWith(expect.objectContaining({ presetIds: [] }));
+  });
+
+  it('asks how hard the model should work, in words a person has', () => {
+    const { attrs } = mountLoaded();
+    expect(triggerFor('Quality')?.textContent).toContain('Any quality');
+    clickOption('Quality', 'Super quality');
+    expect(attrs.onPatch).toHaveBeenCalledWith({ qualityId: 'superQuality' });
+  });
+
+  it('can be told how many steps to take, and asked to leave that to the model', () => {
+    const { attrs } = mountLoaded();
+    expect(triggerFor('Steps')?.textContent).toContain('Any steps');
+    clickOption('Steps', '30');
+    expect(attrs.onPatch).toHaveBeenCalledWith({ steps: 30 });
+  });
+
+  it('shows the step count that is set', () => {
+    mountLoaded({ steps: 50 });
+    expect(triggerFor('Steps')?.textContent).toContain('50');
+  });
+
+  it('starts from the picture the other pane has selected, and can be talked out of it', () => {
+    const without = mountLoaded();
+    root.querySelector<HTMLButtonElement>('.fm-image-source')?.click();
+    m.redraw.sync();
+    expect(
+      without.attrs.onUseSource,
+      'the shell was asked for the other pane’s picture',
+    ).toHaveBeenCalled();
+
+    // Once one is picked, the button says which picture the prompt starts from, and can be undone.
+    const withSource = mountLoaded({
+      source: { location: { providerId: 'local', uri: 'file:///shots/cat.png' } },
+    });
+    expect(root.textContent).toContain('cat.png');
+    root.querySelector<HTMLButtonElement>('[aria-label="Stop starting from a picture"]')?.click();
+    m.redraw.sync();
+    expect(withSource.attrs.onClearSource, 'the start was dropped').toHaveBeenCalled();
   });
 
   it('draws its own choices, because Materialize hides a native select', () => {
     mountLoaded({ width: 1_216, height: 832 });
     expect(root.querySelector('select'), 'no native select to be hidden').toBeNull();
 
-    const trigger = root.querySelector<HTMLButtonElement>('.fm-image-choice-trigger');
-    expect(trigger?.getAttribute('aria-label')).toBe('Size');
+    const trigger = triggerFor('Size');
     expect(trigger?.textContent).toContain('1216 × 832');
     expect(trigger?.querySelector('.fm-icon-chevron-down'), 'a caret to open it').not.toBeNull();
 
@@ -344,18 +416,12 @@ describe('the status bar', () => {
     const list = root.querySelector('.fm-image-choice-list');
     expect(list, 'the list of sizes').not.toBeNull();
     expect(list?.getAttribute('role')).toBe('listbox');
-    const options = [...(list?.querySelectorAll('[role="option"]') ?? [])];
-    expect(options).toHaveLength(5);
-    expect(
-      options
-        .find((option) => option.textContent?.includes('1024 × 1024'))
-        ?.getAttribute('aria-selected'),
-    ).toBe('false');
+    expect(root.querySelectorAll('[role="option"]')).toHaveLength(5);
   });
 
   it('patches the shape the size choice picks, and closes the list', () => {
     const { attrs } = mountLoaded();
-    root.querySelector<HTMLButtonElement>('.fm-image-choice-trigger')?.click();
+    triggerFor('Size')?.click();
     m.redraw.sync();
     const option = [...root.querySelectorAll<HTMLElement>('.fm-image-choice-option')].find((row) =>
       row.textContent?.includes('832 × 1216'),
@@ -367,15 +433,17 @@ describe('the status bar', () => {
   });
 
   it('opens only one choice at a time', () => {
-    mountLoaded({ presetIds: ['portrait'] });
-    root.querySelector<HTMLButtonElement>('.fm-image-preset-trigger')?.click();
+    mountLoaded();
+    triggerFor('Style')?.click();
     m.redraw.sync();
-    expect(root.querySelector('.fm-image-preset-list')).not.toBeNull();
-    const triggers = root.querySelectorAll<HTMLButtonElement>('.fm-image-choice-trigger');
-    triggers[0]?.click();
-    m.redraw.sync();
-    expect(root.querySelector('.fm-image-preset-list'), 'the styles folded').toBeNull();
     expect(root.querySelectorAll('.fm-image-choice-list')).toHaveLength(1);
+    triggerFor('Quality')?.click();
+    m.redraw.sync();
+    const open = [...root.querySelectorAll<HTMLElement>('.fm-image-choice-list')];
+    expect(open).toHaveLength(1);
+    expect(open[0]?.getAttribute('aria-label'), 'the quality list, not the style one').toBe(
+      'Quality',
+    );
   });
 
   it('offers lens wording only when a photographic preset is on', () => {

@@ -15,6 +15,7 @@ import { composeNegativePrompt, composePrompt } from '../features/image-generati
 import { dispatchWorkspaceCommand } from '../features/workspace/dispatch-workspace-command';
 import { t } from '../i18n';
 import type { GeneratedImage, Location, PaneId } from '../models';
+import { qualityIdOf } from '../models';
 import { tabKey } from './shell-helpers';
 import type { ShellState } from './shell-state';
 
@@ -206,6 +207,11 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
         height: entry.height,
         count: entry.count,
         seed: entry.seed ?? null,
+        // A level or a step count nobody chose is left out of the request entirely: an endpoint
+        // without those knobs then sees the request it saw before they existed.
+        ...(entry.qualityId === '' ? {} : { quality: entry.qualityId }),
+        ...(entry.steps === undefined ? {} : { steps: entry.steps }),
+        ...(entry.source === undefined ? {} : { source: entry.source }),
       });
       if (entryOf(key) !== entry || entry.pendingRequestId !== requestId) return;
       entry.pendingRequestId = undefined;
@@ -275,6 +281,9 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     entry.negativePrompt = record.batch.negativePrompt ?? entry.negativePrompt;
     entry.width = record.batch.width;
     entry.height = record.batch.height;
+    entry.qualityId = qualityIdOf(record.batch.quality ?? '');
+    entry.steps = record.batch.steps ?? undefined;
+    entry.source = record.batch.source ?? undefined;
     m.redraw();
     for (const image of record.batch.images) {
       const view = record.views.find((item) => item.imageId === image.id);
@@ -296,6 +305,9 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     entry.lensId = '';
     entry.apertureId = '';
     entry.seed = undefined;
+    entry.qualityId = '';
+    entry.steps = undefined;
+    entry.source = undefined;
     entry.batch = undefined;
     entry.views = [];
     entry.selectedImageId = undefined;
@@ -338,7 +350,12 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
       if (entryOf(key) !== entry) return;
       const reason = imageFailureReason(error);
       entry.failure = reason;
-      entry.error = t('image', imageFailureKey(reason));
+      // Only the folder and the name are in the person's hands at this point, so an invalid
+      // request here is about the destination - the prompt has already been accepted.
+      entry.error = t(
+        'image',
+        reason === 'invalidRequest' ? 'destinationInvalid' : imageFailureKey(reason),
+      );
     } finally {
       if (entryOf(key) === entry) entry.savingImageId = undefined;
       m.redraw();
@@ -372,6 +389,10 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     entry.negativePrompt = batch.negativePrompt ?? entry.negativePrompt;
     entry.width = batch.width;
     entry.height = batch.height;
+    // Asking again means asking the same thing of the same picture, so the start stays put too.
+    entry.qualityId = qualityIdOf(batch.quality ?? '');
+    entry.steps = batch.steps ?? undefined;
+    entry.source = batch.source ?? entry.source;
     await generate(client, key);
   }
 
@@ -395,6 +416,43 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
   }
 
   /** The other pane's folder, which a save defaults to. */
+  /**
+   * Takes the picture the other pane has under its cursor as the one this prompt starts from. The
+   * person points at a file they can see rather than typing a path, and the backend reads the bytes
+   * through the same provider every other read goes through.
+   */
+  function useSource(key: string): void {
+    const entry = entryOf(key);
+    const workspace = shellState.workspace;
+    if (entry === undefined || workspace === undefined) return;
+    const otherPaneId = imageSaveFolderPaneId(workspace.paneOrder, entry.paneId);
+    const otherPane = otherPaneId === undefined ? undefined : workspace.panesById[otherPaneId];
+    const otherTabId = otherPane?.activeTabId;
+    if (otherPaneId === undefined || otherTabId === undefined) {
+      toast({ html: t('image', 'sourceNeedsOtherPane') });
+      return;
+    }
+    const tabKeyOfSource = tabKey(otherPaneId, otherTabId);
+    const view = shellState.directories.get(tabKeyOfSource);
+    const selection = shellState.selections.get(tabKeyOfSource);
+    const entryId = selection?.cursorEntryId ?? selection?.selectedEntryIds[0];
+    const file = view?.entries.find((candidate) => candidate.id === entryId);
+    if (file === undefined || entryId === undefined) {
+      toast({ html: t('image', 'sourceNeedsOtherPane') });
+      return;
+    }
+    if (file.kind !== 'file') {
+      toast({ html: t('image', 'sourceNotFile') });
+      return;
+    }
+    patch(key, { source: { location: file.location } });
+  }
+
+  /** Stops starting from a picture; the prompt and its settings stay as they were. */
+  function clearSource(key: string): void {
+    patch(key, { source: undefined });
+  }
+
   function saveFolder(key: string): { location: Location; name: string } | undefined {
     const entry = entryOf(key);
     const workspace = shellState.workspace;
@@ -418,6 +476,8 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     patch,
     generate: (client: FileManagerClient, key: string) => void generate(client, key),
     stop,
+    useSource,
+    clearSource,
     select: (client: FileManagerClient, key: string, imageId: string) =>
       select(client, key, imageId),
     save: (client: FileManagerClient, key: string, input: ImageSaveInput) =>
@@ -456,7 +516,11 @@ export type ImageFailureKey =
   | 'notFound'
   | 'batchExpired'
   | 'imageTooLarge'
+  | 'sourceUnsupported'
+  | 'sourceUnusable'
+  | 'sourceTooLarge'
   | 'destinationExists'
+  | 'destinationInvalid'
   | 'cancelled'
   | 'generationFailed'
   | 'failed';
@@ -477,6 +541,12 @@ export function imageFailureKey(reason: string): ImageFailureKey {
       return 'batchExpired';
     case 'imageTooLarge':
       return 'imageTooLarge';
+    case 'imageSourceUnsupported':
+      return 'sourceUnsupported';
+    case 'imageSourceUnusable':
+      return 'sourceUnusable';
+    case 'imageSourceTooLarge':
+      return 'sourceTooLarge';
     case 'destinationAlreadyExists':
       return 'destinationExists';
     case 'cancelled':

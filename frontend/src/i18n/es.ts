@@ -1318,6 +1318,8 @@ export const es = {
     savedTo: 'Guardado en {location}',
     savedWithPrompt: 'Guardado en {location} con la instrucción en sus metadatos.',
     savedPlain: 'Guardado en {location}. Este formato no admite la instrucción.',
+    destinationInvalid:
+      'Esa carpeta o nombre de archivo no corresponde a esta ubicación. Revise ambos e inténtelo de nuevo.',
     openSettings: 'Abrir ajustes de IA',
     needSubject: 'Describe primero qué quieres ver.',
     promptTooLong: 'La descripción es demasiado larga. Acórtala.',

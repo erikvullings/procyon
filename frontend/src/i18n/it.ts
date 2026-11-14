@@ -1315,6 +1315,8 @@ export const it = {
     savedTo: 'Salvato in {location}',
     savedWithPrompt: 'Salvato in {location} con la richiesta nei metadati.',
     savedPlain: 'Salvato in {location}. Questo formato non può contenere la richiesta.',
+    destinationInvalid:
+      'Questa cartella o nome file non corrisponde a questo percorso. Controlla entrambi e riprova.',
     openSettings: 'Apri impostazioni IA',
     needSubject: 'Prima descrivi cosa vuoi vedere.',
     promptTooLong: 'La descrizione è troppo lunga. Accorciala.',

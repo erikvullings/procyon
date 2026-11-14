@@ -7,8 +7,35 @@
  * no write to a destination that already exists.
  */
 
-import type { ImageBatch, Location, SaveGeneratedImageResponse } from '../../models';
+import type {
+  GeneratedImageSource,
+  ImageBatch,
+  ImageQualityId,
+  Location,
+  SaveGeneratedImageResponse,
+} from '../../models';
 import { IMAGE_COUNTS, IMAGE_MAX_SEED, isValidImageFileName } from '../../models';
+
+/** The quality levels a person may ask for, named as they are named in the pane. */
+const QUALITIES: readonly ImageQualityId[] = ['fast', 'good', 'quality', 'superQuality'];
+
+/** The picture formats both hosts accept as a starting point: what the backend can decode and send. */
+const SOURCE_EXTENSIONS: readonly string[] = ['png', 'jpg', 'jpeg', 'webp'];
+
+/** Why a picture cannot be used to start from, in the two ways it can fail. */
+export function mockSourceProblem(
+  source: GeneratedImageSource | null | undefined,
+): string | undefined {
+  if (source === undefined || source === null) return undefined;
+  const uri = source.location.uri;
+  const name = uri.slice(uri.lastIndexOf('/') + 1);
+  const extension = name.includes('.')
+    ? (name.slice(name.lastIndexOf('.') + 1).toLowerCase() ?? '')
+    : '';
+  return SOURCE_EXTENSIONS.includes(extension)
+    ? undefined
+    : 'that file cannot be used as a starting picture';
+}
 
 /** One 64×64 solid-colour PNG per slot in a batch. */
 const SWATCHES: readonly string[] = [
@@ -36,6 +63,9 @@ export interface MockImageBatch {
   seed: number | null;
   width: number;
   height: number;
+  quality: ImageQualityId | null;
+  steps: number | null;
+  source: GeneratedImageSource | null;
   images: Map<string, MockImage>;
   createdAt: number;
 }
@@ -50,6 +80,7 @@ export const MOCK_IMAGE_BOUNDS = {
   minEdge: 64,
   maxEdge: 2_048,
   maxPixels: 2_097_152,
+  maxSteps: 64,
 } as const;
 
 /**
@@ -77,6 +108,8 @@ export function mockImageRequestProblem(request: {
   height: number;
   count: number;
   seed?: number | null;
+  quality?: ImageQualityId | null;
+  steps?: number | null;
 }): string | undefined {
   if (request.prompt.trim().length === 0) return 'the prompt is empty';
   if (request.prompt.trim().length > MOCK_IMAGE_BOUNDS.promptChars) {
@@ -99,6 +132,12 @@ export function mockImageRequestProblem(request: {
   }
   if (request.seed != null && (request.seed < 0 || request.seed > IMAGE_MAX_SEED)) {
     return 'the seed is too large';
+  }
+  if (request.quality != null && !QUALITIES.includes(request.quality)) {
+    return 'the quality level is not one of the accepted levels';
+  }
+  if (request.steps != null && (request.steps < 1 || request.steps > MOCK_IMAGE_BOUNDS.maxSteps)) {
+    return 'the step count is outside the accepted range';
   }
   return undefined;
 }
@@ -132,6 +171,9 @@ export function mockImageBatch(
     height: number;
     count: number;
     seed?: number | null;
+    quality?: ImageQualityId | null;
+    steps?: number | null;
+    source?: GeneratedImageSource | null;
   },
 ): { generationId: string; batch: MockImageBatch; dto: ImageBatch } {
   const generationId = nextId();
@@ -167,6 +209,9 @@ export function mockImageBatch(
       seed: request.seed ?? null,
       width: request.width,
       height: request.height,
+      quality: request.quality ?? null,
+      steps: request.steps ?? null,
+      source: request.source ?? null,
       images,
       createdAt: Date.now(),
     },
@@ -178,6 +223,9 @@ export function mockImageBatch(
       seed: request.seed ?? null,
       width: request.width,
       height: request.height,
+      quality: request.quality ?? null,
+      steps: request.steps ?? null,
+      source: request.source ?? null,
       images: listed,
     },
   };

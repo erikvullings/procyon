@@ -116,6 +116,7 @@ import {
   mockImageBatch,
   mockImageRequestProblem,
   mockImageSave,
+  mockSourceProblem,
 } from './mock-image-generation';
 import {
   buildMockKnowledgeAnswer,
@@ -1380,6 +1381,21 @@ export class MockSemanticClient implements SemanticClient {
       }
       if (this.ctx.cancelledImageRequests.has(request.requestId)) {
         throw new MockClientError('cancelled', 'The generation was stopped.');
+      }
+      // The two ways a starting picture fails are refused here too, with the reasons the backend gives.
+      const sourceProblem = mockSourceProblem(request.source);
+      if (sourceProblem !== undefined) {
+        throw new MockClientError('imageSourceUnusable', sourceProblem);
+      }
+      if (
+        request.source != null &&
+        (profile.capabilities ?? []).includes('dashscopeTasks') &&
+        !(profile.capabilities ?? []).includes('imageGenerations')
+      ) {
+        throw new MockClientError(
+          'imageSourceUnsupported',
+          'this image endpoint cannot start from an existing picture',
+        );
       }
       const generated = mockImageBatch(assignment.model, request);
       this.ctx.imageBatches.set(generated.generationId, generated.batch);

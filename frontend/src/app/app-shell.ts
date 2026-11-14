@@ -2555,6 +2555,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       selectGeneration: (key, generationId) =>
         imageWiring.selectGeneration(shellState.client, key, generationId),
       newPrompt: (key) => imageWiring.newPrompt(shellState.client, key),
+      useSource: (key) => imageWiring.useSource(key),
+      clearSource: (key) => imageWiring.clearSource(key),
     },
     imageSaveFolder: (key) => imageWiring.saveFolder(key),
     // The image pane's settings icon goes to the endpoints and roles, not to the semantic section.
@@ -3614,7 +3616,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         {
           // Reachable the way the chat pane is: the pane's own overflow menu.
           id: 'image',
-          label: t('image', 'title'),
+          label: t('image', 'actionTitle'),
           icon: photoIcon(),
           onclick: () => void imageWiring.openImage(),
         },
@@ -4743,11 +4745,17 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 registerInsert: (insert) => {
                   shellState.insertIntoTerminal = insert;
                 },
-                onShellIntegrationChoice: (choice) =>
-                  updateLocationSettings(shellState.client, (settings) => ({
+                onShellIntegrationChoice: async (choice) => {
+                  await updateLocationSettings(shellState.client, (settings) => ({
                     ...settings,
                     terminalShellIntegration: choice,
-                  })),
+                  }));
+                  // A host built before this setting existed drops the field and answers
+                  // `unset`; say so instead of asking again silently.
+                  if (shellState.currentSettings?.terminalShellIntegration !== choice) {
+                    throw new Error('The desktop host did not store the terminal setting.');
+                  }
+                },
                 onToggle: globalKeydownHandlerContext.toggleTerminal,
                 onSwitchPane: () => {
                   if (shellState.workspace === undefined) return;

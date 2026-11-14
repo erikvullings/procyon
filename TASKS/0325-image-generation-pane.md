@@ -108,6 +108,38 @@ must review before anything is written. It gets its own role in 0322 and its own
     will be sent still appears once there are words, because the presets add words the person did not
     type. The leave-out field is named on its left and its placeholder is marked as an example, so
     "text, watermark" is not read as a feature of its own. The send key is the Enter glyph, as in chat.
-  - Still unverified: a live generation end to end. Driving the mock settings UI saved the Qwen profile and
-    showed the Image row in Roles, but the role never stuck, and the pane stayed on its "No image model is
-    set" state - which is itself covered by wiring tests, not by a real reply.
+  - 2026-11-14, after the person's own look at the same pane:
+  - The image role is no longer hidden behind "use different endpoints or models per feature", and its
+    model is typed rather than picked from discovery: discovery answers with chat models, and most chat
+    models cannot draw. The row says so - "Most models cannot draw. Name the model that can; the chat
+    model of an endpoint usually cannot." It is named "Image generation" everywhere a person meets it
+    (the roles list, the command palette action, the pane's overflow item) so it is not read as a chat
+    model that can see pictures, and its cloud permission says what leaves the device - the words, and
+    the pictures that come back - instead of borrowing the sentence about indexing.
+  - Any provider the app knows can serve the image role, `mlx-serve` and OpenAI-compatible endpoints
+    included: the contract comes from what the profile advertises (`ImageGenerations` or
+    `DashscopeTasks`), not from whether the base URL happens to look like a chat endpoint.
+  - The status row carries five single-choice controls - Style, Finish, Size, Quality, Steps - each a
+    drawn trigger with a `role=listbox` list. Checkboxes invited combinations that cannot be drawn, since
+    the mediums exclude one another; `black and white` is a finish that rides along with a medium.
+  - Quality is said in the person's words - fast, good, quality, super quality - and each contract maps
+    them to its own vocabulary where it has one. Steps stay optional: an endpoint with no sampler step
+    count is sent none rather than a guessed number.
+  - A picture can start the drawing. It is taken from the cursor of the other pane rather than typed as a
+    path, and it travels as a location - the backend reads the bytes through the VFS provider and checks
+    them (PNG, JPEG or WebP, at most 12 MiB). Endpoints that cannot take a starting picture say which
+    problem it was - cannot take one, not a usable picture, too large - rather than sharing one refusal.
+  - The seed field's bottom border had been cut off by the row's own height; the header and status rows
+    now allow 2px more, measured in Chrome rather than guessed.
+  - A refused save now blames the destination ("That folder or file name does not fit this location.")
+    because at that point the folder and the name are the only things in the person's hands - the prompt
+    has already been accepted. This came from driving the save form in the browser with an edited folder.
+  - 2026-11-14, browser host (mock build) walked in Chrome: the pane opens from the overflow item, the
+    gear lands on Settings at LLM (AI), the image row binds to a saved endpoint, Generate returns a
+    picture and the preview shows it from a blob, and the save form arrives holding the other pane's
+    folder and a name built from the prompt. The earlier "the role never stuck" was the probe never
+    committing a choice in the Materialize dropdown, not the app refusing the binding.
+  - Still unverified: the "Saved to ..." receipt in the browser host (the mock file tree holds no picture
+    to start from, and the save was reached while a concurrent session's in-flight frontend edits had the
+    shell on "Loading..."), the Tauri host, and a live endpoint of either contract. The write itself, the
+    no-overwrite rule and the metadata are covered by wiring and mock-client tests.

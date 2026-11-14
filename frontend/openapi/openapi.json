@@ -15086,6 +15086,17 @@
             "type": "string",
             "description": "What to draw."
           },
+          "quality": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ImageQualityDto",
+                "description": "How hard the endpoint should work; each contract words these in its own vocabulary, and a\ncontract without such a knob leaves it out."
+              }
+            ]
+          },
           "requestId": {
             "type": "string",
             "format": "uuid",
@@ -15098,6 +15109,26 @@
             ],
             "format": "int64",
             "description": "Reproducibility seed; absent lets the provider choose.",
+            "minimum": 0
+          },
+          "source": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ImageSourceDto",
+                "description": "A picture already on disk the new one should start from. The backend reads its bytes; the\nperson never uploads them, and only contracts that can take one are allowed to."
+              }
+            ]
+          },
+          "steps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Sampler step count; absent sends no step count at all, since not every endpoint has one.",
             "minimum": 0
           },
           "width": {
@@ -15119,7 +15150,9 @@
           "width": 1024,
           "height": 1024,
           "count": 1,
-          "seed": 42
+          "seed": 42,
+          "quality": "good",
+          "steps": 30
         }
       },
       "GenerateKnowledgeAnswerRequestDto": {
@@ -16293,6 +16326,17 @@
             "type": "string",
             "description": "Prompt the batch was generated from, so \"regenerate\" can reuse it."
           },
+          "quality": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ImageQualityDto",
+                "description": "Quality the batch asked for, when one was asked for."
+              }
+            ]
+          },
           "seed": {
             "type": [
               "integer",
@@ -16300,6 +16344,26 @@
             ],
             "format": "int64",
             "description": "Seed the batch was generated with, when the person supplied one.",
+            "minimum": 0
+          },
+          "source": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ImageSourceDto",
+                "description": "The file the batch started from, when it started from one."
+              }
+            ]
+          },
+          "steps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Step count the batch asked for, when one was asked for.",
             "minimum": 0
           },
           "width": {
@@ -16521,6 +16585,29 @@
               "null"
             ],
             "description": "New title."
+          }
+        }
+      },
+      "ImageQualityDto": {
+        "type": "string",
+        "description": "How hard the endpoint should work at the picture, in the person's words rather than the\nprovider's: `fast` to `superQuality`.",
+        "enum": [
+          "fast",
+          "good",
+          "quality",
+          "superQuality"
+        ]
+      },
+      "ImageSourceDto": {
+        "type": "object",
+        "description": "A file on disk the generation should start from, named the way a save names its destination.",
+        "required": [
+          "location"
+        ],
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The source file itself, not the folder holding it."
           }
         }
       },

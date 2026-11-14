@@ -88,6 +88,12 @@ pub mod reason {
     pub const IMAGE_GENERATION_FAILED: &str = "imageGenerationFailed";
     /// A generated image was outside the accepted size or count bounds.
     pub const IMAGE_TOO_LARGE: &str = "imageTooLarge";
+    /// The endpoint's contract cannot take a picture to start from.
+    pub const IMAGE_SOURCE_UNSUPPORTED: &str = "imageSourceUnsupported";
+    /// The file chosen to start from is not a picture the endpoints can read.
+    pub const IMAGE_SOURCE_UNUSABLE: &str = "imageSourceUnusable";
+    /// The file chosen to start from is larger than a source picture may be.
+    pub const IMAGE_SOURCE_TOO_LARGE: &str = "imageSourceTooLarge";
     /// The generated images are no longer held by the backend.
     pub const IMAGE_BATCH_EXPIRED: &str = "imageBatchExpired";
     /// The LLM request timed out.

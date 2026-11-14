@@ -1336,6 +1336,8 @@ export const de = {
     savedTo: 'In {location} gespeichert',
     savedWithPrompt: 'In {location} gespeichert, der Prompt steht in den Metadaten.',
     savedPlain: 'In {location} gespeichert. Dieses Format kann den Prompt nicht tragen.',
+    destinationInvalid:
+      'Dieser Ordner oder Dateiname passt nicht zu diesem Speicherort. Prüfen Sie beides und versuchen Sie es erneut.',
     openSettings: 'KI-Einstellungen öffnen',
     needSubject: 'Beschreibe zuerst, was du sehen willst.',
     promptTooLong: 'Die Beschreibung ist zu lang. Kürze sie.',

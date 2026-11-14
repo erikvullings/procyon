@@ -20,7 +20,9 @@ use crate::location::LocationDto;
     "width": 1024,
     "height": 1024,
     "count": 1,
-    "seed": 42
+    "seed": 42,
+    "quality": "good",
+    "steps": 30
 }))]
 pub struct GenerateImagesRequestDto {
     /// Identity used to cancel this request.
@@ -41,6 +43,40 @@ pub struct GenerateImagesRequestDto {
     /// Reproducibility seed; absent lets the provider choose.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed: Option<u64>,
+    /// How hard the endpoint should work; each contract words these in its own vocabulary, and a
+    /// contract without such a knob leaves it out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quality: Option<ImageQualityDto>,
+    /// Sampler step count; absent sends no step count at all, since not every endpoint has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub steps: Option<u32>,
+    /// A picture already on disk the new one should start from. The backend reads its bytes; the
+    /// person never uploads them, and only contracts that can take one are allowed to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<ImageSourceDto>,
+}
+
+/// How hard the endpoint should work at the picture, in the person's words rather than the
+/// provider's: `fast` to `superQuality`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ImageQualityDto {
+    /// Quick look; the cheapest call.
+    Fast,
+    /// A solid picture without spending much.
+    Good,
+    /// The setting to ask for when the picture matters.
+    Quality,
+    /// The best the endpoint can do.
+    SuperQuality,
+}
+
+/// A file on disk the generation should start from, named the way a save names its destination.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageSourceDto {
+    /// The source file itself, not the folder holding it.
+    pub location: LocationDto,
 }
 
 /// One generated image, as the preview pane needs it. Bytes are never part of this DTO.
@@ -83,6 +119,15 @@ pub struct ImageBatchDto {
     pub width: u32,
     /// Requested height in pixels.
     pub height: u32,
+    /// Quality the batch asked for, when one was asked for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quality: Option<ImageQualityDto>,
+    /// Step count the batch asked for, when one was asked for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub steps: Option<u32>,
+    /// The file the batch started from, when it started from one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<ImageSourceDto>,
     /// Images in request order.
     pub images: Vec<GeneratedImageDto>,
 }

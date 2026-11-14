@@ -224,6 +224,35 @@ export function togglePreset(ids: readonly string[], id: string): string[] {
   return selectedPresets([...kept, id]).map((preset) => preset.id);
 }
 
+/** The one medium the selection carries, if any. */
+export function mediumOf(ids: readonly string[]): ImagePreset | undefined {
+  return selectedPresets(ids).find((preset) => preset.group === 'medium');
+}
+
+/** The one finish the selection carries, if any. */
+export function treatmentOf(ids: readonly string[]): ImagePreset | undefined {
+  return selectedPresets(ids).find((preset) => preset.group === 'treatment');
+}
+
+/**
+ * The selection with one medium on and every other medium off; `''` takes the medium off. Style is
+ * offered as a single choice because the ways of making a picture exclude each other.
+ */
+export function chooseMedium(ids: readonly string[], id: string): string[] {
+  const kept = ids.filter((candidate) => presetById(candidate)?.group !== 'medium');
+  return id === ''
+    ? selectedPresets(kept).map((preset) => preset.id)
+    : selectedPresets([...kept, id]).map((preset) => preset.id);
+}
+
+/** The selection with one finish on and every other finish off; `''` takes the finish off. */
+export function chooseTreatment(ids: readonly string[], id: string): string[] {
+  const kept = ids.filter((candidate) => presetById(candidate)?.group !== 'treatment');
+  return id === ''
+    ? selectedPresets(kept).map((preset) => preset.id)
+    : selectedPresets([...kept, id]).map((preset) => preset.id);
+}
+
 /** Whether a camera makes sense for this selection: any photographic preset is enough. */
 export function selectionIsPhotographic(ids: readonly string[]): boolean {
   return selectedPresets(ids).some((preset) => preset.photographic);

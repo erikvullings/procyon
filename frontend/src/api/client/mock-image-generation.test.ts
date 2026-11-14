@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { GeneratedImage, ImageBatch, LlmProfile, SaveLlmProfileRequest } from '../../models';
+import type {
+  GeneratedImage,
+  ImageBatch,
+  ImageQualityId,
+  LlmProfile,
+  SaveLlmProfileRequest,
+} from '../../models';
 import { MockFileManagerClient } from './mock-file-manager-client';
 
 function localProfile(): SaveLlmProfileRequest {
@@ -108,6 +114,43 @@ describe('MockFileManagerClient image generation', () => {
     });
   });
 
+  it('refuses a quality level nobody named', async () => {
+    const client = await clientWithImageRole();
+    // Not a guess: an unknown level is refused rather than quietly treated as some other level.
+    const inventedLevel = 'ultra' as unknown as ImageQualityId;
+
+    await expect(
+      client.generateImages({ ...REQUEST, quality: inventedLevel }),
+    ).rejects.toMatchObject({ code: 'invalidRequest' });
+  });
+
+  it('draws with a picture model bound from the one-choice preset', async () => {
+    // The flow the Settings screen offers: pick the preset, bind it to the image role, draw.
+    const client = new MockFileManagerClient();
+    const profile = await client.createLlmProfile({
+      ...localProfile(),
+      name: 'Qwen Image (Alibaba Cloud)',
+      preset: 'qwenImage',
+      baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+      model: 'qwen-image',
+      capabilities: ['dashscopeTasks'],
+    });
+    // A cloud endpoint is only used once the person has consented to that host, as Settings asks for.
+    await client.activateLlmProfile(profile.id, true);
+    await client.setLlmRole('image', {
+      profileId: profile.id,
+      model: 'qwen-image',
+      allowCloud: true,
+    });
+
+    const batch = await client.generateImages(REQUEST);
+    const roles = await client.listLlmRoles();
+
+    expect(batch.model).toBe('qwen-image');
+    expect(roles.image?.model).toBe('qwen-image');
+    expect(roles.chat, 'binding a picture model leaves chat alone').toBeNull();
+  });
+
   it('refuses the requests the backend refuses', async () => {
     const client = await clientWithImageRole();
     const cases = [
@@ -117,12 +160,58 @@ describe('MockFileManagerClient image generation', () => {
       [{ width: 2_048, height: 2_048 }, 'too many pixels'],
       [{ count: 5 }, 'number of images'],
       [{ seed: 4_294_967_296 }, 'seed is too large'],
+      [{ steps: 0 }, 'a step count of none'],
+      [{ steps: 65 }, 'more steps than the app will ask for'],
     ] as const;
     for (const [changes, why] of cases) {
       await expect(client.generateImages({ ...REQUEST, ...changes }), why).rejects.toMatchObject({
         code: 'invalidRequest',
       });
     }
+  });
+
+  it('says back the level, the step count and the picture it started from', async () => {
+    const client = await clientWithImageRole();
+
+    const batch = await client.generateImages({
+      ...REQUEST,
+      quality: 'superQuality',
+      steps: 30,
+      source: { location: { providerId: 'local', uri: 'file:///shots/cat.png' } },
+    });
+
+    // "Regenerate with this prompt" asks for the same picture again, so the batch has to remember it.
+    expect(batch.quality).toBe('superQuality');
+    expect(batch.steps).toBe(30);
+    expect(batch.source).toEqual({
+      location: { providerId: 'local', uri: 'file:///shots/cat.png' },
+    });
+  });
+
+  it('refuses a file that is not a picture before pretending to draw', async () => {
+    const client = await clientWithImageRole();
+
+    await expect(
+      client.generateImages({
+        ...REQUEST,
+        source: { location: { providerId: 'local', uri: 'file:///notes/ideas.txt' } },
+      }),
+    ).rejects.toMatchObject({ code: 'imageSourceUnusable' });
+  });
+
+  it('refuses a starting picture an endpoint that only takes words', async () => {
+    const client = await clientWithImageRole({
+      name: 'Qwen Image',
+      preset: 'qwenImage',
+      capabilities: ['dashscopeTasks'],
+    } as Partial<SaveLlmProfileRequest>);
+
+    await expect(
+      client.generateImages({
+        ...REQUEST,
+        source: { location: { providerId: 'local', uri: 'file:///shots/cat.png' } },
+      }),
+    ).rejects.toMatchObject({ code: 'imageSourceUnsupported' });
   });
 
   it('writes nothing until a save, and then refuses to replace without agreement', async () => {

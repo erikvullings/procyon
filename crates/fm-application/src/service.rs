@@ -3483,7 +3483,10 @@ impl FileManagerService {
             .image_request(crate::llm_profiles::LlmRole::Image)
             .await?;
         let provider = crate::image_generation_transport::ImageEndpointTransport::new(endpoint);
-        Ok(self.image_generation.generate(&provider, request).await?)
+        Ok(self
+            .image_generation
+            .generate(&provider, &self.providers, request)
+            .await?)
     }
 
     /// Stops one running generation. Returns whether it was still running.

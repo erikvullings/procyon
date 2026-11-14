@@ -21,8 +21,9 @@ export const ENGLISH_IDENTICAL_ALLOWLIST: Readonly<Record<string, Allowlisted>> 
   'connections.kindWebDav': 'all',
   'connections.webDavAuthBasic': 'all',
   'connections.webDavAuthDigest': 'all',
-  'image.styles': ['fr'],
-  'image.stylesCount': ['fr'],
+  // "Style" and "Source" are the same words in French.
+  'image.source': ['fr'],
+  'image.style': ['fr'],
   'geoConvert.formatCsv': 'all',
   'geoConvert.formatGeojson': 'all',
   'geoConvert.formatGpx': 'all',

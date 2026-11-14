@@ -17,8 +17,8 @@ use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use crate::image_generation::{
-    GeneratedBatch, ImageGenerationError, ImageProvider, MAX_IMAGE_BYTES, MAX_IMAGES,
-    ValidatedImageRequest, images_request_body, parse_images_response,
+    GeneratedBatch, ImageGenerationError, ImageProvider, MAX_IMAGE_BYTES, MAX_IMAGES, SourceImage,
+    ValidatedImageRequest, images_edit_fields, images_request_body, parse_images_response,
 };
 
 /// Largest reply accepted from an images endpoint; base64 makes a reply about a third larger than
@@ -153,15 +153,36 @@ impl ImageEndpointTransport {
         read_bounded(response, cancellation, limit).await
     }
 
-    /// One OpenAI-style call: the images arrive base64-encoded in the reply itself.
+    /// One OpenAI-style call: the images arrive base64-encoded in the reply itself. With a picture
+    /// to start from the call goes to the edits endpoint beside it, which takes the file as a form
+    /// part rather than as JSON.
     async fn generate_openai(
         &self,
         request: &ValidatedImageRequest,
+        source: Option<&SourceImage>,
         cancellation: &CancellationToken,
     ) -> Result<GeneratedBatch, ImageGenerationError> {
-        let builder = self
-            .apply_headers(self.client.post(&self.endpoint.url))
-            .json(&images_request_body(&self.endpoint.model, request));
+        let builder = match source {
+            None => self
+                .apply_headers(self.client.post(&self.endpoint.url))
+                .json(&images_request_body(&self.endpoint.model, request)),
+            Some(source) => {
+                let part = reqwest::multipart::Part::bytes(source.bytes.clone())
+                    .file_name(source.name.clone())
+                    .mime_str(source.media_type)
+                    .map_err(|_| {
+                        ImageGenerationError::InvalidRequest("the source image cannot be sent")
+                    })?;
+                let form = images_edit_fields(&self.endpoint.model, request)
+                    .into_iter()
+                    .fold(
+                        reqwest::multipart::Form::new().part("image", part),
+                        |form, (name, value)| form.text(name, value),
+                    );
+                self.apply_headers(self.client.post(edits_url(&self.endpoint.url)?))
+                    .multipart(form)
+            }
+        };
         let bytes = self
             .reply_bytes(builder, MAX_REPLY_BYTES, cancellation)
             .await?;
@@ -291,16 +312,32 @@ impl ImageProvider for ImageEndpointTransport {
     async fn generate(
         &self,
         request: &ValidatedImageRequest,
+        source: Option<&SourceImage>,
         cancellation: &CancellationToken,
     ) -> Result<GeneratedBatch, ImageGenerationError> {
         match &self.endpoint.api {
-            ImageApiStyle::OpenAiImages => self.generate_openai(request, cancellation).await,
+            ImageApiStyle::OpenAiImages => {
+                self.generate_openai(request, source, cancellation).await
+            }
             ImageApiStyle::DashscopeTasks { task_url_prefix } => {
+                if source.is_some() {
+                    // The task API takes a picture by URL, so it would mean uploading the person's
+                    // file to somebody else's storage first. That is not this app's call to make.
+                    return Err(ImageGenerationError::SourceUnsupported);
+                }
                 self.generate_dashscope(request, task_url_prefix, cancellation)
                     .await
             }
         }
     }
+}
+
+/// The edits endpoint beside a generations endpoint: the same server, asked to change a picture
+/// rather than invent one. An endpoint whose URL is not the documented pair cannot be sent there.
+fn edits_url(url: &str) -> Result<String, ImageGenerationError> {
+    url.strip_suffix("/generations")
+        .map(|prefix| format!("{prefix}/edits"))
+        .ok_or(ImageGenerationError::SourceUnsupported)
 }
 
 /// Builds the Model Studio submit body: the wording goes in `input`, the settings in `parameters`.
@@ -592,6 +629,9 @@ mod tests {
             height: 768,
             count: MAX_IMAGES,
             seed: Some(42),
+            quality: None,
+            steps: None,
+            source: None,
         }
     }
 
@@ -609,7 +649,7 @@ mod tests {
         let endpoint = Endpoint::start(Some(reply(2))).await;
         let transport = ImageEndpointTransport::new(endpoint.request());
         let batch = transport
-            .generate(&validated(), &CancellationToken::new())
+            .generate(&validated(), None, &CancellationToken::new())
             .await
             .expect("generated");
         assert_eq!(batch.model, "flux-schnell");
@@ -663,7 +703,7 @@ mod tests {
             api: ImageApiStyle::OpenAiImages,
         });
         let error = transport
-            .generate(&validated(), &CancellationToken::new())
+            .generate(&validated(), None, &CancellationToken::new())
             .await
             .expect_err("refused");
         assert_eq!(error, ImageGenerationError::Unavailable);
@@ -676,7 +716,7 @@ mod tests {
         let transport = ImageEndpointTransport::new(endpoint.request());
         let cancellation = CancellationToken::new();
         let request = validated();
-        let generate = transport.generate(&request, &cancellation);
+        let generate = transport.generate(&request, None, &cancellation);
         let stop = cancellation.clone();
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(50)).await;
@@ -883,7 +923,7 @@ mod tests {
         );
 
         let batch = transport
-            .generate(&validated(), &CancellationToken::new())
+            .generate(&validated(), None, &CancellationToken::new())
             .await
             .expect("generated");
 
@@ -942,7 +982,7 @@ mod tests {
             Duration::from_millis(5),
         );
         let error = transport
-            .generate(&validated(), &CancellationToken::new())
+            .generate(&validated(), None, &CancellationToken::new())
             .await
             .expect_err("refused");
         assert_eq!(error, ImageGenerationError::Unavailable);
@@ -986,7 +1026,7 @@ mod tests {
         );
         let cancellation = CancellationToken::new();
         let request = validated();
-        let generate = transport.generate(&request, &cancellation);
+        let generate = transport.generate(&request, None, &cancellation);
         let stop = cancellation.clone();
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(60)).await;
@@ -1019,7 +1059,7 @@ mod tests {
         );
         assert_eq!(
             transport
-                .generate(&validated(), &CancellationToken::new())
+                .generate(&validated(), None, &CancellationToken::new())
                 .await
                 .expect_err("another host is not the endpoint's"),
             ImageGenerationError::Unavailable
@@ -1049,11 +1089,99 @@ mod tests {
         );
         assert_eq!(
             transport
-                .generate(&validated(), &CancellationToken::new())
+                .generate(&validated(), None, &CancellationToken::new())
                 .await
                 .expect_err("not an image"),
             ImageGenerationError::Unavailable
         );
         assert_eq!(images.received().len(), 1, "it was fetched, then refused");
+    }
+
+    /// A picture to start from goes to the edits endpoint beside the generations one, as a form part
+    /// the provider reads as a file rather than as JSON it has to decode first.
+    #[tokio::test]
+    async fn a_source_picture_is_posted_to_the_edits_endpoint_as_a_form_part() {
+        let endpoint = Endpoint::start(Some(reply(1))).await;
+        let transport = ImageEndpointTransport::new(endpoint.request());
+        let source = SourceImage {
+            name: "harbour.png".to_owned(),
+            media_type: "image/png",
+            bytes: encoded_png(),
+        };
+        let batch = transport
+            .generate(&validated(), Some(&source), &CancellationToken::new())
+            .await
+            .expect("generated");
+        assert_eq!(batch.images.len(), 1);
+        let seen = endpoint.received();
+        let (head, body) = seen.split_once("\r\n\r\n").expect("a body follows");
+        assert!(
+            head.starts_with("POST /v1/images/edits HTTP/1.1"),
+            "the ask beside a picture goes to the edits endpoint: {head}"
+        );
+        assert!(
+            head.contains("content-type: multipart/form-data; boundary="),
+            "the file travels as a form: {head}"
+        );
+        assert!(
+            body.contains("name=\"image\"; filename=\"harbour.png\""),
+            "the part is named the way the provider expects: {body}"
+        );
+        assert!(
+            body.to_lowercase().contains("content-type: image/png"),
+            "the part says what it is: {body}"
+        );
+        assert!(
+            body.contains("name=\"prompt\"") && body.contains("a lighthouse at dusk"),
+            "the ask travels beside the picture: {body}"
+        );
+    }
+
+    /// A server whose URL is not the documented pair has no edits endpoint to guess at, so the
+    /// person is told rather than a request sent somewhere arbitrary with their file in it.
+    #[tokio::test]
+    async fn an_endpoint_outside_the_documented_pair_is_not_asked_to_edit_a_picture() {
+        let endpoint = Endpoint::start(Some(reply(1))).await;
+        let mut request = endpoint.request();
+        request.url = format!("http://{}/custom/draw", endpoint.addr);
+        let transport = ImageEndpointTransport::new(request);
+        let source = SourceImage {
+            name: "harbour.png".to_owned(),
+            media_type: "image/png",
+            bytes: encoded_png(),
+        };
+        assert_eq!(
+            transport
+                .generate(&validated(), Some(&source), &CancellationToken::new())
+                .await,
+            Err(ImageGenerationError::SourceUnsupported)
+        );
+    }
+
+    /// The task API takes a starting picture by URL, which would mean uploading the person's file to
+    /// somebody else's storage first. That is refused where they can still act on it.
+    #[tokio::test]
+    async fn a_task_endpoint_is_not_asked_to_start_from_a_picture_it_cannot_take() {
+        let endpoint = Script::start("127.0.0.1", Vec::new()).await;
+        let port = endpoint.addr.port();
+        let transport = ImageEndpointTransport::with_poll_interval(
+            dashscope_endpoint(endpoint.url(TASK_PATH), "127.0.0.1", port),
+            Duration::from_millis(5),
+        );
+        let source = SourceImage {
+            name: "harbour.png".to_owned(),
+            media_type: "image/png",
+            bytes: encoded_png(),
+        };
+        assert_eq!(
+            transport
+                .generate(&validated(), Some(&source), &CancellationToken::new())
+                .await,
+            Err(ImageGenerationError::SourceUnsupported)
+        );
+        assert!(
+            endpoint.received().is_empty(),
+            "the person's file is not sent to an endpoint that cannot take it"
+        );
     }
 }

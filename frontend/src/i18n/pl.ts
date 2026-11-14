@@ -1316,6 +1316,8 @@ export const pl = {
     savedTo: 'Zapisano w {location}',
     savedWithPrompt: 'Zapisano w {location}, podpowiedź została w metadanych.',
     savedPlain: 'Zapisano w {location}. Ten format nie pomieści podpowiedzi.',
+    destinationInvalid:
+      'Ten folder lub nazwa pliku nie pasuje do tej lokalizacji. Sprawdź oba i spróbuj ponownie.',
     openSettings: 'Otwórz ustawienia AI',
     needSubject: 'Najpierw opisz, co chcesz zobaczyć.',
     promptTooLong: 'Opis jest za długi. Skróć go.',

@@ -3,6 +3,8 @@
  * Run `pnpm api:generate` (or `pnpm api:check`) to regenerate.
  */
 import type { GeneratedImageDto } from './generatedImageDto.ts';
+import type { ImageQualityDto } from './imageQualityDto.ts';
+import type { ImageSourceDto } from './imageSourceDto.ts';
 
 /**
  * A batch of images the person has to review, save or discard. Nothing was written to disk.
@@ -26,12 +28,20 @@ export interface ImageBatchDto {
   negativePrompt?: string | null;
   /** Prompt the batch was generated from, so "regenerate" can reuse it. */
   prompt: string;
+  quality?: null | ImageQualityDto;
   /**
      * Seed the batch was generated with, when the person supplied one.
      * @minimum 0
      * @nullable
      */
   seed?: number | null;
+  source?: null | ImageSourceDto;
+  /**
+     * Step count the batch asked for, when one was asked for.
+     * @minimum 0
+     * @nullable
+     */
+  steps?: number | null;
   /**
      * Requested width and height in pixels.
      * @minimum 0

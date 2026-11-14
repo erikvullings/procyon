@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use fm_transport_dto::{
     CancelImageGenerationRequestDto, GenerateImagesRequestDto, GeneratedImageDto, ImageBatchDto,
-    SaveGeneratedImageRequestDto, SaveGeneratedImageResponseDto,
+    ImageQualityDto, SaveGeneratedImageRequestDto, SaveGeneratedImageResponseDto,
 };
 use fm_vfs::{ProviderCapabilities, ProviderRegistry, WriteOptions};
 use serde_json::{Value, json};
@@ -37,6 +37,10 @@ pub const MAX_EDGE: u32 = 2_048;
 pub const MAX_PIXELS: u64 = 2_097_152;
 /// Largest seed the person may name.
 pub const MAX_SEED: u64 = 4_294_967_295;
+/// Largest sampler step count the person may name; above it a server is inventing detail anyway.
+pub const MAX_STEPS: u32 = 64;
+/// Largest file the person may ask a generation to start from.
+const MAX_SOURCE_BYTES: u64 = 12 * 1024 * 1024;
 /// Largest single image the provider may return.
 pub(crate) const MAX_IMAGE_BYTES: usize = 24 * 1024 * 1024;
 /// Largest batch the provider may return.
@@ -69,6 +73,15 @@ pub enum ImageGenerationError {
     /// An image was outside the accepted byte bounds.
     #[error("the generated image is too large")]
     TooLarge,
+    /// The endpoint's contract has no way to take a picture to start from.
+    #[error("this image endpoint cannot start from an existing picture")]
+    SourceUnsupported,
+    /// The file chosen to start from is not a picture the endpoints can read.
+    #[error("that file cannot be used as a starting picture ({0})")]
+    SourceUnusable(&'static str),
+    /// The file chosen to start from is larger than a source picture may be.
+    #[error("the picture to start from is too large")]
+    SourceTooLarge,
     /// The batch is no longer held; the person has to generate again.
     #[error("the generated images expired")]
     Expired,
@@ -88,6 +101,80 @@ impl From<LlmProfileError> for ImageGenerationError {
     }
 }
 
+/// How hard the endpoint should work at a picture, in the person's words rather than a provider's:
+/// the pane offers four levels and each contract words them as it likes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImageQuality {
+    /// A quick look, and the cheapest call.
+    Fast,
+    /// A solid picture without spending much.
+    Good,
+    /// The level to ask for when the picture matters.
+    Quality,
+    /// The best the endpoint can do.
+    SuperQuality,
+}
+
+impl ImageQuality {
+    /// The word the OpenAI-style contract takes. That API's own scale is `low|medium|high`, so the
+    /// top level asks for `high`: there is nothing above it to ask for.
+    #[must_use]
+    pub const fn openai_wire(self) -> &'static str {
+        match self {
+            Self::Fast => "low",
+            Self::Good => "medium",
+            Self::Quality => "high",
+            Self::SuperQuality => "high",
+        }
+    }
+
+    /// The word written into a saved file's metadata: the level the person chose, not the word one
+    /// provider happens to use for it.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Fast => "fast",
+            Self::Good => "good",
+            Self::Quality => "quality",
+            Self::SuperQuality => "super quality",
+        }
+    }
+}
+
+impl From<ImageQualityDto> for ImageQuality {
+    fn from(quality: ImageQualityDto) -> Self {
+        match quality {
+            ImageQualityDto::Fast => Self::Fast,
+            ImageQualityDto::Good => Self::Good,
+            ImageQualityDto::Quality => Self::Quality,
+            ImageQualityDto::SuperQuality => Self::SuperQuality,
+        }
+    }
+}
+
+impl From<ImageQuality> for ImageQualityDto {
+    fn from(quality: ImageQuality) -> Self {
+        match quality {
+            ImageQuality::Fast => Self::Fast,
+            ImageQuality::Good => Self::Good,
+            ImageQuality::Quality => Self::Quality,
+            ImageQuality::SuperQuality => Self::SuperQuality,
+        }
+    }
+}
+
+/// The picture a generation starts from, read from disk and inside its bounds by the time a
+/// provider ever sees it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceImage {
+    /// The file's own name, so the file it produces can say where it came from.
+    pub name: String,
+    /// Its media type, e.g. `image/png`.
+    pub media_type: &'static str,
+    /// Its encoded bytes.
+    pub bytes: Vec<u8>,
+}
+
 /// A request that passed the bounds, in the shape the provider call needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidatedImageRequest {
@@ -103,6 +190,13 @@ pub struct ValidatedImageRequest {
     pub count: u32,
     /// Reproducibility seed; `None` lets the provider choose.
     pub seed: Option<u64>,
+    /// How hard the endpoint should work, when the person asked for a level.
+    pub quality: Option<ImageQuality>,
+    /// Sampler step count, when one was named. A contract without a sampler simply is not sent one.
+    pub steps: Option<u32>,
+    /// Where the picture to start from is; its bytes are read separately, so a validated request
+    /// only carries the pointer.
+    pub source: Option<fm_domain::Location>,
 }
 
 /// Checks the bounded contract of one request. Nothing reaches the provider unless this passes.
@@ -150,6 +244,18 @@ pub(crate) fn validate_request(
             "the seed is too large",
         ));
     }
+    if request
+        .steps
+        .is_some_and(|steps| steps == 0 || steps > MAX_STEPS)
+    {
+        return Err(ImageGenerationError::InvalidRequest(
+            "the step count is outside the accepted range",
+        ));
+    }
+    let source = request
+        .source
+        .as_ref()
+        .map(|source| fm_domain::Location::from(source.location.clone()));
     Ok(ValidatedImageRequest {
         prompt: prompt.to_owned(),
         negative_prompt: negative_prompt.map(str::to_owned),
@@ -157,6 +263,9 @@ pub(crate) fn validate_request(
         height: request.height,
         count: request.count,
         seed: request.seed,
+        quality: request.quality.map(Into::into),
+        steps: request.steps,
+        source,
     })
 }
 
@@ -175,7 +284,42 @@ pub(crate) fn images_request_body(model: &str, request: &ValidatedImageRequest) 
     if let Some(seed) = request.seed {
         body["seed"] = json!(seed);
     }
+    if let Some(quality) = request.quality {
+        body["quality"] = json!(quality.openai_wire());
+    }
+    if let Some(steps) = request.steps {
+        body["steps"] = json!(steps);
+    }
     body
+}
+
+/// The form fields of an OpenAI-style image *edit*: the same ask as a generation, sent beside the
+/// picture to start from. `seed` and `response_format` are left out because an edits call answers
+/// with base64 on its own and takes no seed.
+#[must_use]
+pub(crate) fn images_edit_fields(
+    model: &str,
+    request: &ValidatedImageRequest,
+) -> Vec<(String, String)> {
+    let mut fields = vec![
+        ("model".to_owned(), model.to_owned()),
+        ("prompt".to_owned(), request.prompt.clone()),
+        ("n".to_owned(), request.count.to_string()),
+        (
+            "size".to_owned(),
+            format!("{}x{}", request.width, request.height),
+        ),
+    ];
+    if let Some(negative) = &request.negative_prompt {
+        fields.push(("negative_prompt".to_owned(), negative.clone()));
+    }
+    if let Some(quality) = request.quality {
+        fields.push(("quality".to_owned(), quality.openai_wire().to_owned()));
+    }
+    if let Some(steps) = request.steps {
+        fields.push(("steps".to_owned(), steps.to_string()));
+    }
+    fields
 }
 
 /// The images one provider reply carries, as raw bytes in reply order.
@@ -220,10 +364,12 @@ pub struct GeneratedBatch {
 /// by [`crate::llm_profiles::LlmProfileService`] through the image role; tests supply a fake.
 #[async_trait]
 pub trait ImageProvider: Send + Sync {
-    /// Produces up to `request.count` images, or fails.
+    /// Produces up to `request.count` images, or fails. `source` carries the bytes of the picture
+    /// the request asked to start from, and only a contract that can take one is ever handed it.
     async fn generate(
         &self,
         request: &ValidatedImageRequest,
+        source: Option<&SourceImage>,
         cancellation: &CancellationToken,
     ) -> Result<GeneratedBatch, ImageGenerationError>;
 }
@@ -233,7 +379,7 @@ pub trait ImageProvider: Send + Sync {
 pub struct PromptRecord {
     /// What was drawn.
     pub prompt: String,
-    /// What was avoided.
+    /// What was avoided; the negative prompt.
     pub negative_prompt: Option<String>,
     /// Seed, when the person named one.
     pub seed: Option<u64>,
@@ -243,6 +389,12 @@ pub struct PromptRecord {
     pub width: u32,
     /// Requested height in pixels.
     pub height: u32,
+    /// How hard the endpoint worked, when a level was asked for.
+    pub quality: Option<ImageQuality>,
+    /// Sampler step count, when one was asked for.
+    pub steps: Option<u32>,
+    /// The file the picture started from, when it started from one.
+    pub source: Option<String>,
 }
 
 impl PromptRecord {
@@ -261,6 +413,15 @@ impl PromptRecord {
             "\nSize: {}x{}\nModel: {}\nSoftware: Procyon",
             self.width, self.height, self.model
         ));
+        if let Some(quality) = self.quality {
+            text.push_str(&format!("\nQuality: {}", quality.label()));
+        }
+        if let Some(steps) = self.steps {
+            text.push_str(&format!("\nSteps: {steps}"));
+        }
+        if let Some(source) = &self.source {
+            text.push_str(&format!("\nSource: {source}"));
+        }
         text
     }
 }
@@ -286,6 +447,9 @@ struct Batch {
     seed: Option<u64>,
     width: u32,
     height: u32,
+    quality: Option<ImageQuality>,
+    steps: Option<u32>,
+    source: Option<String>,
     images: HashMap<Uuid, StoredImage>,
 }
 
@@ -306,6 +470,9 @@ impl Batch {
             model: self.model.clone(),
             width: self.width,
             height: self.height,
+            quality: self.quality,
+            steps: self.steps,
+            source: self.source.clone(),
         }
     }
 }
@@ -337,13 +504,21 @@ impl ImageGenerationService {
     pub async fn generate(
         &self,
         provider: &dyn ImageProvider,
+        providers: &ProviderRegistry,
         request: GenerateImagesRequestDto,
     ) -> Result<ImageBatchDto, ImageGenerationError> {
         let validated = validate_request(&request)?;
+        let source_dto = request.source.clone();
+        let source = match validated.source.as_ref() {
+            Some(location) => Some(self.read_source(providers, location).await?),
+            None => None,
+        };
         let cancellation = CancellationToken::new();
         self.active_lock()
             .insert(request.request_id, cancellation.clone());
-        let outcome = provider.generate(&validated, &cancellation).await;
+        let outcome = provider
+            .generate(&validated, source.as_ref(), &cancellation)
+            .await;
         self.active_lock().remove(&request.request_id);
         let batch = outcome?;
         if batch.images.is_empty()
@@ -386,6 +561,7 @@ impl ImageGenerationService {
             });
         }
         let generation_id = Uuid::new_v4();
+        let source_name = source.map(|source| source.name);
         self.hold(
             generation_id,
             Batch {
@@ -396,6 +572,9 @@ impl ImageGenerationService {
                 seed: validated.seed,
                 width: validated.width,
                 height: validated.height,
+                quality: validated.quality,
+                steps: validated.steps,
+                source: source_name.clone(),
                 images: held,
             },
         );
@@ -407,7 +586,70 @@ impl ImageGenerationService {
             seed: validated.seed,
             width: validated.width,
             height: validated.height,
+            quality: validated.quality.map(Into::into),
+            steps: validated.steps,
+            source: source_dto,
             images: listed,
+        })
+    }
+
+    /// Reads the picture a generation starts from, inside the byte bound and proved to be a picture
+    /// this app can encode. Nothing is sent to an endpoint before that.
+    async fn read_source(
+        &self,
+        providers: &ProviderRegistry,
+        location: &fm_domain::Location,
+    ) -> Result<SourceImage, ImageGenerationError> {
+        use tokio::io::AsyncReadExt as _;
+
+        let name = location
+            .name()
+            .map_err(|_| ImageGenerationError::SourceUnusable("it has no file name"))?;
+        let provider = providers
+            .resolve(location)
+            .map_err(|_| ImageGenerationError::SourceUnusable("its location cannot be reached"))?;
+        provider
+            .capabilities_for(location)
+            .map_err(|_| ImageGenerationError::SourceUnusable("its location cannot be reached"))?
+            .require(ProviderCapabilities::READ)
+            .map_err(|_| ImageGenerationError::SourceUnusable("it cannot be read from there"))?;
+        let entry = fm_vfs::EntryRef {
+            id: fm_domain::EntryId::new(),
+            location: location.clone(),
+        };
+        let size = provider
+            .file_size(&entry, CancellationToken::new())
+            .await
+            .map_err(|_| ImageGenerationError::SourceUnusable("it could not be read"))?;
+        if size > MAX_SOURCE_BYTES {
+            return Err(ImageGenerationError::SourceTooLarge);
+        }
+        let reader = provider
+            .open_read(&entry, CancellationToken::new())
+            .await
+            .map_err(|_| {
+                ImageGenerationError::InvalidRequest("the source image could not be read")
+            })?;
+        let mut bytes = Vec::new();
+        reader
+            .take(MAX_SOURCE_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .await
+            .map_err(|_| ImageGenerationError::SourceUnusable("it could not be read"))?;
+        if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MAX_SOURCE_BYTES {
+            return Err(ImageGenerationError::SourceTooLarge);
+        }
+        // A file that will not decode is refused in the person's terms, not as a provider failure:
+        // they chose this file, so it is theirs to correct.
+        let (format, _) = decode(&bytes)
+            .map_err(|_| ImageGenerationError::SourceUnusable("it is not a picture"))?;
+        let (media_type, _) = media_type(format).ok_or(ImageGenerationError::SourceUnusable(
+            "it is not a picture the image endpoints can read",
+        ))?;
+        Ok(SourceImage {
+            name,
+            media_type,
+            bytes,
         })
     }
 
@@ -778,6 +1020,9 @@ mod tests {
             height: 1_024,
             count: 1,
             seed: None,
+            quality: None,
+            steps: None,
+            source: None,
         }
     }
 
@@ -998,6 +1243,8 @@ mod tests {
         model: &'static str,
         outcome: Result<Vec<Vec<u8>>, ImageGenerationError>,
         seen: StdMutex<Vec<ValidatedImageRequest>>,
+        /// The picture each request asked to start from, as the provider was handed it.
+        seen_sources: StdMutex<Vec<Option<SourceImage>>>,
         on_generate: Option<GenerateHook>,
     }
 
@@ -1006,8 +1253,10 @@ mod tests {
         async fn generate(
             &self,
             request: &ValidatedImageRequest,
+            source: Option<&SourceImage>,
             cancellation: &CancellationToken,
         ) -> Result<GeneratedBatch, ImageGenerationError> {
+            self.seen_sources.lock().unwrap().push(source.cloned());
             if let Some(on_generate) = &self.on_generate {
                 on_generate(cancellation);
             }
@@ -1024,6 +1273,7 @@ mod tests {
             model: "flux-schnell",
             outcome: Ok(images),
             seen: StdMutex::new(Vec::new()),
+            seen_sources: StdMutex::new(Vec::new()),
             on_generate: None,
         }
     }
@@ -1035,6 +1285,7 @@ mod tests {
         let batch = service
             .generate(
                 &provider(vec![original.clone()]),
+                &registry(),
                 GenerateImagesRequestDto {
                     negative_prompt: Some("text".into()),
                     seed: Some(7),
@@ -1073,7 +1324,7 @@ mod tests {
         let service = ImageGenerationService::new();
         let original = encoded(image::ImageFormat::Png, 2_048, 1_536);
         let batch = service
-            .generate(&provider(vec![original.clone()]), request())
+            .generate(&provider(vec![original.clone()]), &registry(), request())
             .await
             .expect("generated");
         let image = &batch.images[0];
@@ -1116,6 +1367,7 @@ mod tests {
         let batch = service
             .generate(
                 &provider(vec![encoded(image::ImageFormat::Jpeg, 320, 240)]),
+                &registry(),
                 request(),
             )
             .await
@@ -1133,7 +1385,11 @@ mod tests {
         assert_eq!(served.media_type, "image/jpeg");
         assert_eq!(
             service
-                .generate(&provider(vec![b"not an image".to_vec()]), request())
+                .generate(
+                    &provider(vec![b"not an image".to_vec()]),
+                    &registry(),
+                    request()
+                )
                 .await,
             Err(ImageGenerationError::Unavailable)
         );
@@ -1150,6 +1406,7 @@ mod tests {
                         encoded(image::ImageFormat::Png, 32, 32),
                         encoded(image::ImageFormat::Png, 32, 32)
                     ]),
+                    &registry(),
                     request()
                 )
                 .await,
@@ -1157,7 +1414,9 @@ mod tests {
         );
         // Nothing at all.
         assert_eq!(
-            service.generate(&provider(vec![]), request()).await,
+            service
+                .generate(&provider(vec![]), &registry(), request())
+                .await,
             Err(ImageGenerationError::Unavailable)
         );
         // A reply that cannot be decoded holds no batch either.
@@ -1194,7 +1453,10 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                service.generate(&provider, dto).await.expect_err("refused"),
+                service
+                    .generate(&provider, &registry(), dto)
+                    .await
+                    .expect_err("refused"),
                 ImageGenerationError::InvalidRequest(reason)
             );
         }
@@ -1208,7 +1470,7 @@ mod tests {
         let provider = BlockingProvider { started: &started };
         let dto = request();
         let request_id = dto.request_id;
-        let run = async { service.generate(&provider, dto).await };
+        let run = async { service.generate(&provider, &registry(), dto).await };
         let stop = async {
             started.notified().await;
             assert!(service.cancel(CancelImageGenerationRequestDto { request_id }));
@@ -1228,6 +1490,7 @@ mod tests {
         async fn generate(
             &self,
             _request: &ValidatedImageRequest,
+            _source: Option<&SourceImage>,
             cancellation: &CancellationToken,
         ) -> Result<GeneratedBatch, ImageGenerationError> {
             self.started.notify_one();
@@ -1242,6 +1505,7 @@ mod tests {
         let batch = service
             .generate(
                 &provider(vec![encoded(image::ImageFormat::Png, 32, 32)]),
+                &registry(),
                 request(),
             )
             .await
@@ -1297,6 +1561,182 @@ mod tests {
         })
     }
 
+    /// The level the person chose is worded the way the OpenAI-style contract wants it, and a level
+    /// or step count nobody chose is not sent at all - an endpoint without those knobs then sees
+    /// exactly the request it saw before they existed.
+    #[test]
+    fn quality_and_steps_are_worded_for_the_endpoint_and_omitted_when_untouched() {
+        let body = images_request_body(
+            "flux-schnell",
+            &validate_request(&GenerateImagesRequestDto {
+                quality: Some(ImageQualityDto::SuperQuality),
+                steps: Some(30),
+                ..request()
+            })
+            .expect("within bounds"),
+        );
+        // That API's own scale stops at "high", so the top level the person can choose asks for it.
+        assert_eq!(body["quality"], "high");
+        assert_eq!(body["steps"], 30);
+        for level in [
+            ImageQualityDto::Fast,
+            ImageQualityDto::Good,
+            ImageQualityDto::Quality,
+        ] {
+            let body = images_request_body(
+                "flux-schnell",
+                &validate_request(&GenerateImagesRequestDto {
+                    quality: Some(level),
+                    ..request()
+                })
+                .expect("within bounds"),
+            );
+            assert!(
+                ["low", "medium", "high"].contains(&body["quality"].as_str().expect("a word")),
+                "{level:?} should ask in the endpoint's own words"
+            );
+        }
+        let plain = images_request_body("flux-schnell", &validate_request(&request()).expect("ok"));
+        assert!(plain.get("quality").is_none());
+        assert!(plain.get("steps").is_none());
+    }
+
+    #[test]
+    fn a_step_count_outside_the_accepted_range_is_refused() {
+        for steps in [0, MAX_STEPS + 1] {
+            assert_eq!(
+                validate_request(&GenerateImagesRequestDto {
+                    steps: Some(steps),
+                    ..request()
+                }),
+                Err(ImageGenerationError::InvalidRequest(
+                    "the step count is outside the accepted range"
+                )),
+                "{steps} steps should be refused"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn the_quality_and_step_count_asked_for_come_back_with_the_batch() {
+        let service = ImageGenerationService::new();
+        let batch = service
+            .generate(
+                &provider(vec![encoded(image::ImageFormat::Png, 64, 48)]),
+                &registry(),
+                GenerateImagesRequestDto {
+                    quality: Some(ImageQualityDto::Good),
+                    steps: Some(20),
+                    ..request()
+                },
+            )
+            .await
+            .expect("generated");
+        assert_eq!(batch.quality, Some(ImageQualityDto::Good));
+        assert_eq!(batch.steps, Some(20));
+    }
+
+    #[test]
+    fn the_saved_metadata_names_the_quality_the_steps_and_the_source() {
+        let record = PromptRecord {
+            prompt: "a lighthouse at dusk".to_owned(),
+            negative_prompt: None,
+            seed: None,
+            model: "flux-schnell".to_owned(),
+            width: 1_024,
+            height: 1_024,
+            quality: Some(ImageQuality::SuperQuality),
+            steps: Some(30),
+            source: Some("harbour.png".to_owned()),
+        };
+        let text = record.parameters();
+        assert!(text.contains("Quality: super quality"), "{text}");
+        assert!(text.contains("Steps: 30"), "{text}");
+        assert!(text.contains("Source: harbour.png"), "{text}");
+    }
+
+    #[tokio::test]
+    async fn a_source_picture_is_read_from_disk_and_handed_to_the_endpoint() {
+        use fm_transport_dto::ImageSourceDto;
+
+        let directory = tempfile::tempdir().expect("temp directory");
+        let bytes = encoded(image::ImageFormat::Png, 96, 96);
+        let path = directory.path().join("harbour.png");
+        std::fs::write(&path, &bytes).expect("the source is written");
+        let location = fm_domain::Location::from_native_path(&path).expect("location");
+        let service = ImageGenerationService::new();
+        let provider = provider(vec![encoded(image::ImageFormat::Png, 64, 48)]);
+        let batch = service
+            .generate(
+                &provider,
+                &registry(),
+                GenerateImagesRequestDto {
+                    source: Some(ImageSourceDto {
+                        location: location.clone().into(),
+                    }),
+                    ..request()
+                },
+            )
+            .await
+            .expect("generated");
+        let seen = provider.seen_sources.lock().expect("record");
+        let source = seen[0]
+            .as_ref()
+            .expect("the endpoint was given the picture");
+        assert_eq!(source.name, "harbour.png");
+        assert_eq!(source.media_type, "image/png");
+        assert_eq!(source.bytes, bytes);
+        // "Regenerate with this prompt" has to be able to ask for the same picture again.
+        assert_eq!(
+            batch
+                .source
+                .expect("the batch says where it started")
+                .location,
+            location.into()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_source_the_app_cannot_use_is_refused_before_the_endpoint_is_asked() {
+        use fm_transport_dto::ImageSourceDto;
+
+        let directory = tempfile::tempdir().expect("temp directory");
+        let notes = directory.path().join("notes.txt");
+        std::fs::write(&notes, b"not a picture at all").expect("the file is written");
+        let missing = directory.path().join("gone.png");
+        let cases = [
+            (&notes, "it is not a picture"),
+            (&missing, "it could not be read"),
+        ];
+        for (path, expected) in cases {
+            let service = ImageGenerationService::new();
+            let provider = provider(vec![encoded(image::ImageFormat::Png, 64, 48)]);
+            assert_eq!(
+                service
+                    .generate(
+                        &provider,
+                        &registry(),
+                        GenerateImagesRequestDto {
+                            source: Some(ImageSourceDto {
+                                location: fm_domain::Location::from_native_path(path)
+                                    .expect("location")
+                                    .into(),
+                            }),
+                            ..request()
+                        },
+                    )
+                    .await,
+                Err(ImageGenerationError::SourceUnusable(expected)),
+                "{} should be refused",
+                path.display()
+            );
+            assert!(
+                provider.seen.lock().expect("record").is_empty(),
+                "the endpoint is not asked about a source nobody can use"
+            );
+        }
+    }
+
     fn registry() -> ProviderRegistry {
         let mut providers = ProviderRegistry::new();
         providers.register(std::sync::Arc::new(
@@ -1322,6 +1762,7 @@ mod tests {
         service
             .generate(
                 &provider(vec![encoded(image::ImageFormat::Png, 64, 48)]),
+                &registry(),
                 GenerateImagesRequestDto {
                     negative_prompt: Some("text, watermark".into()),
                     seed: Some(42),
@@ -1369,6 +1810,7 @@ mod tests {
         let batch = service
             .generate(
                 &provider(vec![encoded(image::ImageFormat::Png, 32, 32)]),
+                &registry(),
                 GenerateImagesRequestDto {
                     prompt: "a café at dusk, 灯台".into(),
                     ..request()
@@ -1426,6 +1868,7 @@ mod tests {
         let batch = service
             .generate(
                 &provider(vec![encoded(image::ImageFormat::Jpeg, 96, 64)]),
+                &registry(),
                 request(),
             )
             .await
@@ -1501,6 +1944,9 @@ mod tests {
     #[test]
     fn the_prompt_block_reads_the_way_image_tools_expect() {
         let record = PromptRecord {
+            quality: None,
+            steps: None,
+            source: None,
             prompt: "a lighthouse at dusk".into(),
             negative_prompt: Some("text, watermark".into()),
             seed: Some(42),
@@ -1514,6 +1960,9 @@ mod tests {
         );
         assert_eq!(
             PromptRecord {
+                quality: None,
+                steps: None,
+                source: None,
                 prompt: "a cat".into(),
                 negative_prompt: None,
                 seed: None,

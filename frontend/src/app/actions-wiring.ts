@@ -266,7 +266,8 @@ export function createActionsWiring(shellState: ShellState) {
       },
       {
         id: 'client.imageGeneration',
-        title: t('image', 'title'),
+        // Named as a task: the model that answers is not the model that chats.
+        title: t('image', 'actionTitle'),
         description: t('image', 'openDescription'),
         category: 'tools',
         defaultShortcuts: [],

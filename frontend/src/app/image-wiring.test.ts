@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FileManagerClient } from '../api/client/file-manager-client';
 import { emptyImagePane, type ImagePaneEntry } from '../features/image-generation/image-pane-state';
 import { t } from '../i18n';
-import type { GeneratedImageBytes, ImageBatch, SaveGeneratedImageResponse } from '../models';
+import type {
+  GeneratedImageBytes,
+  ImageBatch,
+  Location,
+  SaveGeneratedImageResponse,
+} from '../models';
 import { createImageWiring, imageFailureKey, imageFailureReason } from './image-wiring';
 import type { ShellState } from './shell-state';
 
@@ -211,6 +216,36 @@ describe('image wiring', () => {
     );
     expect(entry.failure).toBeUndefined();
     expect(entry.views[0]?.savedLocation).toBe('file:///shots/a.png');
+  });
+
+  it('blames the destination rather than the prompt when a save is refused as invalid', async () => {
+    const refusal = Object.assign(new Error('bad destination'), { code: 'invalidRequest' });
+    const client = imageClient({
+      saveGeneratedImage: vi
+        .fn<
+          (
+            request: Parameters<FileManagerClient['saveGeneratedImage']>[0],
+            signal?: AbortSignal,
+          ) => Promise<SaveGeneratedImageResponse>
+        >()
+        .mockRejectedValueOnce(refusal),
+    });
+    const { shell, entry } = fakeShell(client);
+    entry.batch = batch;
+    entry.views = [{ imageId: 'i1', loading: false }];
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.save(client as unknown as FileManagerClient, entry.key, {
+      imageId: 'i1',
+      fileName: 'a.png',
+      folder: { providerId: 'local', uri: '/shots' },
+      overwrite: false,
+    });
+
+    expect(entry.failure).toBe('invalidRequest');
+    expect(entry.error).toBe(t('image', 'destinationInvalid'));
+    // The model already took the prompt, so sending the person back to it would be a lie.
+    expect(entry.error).not.toBe(t('image', 'invalidRequest'));
   });
 
   it('drops a batch without saving and tells the backend to forget it', async () => {
@@ -486,5 +521,175 @@ describe('several presets at once', () => {
     expect(
       sent.negativePrompt?.split(',').filter((term) => term.trim() === 'watermark'),
     ).toHaveLength(1);
+  });
+});
+
+describe('how hard the model works, and what it starts from', () => {
+  const catLocation: Location = { providerId: 'local', uri: 'file:///shots/cat.png' };
+  const otherFolder: Location = { providerId: 'local', uri: 'file:///shots/' };
+
+  /** A shell whose right pane is looking at a folder with one picture under its cursor. */
+  function shellWithOtherPane(
+    client: Partial<FileManagerClient>,
+    entries: { id: string; name: string; kind: string; location: Location }[],
+    cursorEntryId?: string,
+  ): { shell: ShellState; entry: ImagePaneEntry } {
+    const entry = emptyImagePane('left:t1', 'left', 't1', 'w1');
+    const shell = {
+      client: client as FileManagerClient,
+      imageByTab: new Map([[entry.key, entry]]),
+      imageOpening: false,
+      directories: new Map<string, unknown>([['right:t2', { location: otherFolder, entries }]]),
+      selections: new Map<string, unknown>([
+        [
+          'right:t2',
+          { selectedEntryIds: cursorEntryId === undefined ? [] : [cursorEntryId], cursorEntryId },
+        ],
+      ]),
+      workspace: {
+        paneOrder: ['left', 'right'],
+        panesById: { left: { activeTabId: 't1' }, right: { activeTabId: 't2' } },
+      },
+    } as unknown as ShellState;
+    return { shell, entry };
+  }
+
+  const picture = { id: 'e1', name: 'cat.png', kind: 'file', location: catLocation };
+
+  function sentRequest(client: Partial<FileManagerClient>): Record<string, unknown> {
+    const generate = client.generateImages;
+    if (generate === undefined) throw new Error('the client cannot generate images');
+    const call = vi.mocked(generate).mock.calls[0];
+    if (call === undefined) throw new Error('nothing was sent to the model');
+    return call[0] as unknown as Record<string, unknown>;
+  }
+
+  it('asks for the level and the step count that were chosen', async () => {
+    const client = imageClient();
+    const { shell, entry } = fakeShell(client);
+    entry.subject = 'a tabby cat';
+    entry.qualityId = 'superQuality';
+    entry.steps = 30;
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.generate(client as unknown as FileManagerClient, entry.key);
+
+    expect(sentRequest(client)).toMatchObject({ quality: 'superQuality', steps: 30 });
+  });
+
+  it('asks nothing about either when the person left both alone', async () => {
+    const client = imageClient();
+    const { shell, entry } = fakeShell(client);
+    entry.subject = 'a tabby cat';
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.generate(client as unknown as FileManagerClient, entry.key);
+
+    const sent = sentRequest(client);
+    expect(
+      'quality' in sent,
+      'an endpoint without those knobs sees the request it saw before',
+    ).toBe(false);
+    expect('steps' in sent).toBe(false);
+    expect('source' in sent).toBe(false);
+  });
+
+  it('starts from the picture the other pane has under its cursor', () => {
+    const client = imageClient();
+    const { shell, entry } = shellWithOtherPane(client, [picture], 'e1');
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    wiring.useSource(entry.key);
+
+    expect(entry.source).toEqual({ location: catLocation });
+  });
+
+  it('follows the cursor rather than a whole marked group', () => {
+    const client = imageClient();
+    const two = [
+      picture,
+      {
+        id: 'e2',
+        name: 'dog.png',
+        kind: 'file',
+        location: { providerId: 'local', uri: 'file:///shots/dog.png' },
+      },
+    ];
+    const { shell, entry } = shellWithOtherPane(client, two, 'e2');
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    wiring.useSource(entry.key);
+
+    expect(entry.source).toEqual({
+      location: { providerId: 'local', uri: 'file:///shots/dog.png' },
+    });
+  });
+
+  it('will not start from a folder', () => {
+    const client = imageClient();
+    const { shell, entry } = shellWithOtherPane(
+      client,
+      [{ id: 'e1', name: 'holidays', kind: 'directory', location: otherFolder }],
+      'e1',
+    );
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    wiring.useSource(entry.key);
+
+    expect(entry.source, 'a folder is not a picture to start from').toBeUndefined();
+  });
+
+  it('will not guess a picture when the other pane has nothing under its cursor', () => {
+    const client = imageClient();
+    const { shell, entry } = shellWithOtherPane(client, [picture]);
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    wiring.useSource(entry.key);
+
+    expect(entry.source).toBeUndefined();
+  });
+
+  it('can be talked out of the picture it was going to start from', () => {
+    const client = imageClient();
+    const { shell, entry } = fakeShell(client);
+    entry.source = { location: catLocation };
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    wiring.clearSource(entry.key);
+
+    expect(entry.source).toBeUndefined();
+  });
+
+  it('asks again of the same picture, at the same level, when it is asked to regenerate', async () => {
+    const client = imageClient();
+    const { shell, entry } = fakeShell(client);
+    entry.batch = { ...batch, quality: 'good', steps: 20, source: { location: catLocation } };
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.regenerate(client as unknown as FileManagerClient, entry.key);
+
+    expect(sentRequest(client)).toMatchObject({
+      quality: 'good',
+      steps: 20,
+      source: { location: catLocation },
+      prompt: batch.prompt,
+    });
+  });
+
+  it('does not carry a picture over to a fresh idea', () => {
+    const client = imageClient();
+    const { shell, entry } = fakeShell(client);
+    entry.subject = 'a tabby cat';
+    entry.qualityId = 'fast';
+    entry.steps = 10;
+    entry.source = { location: catLocation };
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    wiring.newPrompt(client as unknown as FileManagerClient, entry.key);
+
+    expect(entry.subject).toBe('');
+    expect(entry.qualityId).toBe('');
+    expect(entry.steps).toBeUndefined();
+    expect(entry.source).toBeUndefined();
   });
 });

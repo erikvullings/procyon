@@ -1715,6 +1715,8 @@ export const nl = {
     savedTo: 'Opgeslagen in {location}',
     savedWithPrompt: 'Opgeslagen in {location} met de prompt in de metadata.',
     savedPlain: 'Opgeslagen in {location}. Dit formaat kan de prompt niet bevatten.',
+    destinationInvalid:
+      'Die map of bestandsnaam past niet bij deze locatie. Controleer beide en probeer het opnieuw.',
     openSettings: 'Open AI-instellingen',
     needSubject: 'Beschrijf eerst wat je wilt zien.',
     promptTooLong: 'De beschrijving is te lang. Kort het in.',

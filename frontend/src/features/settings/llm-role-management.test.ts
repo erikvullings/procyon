@@ -46,6 +46,29 @@ describe('LlmRoleManagement', () => {
     expect(root.querySelector('[aria-label="Semantic search (embeddings)"]')).toBeNull();
   });
 
+  it('binds the picture model beside the chat model, not behind a switch', async () => {
+    await mountLoaded(new MockFileManagerClient());
+
+    const image = root.querySelector<HTMLElement>('[aria-label="Image generation"]');
+    expect(image, 'most chat models cannot draw, so this is its own choice').not.toBeNull();
+    expect(root.querySelector('[aria-label="Semantic search (embeddings)"]')).toBeNull();
+
+    // Each row picks its endpoint from a list. Chat then picks the model from a list too, while the
+    // picture model is typed: what an endpoint lists for chat is almost never what it can draw with.
+    const drawn = (selector: string): { dropdowns: number; typed: number } => {
+      const row = root.querySelector<HTMLElement>(selector);
+      const inputs = [...(row?.querySelectorAll<HTMLInputElement>('input') ?? [])];
+      return {
+        dropdowns: inputs.filter((input) => input.classList.contains('select-dropdown')).length,
+        typed: inputs.filter(
+          (input) => !input.classList.contains('select-dropdown') && input.type === 'text',
+        ).length,
+      };
+    };
+    expect(drawn('[aria-label="Chat and summaries"]')).toEqual({ dropdowns: 2, typed: 0 });
+    expect(drawn('[aria-label="Image generation"]')).toEqual({ dropdowns: 1, typed: 1 });
+  });
+
   it('shows no status line for an unassigned or ready role', async () => {
     await mountLoaded(new MockFileManagerClient());
 

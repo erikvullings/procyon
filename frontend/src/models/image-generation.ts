@@ -7,6 +7,7 @@ import type {
   SaveGeneratedImageRequestDto,
   SaveGeneratedImageResponseDto,
 } from '../api/generated/models';
+import type { Location } from './location';
 
 /**
  * Image generation (task 0325): a bounded prompt, a batch the person reviews, and an explicit save.
@@ -54,6 +55,42 @@ export const IMAGE_SIZES: readonly { width: number; height: number; labelKey: Im
 
 /** How many images one batch may ask for. */
 export const IMAGE_COUNTS: readonly number[] = [1, 2, 3, 4];
+
+/**
+ * How hard the endpoint should work at a picture. The four levels say what the person wants; each
+ * endpoint contract words them in its own vocabulary on the wire.
+ */
+export type ImageQualityId = 'fast' | 'good' | 'quality' | 'superQuality';
+
+export const IMAGE_QUALITIES: readonly { id: ImageQualityId; labelKey: ImageQualityId }[] = [
+  { id: 'fast', labelKey: 'fast' },
+  { id: 'good', labelKey: 'good' },
+  { id: 'quality', labelKey: 'quality' },
+  { id: 'superQuality', labelKey: 'superQuality' },
+] as const;
+
+/** The chosen quality, or `''` to leave the choice to the endpoint. */
+export function qualityIdOf(value: string): ImageQualityId | '' {
+  return IMAGE_QUALITIES.some((quality) => quality.id === value) ? (value as ImageQualityId) : '';
+}
+
+/** The largest sampler step count the pane offers; the backend refuses anything above it. */
+export const IMAGE_MAX_STEPS = 64;
+
+/**
+ * Step counts worth offering. Some endpoints have no sampler to step, so leaving this unset sends
+ * no step count at all rather than a number the endpoint would have to guess at.
+ */
+export const IMAGE_STEP_CHOICES: readonly number[] = [10, 20, 30, 50];
+
+/**
+ * A picture already on disk the new one should start from, named the way a save names its
+ * destination: the file itself. The backend reads the bytes; they are never uploaded.
+ */
+export interface GeneratedImageSource {
+  /** The source file. */
+  location: Location;
+}
 
 /** Characters no file system in the app's scope accepts in a single name. */
 const FORBIDDEN_NAME_CHARACTERS = /[\\/:*?"<>|]/u;

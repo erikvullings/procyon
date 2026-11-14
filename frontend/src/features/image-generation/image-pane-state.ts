@@ -1,5 +1,18 @@
-import type { ImageBatch, Location, PaneId, TabId } from '../../models';
-import { IMAGE_COUNTS, IMAGE_MAX_SEED, IMAGE_SIZES } from '../../models';
+import type {
+  GeneratedImageSource,
+  ImageBatch,
+  ImageQualityId,
+  Location,
+  PaneId,
+  TabId,
+} from '../../models';
+import {
+  IMAGE_COUNTS,
+  IMAGE_MAX_SEED,
+  IMAGE_MAX_STEPS,
+  IMAGE_SIZES,
+  IMAGE_STEP_CHOICES,
+} from '../../models';
 
 /** One stored image as the preview pane shows it. */
 export interface GeneratedImageView {
@@ -46,6 +59,12 @@ export interface ImagePaneEntry {
   count: number;
   /** Reproducibility seed; `undefined` lets the provider choose. */
   seed?: number | undefined;
+  /** How hard the endpoint should work; `''` leaves the choice to it. */
+  qualityId: ImageQualityId | '';
+  /** Sampler step count; `undefined` sends none, since not every endpoint has a sampler. */
+  steps?: number | undefined;
+  /** A picture on disk this one starts from; the backend reads its bytes. */
+  source?: GeneratedImageSource | undefined;
   /** The generation on screen, and how each of its images is displayed. */
   batch?: ImageBatch | undefined;
   views: GeneratedImageView[];
@@ -85,9 +104,21 @@ export function emptyImagePane(
     width: IMAGE_SIZES[0]?.width ?? 1_024,
     height: IMAGE_SIZES[0]?.height ?? 1_024,
     count: 1,
+    qualityId: '',
     views: [],
     history: [],
   };
+}
+
+/** The step counts worth choosing, beside "any", which sends none at all. */
+export const IMAGE_STEP_OPTIONS: readonly (number | '')[] = ['', ...IMAGE_STEP_CHOICES];
+
+/** The name of the picture this pane starts from, or nothing when it does not start from one. */
+export function sourceNameOf(source: GeneratedImageSource | null | undefined): string | undefined {
+  if (source === undefined || source === null) return undefined;
+  const uri = source.location.uri.replace(/\/+$/, '');
+  const tail = uri.slice(uri.lastIndexOf('/') + 1);
+  return decodeURIComponent(tail) || uri;
 }
 
 /** Why a request cannot be sent, as an i18n key; `undefined` when it can. */
@@ -97,13 +128,15 @@ export type ImageRequestProblem =
   | 'negativeTooLong'
   | 'sizeNotAllowed'
   | 'countNotAllowed'
-  | 'seedTooLarge';
+  | 'seedTooLarge'
+  | 'stepsOutOfRange';
 
 /** The bounds the backend enforces; checking them here saves a round trip and says why. */
 export const IMAGE_LIMITS = {
   promptChars: 4_000,
   negativePromptChars: 2_000,
   maxSeed: IMAGE_MAX_SEED,
+  maxSteps: IMAGE_MAX_STEPS,
 } as const;
 
 /**
@@ -125,6 +158,9 @@ export function imageRequestProblem(entry: ImagePaneEntry): ImageRequestProblem 
   if (!IMAGE_COUNTS.includes(entry.count)) return 'countNotAllowed';
   if (entry.seed !== undefined && (entry.seed < 0 || entry.seed > IMAGE_LIMITS.maxSeed)) {
     return 'seedTooLarge';
+  }
+  if (entry.steps !== undefined && (entry.steps < 1 || entry.steps > IMAGE_LIMITS.maxSteps)) {
+    return 'stepsOutOfRange';
   }
   return undefined;
 }

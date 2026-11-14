@@ -14,26 +14,30 @@ import {
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { GeneratedImage, Location } from '../../models';
-import { IMAGE_SIZES, isValidImageFileName } from '../../models';
+import { IMAGE_QUALITIES, IMAGE_SIZES, isValidImageFileName, qualityIdOf } from '../../models';
 import {
   canGenerate,
   crumbLabel,
   failureNeedsSettings,
   hasPreview,
+  IMAGE_STEP_OPTIONS,
   type ImagePaneEntry,
   isSaveConflict,
+  sourceNameOf,
   suggestedFileName,
 } from './image-pane-state';
 import {
+  chooseMedium,
+  chooseTreatment,
   composeNegativePrompt,
   composePrompt,
   IMAGE_APERTURES,
   IMAGE_LENSES,
   IMAGE_PRESETS,
+  mediumOf,
   presetById,
-  selectedPresets,
   selectionIsPhotographic,
-  togglePreset,
+  treatmentOf,
 } from './image-presets';
 import './image-pane.css';
 
@@ -54,6 +58,10 @@ export interface ImagePaneAttrs {
   }) => void;
   readonly onDiscard: () => void;
   readonly onRegenerate: () => void;
+  /** Takes the picture the other pane has selected as the one this prompt starts from. */
+  readonly onUseSource: () => void;
+  /** Stops starting from a picture. */
+  readonly onClearSource: () => void;
   /** Shows one of the generations the crumb bar holds. */
   readonly onSelectGeneration: (generationId: string) => void;
   /** Clears the prompt for a fresh idea, leaving the generations already made alone. */
@@ -78,8 +86,6 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
   let fileName = '';
   let folderText = '';
   let confirmingReplace = false;
-  /** The list of styles is folded into the status bar; there is no room to show which are on. */
-  let stylesOpen = false;
   /** Which status choice has its list open, so at most one is ever drawn. */
   let openChoice: string | undefined;
 
@@ -151,7 +157,6 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
           'aria-controls': open ? listId : undefined,
           disabled,
           onclick: () => {
-            stylesOpen = false;
             openChoice = open ? undefined : key;
           },
           onkeydown: (event: KeyboardEvent) => {
@@ -214,76 +219,51 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
     );
   };
 
-  /** The styles live behind one status bar control that counts them rather than naming them. */
-  const styleControl = (attrs: ImagePaneAttrs) => {
-    const { entry } = attrs;
-    const chosen = selectedPresets(entry.presetIds);
-    const pending = entry.pendingRequestId !== undefined;
-    return m('.fm-image-presets', [
-      m(
-        'button.btn-flat.fm-image-chrome.fm-image-preset-trigger',
-        {
-          type: 'button',
-          'aria-expanded': String(stylesOpen),
-          'aria-controls': stylesOpen ? 'fm-image-preset-list' : undefined,
-          disabled: pending,
-          onclick: () => {
-            openChoice = undefined;
-            stylesOpen = !stylesOpen;
-          },
-          onkeydown: (event: KeyboardEvent) => {
-            if (event.key !== 'Escape' || !stylesOpen) return;
-            stylesOpen = false;
-          },
-        },
-        chosen.length === 0
-          ? t('image', 'styles')
-          : t('image', 'stylesCount', { count: String(chosen.length) }),
-      ),
-      stylesOpen
-        ? m(
-            'div.fm-image-preset-list',
-            {
-              id: 'fm-image-preset-list',
-              role: 'group',
-              'aria-label': t('image', 'styles'),
-            },
-            IMAGE_PRESETS.map((preset) => {
-              const label = t('imagePreset', preset.id);
-              const on = entry.presetIds.includes(preset.id);
-              return m('label.fm-image-preset-option', [
-                m('input', {
-                  type: 'checkbox',
-                  'aria-label': label,
-                  checked: on,
-                  disabled: pending,
-                  onclick: (event: Event) => {
-                    event.preventDefault();
-                    const next = togglePreset(entry.presetIds, preset.id);
-                    const medium = presetById(togglePreset([], preset.id)[0] ?? '');
-                    // A medium also brings the shape it suits; the size control beside it stays open
-                    // to the person afterwards.
-                    attrs.onPatch(
-                      medium !== undefined && medium.group === 'medium'
-                        ? { presetIds: next, width: medium.width, height: medium.height }
-                        : { presetIds: next },
-                    );
-                  },
-                }),
-                m('span.fm-image-preset-label', label),
-              ]);
-            }),
-          )
-        : undefined,
-    ]);
-  };
-
   const status = (attrs: ImagePaneAttrs) => {
     const { entry } = attrs;
     const pending = entry.pendingRequestId !== undefined;
     const photographic = selectionIsPhotographic(entry.presetIds);
     return m('footer.fm-image-status', [
-      styleControl(attrs),
+      // Style is one choice: the ways of making a picture exclude each other, so a list of toggles
+      // would only offer combinations that cannot be had. What can join any of them - taking the
+      // colour out - is a second choice beside it.
+      statusChoice(
+        'style',
+        t('image', 'style'),
+        mediumOf(entry.presetIds)?.id ?? '',
+        [
+          { id: '', label: t('image', 'styleNone') },
+          ...IMAGE_PRESETS.filter((preset) => preset.group === 'medium').map((preset) => ({
+            id: preset.id,
+            label: t('imagePreset', preset.id),
+          })),
+        ],
+        pending,
+        (value) => {
+          const medium = presetById(value);
+          const presetIds = chooseMedium(entry.presetIds, value);
+          // A medium also brings the shape it suits; the size choice beside it stays open afterwards.
+          attrs.onPatch(
+            medium !== undefined && medium.group === 'medium'
+              ? { presetIds, width: medium.width, height: medium.height }
+              : { presetIds },
+          );
+        },
+      ),
+      statusChoice(
+        'finish',
+        t('image', 'finish'),
+        treatmentOf(entry.presetIds)?.id ?? '',
+        [
+          { id: '', label: t('image', 'finishNone') },
+          ...IMAGE_PRESETS.filter((preset) => preset.group === 'treatment').map((preset) => ({
+            id: preset.id,
+            label: t('imagePreset', preset.id),
+          })),
+        ],
+        pending,
+        (value) => attrs.onPatch({ presetIds: chooseTreatment(entry.presetIds, value) }),
+      ),
       statusChoice(
         'size',
         t('image', 'size'),
@@ -298,6 +278,31 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
           if (width === undefined || height === undefined) return;
           attrs.onPatch({ width, height });
         },
+      ),
+      statusChoice(
+        'quality',
+        t('image', 'quality'),
+        entry.qualityId,
+        [
+          { id: '', label: t('image', 'qualityAny') },
+          ...IMAGE_QUALITIES.map((quality) => ({
+            id: quality.id,
+            label: t('imageQuality', quality.labelKey),
+          })),
+        ],
+        pending,
+        (value) => attrs.onPatch({ qualityId: qualityIdOf(value) }),
+      ),
+      statusChoice(
+        'steps',
+        t('image', 'steps'),
+        entry.steps === undefined ? '' : String(entry.steps),
+        IMAGE_STEP_OPTIONS.map((steps) => ({
+          id: String(steps),
+          label: steps === '' ? t('image', 'stepsAny') : String(steps),
+        })),
+        pending,
+        (value) => attrs.onPatch({ steps: value === '' ? undefined : Number(value) }),
       ),
       photographic
         ? statusChoice(
@@ -340,6 +345,28 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
           attrs.onPatch({ seed: text !== '' && Number.isFinite(parsed) ? parsed : undefined });
         },
       }),
+      entry.source === undefined
+        ? tooltip(
+            t('image', 'sourceHint'),
+            m(
+              'button.btn-flat.fm-image-chrome.fm-image-source',
+              { type: 'button', disabled: pending, onclick: () => attrs.onUseSource() },
+              [photoIcon({ size: 14 }), t('image', 'source')],
+            ),
+          )
+        : m('.fm-image-source-set', [
+            tooltip(
+              entry.source.location.uri,
+              m(
+                'button.btn-flat.fm-image-chrome.fm-image-source',
+                { type: 'button', disabled: pending, onclick: () => attrs.onUseSource() },
+                sourceNameOf(entry.source) ?? t('image', 'source'),
+              ),
+            ),
+            iconButton(t('image', 'sourceClear'), trashIcon({ size: 14 }), () =>
+              attrs.onClearSource(),
+            ),
+          ]),
       m('.fm-image-status-actions', [
         hasPreview(entry)
           ? iconButton(

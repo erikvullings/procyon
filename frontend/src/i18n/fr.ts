@@ -1323,6 +1323,8 @@ export const fr = {
     savedTo: 'Enregistré dans {location}',
     savedWithPrompt: 'Enregistré dans {location} avec la requête dans les métadonnées.',
     savedPlain: 'Enregistré dans {location}. Ce format ne peut pas contenir la requête.',
+    destinationInvalid:
+      'Ce dossier ou ce nom de fichier ne correspond pas à cet emplacement. Vérifiez les deux et réessayez.',
     openSettings: 'Ouvrir les paramètres IA',
     needSubject: 'Décrivez d’abord ce que vous voulez voir.',
     promptTooLong: 'La description est trop longue. Raccourcissez-la.',
