@@ -23,15 +23,15 @@ export interface PluginDescriptorDto {
   diagnostic?: string | null;
   /** Whether the valid plugin is enabled in persisted settings. */
   enabled: boolean;
-  iconTheme?: null | PluginIconThemeDto;
+  iconTheme?: PluginIconThemeDto | null;
   /** Stable manifest identifier, or a directory-derived identifier when invalid. */
   id: string;
   /** User-facing name when available. */
   name: string;
   /** Capabilities the manifest requests; ungranted capabilities are denied (spec §19). */
   permissions: PluginPermissionsDto;
-  preview?: null | PluginPreviewDto;
-  spaPanel?: null | PluginSpaPanelDto;
+  preview?: PluginPreviewDto | null;
+  spaPanel?: PluginSpaPanelDto | null;
   /** Package version when available. */
   version: string;
 }

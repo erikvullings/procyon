@@ -17,7 +17,7 @@ export interface LinkProblemDto {
      * @nullable
      */
   line?: number | null;
-  resolved?: null | LocationDto;
+  resolved?: LocationDto | null;
   /** The file or symlink that contains the link. */
   source: LocationDto;
   /** The target exactly as recorded in the link. */

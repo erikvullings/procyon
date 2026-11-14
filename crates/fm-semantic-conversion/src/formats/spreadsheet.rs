@@ -271,7 +271,7 @@ fn image_relationship_ids(bytes: &[u8]) -> Vec<String> {
                         package::local_name(attribute.key.as_ref()).as_str(),
                         "embed" | "link"
                     )
-                    .then(|| String::from_utf8_lossy(&attribute.value).into_owned())
+                    .then(|| attribute.value.to_string())
                 }) {
                     ids.push(id);
                 }
@@ -295,7 +295,7 @@ fn relationship_ids(bytes: &[u8], element: &str, attribute_name: &str) -> Vec<St
             {
                 if let Some(id) = start.attributes().flatten().find_map(|attribute| {
                     (package::local_name(attribute.key.as_ref()) == attribute_name)
-                        .then(|| String::from_utf8_lossy(&attribute.value).into_owned())
+                        .then(|| attribute.value.to_string())
                 }) {
                     ids.push(id);
                 }

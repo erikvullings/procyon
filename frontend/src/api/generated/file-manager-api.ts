@@ -9324,7 +9324,7 @@ return fetchMutator<installSemanticComponentWorkerPatchResponse>(getInstallSeman
 
 
 export type getDocumentSummaryResponse200 = {
-  data: null | DocumentSummaryDto
+  data: DocumentSummaryDto | null
   status: 200
 }
 

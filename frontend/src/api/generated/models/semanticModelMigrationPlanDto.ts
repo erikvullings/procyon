@@ -12,7 +12,7 @@ import type { SemanticReindexEstimateDto } from './semanticReindexEstimateDto.ts
 export interface SemanticModelMigrationPlanDto {
   /** Estimated full-reindex work. */
   estimate: SemanticReindexEstimateDto;
-  from?: null | SemanticModelSelectionDto;
+  from?: SemanticModelSelectionDto | null;
   /** Always true: all embeddings must be rebuilt. */
   fullReindex: boolean;
   /** Opaque plan identity. */

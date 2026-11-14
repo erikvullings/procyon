@@ -58,7 +58,7 @@ export interface DirectorySnapshotDto {
      * choice for this folder (task 0270).
      */
   viewRemembered?: boolean;
-  volumeCapacity?: null | VolumeCapacityDto;
+  volumeCapacity?: VolumeCapacityDto | null;
   /** Whether the current user may create entries in this directory. */
   writable: boolean;
 }

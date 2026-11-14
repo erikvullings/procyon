@@ -9,7 +9,7 @@ use russh::client::{self, AuthResult};
 use russh::keys::agent::AgentIdentity;
 #[cfg(unix)]
 use russh::keys::agent::client::{AgentClient, AgentStream};
-use russh::keys::{PrivateKeyWithHashAlg, PublicKey};
+use russh::keys::{PrivateKeyWithHashAlg, PublicKey, PublicKeyOrCertificate};
 use russh_sftp::client::SftpSession;
 use tokio::sync::Mutex as AsyncMutex;
 
@@ -417,20 +417,27 @@ impl client::Handler for ClientHandler {
 
     async fn check_server_key(
         &mut self,
-        server_public_key: &PublicKey,
+        server_public_key: &PublicKeyOrCertificate,
     ) -> Result<bool, Self::Error> {
-        let fingerprint = fingerprint_of(server_public_key);
-        // A known-hosts store failure must never be treated as trust: fail
-        // closed as "unverified" rather than silently accepting.
-        let verification = verify_host_key(
-            self.known_hosts.as_ref(),
-            &self.known_hosts_key,
-            &fingerprint,
-        )
-        .await
-        .unwrap_or(HostKeyVerification::Unverified {
-            fingerprint: fingerprint.clone(),
-        });
+        let fingerprint = fingerprint_of(&server_public_key.public_key());
+        // Host certificates are not trusted by key fingerprint alone: refuse them as
+        // "unverified". A known-hosts store failure must never be treated as trust either:
+        // fail closed as "unverified" rather than silently accepting.
+        let verification = if server_public_key.certificate().is_some() {
+            HostKeyVerification::Unverified {
+                fingerprint: fingerprint.clone(),
+            }
+        } else {
+            verify_host_key(
+                self.known_hosts.as_ref(),
+                &self.known_hosts_key,
+                &fingerprint,
+            )
+            .await
+            .unwrap_or(HostKeyVerification::Unverified {
+                fingerprint: fingerprint.clone(),
+            })
+        };
         let trusted = matches!(verification, HostKeyVerification::Trusted { .. });
         *self.outcome.lock().expect("host-key outcome lock poisoned") = Some(verification);
         Ok(trusted)

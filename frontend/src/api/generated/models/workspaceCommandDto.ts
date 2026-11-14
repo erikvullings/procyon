@@ -114,7 +114,7 @@ export type WorkspaceCommandDto = {
      * @minimum 0
      */
   expectedRevision: number;
-  location?: null | LocationDto;
+  location?: LocationDto | null;
   /** How the navigation affects history. */
   navigationMode: NavigationModeDto;
   /** The pane the tab belongs to. */

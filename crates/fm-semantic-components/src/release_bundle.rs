@@ -38,13 +38,13 @@ use crate::{
 };
 
 /// Exact pinned `zvec-rust` / native Zvec release packed as the runtime artifact.
-const PRODUCTION_ZVEC_VERSION: &str = "0.7.0";
+const PRODUCTION_ZVEC_VERSION: &str = "0.8.1";
 /// Credential-free public source of the pinned Zvec native runtime.
 const PRODUCTION_ZVEC_SOURCE_URL: &str = "https://github.com/zvec-ai/zvec-rust";
 /// Immutable upstream revision recorded for the pinned Zvec release.
-const PRODUCTION_ZVEC_SOURCE_REVISION: &str = "733e0bc82e02a0c63202bff594a7f4530520dfd0";
-/// Native Zvec revision pinned by the Rust SDK's v0.7.0 submodule.
-const PRODUCTION_ZVEC_NATIVE_SOURCE_REVISION: &str = "8321c1314a559fd5f909e92498f43e5194bf9b99";
+const PRODUCTION_ZVEC_SOURCE_REVISION: &str = "668f8270d3023bda0f3ed2ba650a508dca78d648";
+/// Native Zvec tree (`zvec/`, vendored in the Rust SDK repository) at the v0.8.1 tag.
+const PRODUCTION_ZVEC_NATIVE_SOURCE_REVISION: &str = "9c1a7f95b0ddbf1e478c4fac2d6735903d6e6120";
 /// Microsoft ONNX Runtime release used by the Linux x86-64 dynamic loader.
 const PRODUCTION_ONNX_RUNTIME_VERSION: &str = "1.28.0";
 const PRODUCTION_PDFIUM_VERSION: &str = "0.8086.0";
@@ -89,8 +89,8 @@ const INDEX_SCHEMA_VERSION: u32 = 2;
 /// Target operating-system/architecture pairs with a qualified, verified
 /// Zvec native runtime artifact (see `docs/architecture/zvec-rust-sdk.md`).
 ///
-/// macOS x64 is deliberately absent: `zvec-rust` 0.7.0 has no macOS x64
-/// prebuilt artifact, so Procyon must not advertise the component there.
+/// macOS x64 and Windows ARM64 are deliberately absent: `zvec-rust` 0.8.1 publishes prebuilts
+/// for both, but Procyon has not qualified either target yet.
 const SUPPORTED_TARGETS: [(&str, &str); 4] = [
     ("macos", "aarch64"),
     ("windows", "x86_64"),
@@ -1828,17 +1828,17 @@ mod tests {
     }
 
     #[test]
-    fn rejects_the_one_target_zvec_has_no_prebuilt_artifact_for() {
+    fn rejects_targets_outside_the_qualified_matrix() {
         let directory = tempfile::tempdir().unwrap();
         let mut spec = base_spec(directory.path());
-        spec.target_operating_system = "macos".into();
-        spec.target_architecture = "x86_64".into();
+        spec.target_operating_system = "windows".into();
+        spec.target_architecture = "aarch64".into();
 
         let error = build_production_release_bundle(&spec).unwrap_err();
         assert!(matches!(
             error,
             ProductionBundleError::UnsupportedTarget { operating_system, architecture }
-                if operating_system == "macos" && architecture == "x86_64"
+                if operating_system == "windows" && architecture == "aarch64"
         ));
     }
 

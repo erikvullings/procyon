@@ -16,8 +16,8 @@ import type { SearchSemanticPredicateDto } from './searchSemanticPredicateDto.ts
  * Structured, versioned search query suitable for durable persistence.
  */
 export interface SearchQueryDto {
-  concept?: null | SearchConceptPredicateDto;
-  content?: null | SearchContentPredicateDto;
+  concept?: SearchConceptPredicateDto | null;
+  content?: SearchContentPredicateDto | null;
   entryKinds?: SearchEntryKindDto[];
   gitStatuses?: SearchGitStatusDto[];
   /**
@@ -37,10 +37,10 @@ export interface SearchQueryDto {
   modifiedAfter?: string | null;
   /** @nullable */
   modifiedBefore?: string | null;
-  name?: null | SearchNamePredicateDto;
+  name?: SearchNamePredicateDto | null;
   /** @minimum 0 */
   schemaVersion: number;
   scope: SearchScopeDto;
-  semantic?: null | SearchSemanticPredicateDto;
+  semantic?: SearchSemanticPredicateDto | null;
   tags?: string[];
 }

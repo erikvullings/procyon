@@ -72,23 +72,23 @@ fm-vfs-webdav = {path = "crates/fm-vfs-webdav"}
 # with `dependency.workspace = true`.
 async-trait = "0.1.91"
 axum = "0.8.9"
-axum-server = {version = "0.7", features = ["tls-rustls"]}
-base64 = "0.22.1"
+axum-server = {version = "0.9", features = ["tls-rustls"]}
+base64 = "0.23.1"
 bitflags = "2.13.1"
 block2 = "0.6.2"
 blake3 = "1.8.6"
 similar = "3.2.1"
 bytes = "1.12.1"
 bzip2 = "0.6"
-calamine = {version = "0.32.0", features = ["chrono", "picture"]}
+calamine = {version = "0.38.0", features = ["chrono", "picture"]}
 caseless = "0.2.2"
 chrono = {version = "0.4.45", features = ["serde"]}
 clap = {version = "4.6.4", features = ["derive", "env"]}
 crc32fast = "1.5.0"
-criterion = {version = "0.5.1", features = ["html_reports"]}
-dirs = "6.0.0"
-docling-core = "=2.52.9"
-docling-pdf = {version = "=2.52.9", default-features = false}
+criterion = {version = "0.8.2", features = ["html_reports"]}
+dirs = "7.0.0"
+docling-core = "=2.82.1"
+docling-pdf = {version = "=2.82.1", default-features = false}
 # Local patch of drag-rs 2.1.1: upstream only exposes one operation at a time, while native
 # file drags must advertise both copy and move so Finder/Explorer can negotiate modifiers.
 drag = {path = "third_party/drag-rs"}
@@ -96,10 +96,10 @@ dunce = "1.0.5"
 encoding_rs = "0.8.35"
 ed25519-dalek = "3.0.0"
 flate2 = "1"
-ferrodoc = { version = "0.7.0", default-features = false, features = ["docx", "html"] }
+ferrodoc = { version = "1.0.1", default-features = false, features = ["docx", "html"] }
 fs2 = "0.4.3"
 futures = "0.3.31"
-git2 = {version = "0.20.4", default-features = false, features = ["vendored-libgit2"]}
+git2 = {version = "0.21.0", default-features = false, features = ["vendored-libgit2"]}
 governor = "0.10.4"
 ignore = "0.4.23"
 image = {version = "0.25.10", default-features = false, features = [
@@ -111,7 +111,7 @@ image = {version = "0.25.10", default-features = false, features = [
 ]}
 libc = "0.2.189"
 interprocess = {version = "2.4.4", features = ["tokio"]}
-lopdf = {version = "0.44.0", default-features = false}
+lopdf = {version = "0.47.0", default-features = false}
 md-5 = "0.11.0"
 mlua = {version = "0.12.0", features = [
   "lua54",
@@ -137,37 +137,39 @@ prost = "0.14.3"
 pulldown-cmark = {version = "0.13.4", default-features = false}
 prost-build = "0.14.3"
 protoc-bin-vendored = "3.2.0"
-quick-xml = "0.41.0"
-proj4rs = "0.2.1"
+quick-xml = "0.42.0"
+proj4rs = "0.3.0"
 crs-definitions = "0.6.0"
 csv = "1.4.0"
 rand = "0.10"
-rars = "0.4.8"
+rars = "0.12.4"
 rayon = "1.11.0"
 regex = "1.11.3"
 reqwest = {version = "0.13.4", default-features = false, features = [
   "json",
+  "multipart",
   "rustls",
   "stream",
 ]}
 rustix = {version = "1.1.4", features = ["process"]}
-rusqlite = {version = "0.37.0", features = ["bundled", "hooks", "limits"]}
-russh = "0.62"
+rusqlite = {version = "0.42.0", features = ["bundled", "hooks", "limits"]}
+russh = "0.65.1"
+# russh-sftp 3.x fails SFTP sessions against the russh 0.65 server ("sender dropped"); stay on 2.x.
 russh-sftp = "2.4"
-rusty-s3 = "0.10.2"
+rusty-s3 = "0.11.0"
 rustls-platform-verifier = "0.7.0"
 security-framework = "3.7.0"
 semver = {version = "1.0.28", features = ["serde"]}
 serde = {version = "1.0.229", features = ["derive"]}
 serde_json = "1.0.151"
-serde_json_canonicalizer = "0.3.2"
-sevenz-rust2 = {version = "0.21.3", default-features = false, features = [
+serde_json_canonicalizer = "0.4.1"
+sevenz-rust2 = {version = "0.25.0", default-features = false, features = [
   "aes256",
   "compress",
   "util",
 ]}
 sha2 = "0.11.0"
-suppaftp = {version = "10.0.1", default-features = false, features = ["tokio-rustls-ring"]}
+suppaftp = {version = "12.2.1", default-features = false, features = ["tokio-rustls-ring"]}
 tar = "0.4"
 tauri = "2"
 tauri-build = "2"
@@ -179,7 +181,7 @@ tauri-plugin-updater = "2"
 tauri-plugin-window-state = "2"
 tempfile = "3.15.0"
 thiserror = "2.0.19"
-tokio = {version = "1.53.1", features = [
+tokio = {version = "1.54.1", features = [
   "rt-multi-thread",
   "macros",
   "net",
@@ -204,23 +206,23 @@ tracing = "0.1.44"
 tracing-appender = "0.2.5"
 tracing-subscriber = {version = "0.3.23", features = ["env-filter"]}
 url = "2.5.8"
-utoipa = {version = "5.5.0", features = ["chrono", "uuid"]}
-utoipa-axum = "0.2.0"
-utoipa-swagger-ui = {version = "9.0.2", features = ["axum", "vendored"]}
+utoipa = {version = "6.0.0", features = ["chrono", "uuid"]}
+utoipa-axum = "0.3.0"
+utoipa-swagger-ui = {version = "10.0.2", features = ["axum", "vendored"]}
 uuid = {version = "1.24.0", features = ["serde", "v4", "v5"]}
 walkdir = "2.5.0"
 widestring = "1.2.1"
 windows-permissions = "0.2.4"
-xattr = "1.6.1"
+xattr = "1.7.0"
 xz2 = {version = "0.1", features = ["static"]}
-zeroize = "1.8.2"
-zip = {version = "8.6.0", default-features = false, features = [
+zeroize = "1.9.1"
+zip = {version = "9.5.1", default-features = false, features = [
   "aes-crypto",
   "deflate",
   "deflate64",
   "time",
 ]}
-zvec-rust = "=0.7.0"
+zvec-rust = "=0.8.1"
 
 # `anyhow` is reserved for executables in `apps/`; libraries use `thiserror`.
 # This is enforced by the architecture fitness test in `fm-test-support`.

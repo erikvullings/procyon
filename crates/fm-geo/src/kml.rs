@@ -89,15 +89,13 @@ fn line_column(bytes: &[u8], offset: usize) -> (usize, usize) {
     (line, column)
 }
 
-fn local(name: &[u8]) -> String {
-    let text = String::from_utf8_lossy(name);
-    text.rsplit(':').next().unwrap_or(&text).to_owned()
+fn local(name: &str) -> String {
+    name.rsplit(':').next().unwrap_or(name).to_owned()
 }
 
 fn attribute(start: &quick_xml::events::BytesStart<'_>, wanted: &str) -> Option<String> {
     start.attributes().flatten().find_map(|attribute| {
-        (local(attribute.key.as_ref()) == wanted)
-            .then(|| String::from_utf8_lossy(&attribute.value).into_owned())
+        (local(attribute.key.as_ref()) == wanted).then(|| attribute.value.to_string())
     })
 }
 
@@ -342,7 +340,7 @@ pub fn parse_kml(
         match event {
             Event::Eof => break,
             Event::DocType(doctype) => {
-                if String::from_utf8_lossy(&doctype).contains("ENTITY") {
+                if doctype.contains("ENTITY") {
                     return Err(KmlError::Entities);
                 }
             }
@@ -443,14 +441,13 @@ pub fn parse_kml(
                 }
             }
             Event::Text(content) => {
-                if let Ok(decoded) = content.decode() {
-                    text.push_str(&decoded);
-                }
+                text.push_str(&content);
             }
-            Event::CData(content) => text.push_str(&String::from_utf8_lossy(&content)),
+            Event::CData(content) => text.push_str(&content),
             Event::GeneralRef(reference) => {
-                if let Ok(name) = reference.decode() {
-                    text.push_str(match name.as_ref() {
+                {
+                    let name: &str = &reference;
+                    text.push_str(match name {
                         "amp" => "&",
                         "lt" => "<",
                         "gt" => ">",

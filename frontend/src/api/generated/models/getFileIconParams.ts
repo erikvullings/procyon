@@ -4,5 +4,5 @@
  */
 
 export type GetFileIconParams = {
-uri: string;
+  uri: string;
 };

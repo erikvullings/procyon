@@ -115,7 +115,14 @@ fn zip_format(bytes: &[u8]) -> ResolvedFormat {
                 };
             }
         };
-        let name = entry.name().to_owned();
+        let name = match entry.name() {
+            Ok(name) => name.into_owned(),
+            Err(error) => {
+                return ResolvedFormat::Malformed {
+                    detail: format!("ZIP entry {index} has an invalid name: {error}"),
+                };
+            }
+        };
         if let Some(detail) = package::unsafe_entry_detail(
             &name,
             entry.enclosed_name().is_some(),

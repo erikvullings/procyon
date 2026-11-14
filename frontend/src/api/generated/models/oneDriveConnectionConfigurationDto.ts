@@ -21,7 +21,7 @@ export interface OneDriveConnectionConfigurationDto {
      * @nullable
      */
   displayName?: string | null;
-  driveType?: null | OneDriveDriveTypeDto;
+  driveType?: OneDriveDriveTypeDto | null;
   /**
      * The signed-in account's email/`userPrincipalName`, present once
      * authorization has succeeded at least once.

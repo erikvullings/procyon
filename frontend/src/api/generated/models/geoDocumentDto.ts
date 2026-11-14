@@ -21,13 +21,13 @@ export interface GeoDocumentDto {
   bounds?: number[] | null;
   /** The displayed features as a GeoJSON `FeatureCollection`. */
   collection: GeoDocumentDtoCollection;
-  csv?: null | CsvGeoInfoDto;
+  csv?: CsvGeoInfoDto | null;
   /**
      * Features in `collection`; less than `totalFeatures` when limits applied.
      * @minimum 0
      */
   displayedFeatures: number;
-  error?: null | GeoErrorDto;
+  error?: GeoErrorDto | null;
   /** `geojson`, `gpx`, `kml` or `kmz`; empty when the file is not a geographic file. */
   format: string;
   /** Ground overlays whose image is in `resources`. */

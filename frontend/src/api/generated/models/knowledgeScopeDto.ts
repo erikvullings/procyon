@@ -11,7 +11,7 @@ import type { LocationDto } from './locationDto.ts';
 export interface KnowledgeScopeDto {
   /** Enrolled root IDs for the enrolled-root scope. */
   enrolledRootIds?: string[];
-  folder?: null | LocationDto;
+  folder?: LocationDto | null;
   /** Scope kind. */
   kind: KnowledgeScopeKindDto;
   /** Opaque source IDs from a host-produced semantic result set. */

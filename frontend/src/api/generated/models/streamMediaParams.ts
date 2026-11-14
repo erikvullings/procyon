@@ -4,12 +4,8 @@
  */
 
 export type StreamMediaParams = {
-/**
- * JSON-encoded `LocationDto` of the file to stream.
- */
-location: string;
-/**
- * Session token, accepted by the auth middleware for requests that cannot set headers.
- */
-token?: string;
+  /** JSON-encoded `LocationDto` of the file to stream. */
+  location: string;
+  /** Session token, accepted by the auth middleware for requests that cannot set headers. */
+  token?: string;
 };

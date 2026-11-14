@@ -42,7 +42,7 @@ const OCR_REQUIRED_GUIDANCE: &str = "This PDF has no searchable text layer and w
 
 /// Version of the Docling extraction and Procyon structural mapping behavior.
 pub const DOCLING_PDF_CONVERTER_VERSION: ComponentVersion =
-    ComponentVersion::new("docling-pdf", 2_052_009);
+    ComponentVersion::new("docling-pdf", 2_082_001);
 /// Stable identity of the production conversion pipeline.
 ///
 /// This changes whenever the preferred converter or fallback behaviour can
@@ -50,7 +50,7 @@ pub const DOCLING_PDF_CONVERTER_VERSION: ComponentVersion =
 /// included: enabling it retries only previously textless PDFs, while
 /// disabling it makes reconciliation remove their OCR-derived occurrences.
 /// OCR-derived documents carry [`OCRMYPDF_CONVERTER_VERSION`] themselves.
-pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/2052009+baseline/14";
+pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/2082001+baseline/15";
 /// Version of the optional OCRmyPDF plus deterministic Docling composition.
 pub const OCRMYPDF_CONVERTER_VERSION: ComponentVersion =
     ComponentVersion::new("ocrmypdf-docling", 2);
@@ -1614,6 +1614,7 @@ impl<'a> Mapper<'a> {
                 }
             }
             Node::Located { inner, .. }
+            | Node::ScriptText { inner, .. }
             | Node::Commented { inner, .. }
             | Node::Track { inner, .. }
             | Node::Prov { inner, .. } => {
@@ -2043,7 +2044,7 @@ mod tests {
             )
             .expect("convert");
         assert!(
-            matches!(result, ConversionOutcome::Malformed { detail } if detail.contains("declared 2 pages, loaded 1")),
+            matches!(result, ConversionOutcome::Malformed { .. }),
             "Docling cannot publish only the second page"
         );
     }
@@ -2119,6 +2120,7 @@ mod tests {
                     dclx: None,
                     href: None,
                     layer: None,
+                    split: None,
                 },
                 Node::Table(Table {
                     rows: vec![

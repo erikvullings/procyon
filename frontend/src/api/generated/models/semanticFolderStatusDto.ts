@@ -28,7 +28,7 @@ export interface SemanticFolderStatusDto {
      * @nullable
      */
   unavailableReason?: string | null;
-  unavailableReasonCode?: null | SemanticUnavailableReasonDto;
+  unavailableReasonCode?: SemanticUnavailableReasonDto | null;
   /** Whether the active workspace is attached to the granting root. */
   workspaceReferenced: boolean;
 }

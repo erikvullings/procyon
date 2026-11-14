@@ -1017,7 +1017,7 @@ fn preflight_zip_workbook(bytes: &[u8]) -> Result<(), String> {
         let size = entry.size();
         expanded = expanded.saturating_add(size);
         ensure_at_most(expanded, WORKBOOK_EXPANDED_BYTES, "Workbook expanded bytes")?;
-        let name = entry.name().to_owned();
+        let name = String::from_utf8_lossy(entry.name_raw()).into_owned();
         if name.starts_with("xl/media/") {
             ensure_at_most(
                 size,

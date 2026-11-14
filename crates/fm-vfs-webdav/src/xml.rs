@@ -31,10 +31,9 @@ pub(crate) struct DavEntry {
 pub(crate) struct XmlError(String);
 
 fn local_name(name: QName<'_>) -> String {
-    let raw = name.as_ref();
-    let text = String::from_utf8_lossy(raw);
-    text.rsplit_once(':')
-        .map_or_else(|| text.to_string(), |(_, local)| local.to_owned())
+    let raw: &str = name.as_ref();
+    raw.rsplit_once(':')
+        .map_or_else(|| raw.to_owned(), |(_, local)| local.to_owned())
         .to_ascii_lowercase()
 }
 
@@ -72,8 +71,7 @@ pub(crate) fn parse_multistatus(body: &[u8]) -> Result<Vec<DavEntry>, XmlError> 
             },
             Event::Text(text) => {
                 if let Some(target) = text_target {
-                    let decoded = text.decode().map_err(|error| XmlError(error.to_string()))?;
-                    let value = quick_xml::escape::unescape(&decoded)
+                    let value = quick_xml::escape::unescape(&text)
                         .map_err(|error| XmlError(error.to_string()))?
                         .into_owned();
                     match target {

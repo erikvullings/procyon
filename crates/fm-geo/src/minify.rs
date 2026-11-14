@@ -662,7 +662,7 @@ pub fn compact_xml(bytes: &[u8]) -> Result<Vec<u8>, String> {
         match event {
             Event::Eof => break,
             Event::Comment(_) => {}
-            Event::Text(ref text) if text.iter().all(u8::is_ascii_whitespace) => {}
+            Event::Text(ref text) if text.bytes().all(|byte| byte.is_ascii_whitespace()) => {}
             other => writer
                 .write_event(other)
                 .map_err(|error| error.to_string())?,

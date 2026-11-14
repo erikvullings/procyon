@@ -19,7 +19,7 @@ export interface PreviewGeoMinifyResponseDto {
   distanceAfterMeters: number;
   /** Summed length of all lines before, metres. */
   distanceBeforeMeters: number;
-  error?: null | GeoMessageDto;
+  error?: GeoMessageDto | null;
   /**
      * Features after.
      * @minimum 0

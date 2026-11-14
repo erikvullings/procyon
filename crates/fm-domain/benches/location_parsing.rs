@@ -4,8 +4,9 @@
 
 #![allow(missing_docs)]
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use fm_domain::location::Location;
+use std::hint::black_box;
 
 fn location_parsing_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("location_parsing");

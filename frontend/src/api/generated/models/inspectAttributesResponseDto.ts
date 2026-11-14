@@ -14,5 +14,5 @@ export interface InspectAttributesResponseDto {
   entries: AttributeEntryDto[];
   /** Fields editable for every selected entry. */
   support: AttributeSupportDto;
-  unsupportedReason?: null | AttributeUnsupportedReasonDto;
+  unsupportedReason?: AttributeUnsupportedReasonDto | null;
 }

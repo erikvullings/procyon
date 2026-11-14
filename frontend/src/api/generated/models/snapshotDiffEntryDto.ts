@@ -24,7 +24,7 @@ export interface SnapshotDiffEntryDto {
   isDirectory: boolean;
   /** How the entry differs. */
   kind: SnapshotDiffKindDto;
-  location?: null | LocationDto;
+  location?: LocationDto | null;
   /** Path relative to the compared folder, with `/` separators. */
   path: string;
   /**

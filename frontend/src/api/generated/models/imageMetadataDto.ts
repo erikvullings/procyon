@@ -16,7 +16,7 @@ export interface ImageMetadataDto {
      * @nullable
      */
   format?: string | null;
-  gps?: null | GpsPositionDto;
+  gps?: GpsPositionDto | null;
   /** Non-empty tag groups. */
   groups: ImageTagGroupDto[];
   /** False when the format cannot be parsed, so the UI can say so instead of showing nothing. */

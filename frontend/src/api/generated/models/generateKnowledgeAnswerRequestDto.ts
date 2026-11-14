@@ -14,7 +14,7 @@ import type { KnowledgeOutputFormatDto } from './knowledgeOutputFormatDto.ts';
  * fields shape presentation only.
  */
 export interface GenerateKnowledgeAnswerRequestDto {
-  action?: null | KnowledgeActionDto;
+  action?: KnowledgeActionDto | null;
   /** Explicit opt-in to distinguishable model-only knowledge. */
   allowModelKnowledge?: boolean;
   /** Answer-only constraints; never used for retrieval. */
@@ -24,10 +24,10 @@ export interface GenerateKnowledgeAnswerRequestDto {
      * @nullable
      */
   context?: string | null;
-  depth?: null | KnowledgeAnswerDepthDto;
+  depth?: KnowledgeAnswerDepthDto | null;
   /** Fingerprint of the exact evidence set returned by the search. */
   evidenceFingerprint: string;
-  output?: null | KnowledgeOutputFormatDto;
+  output?: KnowledgeOutputFormatDto | null;
   /** Explicitly selected saved generation profile. */
   profileId: string;
   /**

@@ -24,7 +24,7 @@ export interface OperationProgressDto {
      * @minimum 0
      */
   completedItems: number;
-  currentEntry?: null | EntryRefDto;
+  currentEntry?: EntryRefDto | null;
   /**
      * Planned bytes.
      * @minimum 0

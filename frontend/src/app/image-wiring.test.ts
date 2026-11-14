@@ -50,6 +50,8 @@ function fakeShell(client: Partial<FileManagerClient>): {
     client: client as FileManagerClient,
     imageByTab: new Map([[entry.key, entry]]),
     imageOpening: false,
+    imageGenerationAvailable: false,
+    imageGenerationChecked: false,
     directories: new Map(),
   } as unknown as ShellState;
   return { shell, entry };
@@ -691,5 +693,37 @@ describe('how hard the model works, and what it starts from', () => {
     expect(entry.qualityId).toBe('');
     expect(entry.steps).toBeUndefined();
     expect(entry.source).toBeUndefined();
+  });
+
+  it('offers the tool only where an image model is assigned', async () => {
+    const client = imageClient();
+    const { shell } = fakeShell(client);
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+    const assigned = {
+      chat: null,
+      embeddings: null,
+      image: { profileId: 'p1', model: 'qwen-image', allowCloud: true },
+    };
+
+    expect(wiring.imageRoleAvailable()).toBe(false);
+
+    client.listLlmRoles = async () => assigned;
+    await wiring.refreshRoles(client as unknown as FileManagerClient);
+    expect(wiring.imageRoleAvailable(), 'a named model is what makes the pane worth opening').toBe(
+      true,
+    );
+    expect(shell.imageGenerationChecked).toBe(true);
+
+    // Clearing the role takes the tool away again rather than leaving a pane that cannot work.
+    client.listLlmRoles = async () => ({ chat: null, embeddings: null, image: null });
+    await wiring.refreshRoles(client as unknown as FileManagerClient);
+    expect(wiring.imageRoleAvailable()).toBe(false);
+
+    // A host that cannot answer leaves it off too, so the pane is never offered on a guess.
+    client.listLlmRoles = async () => {
+      throw new Error('offline');
+    };
+    await wiring.refreshRoles(client as unknown as FileManagerClient);
+    expect(wiring.imageRoleAvailable()).toBe(false);
   });
 });

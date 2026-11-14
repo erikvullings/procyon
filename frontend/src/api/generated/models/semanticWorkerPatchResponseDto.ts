@@ -8,5 +8,5 @@ import type { SemanticInstallReceiptDto } from './semanticInstallReceiptDto.ts';
  * Result of checking for and applying a compatible worker patch.
  */
 export interface SemanticWorkerPatchResponseDto {
-  receipt?: null | SemanticInstallReceiptDto;
+  receipt?: SemanticInstallReceiptDto | null;
 }

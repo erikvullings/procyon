@@ -3,9 +3,9 @@
 Task 0181 qualifies the official Rust SDK as an optional, worker-local derived-index backend. The
 qualified versions are:
 
-- `zvec-rust = 0.7.0`
-- `zvec-rust-sys = 0.7.0`
-- Zvec native C API `0.7.0`
+- `zvec-rust = 0.8.1`
+- `zvec-rust-sys = 0.8.1`
+- Zvec native C API `0.8.1`
 - Rust SDK tag commit `733e0bc82e02a0c63202bff594a7f4530520dfd0`
 - Native Zvec tag commit `8321c1314a559fd5f909e92498f43e5194bf9b99`
 
@@ -22,7 +22,7 @@ an absolute build-directory rpath on macOS/Linux. Procyon therefore keeps `zvec-
 
 Reproducible release builds must:
 
-1. Obtain the exact target archive from the Zvec Rust v0.7.0 GitHub release during the release
+1. Obtain the exact target archive from the Zvec Rust v0.8.1 GitHub release during the release
    build, never from the worker at runtime.
 2. Verify the pinned release asset ID, byte length, SHA-256, exact archive member set, `TARGET`
    marker, loader byte length/SHA-256, binary format, architecture, and dynamic dependencies.
@@ -40,13 +40,13 @@ a target toolchain file, target compiler, or target architecture settings.
 
 ## Qualified targets and deployment cost
 
-| Target | v0.7.0 artifact | Compressed | Dynamic library | Result |
+| Target | v0.8.1 artifact | Compressed | Dynamic library | Result |
 | --- | ---: | ---: | ---: | --- |
-| macOS arm64 | yes | 8,135,328 B | 23,146,352 B | qualified |
-| macOS x64 | **no** | - | - | packaging blocker |
-| Windows x64 MSVC | yes | 8,839,865 B | 26,570,240 B | qualified |
-| Linux x64 glibc | yes | 13,331,422 B | 36,854,864 B | qualified |
-| Linux arm64 glibc | yes | 11,784,274 B | 32,470,624 B | qualified |
+| macOS arm64 | yes | 11,013,728 B | 27,207,856 B | qualified |
+| macOS x64 | yes | 12,340,298 B | 30,439,416 B | artifact published; not qualified by Procyon yet |
+| Windows x64 MSVC | yes | 11,527,420 B | 29,406,720 B | qualified |
+| Linux x64 glibc | yes | 16,156,796 B | 40,560,496 B | qualified |
+| Linux arm64 glibc | yes | 14,519,213 B | 35,409,600 B | qualified |
 
 The exact release inputs are:
 

@@ -15,7 +15,7 @@ import type { SyncPlanItemDto } from './syncPlanItemDto.ts';
  * runs without this explicit, reviewed call).
  */
 export interface ApplySyncPlanRequestDto {
-  conflictPolicy?: null | OperationConflictPolicyDto;
+  conflictPolicy?: OperationConflictPolicyDto | null;
   /**
      * The (possibly edited) rows to apply. Rows with action `skip` start no
      * operation.

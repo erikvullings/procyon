@@ -276,7 +276,8 @@ async fn main() {
             let tls_config = axum_server::tls_rustls::RustlsConfig::from_pem_file(&cert, &key)
                 .await
                 .unwrap_or_else(|err| panic!("failed to load TLS material: {err}"));
-            axum_server::bind_rustls((config.bind_address, config.port).into(), tls_config)
+            let addr = std::net::SocketAddr::from((config.bind_address, config.port));
+            axum_server::bind_rustls(addr, tls_config)
                 .serve(router.into_make_service())
                 .await
                 .expect("fm-server exited unexpectedly");

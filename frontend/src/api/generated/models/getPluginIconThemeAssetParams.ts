@@ -4,5 +4,5 @@
  */
 
 export type GetPluginIconThemeAssetParams = {
-path: string;
+  path: string;
 };

@@ -4,5 +4,5 @@
  */
 
 export type SetFinderTagsParams = {
-uri: string;
+  uri: string;
 };

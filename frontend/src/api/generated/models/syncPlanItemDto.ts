@@ -15,10 +15,10 @@ export interface SyncPlanItemDto {
      * action.
      */
   action: SyncActionDto;
-  left?: null | ComparisonEntrySideDto;
+  left?: ComparisonEntrySideDto | null;
   /** Path relative to both roots, using `/` separators. */
   relativePath: string;
-  right?: null | ComparisonEntrySideDto;
+  right?: ComparisonEntrySideDto | null;
   /** The comparison outcome this action was proposed from. */
   status: ComparisonStatusDto;
 }

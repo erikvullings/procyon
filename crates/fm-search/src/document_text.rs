@@ -93,7 +93,11 @@ fn text_parts(names: &[String], mimetype: Option<&str>) -> Vec<String> {
 #[must_use]
 pub(crate) fn document_text(bytes: &[u8]) -> Option<String> {
     let mut archive = ZipArchive::new(Cursor::new(bytes)).ok()?;
-    let names: Vec<String> = archive.file_names().map(str::to_owned).collect();
+    let names: Vec<String> = archive
+        .file_names()
+        .filter_map(Result::ok)
+        .map(std::borrow::Cow::into_owned)
+        .collect();
     let mimetype = archive.by_name("mimetype").ok().and_then(|mut entry| {
         let mut text = String::new();
         entry.by_ref().take(256).read_to_string(&mut text).ok()?;

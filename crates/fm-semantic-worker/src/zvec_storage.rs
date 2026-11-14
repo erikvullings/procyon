@@ -19,9 +19,9 @@ use crate::semantic_search::{ScoredRecord, SemanticCandidateIndex};
 use crate::semantic_storage::{DerivedIndexRecord, QueryFilters, VectorIndexKind};
 
 /// Official Rust SDK version pinned by Procyon.
-pub const ZVEC_RUST_VERSION: &str = "0.7.0";
+pub const ZVEC_RUST_VERSION: &str = "0.8.1";
 /// Native C API version paired with the pinned Rust SDK.
-pub const ZVEC_NATIVE_VERSION: &str = "0.7.0";
+pub const ZVEC_NATIVE_VERSION: &str = "0.8.1";
 /// Procyon schema version implemented by this adapter.
 pub const ZVEC_SCHEMA_VERSION: u32 = 2;
 /// Maximum retrieval candidates accepted by the worker.
@@ -69,41 +69,41 @@ pub struct ZvecPackagingTarget {
     pub library_name: &'static str,
 }
 
-/// Audited v0.7.0 packaging matrix.
+/// Audited v0.8.1 packaging matrix (sizes from the upstream v0.8.1 prebuilt archives).
 pub const ZVEC_PACKAGING_TARGETS: &[ZvecPackagingTarget] = &[
     ZvecPackagingTarget {
         target: "aarch64-apple-darwin",
         official_artifact: true,
-        compressed_bytes: Some(8_135_328),
-        dynamic_library_bytes: Some(23_146_352),
+        compressed_bytes: Some(11_013_728),
+        dynamic_library_bytes: Some(27_207_856),
         library_name: "libzvec_c_api.dylib",
     },
     ZvecPackagingTarget {
         target: "x86_64-apple-darwin",
-        official_artifact: false,
-        compressed_bytes: None,
-        dynamic_library_bytes: None,
+        official_artifact: true,
+        compressed_bytes: Some(12_340_298),
+        dynamic_library_bytes: Some(30_439_416),
         library_name: "libzvec_c_api.dylib",
     },
     ZvecPackagingTarget {
         target: "x86_64-pc-windows-msvc",
         official_artifact: true,
-        compressed_bytes: Some(8_839_865),
-        dynamic_library_bytes: Some(26_570_240),
+        compressed_bytes: Some(11_527_420),
+        dynamic_library_bytes: Some(29_406_720),
         library_name: "zvec_c_api.dll",
     },
     ZvecPackagingTarget {
         target: "x86_64-unknown-linux-gnu",
         official_artifact: true,
-        compressed_bytes: Some(13_331_422),
-        dynamic_library_bytes: Some(36_854_864),
+        compressed_bytes: Some(16_156_796),
+        dynamic_library_bytes: Some(40_560_496),
         library_name: "libzvec_c_api.so",
     },
     ZvecPackagingTarget {
         target: "aarch64-unknown-linux-gnu",
         official_artifact: true,
-        compressed_bytes: Some(11_784_274),
-        dynamic_library_bytes: Some(32_470_624),
+        compressed_bytes: Some(14_519_213),
+        dynamic_library_bytes: Some(35_409_600),
         library_name: "libzvec_c_api.so",
     },
 ];
@@ -1033,7 +1033,7 @@ mod tests {
         assert!(
             ZVEC_PACKAGING_TARGETS
                 .iter()
-                .any(|target| target.target == "x86_64-apple-darwin" && !target.official_artifact)
+                .any(|target| target.target == "x86_64-apple-darwin" && target.official_artifact)
         );
         assert!(
             ZVEC_PACKAGING_TARGETS

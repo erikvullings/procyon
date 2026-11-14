@@ -183,9 +183,9 @@ impl SqliteViewService {
         };
         let warning = wal_warning(&path, temp.is_some());
         let (connection, objects, version) = tokio::task::spawn_blocking(move || {
-            let connection = open_read_only(&path)?;
+            let mut connection = open_read_only(&path)?;
             let objects = read_schema(&connection)?;
-            install_authorizer(&connection);
+            install_authorizer(&mut connection).map_err(map_sqlite_error)?;
             let version = rusqlite::version().to_owned();
             Ok::<_, ApplicationError>((connection, objects, version))
         })
@@ -214,11 +214,11 @@ impl SqliteViewService {
     ) -> Result<QuerySqliteViewResponseDto, ApplicationError> {
         let session = self.session(request.session_id).await?;
         tokio::task::spawn_blocking(move || {
-            let connection = session
+            let mut connection = session
                 .connection
                 .lock()
                 .map_err(|_| ApplicationError::Internal)?;
-            run_query(&connection, &session.objects, &request)
+            run_query(&mut connection, &session.objects, &request)
         })
         .await
         .map_err(|_| ApplicationError::Internal)?
@@ -367,7 +367,7 @@ fn open_read_only(path: &Path) -> Result<Connection, ApplicationError> {
 }
 
 /// Admits only read statements; everything that could write, attach or reconfigure is denied.
-fn install_authorizer(connection: &Connection) {
+fn install_authorizer(connection: &mut Connection) -> rusqlite::Result<()> {
     connection.authorizer(Some(|context: AuthContext<'_>| match context.action {
         AuthAction::Select | AuthAction::Read { .. } | AuthAction::Recursive => {
             Authorization::Allow
@@ -393,7 +393,7 @@ fn install_authorizer(connection: &Connection) {
             }
         }
         _ => Authorization::Deny,
-    }));
+    }))
 }
 
 fn read_schema(connection: &Connection) -> Result<Vec<SqliteObjectDto>, ApplicationError> {
@@ -479,16 +479,16 @@ fn map_sqlite_error(error: rusqlite::Error) -> ApplicationError {
 }
 
 /// Interrupts the running statement once [`QUERY_TIMEOUT`] has elapsed from now.
-fn arm_deadline(connection: &Connection) {
+fn arm_deadline(connection: &mut Connection) -> rusqlite::Result<()> {
     let deadline = Instant::now() + QUERY_TIMEOUT;
     connection.progress_handler(
         PROGRESS_INTERVAL_OPS,
         Some(move || Instant::now() >= deadline),
-    );
+    )
 }
 
 fn run_query(
-    connection: &Connection,
+    connection: &mut Connection,
     objects: &[SqliteObjectDto],
     request: &QuerySqliteViewRequestDto,
 ) -> Result<QuerySqliteViewResponseDto, ApplicationError> {
@@ -499,7 +499,7 @@ fn run_query(
     } else {
         limit
     };
-    arm_deadline(connection);
+    arm_deadline(connection).map_err(map_sqlite_error)?;
     let result = match &request.source {
         SqliteQuerySourceDto::Browse {
             object,
@@ -518,7 +518,9 @@ fn run_query(
         ),
         SqliteQuerySourceDto::Sql { sql } => run_sql(connection, sql, request.offset, limit),
     };
-    connection.progress_handler(PROGRESS_INTERVAL_OPS, None::<fn() -> bool>);
+    connection
+        .progress_handler(PROGRESS_INTERVAL_OPS, None::<fn() -> bool>)
+        .map_err(map_sqlite_error)?;
     let mut response = result?;
     response.elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     Ok(response)
@@ -526,7 +528,7 @@ fn run_query(
 
 #[allow(clippy::too_many_arguments)]
 fn browse(
-    connection: &Connection,
+    connection: &mut Connection,
     objects: &[SqliteObjectDto],
     object: &str,
     search: &str,
@@ -658,7 +660,7 @@ fn browse(
     let mut response = read_page(connection, &sql, &parameters, offset, limit)?;
     if offset == 0 {
         // The count gets its own budget so a slow count cannot starve the page read.
-        arm_deadline(connection);
+        arm_deadline(connection).map_err(map_sqlite_error)?;
         response.total_rows = count_rows(connection, &table, &where_clause, &parameters);
     }
     Ok(response)
@@ -717,11 +719,7 @@ fn read_page(
             "only read-only statements are allowed",
         )));
     }
-    let columns: Vec<String> = statement
-        .column_names()
-        .into_iter()
-        .map(str::to_owned)
-        .collect();
+    let columns: Vec<String> = statement.column_names().map(str::to_owned).collect();
     let mut rows = statement
         .query(rusqlite::params_from_iter(parameters.iter()))
         .map_err(map_sqlite_error)?;
@@ -869,9 +867,9 @@ mod tests {
     }
 
     fn open(path: &Path) -> (Connection, Vec<SqliteObjectDto>) {
-        let connection = open_read_only(path).expect("open read-only");
+        let mut connection = open_read_only(path).expect("open read-only");
         let objects = read_schema(&connection).expect("schema");
-        install_authorizer(&connection);
+        install_authorizer(&mut connection).expect("authorizer");
         (connection, objects)
     }
 
@@ -925,8 +923,9 @@ mod tests {
     #[test]
     fn distinguishes_null_empty_and_blob_cells() {
         let directory = tempfile::tempdir().expect("temp dir");
-        let (connection, objects) = open(&fixture(directory.path()));
-        let response = run_query(&connection, &objects, &browse_request("people")).expect("browse");
+        let (mut connection, objects) = open(&fixture(directory.path()));
+        let response =
+            run_query(&mut connection, &objects, &browse_request("people")).expect("browse");
         assert_eq!(response.total_rows, Some(4));
         assert_eq!(response.rows[1][2].value_type, SqliteValueTypeDto::Null);
         assert_eq!(response.rows[2][2].value_type, SqliteValueTypeDto::Text);
@@ -939,14 +938,14 @@ mod tests {
     #[test]
     fn pages_with_has_more() {
         let directory = tempfile::tempdir().expect("temp dir");
-        let (connection, objects) = open(&fixture(directory.path()));
+        let (mut connection, objects) = open(&fixture(directory.path()));
         let mut request = browse_request("people");
         request.limit = 3;
-        let first = run_query(&connection, &objects, &request).expect("first page");
+        let first = run_query(&mut connection, &objects, &request).expect("first page");
         assert_eq!(first.rows.len(), 3);
         assert!(first.has_more);
         request.offset = 3;
-        let second = run_query(&connection, &objects, &request).expect("second page");
+        let second = run_query(&mut connection, &objects, &request).expect("second page");
         assert_eq!(second.rows.len(), 1);
         assert!(!second.has_more);
         assert_eq!(second.total_rows, None);
@@ -955,8 +954,8 @@ mod tests {
     #[test]
     fn search_is_literal_and_covers_every_column() {
         let directory = tempfile::tempdir().expect("temp dir");
-        let (connection, objects) = open(&fixture(directory.path()));
-        let search = |text: &str| {
+        let (mut connection, objects) = open(&fixture(directory.path()));
+        let mut search = |text: &str| {
             let mut request = browse_request("people");
             request.source = SqliteQuerySourceDto::Browse {
                 object: "people".to_owned(),
@@ -964,7 +963,7 @@ mod tests {
                 filters: Vec::new(),
                 sort: None,
             };
-            names(&run_query(&connection, &objects, &request).expect("search"))
+            names(&run_query(&mut connection, &objects, &request).expect("search"))
         };
         assert_eq!(search("ada"), ["Ada", "Dee"]);
         assert_eq!(search("100%"), ["Ada"]);
@@ -975,7 +974,7 @@ mod tests {
     #[test]
     fn filters_and_sort_combine() {
         let directory = tempfile::tempdir().expect("temp dir");
-        let (connection, objects) = open(&fixture(directory.path()));
+        let (mut connection, objects) = open(&fixture(directory.path()));
         let mut request = browse_request("people");
         request.source = SqliteQuerySourceDto::Browse {
             object: "people".to_owned(),
@@ -997,7 +996,7 @@ mod tests {
                 descending: true,
             }),
         };
-        let response = run_query(&connection, &objects, &request).expect("filter");
+        let response = run_query(&mut connection, &objects, &request).expect("filter");
         assert_eq!(names(&response), ["Dee", "Cy_d"]);
         assert_eq!(response.total_rows, Some(2));
     }
@@ -1005,10 +1004,10 @@ mod tests {
     #[test]
     fn rejects_unknown_identifiers_instead_of_interpolating_them() {
         let directory = tempfile::tempdir().expect("temp dir");
-        let (connection, objects) = open(&fixture(directory.path()));
+        let (mut connection, objects) = open(&fixture(directory.path()));
         assert!(
             run_query(
-                &connection,
+                &mut connection,
                 &objects,
                 &browse_request("people; DROP TABLE people")
             )
@@ -1024,7 +1023,7 @@ mod tests {
                 descending: false,
             }),
         };
-        assert!(run_query(&connection, &objects, &request).is_err());
+        assert!(run_query(&mut connection, &objects, &request).is_err());
     }
 
     #[test]
@@ -1038,8 +1037,8 @@ mod tests {
                  CREATE VIEW loose_view AS SELECT v AS n FROM loose;",
             )
             .expect("loose table");
-        let (connection, objects) = open(&path);
-        let filter = |object: &str, column: &str, operator, value: &str| {
+        let (mut connection, objects) = open(&path);
+        let mut filter = |object: &str, column: &str, operator, value: &str| {
             let mut request = browse_request(object);
             request.source = SqliteQuerySourceDto::Browse {
                 object: object.to_owned(),
@@ -1051,7 +1050,7 @@ mod tests {
                 }],
                 sort: None,
             };
-            run_query(&connection, &objects, &request)
+            run_query(&mut connection, &objects, &request)
                 .expect("filter")
                 .rows
                 .len()
@@ -1099,9 +1098,9 @@ mod tests {
     #[test]
     fn quotes_awkward_table_names() {
         let directory = tempfile::tempdir().expect("temp dir");
-        let (connection, objects) = open(&fixture(directory.path()));
+        let (mut connection, objects) = open(&fixture(directory.path()));
         let response =
-            run_query(&connection, &objects, &browse_request("we\"ird")).expect("browse");
+            run_query(&mut connection, &objects, &browse_request("we\"ird")).expect("browse");
         assert_eq!(response.rows[0][1].text.as_deref(), Some("2.5"));
     }
 
@@ -1119,8 +1118,8 @@ mod tests {
     #[test]
     fn runs_read_only_sql_including_joins_cte_and_pragma() {
         let directory = tempfile::tempdir().expect("temp dir");
-        let (connection, objects) = open(&fixture(directory.path()));
-        let run = |sql: &str| run_query(&connection, &objects, &sql_request(sql));
+        let (mut connection, objects) = open(&fixture(directory.path()));
+        let mut run = |sql: &str| run_query(&mut connection, &objects, &sql_request(sql));
         let counted = run("SELECT count(*) AS n FROM people").expect("count");
         assert_eq!(counted.columns, ["n"]);
         assert_eq!(counted.rows[0][0].text.as_deref(), Some("4"));
@@ -1142,8 +1141,9 @@ mod tests {
                                          ('Lua', 'small embeddable scripting language');",
             )
             .expect("fts5 table");
-        let (connection, objects) = open(&path);
-        let run = |sql: &str| run_query(&connection, &objects, &sql_request(sql)).expect(sql);
+        let (mut connection, objects) = open(&path);
+        let mut run =
+            |sql: &str| run_query(&mut connection, &objects, &sql_request(sql)).expect(sql);
         assert_eq!(
             run("SELECT title FROM docs WHERE docs MATCH 'embeddable'").rows[0][0]
                 .text
@@ -1169,8 +1169,8 @@ mod tests {
     fn rejects_writes_attach_pragma_writes_and_multiple_statements() {
         let directory = tempfile::tempdir().expect("temp dir");
         let path = fixture(directory.path());
-        let (connection, objects) = open(&path);
-        let run = |sql: &str| run_query(&connection, &objects, &sql_request(sql));
+        let (mut connection, objects) = open(&path);
+        let mut run = |sql: &str| run_query(&mut connection, &objects, &sql_request(sql));
         for statement in [
             "DELETE FROM people",
             "INSERT INTO people (name) VALUES ('x')",
@@ -1186,9 +1186,9 @@ mod tests {
         ] {
             assert!(run(statement).is_err(), "{statement} must be rejected");
         }
-        let (check, check_objects) = open(&path);
+        let (mut check, check_objects) = open(&path);
         let count = run_query(
-            &check,
+            &mut check,
             &check_objects,
             &sql_request("SELECT count(*) FROM people"),
         )
@@ -1208,8 +1208,8 @@ mod tests {
         }
         let before = std::fs::read(&path).expect("read before");
         let listing_before = std::fs::read_dir(directory.path()).unwrap().count();
-        let (connection, objects) = open(&path);
-        run_query(&connection, &objects, &browse_request("people")).expect("browse");
+        let (mut connection, objects) = open(&path);
+        run_query(&mut connection, &objects, &browse_request("people")).expect("browse");
         drop(connection);
         assert_eq!(before, std::fs::read(&path).expect("read after"));
         assert_eq!(
@@ -1222,10 +1222,10 @@ mod tests {
     #[test]
     fn stops_runaway_queries_at_the_deadline() {
         let directory = tempfile::tempdir().expect("temp dir");
-        let (connection, objects) = open(&fixture(directory.path()));
+        let (mut connection, objects) = open(&fixture(directory.path()));
         let started = Instant::now();
         let error = run_query(
-            &connection,
+            &mut connection,
             &objects,
             &sql_request(
                 "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT count(*) FROM c",
@@ -1239,10 +1239,10 @@ mod tests {
     #[test]
     fn refuses_values_over_the_length_limit() {
         let directory = tempfile::tempdir().expect("temp dir");
-        let (connection, objects) = open(&fixture(directory.path()));
+        let (mut connection, objects) = open(&fixture(directory.path()));
         assert!(
             run_query(
-                &connection,
+                &mut connection,
                 &objects,
                 &sql_request("SELECT zeroblob(1000000000)")
             )
@@ -1253,10 +1253,10 @@ mod tests {
     #[test]
     fn truncates_long_text_and_caps_page_size() {
         let directory = tempfile::tempdir().expect("temp dir");
-        let (connection, objects) = open(&fixture(directory.path()));
+        let (mut connection, objects) = open(&fixture(directory.path()));
         let mut request = sql_request("SELECT replace(hex(zeroblob(5000)), '0', 'é')");
         request.limit = 9999;
-        let response = run_query(&connection, &objects, &request).expect("long text");
+        let response = run_query(&mut connection, &objects, &request).expect("long text");
         let cell = &response.rows[0][0];
         assert!(cell.truncated);
         assert_eq!(cell.text.as_ref().unwrap().chars().count(), CELL_TEXT_CHARS);

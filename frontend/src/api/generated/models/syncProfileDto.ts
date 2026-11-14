@@ -23,7 +23,7 @@ export interface SyncProfileDto {
   id: string;
   /** Glob patterns a path must match; empty admits all. */
   include: string[];
-  lastRun?: null | SyncRunSummaryDto;
+  lastRun?: SyncRunSummaryDto | null;
   /** Root compared as "left". */
   left: LocationDto;
   /** Direction. */
@@ -32,7 +32,7 @@ export interface SyncProfileDto {
   name: string;
   /** Root compared as "right". */
   right: LocationDto;
-  schedule?: null | SyncScheduleDto;
+  schedule?: SyncScheduleDto | null;
   /** Include hidden entries. */
   showHidden: boolean;
 }

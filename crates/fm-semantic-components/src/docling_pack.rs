@@ -7,10 +7,10 @@ use crate::{
     AdvancedPackManifest, AdvancedPackResources,
 };
 
-/// Audited Docling release used by task 0192.
-pub const DOCLING_RS_VERSION: &str = "1.36.0";
+/// Audited Docling release used by task 0192 (the pinned `docling-pdf` crate).
+pub const DOCLING_RS_VERSION: &str = "2.82.1";
 /// Audited upstream source revision.
-pub const DOCLING_RS_REVISION: &str = "660b312780d919a5e29eb9386f2ff8d1a522f8a0";
+pub const DOCLING_RS_REVISION: &str = "7a17b0657c6dbc34cf63f322cae76af1f0cc3476";
 /// Stable managed-pack identity.
 pub const DOCLING_PDF_PACK_ID: &str = "docling-pdf";
 /// Targets for which release packaging may produce separate signed artifacts.

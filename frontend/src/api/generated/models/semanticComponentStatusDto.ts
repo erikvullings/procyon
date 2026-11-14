@@ -12,7 +12,7 @@ import type { SemanticModelSelectionDto } from './semanticModelSelectionDto.ts';
  * Complete observable semantic component state.
  */
 export interface SemanticComponentStatusDto {
-  activeModel?: null | SemanticModelSelectionDto;
+  activeModel?: SemanticModelSelectionDto | null;
   /** Installed active and rollback components. */
   components: InstalledSemanticComponentDto[];
   /**
@@ -24,5 +24,5 @@ export interface SemanticComponentStatusDto {
   diskUse: SemanticDiskUseDto;
   /** Current explicit lifecycle state. */
   lifecycle: SemanticComponentLifecycleDto;
-  migration?: null | SemanticModelMigrationProgressDto;
+  migration?: SemanticModelMigrationProgressDto | null;
 }

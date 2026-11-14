@@ -15,7 +15,7 @@ export type SqliteQuerySourceDto = {
   object: string;
   /** Free-text search across every column (case-insensitive substring). */
   search?: string;
-  sort?: null | SqliteSortDto;
+  sort?: SqliteSortDto | null;
   type: 'browse';
 } | {
   /** A single `SELECT`, `WITH`, `EXPLAIN` or read-only `PRAGMA` statement. */

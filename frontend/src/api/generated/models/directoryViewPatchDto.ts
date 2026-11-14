@@ -23,8 +23,8 @@ export interface DirectoryViewPatchDto {
      * @nullable
      */
   foldersFirst?: boolean | null;
-  iconSize?: null | IconSizeDto;
-  quickFilter?: null | QuickFilterPatchDto;
+  iconSize?: IconSizeDto | null;
+  quickFilter?: QuickFilterPatchDto | null;
   /**
      * Replace whether hidden entries are shown, if present.
      * @nullable
@@ -35,5 +35,5 @@ export interface DirectoryViewPatchDto {
      * @nullable
      */
   sort?: SortDescriptorDto[] | null;
-  viewMode?: null | DirectoryViewModeDto;
+  viewMode?: DirectoryViewModeDto | null;
 }

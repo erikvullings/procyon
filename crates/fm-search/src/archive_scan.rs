@@ -65,7 +65,9 @@ pub(crate) fn scan_zip(
         if member.is_dir() || member.encrypted() || member.size() > MAX_MEMBER_BYTES {
             continue;
         }
-        let inner_path = member.name().to_owned();
+        let Ok(inner_path) = member.name().map(std::borrow::Cow::into_owned) else {
+            continue;
+        };
         if inner_path.starts_with('/') || inner_path.split('/').any(|segment| segment == "..") {
             continue;
         }

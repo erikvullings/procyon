@@ -16,5 +16,5 @@ export interface UpdateConnectionRequestDto {
   kind: ConnectionKindDto;
   /** Display name. */
   name: string;
-  secret?: null | ConnectionSecretInputDto;
+  secret?: ConnectionSecretInputDto | null;
 }

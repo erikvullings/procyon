@@ -10,5 +10,5 @@ export interface SearchSemanticPredicateDto {
   libraryId: string;
   query: string;
   scope: SemanticSearchScopeDto;
-  selectedConcept?: null | SearchSemanticConceptSourceDto;
+  selectedConcept?: SearchSemanticConceptSourceDto | null;
 }

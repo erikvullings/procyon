@@ -20,7 +20,7 @@ export interface EntrySummaryDto {
      * @nullable
      */
   extension?: string | null;
-  gitStatus?: null | GitFileStatusDto;
+  gitStatus?: GitFileStatusDto | null;
   /** Whether the entry is hidden. */
   hidden: boolean;
   /**

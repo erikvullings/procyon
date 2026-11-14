@@ -9,7 +9,7 @@ import type { LocationDto } from './locationDto.ts';
  * The report for one file.
  */
 export interface GeoConversionReportDto {
-  error?: null | GeoMessageDto;
+  error?: GeoMessageDto | null;
   /** The source file. */
   location: LocationDto;
   /** What the target format cannot represent. */

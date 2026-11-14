@@ -9,8 +9,8 @@ import type { KnowledgeNeedDto } from './knowledgeNeedDto.ts';
  * One recorded alternative interpretation.
  */
 export interface KnowledgeParseAmbiguityDto {
-  alternativeAction?: null | KnowledgeActionDto;
-  alternativeNeed?: null | KnowledgeNeedDto;
+  alternativeAction?: KnowledgeActionDto | null;
+  alternativeNeed?: KnowledgeNeedDto | null;
   /** Human-readable explanation of the alternative reading. */
   description: string;
 }

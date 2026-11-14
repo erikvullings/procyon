@@ -415,7 +415,7 @@ fn preflight_package_with_expanded_limit(
         if expanded_bytes > max_expanded_bytes {
             return Err(budget_error("expanded ZIP", max_expanded_bytes));
         }
-        let name = file.name().to_owned();
+        let name = String::from_utf8_lossy(file.name_raw()).into_owned();
         if image_media_type(&name).is_some() && !file.is_dir() {
             image_count += 1;
             if image_count > MAX_DOCX_IMAGES {

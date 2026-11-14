@@ -364,8 +364,8 @@ describe('SettingsEditor', () => {
     openSection('LLM (AI)');
 
     await vi.waitFor(() => {
-      const model = [...root.querySelectorAll<HTMLInputElement>('.select-dropdown')].find(
-        (input) => input.value === 'llama3.2:3b',
+      const model = [...root.querySelectorAll<HTMLButtonElement>('button.select-dropdown')].find(
+        (button) => button.textContent === 'llama3.2:3b',
       );
       expect(model).not.toBeUndefined();
     });
@@ -388,7 +388,7 @@ describe('SettingsEditor', () => {
 
   it('offers every supported language', () => {
     const { onPreview } = mountEditor();
-    root.querySelectorAll<HTMLInputElement>('input.select-dropdown')[0]?.click();
+    root.querySelectorAll<HTMLButtonElement>('button.select-dropdown')[0]?.click();
     m.redraw.sync();
 
     expect(root.textContent).toContain('English');

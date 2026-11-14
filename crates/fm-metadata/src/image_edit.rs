@@ -547,7 +547,7 @@ fn rewrite_xmp(document: &str, changes: &XmpChanges<'_>) -> Result<String, Image
     let mut skip_depth: Option<usize> = None;
     let mut first_description_done = false;
     let new_elements = changes.new_elements();
-    let name_of = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
+    let name_of = |name: &str| name.to_owned();
     loop {
         let event = reader.read_event().map_err(xmp_error)?;
         if let Some(skip_at) = skip_depth {
@@ -582,10 +582,7 @@ fn rewrite_xmp(document: &str, changes: &XmpChanges<'_>) -> Result<String, Image
                     have_dc |= key == "xmlns:dc";
                     have_xmp |= key == "xmlns:xmp";
                     let value = attribute
-                        .decoded_and_normalized_value(
-                            quick_xml::XmlVersion::Implicit1_0,
-                            reader.decoder(),
-                        )
+                        .normalized_value(quick_xml::XmlVersion::Implicit1_0)
                         .map_err(xmp_error)?
                         .into_owned();
                     description.push_attribute((key.as_str(), value.as_str()));

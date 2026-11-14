@@ -33,5 +33,5 @@ export interface DocumentSummaryDto {
   supportingChunkIds: string[];
   /** Population weights aligned with supporting chunks. */
   supportingWeights: number[];
-  title?: null | SummaryAttributionDto;
+  title?: SummaryAttributionDto | null;
 }

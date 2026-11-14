@@ -367,32 +367,37 @@ pub(crate) fn defer_image_body(
     Some((id, Object::Null))
 }
 
-/// Re-reads one image XObject whose body [`defer_image_body`] dropped.
-fn load_image_body(
-    bytes: &[u8],
-    document: &Document,
+thread_local! {
+    /// The image XObject the current [`load_image_body`] call wants its body for.
+    static IMAGE_BODY_TARGET: std::cell::Cell<Option<lopdf::ObjectId>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Load filter for [`load_image_body`]: keeps the target image's body and drops every other
+/// image body. `lopdf` no longer exposes its object reader, so a single object is read by
+/// loading the document again through this filter.
+fn keep_only_target_image_body(
     id: lopdf::ObjectId,
-) -> lopdf::Result<lopdf::Stream> {
-    // Matches the header offset `lopdf` strips before resolving xref offsets.
-    let offset = bytes
-        .windows(5)
-        .position(|window| window == b"%PDF-")
-        .unwrap_or(0);
-    let mut structure = Document::new();
-    structure.reference_table = document.reference_table.clone();
-    let reader = lopdf::Reader {
-        buffer: &bytes[offset..],
-        document: structure,
-        encryption_state: None,
-        raw_objects: std::collections::BTreeMap::new(),
-        password: None,
-        strict: false,
-        max_decompressed_size: Some(MAX_PDF_STRUCTURAL_STREAM_BYTES),
-    };
-    let stream = reader
-        .get_object(id, &mut HashSet::new())?
-        .as_stream()?
-        .clone();
+    object: &mut Object,
+) -> Option<(lopdf::ObjectId, Object)> {
+    if IMAGE_BODY_TARGET.with(std::cell::Cell::get) == Some(id) {
+        return Some((id, Object::Null));
+    }
+    defer_image_body(id, object)
+}
+
+/// Re-reads one image XObject whose body [`defer_image_body`] dropped.
+fn load_image_body(bytes: &[u8], id: lopdf::ObjectId) -> lopdf::Result<lopdf::Stream> {
+    IMAGE_BODY_TARGET.with(|target| target.set(Some(id)));
+    let loaded = lopdf::Document::load_mem_with_options(
+        bytes,
+        lopdf::LoadOptions {
+            filter: Some(keep_only_target_image_body),
+            ..lopdf::LoadOptions::with_max_decompressed_size(MAX_PDF_STRUCTURAL_STREAM_BYTES)
+        },
+    );
+    IMAGE_BODY_TARGET.with(|target| target.set(None));
+    let stream = loaded?.get_object(id)?.as_stream()?.clone();
     if stream.content.is_empty() {
         return Err(lopdf::Error::InvalidStream(
             "image body is empty or unreadable".to_owned(),
@@ -494,7 +499,7 @@ fn extract_page_images(
                 continue;
             }
         }
-        let image = match load_image_body(bytes, document, image_id) {
+        let image = match load_image_body(bytes, image_id) {
             Ok(image) => image,
             Err(error) => {
                 builder.omit_visual(
@@ -1122,18 +1127,18 @@ pub(crate) mod tests {
         document
             .save_with_options(&mut bytes, options)
             .expect("save split compressed PDF");
+        // lopdf 0.47 refuses the whole load when a compressed object exceeds the bound, rather
+        // than dropping that object and loading the rest.
         let loaded = Document::load_mem_with_options(
             &bytes,
             lopdf::LoadOptions::with_max_decompressed_size(MAX_PDF_STRUCTURAL_STREAM_BYTES),
-        )
-        .expect("load bounded PDF");
-        assert_eq!(
-            loaded.get_pages().len(),
-            1,
-            "fixture must lose only one page"
         );
         assert!(
-            matches!(convert_pdf(&bytes), Err(PdfError::Malformed(detail)) if detail.contains("declared 2 pages, loaded 1")),
+            matches!(loaded, Err(lopdf::Error::Decompress(_))),
+            "an oversized compressed object must fail the bounded load"
+        );
+        assert!(
+            matches!(convert_pdf(&bytes), Err(PdfError::Malformed(_))),
             "a remaining readable page cannot mask missing page structure"
         );
     }

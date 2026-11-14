@@ -105,7 +105,11 @@ pub fn parse_kmz(bytes: &[u8], limits: Limits) -> Result<GeoDocument, KmzError> 
     if zip.len() > MAX_ENTRIES {
         return Err(too_many_entries());
     }
-    let names: Vec<String> = zip.file_names().map(str::to_owned).collect();
+    let names: Vec<String> = zip
+        .file_names()
+        .filter_map(Result::ok)
+        .map(std::borrow::Cow::into_owned)
+        .collect();
     let kml_name = main_kml(&names).ok_or(KmzError::NoKml)?.clone();
     let mut kml = Vec::new();
     {
@@ -161,7 +165,10 @@ pub fn repack_kmz(bytes: &[u8]) -> Result<Vec<u8>, KmzError> {
         let mut entry = zip
             .by_index(index)
             .map_err(|error| KmzError::Archive(error.to_string()))?;
-        let name = entry.name().to_owned();
+        let name = entry
+            .name()
+            .map_err(|error| KmzError::Archive(error.to_string()))?
+            .into_owned();
         if entry.is_dir() {
             writer
                 .add_directory(&name, options)

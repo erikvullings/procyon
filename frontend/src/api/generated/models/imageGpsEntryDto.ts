@@ -9,7 +9,7 @@ import type { LocationDto } from './locationDto.ts';
  * GPS result for one image.
  */
 export interface ImageGpsEntryDto {
-  gps?: null | GpsPositionDto;
+  gps?: GpsPositionDto | null;
   /** The image. */
   location: LocationDto;
   /**

@@ -4,9 +4,7 @@
  */
 
 export type GetThumbnailParams = {
-uri: string;
-/**
- * One of `small`, `medium`, `large`.
- */
-size: string;
+  uri: string;
+  /** One of `small`, `medium`, `large`. */
+  size: string;
 };

@@ -4,5 +4,5 @@
  */
 
 export type GetSpotlightCommentParams = {
-uri: string;
+  uri: string;
 };

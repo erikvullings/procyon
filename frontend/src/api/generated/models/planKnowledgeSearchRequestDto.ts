@@ -18,7 +18,7 @@ export interface PlanKnowledgeSearchRequestDto {
   intent?: KnowledgeQueryIntentDto;
   /** Requested retrieval mode. */
   mode?: KnowledgeRetrievalModeDto;
-  options?: null | KnowledgeSearchOptionsDto;
+  options?: KnowledgeSearchOptionsDto | null;
   /** Visible authorized scope. */
   scope: KnowledgeScopeDto;
 }

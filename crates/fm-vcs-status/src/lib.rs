@@ -347,7 +347,7 @@ fn compute_repo_status(repo_root: &Path) -> Option<RepoStatus> {
 
     let mut files = HashMap::new();
     for entry in statuses.iter() {
-        let Some(path) = entry.path() else { continue };
+        let Ok(path) = entry.path() else { continue };
         files.insert(PathBuf::from(path), classify(entry.status()));
     }
 
@@ -434,12 +434,12 @@ fn compute_file_history(
                 .as_object()
                 .short_id()
                 .ok()
-                .and_then(|buf| buf.as_str().map(str::to_owned))
+                .and_then(|buf| buf.as_str().ok().map(str::to_owned))
                 .unwrap_or_else(|| oid.to_string()),
             author_name: author.name().unwrap_or("").to_owned(),
             author_email: author.email().unwrap_or("").to_owned(),
             committed_at,
-            summary: commit.summary().unwrap_or("").to_owned(),
+            summary: commit.summary().ok().flatten().unwrap_or("").to_owned(),
         });
     }
     Some(entries)

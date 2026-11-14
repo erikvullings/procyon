@@ -59,7 +59,7 @@ function clampedIndex(index: number, entryIds: readonly EntryId[]): number | und
 
 function cursorIndex(state: SelectionState, entryIds: readonly EntryId[]): number {
   const index = state.cursorEntryId === undefined ? -1 : entryIds.indexOf(state.cursorEntryId);
-  return index < 0 ? 0 : index;
+  return Math.max(0, index);
 }
 
 /** Applies one selection transition using the entries in their current visible order. */
@@ -172,7 +172,7 @@ export function reduceSelection(
       }
       const toggledEntryIndex = orderedEntryIds.indexOf(action.entryId);
       const nextIndex = clampedIndex(
-        (toggledEntryIndex < 0 ? 0 : toggledEntryIndex) + action.offset,
+        Math.max(0, toggledEntryIndex) + action.offset,
         orderedEntryIds,
       );
       const nextCursorEntryId =

@@ -122,7 +122,7 @@ describe('LlmRoleManagement', () => {
       const row = root.querySelector<HTMLElement>(selector);
       const inputs = [...(row?.querySelectorAll<HTMLInputElement>('input') ?? [])];
       return {
-        dropdowns: inputs.filter((input) => input.classList.contains('select-dropdown')).length,
+        dropdowns: row?.querySelectorAll('button.select-dropdown').length ?? 0,
         typed: inputs.filter(
           (input) => !input.classList.contains('select-dropdown') && input.type === 'text',
         ).length,

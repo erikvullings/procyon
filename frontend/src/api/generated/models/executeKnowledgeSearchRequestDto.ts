@@ -18,7 +18,7 @@ export interface ExecuteKnowledgeSearchRequestDto {
   intent?: KnowledgeQueryIntentDto;
   /** Requested retrieval mode. */
   mode?: KnowledgeRetrievalModeDto;
-  options?: null | KnowledgeSearchOptionsDto;
+  options?: KnowledgeSearchOptionsDto | null;
   /** Caller-owned identity used for cancellation and correlation. */
   requestId: string;
   /** Visible authorized scope. */

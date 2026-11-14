@@ -30,12 +30,18 @@ async function mountLoaded(
   m.redraw.sync();
 }
 
-function fieldInput(label: string): HTMLInputElement | undefined {
+function fieldInput(label: string): HTMLInputElement | HTMLButtonElement | undefined {
   return (
     [...root.querySelectorAll('.input-field')]
       .find((field) => field.querySelector('label')?.textContent === label)
-      ?.querySelector('input') ?? undefined
+      ?.querySelector<HTMLInputElement | HTMLButtonElement>('input, button.select-dropdown') ??
+    undefined
   );
+}
+
+function fieldValue(label: string): string | undefined {
+  const control = fieldInput(label);
+  return control instanceof HTMLButtonElement ? (control.textContent ?? undefined) : control?.value;
 }
 
 describe('the images API choice', () => {
@@ -160,8 +166,8 @@ describe('LlmProfileManagement', () => {
         (legend) => legend.textContent?.trim() === 'Advanced settings',
       ),
     ).toBe(false);
-    await vi.waitFor(() => expect(fieldInput('Context window')?.value).toBe('128k'));
-    expect(fieldInput('Maximum answer tokens')?.value).toBe('8k');
+    await vi.waitFor(() => expect(fieldValue('Context window')).toBe('128k'));
+    expect(fieldValue('Maximum answer tokens')).toBe('8k');
     expect(root.textContent).toContain('131,072 context tokens, 8,192 output tokens');
     fieldInput('Context window')?.click();
     m.redraw.sync();
@@ -191,8 +197,8 @@ describe('LlmProfileManagement', () => {
       ?.click();
     m.redraw.sync();
 
-    expect(fieldInput('Context window')?.value).toBe('8k');
-    expect(fieldInput('Maximum answer tokens')?.value).toBe('1k');
+    expect(fieldValue('Context window')).toBe('8k');
+    expect(fieldValue('Maximum answer tokens')).toBe('1k');
     expect(root.textContent).toContain('Model limits could not be determined');
   });
 
@@ -208,7 +214,7 @@ describe('LlmProfileManagement', () => {
     [...root.querySelectorAll<HTMLButtonElement>('button')]
       .find((button) => button.textContent?.trim() === 'Advanced settings')
       ?.click();
-    await vi.waitFor(() => expect(fieldInput('Context window')?.value).toBe('1M'));
+    await vi.waitFor(() => expect(fieldValue('Context window')).toBe('1M'));
     fieldInput('Maximum answer tokens')?.click();
     m.redraw.sync();
     const options = [...root.querySelectorAll('li')].map((item) => item.textContent?.trim());
@@ -223,15 +229,15 @@ describe('LlmProfileManagement', () => {
     [...root.querySelectorAll<HTMLButtonElement>('button')]
       .find((button) => button.textContent?.trim() === 'Advanced settings')
       ?.click();
-    await vi.waitFor(() => expect(fieldInput('Context window')?.value).toBe('128k'));
+    await vi.waitFor(() => expect(fieldValue('Context window')).toBe('128k'));
 
     fieldInput('Model')?.click();
     m.redraw.sync();
     [...root.querySelectorAll('li')]
       .find((item) => item.textContent?.trim() === 'model-b')
       ?.click();
-    await vi.waitFor(() => expect(fieldInput('Context window')?.value).toBe('8k'));
-    expect(fieldInput('Maximum answer tokens')?.value).toBe('1k');
+    await vi.waitFor(() => expect(fieldValue('Context window')).toBe('8k'));
+    expect(fieldValue('Maximum answer tokens')).toBe('1k');
 
     fieldInput('Context window')?.click();
     m.redraw.sync();
@@ -242,8 +248,8 @@ describe('LlmProfileManagement', () => {
     [...root.querySelectorAll('li')]
       .find((item) => item.textContent?.trim() === 'model-a')
       ?.click();
-    await vi.waitFor(() => expect(fieldInput('Maximum answer tokens')?.value).toBe('8k'));
-    expect(fieldInput('Context window')?.value).toBe('16k');
+    await vi.waitFor(() => expect(fieldValue('Maximum answer tokens')).toBe('8k'));
+    expect(fieldValue('Context window')).toBe('16k');
   });
 
   it('keeps existing non-preset token limits selectable without modifying a saved profile', async () => {
@@ -273,8 +279,8 @@ describe('LlmProfileManagement', () => {
       ?.click();
     m.redraw.sync();
 
-    expect(fieldInput('Context window')?.value).toBe('Current: 12,000 tokens');
-    expect(fieldInput('Maximum answer tokens')?.value).toBe('Current: 3,000 tokens');
+    expect(fieldValue('Context window')).toBe('Current: 12,000 tokens');
+    expect(fieldValue('Maximum answer tokens')).toBe('Current: 3,000 tokens');
     expect((await client.listLlmProfiles())[0]?.advanced).toEqual(existing.advanced);
   });
 
@@ -304,8 +310,8 @@ describe('LlmProfileManagement', () => {
       .find((button) => button.textContent?.trim() === 'Advanced settings')
       ?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('above a reported model limit'));
-    expect(fieldInput('Context window')?.value).toBe('Current: 262,144 tokens');
-    expect(fieldInput('Maximum answer tokens')?.value).toBe('Current: 12,288 tokens');
+    expect(fieldValue('Context window')).toBe('Current: 262,144 tokens');
+    expect(fieldValue('Maximum answer tokens')).toBe('Current: 12,288 tokens');
     expect((await client.listLlmProfiles())[0]?.advanced).toEqual(existing.advanced);
   });
 
@@ -329,8 +335,8 @@ describe('LlmProfileManagement', () => {
     [...root.querySelectorAll('li')].find((item) => item.textContent?.trim() === '4k')?.click();
     m.redraw.sync();
 
-    expect(fieldInput('Context window')?.value).toBe('16k');
-    expect(fieldInput('Maximum answer tokens')?.value).toBe('4k');
+    expect(fieldValue('Context window')).toBe('16k');
+    expect(fieldValue('Maximum answer tokens')).toBe('4k');
     if (save === undefined) throw new Error('Save handler was not registered');
     expect(await save()).toBe(true);
     expect((await client.listLlmProfiles())[0]?.advanced.contextWindow).toBe(16_384);
@@ -498,7 +504,7 @@ describe('LlmProfileManagement', () => {
       ?.click();
 
     await vi.waitFor(() => {
-      expect(fieldInput('Model')?.value).toBe('model-a');
+      expect(fieldValue('Model')).toBe('model-a');
       expect(fieldInput('Model')?.classList.contains('select-dropdown')).toBe(true);
     });
     expect(root.textContent).not.toContain('Available provider models');
@@ -531,7 +537,7 @@ describe('LlmProfileManagement', () => {
       ?.click();
     m.redraw.sync();
 
-    expect(fieldInput('Model')?.value).toBe('model-b');
+    expect(fieldValue('Model')).toBe('model-b');
     expect(
       [...root.querySelectorAll('.input-field')].filter(
         (field) => field.querySelector('label')?.textContent === 'Model',
@@ -582,7 +588,7 @@ describe('LlmProfileManagement', () => {
 
     await vi.waitFor(() => expect(discover).toHaveBeenCalledOnce());
     await vi.waitFor(() => {
-      expect(fieldInput('Model')?.value).toBe('llama3.2:3b');
+      expect(fieldValue('Model')).toBe('llama3.2:3b');
       expect(fieldInput('Model')?.classList.contains('select-dropdown')).toBe(true);
     });
     expect(root.textContent).not.toContain('Available provider models');
@@ -599,7 +605,7 @@ describe('LlmProfileManagement', () => {
       save = handler;
     });
     await vi.waitFor(() => {
-      expect(fieldInput('Model')?.value).toBe('llama3.2:3b');
+      expect(fieldValue('Model')).toBe('llama3.2:3b');
       expect(fieldInput('Model')?.classList.contains('select-dropdown')).toBe(true);
     });
     if (!save) throw new Error('Settings did not register profile save');

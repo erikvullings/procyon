@@ -1949,8 +1949,16 @@ mod tests {
             .expect("profile presets command must succeed")
             .deserialize::<Vec<fm_transport_dto::LlmProfilePresetDto>>()
             .expect("presets response must deserialize");
-        assert_eq!(presets.len(), 10);
+        assert_eq!(presets.len(), 11);
         assert_eq!(presets[5].preset, fm_transport_dto::LlmPresetDto::MlxServe);
+        let unsloth = presets
+            .iter()
+            .find(|preset| preset.preset == fm_transport_dto::LlmPresetDto::Unsloth)
+            .expect(
+                "the desktop host offers Unsloth Studio, so the image role can name a local server",
+            );
+        assert_eq!(unsloth.name, "Unsloth Studio");
+        assert_eq!(unsloth.base_url, "http://127.0.0.1:8888");
         let studio = presets
             .iter()
             .find(|preset| preset.preset == fm_transport_dto::LlmPresetDto::ModelStudio)

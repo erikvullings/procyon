@@ -43,7 +43,7 @@ use std::sync::Arc;
 use russh::keys::{Algorithm, PrivateKey, PublicKey};
 use russh::server::{
     Auth, ChannelOpenHandle, Config as ServerConfig, Handler as ServerHandler, Msg,
-    Server as ServerTrait,
+    Server as ServerTrait, VerifiedPublicKey,
 };
 use russh::{Channel, ChannelId, Pty};
 use russh_sftp::protocol::{
@@ -209,9 +209,9 @@ impl ServerHandler for FixtureSshHandler {
     async fn auth_publickey(
         &mut self,
         user: &str,
-        public_key: &PublicKey,
+        key: VerifiedPublicKey<'_>,
     ) -> Result<Auth, Self::Error> {
-        if user == FIXTURE_USERNAME && *public_key == self.authorized_public_key {
+        if user == FIXTURE_USERNAME && *key.public_key == self.authorized_public_key {
             Ok(Auth::Accept)
         } else {
             Ok(Auth::reject())

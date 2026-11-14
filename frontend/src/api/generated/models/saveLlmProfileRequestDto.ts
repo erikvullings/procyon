@@ -17,7 +17,7 @@ export interface SaveLlmProfileRequestDto {
   apiVersion?: string | null;
   baseUrl: string;
   capabilities: LlmApiCapabilityDto[];
-  credential?: null | LlmCredentialInputDto;
+  credential?: LlmCredentialInputDto | null;
   /** @nullable */
   deployment?: string | null;
   model: string;

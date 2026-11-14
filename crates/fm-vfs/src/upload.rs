@@ -34,7 +34,7 @@ impl UploadCompletion {
 }
 
 /// The body the upload task reads: the bytes written, ending cleanly only when the writer was
-/// shut down. If the writer is dropped first, the read fails with `Interrupted` at the point
+/// shut down. If the writer is dropped first, the read fails with `ConnectionAborted` at the point
 /// where end-of-file would have been.
 pub struct UploadBody {
     inner: DuplexStream,
@@ -53,8 +53,10 @@ impl AsyncRead for UploadBody {
                 if self.finished.load(Ordering::Acquire) {
                     Poll::Ready(Ok(()))
                 } else {
+                    // Abandonment is permanent. Interrupted is retried by read_to_end
+                    // and would spin forever once this pipe reaches EOF.
                     Poll::Ready(Err(io::Error::new(
-                        io::ErrorKind::Interrupted,
+                        io::ErrorKind::ConnectionAborted,
                         "the upload was abandoned before its body was complete",
                     )))
                 }
@@ -245,11 +247,14 @@ mod tests {
         writer.write_all(b"half").await.expect("write");
         drop(writer);
         let mut read = Vec::new();
-        let error = body
-            .read_to_end(&mut read)
-            .await
-            .expect_err("a body that was never finished must not look complete");
-        assert_eq!(error.kind(), io::ErrorKind::Interrupted);
+        let error = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            body.read_to_end(&mut read),
+        )
+        .await
+        .expect("an abandoned upload must terminate")
+        .expect_err("a body that was never finished must not look complete");
+        assert_eq!(error.kind(), io::ErrorKind::ConnectionAborted);
         assert_eq!(
             read, b"half",
             "what arrived is still delivered before the failure"

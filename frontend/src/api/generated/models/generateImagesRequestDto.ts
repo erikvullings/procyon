@@ -26,7 +26,7 @@ export interface GenerateImagesRequestDto {
   negativePrompt?: string | null;
   /** What to draw. */
   prompt: string;
-  quality?: null | ImageQualityDto;
+  quality?: ImageQualityDto | null;
   /** Identity used to cancel this request. */
   requestId: string;
   /**
@@ -35,7 +35,7 @@ export interface GenerateImagesRequestDto {
      * @nullable
      */
   seed?: number | null;
-  source?: null | ImageSourceDto;
+  source?: ImageSourceDto | null;
   /**
      * Sampler step count; absent sends no step count at all, since not every endpoint has one.
      * @minimum 0

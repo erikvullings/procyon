@@ -4,5 +4,5 @@
  */
 
 export type GetFinderTagsParams = {
-uri: string;
+  uri: string;
 };

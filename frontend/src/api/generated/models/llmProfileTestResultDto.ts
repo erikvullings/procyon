@@ -14,7 +14,7 @@ export interface LlmProfileTestResultDto {
   /** @nullable */
   availableModels?: string[] | null;
   capabilities: LlmApiCapabilityDto[];
-  category?: null | LlmTestErrorCategoryDto;
+  category?: LlmTestErrorCategoryDto | null;
   /** @minimum 0 */
   durationMs: number;
   locality: LlmEndpointLocalityDto;

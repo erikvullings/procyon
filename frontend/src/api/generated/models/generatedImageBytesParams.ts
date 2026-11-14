@@ -4,16 +4,10 @@
  */
 
 export type GeneratedImageBytesParams = {
-/**
- * Batch the image came from.
- */
-generation_id: string;
-/**
- * Image to fetch.
- */
-image_id: string;
-/**
- * Serve the stored original instead of the preview downscale.
- */
-original?: boolean;
+  /** Batch the image came from. */
+  generation_id: string;
+  /** Image to fetch. */
+  image_id: string;
+  /** Serve the stored original instead of the preview downscale. */
+  original?: boolean;
 };

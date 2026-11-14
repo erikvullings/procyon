@@ -146,11 +146,9 @@ fn convert_slide(
                 }
             }
             Event::Text(value) => {
-                let decoded = value.decode().map_err(|error| {
-                    PackageError::Malformed(format!("{name} has invalid text: {error}"))
-                })?;
+                let decoded: &str = value;
                 if !decoded.trim().is_empty() {
-                    text.push_str(&decoded);
+                    text.push_str(decoded);
                 }
             }
             _ => {}
@@ -175,7 +173,7 @@ fn collect_image_reference(
             package::local_name(attribute.key.as_ref()).as_str(),
             "embed" | "link"
         )
-        .then(|| String::from_utf8_lossy(&attribute.value).into_owned())
+        .then(|| attribute.value.to_string())
     }) {
         references.push((
             id,

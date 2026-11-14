@@ -28,14 +28,14 @@ export interface ImageBatchDto {
   negativePrompt?: string | null;
   /** Prompt the batch was generated from, so "regenerate" can reuse it. */
   prompt: string;
-  quality?: null | ImageQualityDto;
+  quality?: ImageQualityDto | null;
   /**
      * Seed the batch was generated with, when the person supplied one.
      * @minimum 0
      * @nullable
      */
   seed?: number | null;
-  source?: null | ImageSourceDto;
+  source?: ImageSourceDto | null;
   /**
      * Step count the batch asked for, when one was asked for.
      * @minimum 0

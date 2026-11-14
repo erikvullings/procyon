@@ -14,7 +14,7 @@ export interface GeoTransformDto {
   csvWkt?: boolean;
   /** Replace the source file instead of writing a new one; needs no `targetFormat`. */
   inPlace?: boolean;
-  minify?: null | GeoMinifyDto;
+  minify?: GeoMinifyDto | null;
   /**
      * Output format: `geojson`, `gpx`, `kml`, `kmz` or `csv`; absent keeps each file's format.
      * @nullable

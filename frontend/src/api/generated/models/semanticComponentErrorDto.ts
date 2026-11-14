@@ -11,7 +11,7 @@ import type { SemanticComponentErrorDetailsDto } from './semanticComponentErrorD
 export interface SemanticComponentErrorDto {
   /** Stable machine-readable failure code. */
   code: SemanticComponentErrorCodeDto;
-  details?: null | SemanticComponentErrorDetailsDto;
+  details?: SemanticComponentErrorDetailsDto | null;
   /** Sanitized user-readable explanation. */
   message: string;
   /** Correlates the failure with one HTTP or Tauri request. */

@@ -15,17 +15,17 @@ import type { PermissionsInfoDto } from './permissionsInfoDto.ts';
  * Detailed, non-eagerly-fetched metadata for a single entry (spec §5.2).
  */
 export interface EntryMetadataDto {
-  archive?: null | ArchiveInfoDto;
+  archive?: ArchiveInfoDto | null;
   /** Checksums, keyed by algorithm name (for example `"sha256"`). */
   checksums: EntryMetadataDtoChecksums;
   /** The entry this metadata describes. */
   entryId: string;
   /** Extended attributes, keyed by attribute name. */
   extendedAttributes: EntryMetadataDtoExtendedAttributes;
-  imageDimensions?: null | ImageDimensionsDto;
-  media?: null | MediaMetadataDto;
-  ownership?: null | OwnershipInfoDto;
-  permissions?: null | PermissionsInfoDto;
+  imageDimensions?: ImageDimensionsDto | null;
+  media?: MediaMetadataDto | null;
+  ownership?: OwnershipInfoDto | null;
+  permissions?: PermissionsInfoDto | null;
   /** Plugin-provided fields, keyed by a plugin-namespaced field name. */
   pluginFields: EntryMetadataDtoPluginFields;
 }

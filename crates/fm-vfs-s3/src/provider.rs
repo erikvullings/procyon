@@ -443,12 +443,11 @@ impl FileSystemProvider for S3FileSystemProvider {
                 continue;
             }
             let child = location.join(name).map_err(|_| invalid(&location.uri))?;
-            entries.push(file_summary(
-                child,
-                name,
-                object.size,
-                &object.last_modified,
-            ));
+            let (Some(size), Some(last_modified)) = (object.size, object.last_modified.as_deref())
+            else {
+                return Err(invalid(&location.uri));
+            };
+            entries.push(file_summary(child, name, size, last_modified));
         }
 
         let has_more = parsed_response.next_continuation_token.is_some();

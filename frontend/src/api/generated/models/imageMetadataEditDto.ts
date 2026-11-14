@@ -27,13 +27,13 @@ export interface ImageMetadataEditDto {
      * @nullable
      */
   copyright?: string | null;
-  dateTaken?: null | CaptureTimeDto;
+  dateTaken?: CaptureTimeDto | null;
   /**
      * New description.
      * @nullable
      */
   description?: string | null;
-  gps?: null | GpsPositionDto;
+  gps?: GpsPositionDto | null;
   /**
      * New keywords.
      * @nullable

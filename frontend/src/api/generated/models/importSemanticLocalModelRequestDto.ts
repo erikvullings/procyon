@@ -35,7 +35,7 @@ export interface ImportSemanticLocalModelRequestDto {
   licenseSpdx: string;
   /** Opaque model identifier. */
   modelId: string;
-  normalization?: null | SemanticEmbeddingNormalizationDto;
+  normalization?: SemanticEmbeddingNormalizationDto | null;
   /** Abstract profile assigned to the imported model. */
   profile: SemanticProfileDto;
   /** Required logical runtime component. */

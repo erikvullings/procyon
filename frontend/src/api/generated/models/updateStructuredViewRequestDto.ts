@@ -13,7 +13,7 @@ export interface UpdateStructuredViewRequestDto {
      * @nullable
      */
   delimiter?: string | null;
-  headerMode?: null | StructuredHeaderModeDto;
+  headerMode?: StructuredHeaderModeDto | null;
   /**
      * Worksheet to select without reopening the workbook.
      * @nullable

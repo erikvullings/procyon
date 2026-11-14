@@ -26,7 +26,7 @@ export interface OperationDto {
   conflictPolicy: OperationConflictPolicyDto;
   /** Acceptance timestamp. */
   createdAt: string;
-  destination?: null | LocationDto;
+  destination?: LocationDto | null;
   /** Entry-scoped failures that did not abort the operation. */
   errors: OperationEntryErrorDto[];
   /** Stable operation identifier. */
@@ -69,5 +69,5 @@ export interface OperationDto {
      * @nullable
      */
   undoOf?: string | null;
-  verification?: null | OperationVerificationDto;
+  verification?: OperationVerificationDto | null;
 }

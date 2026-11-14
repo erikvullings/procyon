@@ -27,7 +27,7 @@ export interface StartSearchResponseDto {
   location: LocationDto;
   /** The started search's identifier, used to cancel it. */
   searchId: string;
-  semanticCoverage?: null | SemanticSearchCoverageDto;
+  semanticCoverage?: SemanticSearchCoverageDto | null;
   /** File-primary evidence returned only for semantic mode. */
   semanticResults?: SemanticSearchResultDto[];
 }

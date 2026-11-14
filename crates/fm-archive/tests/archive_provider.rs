@@ -5,7 +5,8 @@ use std::{io::Write, sync::Arc};
 use fm_archive::{ArchiveFileSystemProvider, ArchiveLimits};
 use fm_domain::{EntryKind, Location};
 use fm_vfs::{FileSystemProvider, ListOptions, ProviderCapabilities, ProviderRegistry, VfsError};
-use rars::rar50::{Rar50Writer, StoredEntry, WriterOptions};
+use rars::EntrySource;
+use rars::rar50::{ArchiveEntry, Rar50Writer, WriterOptions};
 use tempfile::tempdir;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
@@ -35,6 +36,25 @@ fn registry_delegates_archive_uri_validation_to_the_archive_provider() {
         registry.parse(&format!("{}/../escape", location.uri)),
         Err(VfsError::InvalidLocation { .. })
     ));
+}
+
+/// Builds an uncompressed RAR 5 archive holding `entries` (name, bytes), with fixed metadata.
+fn stored_rar(entries: &[(&[u8], &[u8])]) -> Vec<u8> {
+    entries
+        .iter()
+        .fold(
+            Rar50Writer::new(WriterOptions::default()),
+            |writer, (name, data)| {
+                writer.entry(
+                    ArchiveEntry::new(*name, EntrySource::from_bytes(data.to_vec()))
+                        .with_mtime(Some(0))
+                        .with_attributes(0x20)
+                        .with_host_os(3),
+                )
+            },
+        )
+        .finish()
+        .expect("build RAR fixture")
 }
 
 #[tokio::test]
@@ -216,16 +236,7 @@ async fn standalone_gzip_is_exposed_as_a_single_read_only_file() {
 async fn rar_comic_is_navigable_and_read_only() {
     let root = tempdir().expect("temporary root");
     let archive_path = root.path().join("comic.cbr");
-    let bytes = Rar50Writer::new(WriterOptions::default())
-        .stored_entries(&[StoredEntry {
-            name: b"pages/001.jpg",
-            data: b"image bytes",
-            mtime: Some(0),
-            attributes: 0x20,
-            host_os: 3,
-        }])
-        .finish()
-        .expect("build RAR fixture");
+    let bytes = stored_rar(&[(b"pages/001.jpg", b"image bytes")]);
     std::fs::write(&archive_path, bytes).expect("write RAR fixture");
     let provider = ArchiveFileSystemProvider::new();
     let location = zip_location(&archive_path);
@@ -262,25 +273,10 @@ async fn rar_comic_is_navigable_and_read_only() {
 async fn reading_a_rar_comic_page_does_not_extract_later_pages() {
     let root = tempdir().expect("temporary root");
     let archive_path = root.path().join("comic.cbr");
-    let mut bytes = Rar50Writer::new(WriterOptions::default())
-        .stored_entries(&[
-            StoredEntry {
-                name: b"001.jpg",
-                data: b"first image bytes",
-                mtime: Some(0),
-                attributes: 0x20,
-                host_os: 3,
-            },
-            StoredEntry {
-                name: b"002.jpg",
-                data: b"second image bytes",
-                mtime: Some(0),
-                attributes: 0x20,
-                host_os: 3,
-            },
-        ])
-        .finish()
-        .expect("build RAR fixture");
+    let mut bytes = stored_rar(&[
+        (b"001.jpg", b"first image bytes"),
+        (b"002.jpg", b"second image bytes"),
+    ]);
     let trailing_page = bytes
         .windows(b"second image bytes".len())
         .position(|window| window == b"second image bytes")

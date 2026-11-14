@@ -24,7 +24,7 @@ export interface RagPreviewDto {
      * @minimum 0
      */
   evidenceTokens: number;
-  fallbackReason?: null | RagPlanningFallbackReasonDto;
+  fallbackReason?: RagPlanningFallbackReasonDto | null;
   /**
      * Fusion contract version when fusion was applied.
      * @nullable

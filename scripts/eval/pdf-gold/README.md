@@ -56,13 +56,13 @@ next to the model output; scoring prefers it. List the pages you checked in `ver
 
 ## Reading the report
 
-| Metric | Meaning |
-|---|---|
-| words F1 | bag-of-words overlap with the gold page, ignoring order (did the text survive) |
-| reading order | word-sequence similarity, 1 - normalized Levenshtein (is it in the right order) |
-| para precision / recall | unit boundaries vs gold paragraph boundaries, by each paragraph's first 4 words |
-| units/gold | units per gold paragraph; 1.0 is ideal, above 1 means fragmentation |
-| cell F1 / rows found | table cells as a multiset of normalized cells; share of gold rows matched (fuzzy >= 0.9) |
+| Metric                  | Meaning                                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------- |
+| words F1                | bag-of-words overlap with the gold page, ignoring order (did the text survive)           |
+| reading order           | word-sequence similarity, 1 - normalized Levenshtein (is it in the right order)          |
+| para precision / recall | unit boundaries vs gold paragraph boundaries, by each paragraph's first 4 words          |
+| units/gold              | units per gold paragraph; 1.0 is ideal, above 1 means fragmentation                      |
+| cell F1 / rows found    | table cells as a multiset of normalized cells; share of gold rows matched (fuzzy >= 0.9) |
 
 Paragraph metrics depend on how the model separates paragraphs (blank lines, else one per line);
 treat them as relative between methods, not absolute. Tests were run with a stub server and with

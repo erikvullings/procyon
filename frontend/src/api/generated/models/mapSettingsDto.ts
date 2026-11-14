@@ -20,7 +20,7 @@ export interface MapSettingsDto {
   maxZoom: number;
   /** Whether requests to remote tile or style hosts are allowed at all. */
   onlineTiles: boolean;
-  pmtilesLocation?: null | LocationDto;
+  pmtilesLocation?: LocationDto | null;
   /**
      * Remote host that receives requests for the selected basemap; read-only, derived by the
      * backend. Absent for local files.

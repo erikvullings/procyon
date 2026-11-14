@@ -22,28 +22,28 @@ export interface StartOperationRequestDto {
      * @nullable
      */
   archiveCompressionLevel?: number | null;
-  archiveFormat?: null | ArchiveFormatDto;
-  attributeChange?: null | ChangeAttributesDto;
+  archiveFormat?: ArchiveFormatDto | null;
+  attributeChange?: ChangeAttributesDto | null;
   /** Conflict behavior selected before execution. */
   conflictPolicy: OperationConflictPolicyDto;
   /** Whether a multi-component create-directory name may create missing parents. */
   createIntermediateDirectories?: boolean;
-  destination?: null | LocationDto;
+  destination?: LocationDto | null;
   /**
      * Per-source destinations for a batch `rename` (task 0072 multi-rename), one entry per
      * `sources` item in the same order. Empty for every other operation kind and for a
      * single-entry rename, which keeps using `destination` instead.
      */
   destinations?: LocationDto[];
-  geoTransform?: null | GeoTransformDto;
-  imageMetadataEdit?: null | ImageMetadataEditDto;
+  geoTransform?: GeoTransformDto | null;
+  imageMetadataEdit?: ImageMetadataEditDto | null;
   /**
      * UTF-8 text written into the new file by a `createFile` operation (task 0264); an empty
      * file is created when absent. Existing files are never overwritten.
      * @nullable
      */
   initialContent?: string | null;
-  link?: null | LinkRequestDto;
+  link?: LinkRequestDto | null;
   /**
      * New child name for `createDirectory`.
      * @nullable
@@ -60,7 +60,7 @@ export interface StartOperationRequestDto {
   skipSpaceCheck?: boolean;
   /** Provider-neutral source locations. */
   sources: LocationDto[];
-  splitFile?: null | SplitFileDto;
+  splitFile?: SplitFileDto | null;
   /** Policy for symbolic links encountered during recursive copying. */
   symlinkPolicy?: SymlinkPolicyDto;
   /** Semantic operation discriminator. `type` is the stable JSON field name. */

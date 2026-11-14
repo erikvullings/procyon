@@ -11,7 +11,7 @@ import type { KnowledgeRouteFallbackReasonDto } from './knowledgeRouteFallbackRe
 export interface KnowledgeRouteOutcomeDto {
   /** Route actually executed. */
   applied: KnowledgeRouteDto;
-  fallbackReason?: null | KnowledgeRouteFallbackReasonDto;
+  fallbackReason?: KnowledgeRouteFallbackReasonDto | null;
   /** Route the caller asked for. */
   requested: KnowledgeRouteDto;
 }

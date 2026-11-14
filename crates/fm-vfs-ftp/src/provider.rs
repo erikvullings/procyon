@@ -169,7 +169,7 @@ impl FtpFileSystemProvider {
                             };
                             // The data connection must be closed and the final reply read
                             // whatever happened, or the control connection is left desynchronised.
-                            let finalized = $ftp.finalize_put_stream(data).await.map_err(map_ftp);
+                            let finalized = data.finish().await.map_err(map_ftp);
                             copied.and(finalized)
                         }
                     }
@@ -373,13 +373,13 @@ impl FileSystemProvider for FtpFileSystemProvider {
                 Client::Plain(v) => {
                     if let Ok(mut data) = v.retr_as_stream(p.path).await {
                         let _ = tokio::select! {r=tokio::io::copy(&mut data,&mut tx)=>r,_=c.cancelled()=>Ok(0)};
-                        let _ = v.finalize_retr_stream(data).await;
+                        let _ = data.finish().await;
                     }
                 }
                 Client::Secure(v) => {
                     if let Ok(mut data) = v.retr_as_stream(p.path).await {
                         let _ = tokio::select! {r=tokio::io::copy(&mut data,&mut tx)=>r,_=c.cancelled()=>Ok(0)};
-                        let _ = v.finalize_retr_stream(data).await;
+                        let _ = data.finish().await;
                     }
                 }
             }

@@ -17,6 +17,8 @@ pub enum LlmPresetDto {
     Sglang,
     Omlx,
     MlxServe,
+    /// Unsloth Studio, a local app serving an OpenAI-compatible API on the Studio port.
+    Unsloth,
     OpenAiCompatible,
     AzureOpenAi,
     /// Alibaba Cloud Model Studio, whose `qwen-image` and `wan*` models answer the async task API.

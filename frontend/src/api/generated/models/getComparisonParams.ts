@@ -4,18 +4,16 @@
  */
 
 export type GetComparisonParams = {
-/**
- * Zero-based entry offset, into the (possibly filtered) result set.
- * @minimum 0
- */
-offset?: number;
-/**
- * Page size, clamped to 1 through 500.
- * @minimum 0
- */
-limit?: number;
-/**
- * Restrict the page to entries that are not identical.
- */
-differencesOnly?: boolean;
+  /**
+   * Zero-based entry offset, into the (possibly filtered) result set.
+   * @minimum 0
+   */
+  offset?: number;
+  /**
+   * Page size, clamped to 1 through 500.
+   * @minimum 0
+   */
+  limit?: number;
+  /** Restrict the page to entries that are not identical. */
+  differencesOnly?: boolean;
 };

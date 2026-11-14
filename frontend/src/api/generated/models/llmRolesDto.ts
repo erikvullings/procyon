@@ -8,7 +8,7 @@ import type { LlmRoleAssignmentDto } from './llmRoleAssignmentDto.ts';
  * The configured role bindings. An absent role is not assigned.
  */
 export interface LlmRolesDto {
-  chat?: null | LlmRoleAssignmentDto;
-  embeddings?: null | LlmRoleAssignmentDto;
-  image?: null | LlmRoleAssignmentDto;
+  chat?: LlmRoleAssignmentDto | null;
+  embeddings?: LlmRoleAssignmentDto | null;
+  image?: LlmRoleAssignmentDto | null;
 }

@@ -50,6 +50,10 @@ pub enum LlmPreset {
     Sglang,
     Omlx,
     MlxServe,
+    /// Unsloth Studio: a local app whose OpenAI-compatible API answers on the Studio port (8888 by
+    /// default). Whether its server takes the thinking-off switches is not documented, so it is left
+    /// with none.
+    Unsloth,
     OpenAiCompatible,
     AzureOpenAi,
     /// Alibaba Cloud Model Studio: `qwen-image` and the `wan*` image models. Its images API is an
@@ -1080,6 +1084,11 @@ impl LlmProfileService {
             (LlmPreset::Sglang, "SGLang", "http://127.0.0.1:30000"),
             (LlmPreset::Omlx, "OMLX", "http://127.0.0.1:8000"),
             (LlmPreset::MlxServe, "mlx-serve", "http://127.0.0.1:11234"),
+            (
+                LlmPreset::Unsloth,
+                "Unsloth Studio",
+                "http://127.0.0.1:8888",
+            ),
             (
                 LlmPreset::OpenAiCompatible,
                 "OpenAI-compatible",
@@ -2782,6 +2791,7 @@ fn preset_from_dto(value: LlmPresetDto) -> LlmPreset {
         LlmPresetDto::Sglang => LlmPreset::Sglang,
         LlmPresetDto::Omlx => LlmPreset::Omlx,
         LlmPresetDto::MlxServe => LlmPreset::MlxServe,
+        LlmPresetDto::Unsloth => LlmPreset::Unsloth,
         LlmPresetDto::OpenAiCompatible => LlmPreset::OpenAiCompatible,
         LlmPresetDto::AzureOpenAi => LlmPreset::AzureOpenAi,
         LlmPresetDto::ModelStudio => LlmPreset::ModelStudio,
@@ -2797,6 +2807,7 @@ fn preset_to_dto(value: LlmPreset) -> LlmPresetDto {
         LlmPreset::Sglang => LlmPresetDto::Sglang,
         LlmPreset::Omlx => LlmPresetDto::Omlx,
         LlmPreset::MlxServe => LlmPresetDto::MlxServe,
+        LlmPreset::Unsloth => LlmPresetDto::Unsloth,
         LlmPreset::OpenAiCompatible => LlmPresetDto::OpenAiCompatible,
         LlmPreset::AzureOpenAi => LlmPresetDto::AzureOpenAi,
         LlmPreset::ModelStudio => LlmPresetDto::ModelStudio,
@@ -3031,7 +3042,7 @@ mod tests {
     #[test]
     fn every_preset_has_safe_explicit_defaults() {
         let presets = LlmProfileService::presets();
-        assert_eq!(presets.len(), 10);
+        assert_eq!(presets.len(), 11);
         assert_eq!(presets[0].base_url, "http://127.0.0.1:11434");
         assert_eq!(presets[1].base_url, "http://127.0.0.1:1234");
         assert_eq!(presets[2].base_url, "http://127.0.0.1:8000");
@@ -3044,8 +3055,16 @@ mod tests {
                 .capabilities
                 .contains(&LlmApiCapability::ModelDiscovery)
         );
-        assert!(presets[6].redact_filenames);
-        assert_eq!(presets[7].api_version.as_deref(), Some("2024-10-21"));
+        // Unsloth Studio is a local server on the Studio port; its API is the OpenAI-style one.
+        assert_eq!(presets[6].preset, LlmPreset::Unsloth);
+        assert_eq!(presets[6].base_url, "http://127.0.0.1:8888");
+        assert_eq!(presets[6].name, "Unsloth Studio");
+        assert!(
+            !supports_reasoning_switch(LlmPreset::Unsloth),
+            "the Studio server is not documented to take the thinking-off switches"
+        );
+        assert!(presets[7].redact_filenames);
+        assert_eq!(presets[8].api_version.as_deref(), Some("2024-10-21"));
 
         // An image-only endpoint is a preset of its own, so the image role is one choice away.
         let qwen = presets

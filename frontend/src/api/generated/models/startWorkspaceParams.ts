@@ -4,10 +4,10 @@
  */
 
 export type StartWorkspaceParams = {
-/**
- * Opens this workspace explicitly. When absent, the last-active
- * workspace is reopened, falling back to a fresh default if none exists
- * or the last-active one is missing/corrupt (spec §5.3.7).
- */
-workspaceId?: string;
+  /**
+   * Opens this workspace explicitly. When absent, the last-active
+   * workspace is reopened, falling back to a fresh default if none exists
+   * or the last-active one is missing/corrupt (spec §5.3.7).
+   */
+  workspaceId?: string;
 };

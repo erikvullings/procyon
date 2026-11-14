@@ -43,7 +43,7 @@ export interface StartSearchRequestDto {
      * "show hidden files" setting explicitly.
      */
   showHidden?: boolean;
-  structuredQuery?: null | SearchQueryDto;
+  structuredQuery?: SearchQueryDto | null;
   /** Workspace that owns the search and receives its result-batch events. */
   workspaceId: string;
 }

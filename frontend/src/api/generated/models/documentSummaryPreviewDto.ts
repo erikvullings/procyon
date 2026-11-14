@@ -31,7 +31,7 @@ export interface DocumentSummaryPreviewDto {
      * @minimum 0
      */
   omittedImageCount: number;
-  profile?: null | SummaryProfileDisclosureDto;
+  profile?: SummaryProfileDisclosureDto | null;
   /** Whether the provider's context limit was verified. */
   providerLimitVerified?: boolean;
   /**

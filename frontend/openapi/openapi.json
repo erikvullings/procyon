@@ -15,7 +15,7 @@
         "operationId": "listActions",
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -55,7 +55,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -65,7 +65,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -75,7 +75,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -85,7 +85,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -476,7 +476,7 @@
         },
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           }
         }
       }
@@ -524,7 +524,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "content": {
               "application/json": {
                 "schema": {
@@ -534,7 +534,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -584,7 +584,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -594,7 +594,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -622,10 +622,10 @@
         ],
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -663,7 +663,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -673,7 +673,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -711,7 +711,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "content": {
               "application/json": {
                 "schema": {
@@ -721,7 +721,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -731,7 +731,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -769,7 +769,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -779,7 +779,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -789,7 +789,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -816,7 +816,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "content": {
               "application/json": {
                 "schema": {
@@ -826,7 +826,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -885,7 +885,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -895,7 +895,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -933,7 +933,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "content": {
               "application/json": {
                 "schema": {
@@ -943,7 +943,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -953,7 +953,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -981,10 +981,10 @@
         ],
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -1022,7 +1022,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -1032,7 +1032,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -1907,7 +1907,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "content": {
               "application/json": {
                 "schema": {
@@ -1917,7 +1917,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -1967,7 +1967,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -1977,7 +1977,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -2005,10 +2005,10 @@
         ],
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -2105,7 +2105,7 @@
         },
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           }
         }
       }
@@ -2154,7 +2154,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -2202,7 +2202,7 @@
         "operationId": "listFileTemplates",
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -2233,10 +2233,10 @@
         },
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -2264,7 +2264,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -2274,7 +2274,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -2284,7 +2284,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -2294,7 +2294,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -2322,7 +2322,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -2332,7 +2332,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -2342,7 +2342,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -2369,7 +2369,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -2379,7 +2379,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -2389,7 +2389,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -2416,7 +2416,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -2426,7 +2426,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -2436,7 +2436,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -2694,10 +2694,10 @@
         },
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -2725,7 +2725,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -2735,7 +2735,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -2745,7 +2745,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -2755,7 +2755,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -2783,7 +2783,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -2793,7 +2793,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -2803,7 +2803,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -2813,7 +2813,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -2957,10 +2957,10 @@
         },
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -2988,7 +2988,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -2998,7 +2998,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -3008,7 +3008,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -3036,7 +3036,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -3046,7 +3046,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -3056,7 +3056,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -3083,10 +3083,10 @@
         },
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -3113,7 +3113,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -3123,7 +3123,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -3133,7 +3133,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -3161,7 +3161,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -3171,7 +3171,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -3181,7 +3181,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -3208,7 +3208,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -3218,7 +3218,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -3228,7 +3228,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -3255,7 +3255,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -3265,7 +3265,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -3275,7 +3275,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -3302,7 +3302,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -3312,7 +3312,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -3322,7 +3322,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -3349,7 +3349,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -3359,7 +3359,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -3369,7 +3369,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -3523,7 +3523,7 @@
             "description": "The remembered view is gone (or there was none)"
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -3830,7 +3830,7 @@
         },
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           }
         }
       }
@@ -3851,7 +3851,7 @@
         },
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           }
         }
       }
@@ -3977,7 +3977,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -3987,7 +3987,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -3997,7 +3997,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -4024,7 +4024,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "content": {
               "application/json": {
                 "schema": {
@@ -4034,7 +4034,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -4044,7 +4044,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -4094,7 +4094,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -4104,7 +4104,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -4132,10 +4132,10 @@
         ],
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -4163,7 +4163,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -4173,7 +4173,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -4201,7 +4201,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -4211,7 +4211,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -4221,7 +4221,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -4231,7 +4231,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -5086,7 +5086,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "content": {
               "application/json": {
                 "schema": {
@@ -5096,7 +5096,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -5106,7 +5106,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -5156,7 +5156,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -5166,7 +5166,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -5194,10 +5194,10 @@
         ],
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -5376,7 +5376,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -5401,7 +5401,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "content": {
               "application/json": {
                 "schema": {
@@ -5411,7 +5411,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -5429,7 +5429,7 @@
         "operationId": "listInterruptedTransfers",
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -5458,10 +5458,10 @@
         ],
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -5471,7 +5471,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -5481,7 +5481,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -5519,7 +5519,7 @@
         ],
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "content": {
               "application/json": {
                 "schema": {
@@ -5529,7 +5529,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -5539,7 +5539,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -5549,7 +5549,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -5577,7 +5577,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -5587,7 +5587,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -5597,7 +5597,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -5625,7 +5625,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -5635,7 +5635,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -5663,10 +5663,10 @@
         ],
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -5676,7 +5676,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -5704,10 +5704,10 @@
         ],
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -5717,7 +5717,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -5755,10 +5755,10 @@
         },
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -5768,7 +5768,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -5796,10 +5796,10 @@
         ],
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -5809,7 +5809,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -5837,7 +5837,7 @@
         ],
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "content": {
               "application/json": {
                 "schema": {
@@ -5847,7 +5847,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -5857,7 +5857,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -5875,7 +5875,7 @@
         "operationId": "listPlugins",
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -5905,10 +5905,10 @@
         ],
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -5935,10 +5935,10 @@
         ],
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -5974,7 +5974,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -5984,7 +5984,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -6011,7 +6011,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -6024,7 +6024,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -6062,7 +6062,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -6072,7 +6072,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -6082,7 +6082,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -6127,7 +6127,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "content": {
               "application/json": {
                 "schema": {
@@ -6137,7 +6137,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -6165,10 +6165,10 @@
         ],
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -6195,7 +6195,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -6205,7 +6205,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -6215,7 +6215,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -6242,7 +6242,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -6255,7 +6255,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -6282,10 +6282,10 @@
         },
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -6295,7 +6295,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -6322,7 +6322,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -6332,7 +6332,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -6342,7 +6342,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -6369,7 +6369,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -6379,7 +6379,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -6389,7 +6389,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -6399,7 +6399,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -6409,7 +6409,7 @@
             }
           },
           "503": {
-            "description": "",
+            "description": "Service Unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -6436,7 +6436,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -6446,7 +6446,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -6456,7 +6456,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -6466,7 +6466,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -6476,7 +6476,7 @@
             }
           },
           "503": {
-            "description": "",
+            "description": "Service Unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -7298,16 +7298,16 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
                   "oneOf": [
                     {
-                      "type": "null"
+                      "$ref": "#/components/schemas/DocumentSummaryDto"
                     },
                     {
-                      "$ref": "#/components/schemas/DocumentSummaryDto"
+                      "type": "null"
                     }
                   ]
                 }
@@ -7315,7 +7315,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -7325,7 +7325,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -7335,7 +7335,7 @@
             }
           },
           "503": {
-            "description": "",
+            "description": "Service Unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -7362,7 +7362,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7372,7 +7372,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -7382,7 +7382,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -7392,7 +7392,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -7402,7 +7402,7 @@
             }
           },
           "503": {
-            "description": "",
+            "description": "Service Unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -7429,7 +7429,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7439,7 +7439,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -7449,7 +7449,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -7459,7 +7459,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -7469,7 +7469,7 @@
             }
           },
           "503": {
-            "description": "",
+            "description": "Service Unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -7496,7 +7496,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7506,7 +7506,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -7516,7 +7516,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -7536,7 +7536,7 @@
             }
           },
           "500": {
-            "description": "",
+            "description": "Internal Server Error",
             "content": {
               "application/json": {
                 "schema": {
@@ -7546,7 +7546,7 @@
             }
           },
           "503": {
-            "description": "",
+            "description": "Service Unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -7573,7 +7573,7 @@
         },
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           }
         }
       }
@@ -7583,7 +7583,7 @@
         "operationId": "getKnowledgeCapabilities",
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7610,7 +7610,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7637,7 +7637,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7647,7 +7647,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -7657,7 +7657,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -7667,7 +7667,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -7677,7 +7677,7 @@
             }
           },
           "503": {
-            "description": "",
+            "description": "Service Unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -7704,7 +7704,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7717,7 +7717,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -7727,7 +7727,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -7737,7 +7737,7 @@
             }
           },
           "503": {
-            "description": "",
+            "description": "Service Unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -7764,7 +7764,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7774,7 +7774,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -7784,7 +7784,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -7794,7 +7794,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -7804,7 +7804,7 @@
             }
           },
           "503": {
-            "description": "",
+            "description": "Service Unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -7831,7 +7831,7 @@
         },
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           }
         }
       }
@@ -7851,7 +7851,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7861,7 +7861,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -7871,7 +7871,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -7881,7 +7881,7 @@
             }
           },
           "503": {
-            "description": "",
+            "description": "Service Unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -7898,7 +7898,7 @@
         "operationId": "getSemanticLibraryCapabilities",
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7925,7 +7925,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7935,7 +7935,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -7945,7 +7945,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -7955,7 +7955,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -7982,7 +7982,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7992,7 +7992,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -8002,7 +8002,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8012,7 +8012,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -8039,7 +8039,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8049,7 +8049,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8059,7 +8059,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -8086,7 +8086,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8096,7 +8096,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -8106,7 +8106,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8116,7 +8116,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -8143,7 +8143,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8153,7 +8153,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8163,7 +8163,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -8190,7 +8190,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8200,7 +8200,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -8210,7 +8210,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8220,7 +8220,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -8247,7 +8247,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8257,7 +8257,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -8267,7 +8267,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8277,7 +8277,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -8304,7 +8304,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8314,7 +8314,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -8324,7 +8324,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8334,7 +8334,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -8361,7 +8361,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8371,7 +8371,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8381,7 +8381,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -8408,7 +8408,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8418,7 +8418,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8428,7 +8428,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -8455,7 +8455,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8465,7 +8465,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -8475,7 +8475,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8485,7 +8485,7 @@
             }
           },
           "409": {
-            "description": "",
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -8502,7 +8502,7 @@
         "operationId": "getSemanticLibraryStatus",
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8512,7 +8512,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8522,7 +8522,7 @@
             }
           },
           "503": {
-            "description": "",
+            "description": "Service Unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -8549,7 +8549,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8559,7 +8559,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -8569,7 +8569,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8579,7 +8579,7 @@
             }
           },
           "503": {
-            "description": "",
+            "description": "Service Unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -8606,7 +8606,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8616,7 +8616,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -8626,7 +8626,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8636,7 +8636,7 @@
             }
           },
           "503": {
-            "description": "",
+            "description": "Service Unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -8663,7 +8663,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8673,7 +8673,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -8683,7 +8683,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8693,7 +8693,7 @@
             }
           },
           "503": {
-            "description": "",
+            "description": "Service Unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -8720,7 +8720,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8730,7 +8730,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -8740,7 +8740,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8750,7 +8750,7 @@
             }
           },
           "503": {
-            "description": "",
+            "description": "Service Unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -8767,7 +8767,7 @@
         "operationId": "listSemanticVocabularies",
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8780,7 +8780,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8807,7 +8807,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8817,7 +8817,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -8827,7 +8827,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8854,7 +8854,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8864,7 +8864,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -8874,7 +8874,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8901,7 +8901,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8911,7 +8911,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -8938,7 +8938,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "content": {
               "application/json": {
                 "schema": {
@@ -8948,7 +8948,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -8958,7 +8958,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8985,7 +8985,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8995,7 +8995,7 @@
             }
           },
           "400": {
-            "description": "",
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
@@ -9005,7 +9005,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -9086,7 +9086,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "content": {
               "application/json": {
                 "schema": {
@@ -9096,7 +9096,7 @@
             }
           },
           "403": {
-            "description": "",
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -9146,7 +9146,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -9156,7 +9156,7 @@
             }
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -9184,10 +9184,10 @@
         ],
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "404": {
-            "description": "",
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -10352,11 +10352,11 @@
           "conflictPolicy": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/OperationConflictPolicyDto",
                 "description": "Conflict policy for copy rows whose destination exists. Defaults to `overwrite`\n(a sync copy deliberately replaces a differing destination)."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -10624,11 +10624,11 @@
           "attributes": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/AttributeSnapshotDto",
                 "description": "Editable state; absent when the entry cannot be read or edited."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -11423,11 +11423,11 @@
           "left": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ComparisonEntrySideDto",
                 "description": "Left-side metadata, absent when [`ComparisonStatusDto::OnlyRight`]."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -11438,11 +11438,11 @@
           "right": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ComparisonEntrySideDto",
                 "description": "Right-side metadata, absent when [`ComparisonStatusDto::OnlyLeft`]."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -12484,11 +12484,11 @@
           "themes": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/CorpusThemesDto",
                 "description": "Present only when the outcome is ready."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -12518,11 +12518,11 @@
           "secret": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ConnectionSecretInputDto",
                 "description": "New secret material to store, if this connection needs one."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -13146,11 +13146,11 @@
           "volumeCapacity": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/VolumeCapacityDto",
                 "description": "Total/available capacity for the volume backing this location, when known\n(task 0096); absent for non-local providers or unsupported platforms."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -13208,11 +13208,11 @@
           "quickFilter": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/PersistedFilterDto",
                 "description": "A persisted quick-filter query, if one is saved with the tab."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -13265,22 +13265,22 @@
           "iconSize": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/IconSizeDto",
                 "description": "Replace the grid tile size, if present (task 0134)."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "quickFilter": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/QuickFilterPatchDto",
                 "description": "Set or clear the saved quick-filter, if present."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -13304,11 +13304,11 @@
           "viewMode": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/DirectoryViewModeDto",
                 "description": "Replace the active view mode, if present (task 0134)."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -13661,11 +13661,11 @@
           "title": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SummaryAttributionDto",
                 "description": "Optional verified title (not inferred from the file name)."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -13724,11 +13724,11 @@
           "profile": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SummaryProfileDisclosureDto",
                 "description": "Generation disclosure, absent in key-passages-only mode."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -14080,11 +14080,11 @@
           "archive": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ArchiveInfoDto",
                 "description": "Archive metadata, when the entry is a browsable archive."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -14116,44 +14116,44 @@
           "imageDimensions": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ImageDimensionsDto",
                 "description": "Image pixel dimensions, when the entry is an image."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "media": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MediaMetadataDto",
                 "description": "Audio/video metadata, when the entry is a media file."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "ownership": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/OwnershipInfoDto",
                 "description": "Ownership information, when the provider exposes it."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "permissions": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/PermissionsInfoDto",
                 "description": "Filesystem permissions, when the provider exposes them."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -14260,11 +14260,11 @@
           "gitStatus": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/GitFileStatusDto",
                 "description": "Git working-tree status, when this entry sits inside a local git\nworking tree (task 0135)."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -14374,11 +14374,11 @@
           "options": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/KnowledgeSearchOptionsDto",
                 "description": "Optional bounded option overrides."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -15089,11 +15089,11 @@
           "quality": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ImageQualityDto",
                 "description": "How hard the endpoint should work; each contract words these in its own vocabulary, and a\ncontract without such a knob leaves it out."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -15114,11 +15114,11 @@
           "source": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ImageSourceDto",
                 "description": "A picture already on disk the new one should start from. The backend reads its bytes; the\nperson never uploads them, and only contracts that can take one are allowed to."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -15168,11 +15168,11 @@
           "action": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/KnowledgeActionDto",
                 "description": "Answer-only typed goal; never used as retrieval text."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -15197,11 +15197,11 @@
           "depth": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/KnowledgeAnswerDepthDto",
                 "description": "Answer-only requested depth."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -15212,11 +15212,11 @@
           "output": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/KnowledgeOutputFormatDto",
                 "description": "Answer-only requested presentation."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -15400,11 +15400,11 @@
           "error": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/GeoMessageDto",
                 "description": "Set when this file cannot be converted at all."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -15459,11 +15459,11 @@
           "csv": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/CsvGeoInfoDto",
                 "description": "How a CSV file was read; also present, with only the columns, when it has no coordinates."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -15476,11 +15476,11 @@
           "error": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/GeoErrorDto",
                 "description": "Set when the file could not be read; `collection` is then empty."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -15935,11 +15935,11 @@
           "minify": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/GeoMinifyDto",
                 "description": "Size reductions to apply."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -16329,11 +16329,11 @@
           "quality": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ImageQualityDto",
                 "description": "Quality the batch asked for, when one was asked for."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -16349,11 +16349,11 @@
           "source": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ImageSourceDto",
                 "description": "The file the batch started from, when it started from one."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -16406,11 +16406,11 @@
           "gps": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/GpsPositionDto",
                 "description": "Position when the image is geotagged."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -16456,11 +16456,11 @@
           "gps": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/GpsPositionDto",
                 "description": "GPS position when the EXIF GPS tags are complete."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -16509,11 +16509,11 @@
           "dateTaken": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/CaptureTimeDto",
                 "description": "New capture time."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -16527,11 +16527,11 @@
           "gps": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/GpsPositionDto",
                 "description": "New GPS position."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -16721,11 +16721,11 @@
           "normalization": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SemanticEmbeddingNormalizationDto",
                 "description": "Required normalization metadata."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -16805,11 +16805,11 @@
           "unsupportedReason": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/AttributeUnsupportedReasonDto",
                 "description": "Why `support` is empty, when it is."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -16985,11 +16985,11 @@
           "destination": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/LocationDto",
                 "description": "Requested destination, if any."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -17677,22 +17677,22 @@
           "alternativeAction": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/KnowledgeActionDto",
                 "description": "Alternative answer action, when answer intent is ambiguous."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "alternativeNeed": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/KnowledgeNeedDto",
                 "description": "Alternative information need, when retrieval shape is ambiguous."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -17751,11 +17751,11 @@
           "action": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/KnowledgeActionDto",
                 "description": "Answer-only typed goal; never used as retrieval text."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -17776,22 +17776,22 @@
           "depth": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/KnowledgeAnswerDepthDto",
                 "description": "Answer-only answer depth."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "format": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/KnowledgeOutputFormatDto",
                 "description": "Answer-only output format."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -18024,11 +18024,11 @@
           "fallbackReason": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/KnowledgeRouteFallbackReasonDto",
                 "description": "Present whenever `applied` differs from `requested`."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -18056,11 +18056,11 @@
           "folder": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/LocationDto",
                 "description": "Folder location for the current-folder scope."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -18276,11 +18276,11 @@
           "action": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/KnowledgeActionDto",
                 "description": "Answer action that selected a default need, when applicable."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -18291,11 +18291,11 @@
           "need": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/KnowledgeNeedDto",
                 "description": "Information need used by the template, when the reason has one."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -18385,11 +18385,11 @@
           "trace": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/KnowledgeSearchTraceDto",
                 "description": "Optional bounded trace."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -18668,11 +18668,11 @@
           "resolved": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/LocationDto",
                 "description": "Where the target would be, when it could be resolved to a location."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -19009,6 +19009,7 @@
           "sglang",
           "omlx",
           "mlxServe",
+          "unsloth",
           "openAiCompatible",
           "azureOpenAi",
           "modelStudio",
@@ -19221,10 +19222,10 @@
           "category": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/LlmTestErrorCategoryDto"
               },
               {
-                "$ref": "#/components/schemas/LlmTestErrorCategoryDto"
+                "type": "null"
               }
             ]
           },
@@ -19282,30 +19283,30 @@
           "chat": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/LlmRoleAssignmentDto"
               },
               {
-                "$ref": "#/components/schemas/LlmRoleAssignmentDto"
+                "type": "null"
               }
             ]
           },
           "embeddings": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/LlmRoleAssignmentDto"
               },
               {
-                "$ref": "#/components/schemas/LlmRoleAssignmentDto"
+                "type": "null"
               }
             ]
           },
           "image": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/LlmRoleAssignmentDto"
               },
               {
-                "$ref": "#/components/schemas/LlmRoleAssignmentDto"
+                "type": "null"
               }
             ]
           }
@@ -19505,11 +19506,11 @@
           "pmtilesLocation": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/LocationDto",
                 "description": "Local `.pmtiles` file."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -20185,11 +20186,11 @@
           "driveType": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/OneDriveDriveTypeDto",
                 "description": "The default drive's `driveType`, present once authorization has\nsucceeded at least once."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -20610,11 +20611,11 @@
           "destination": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/LocationDto",
                 "description": "Optional destination."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -20705,11 +20706,11 @@
           "verification": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/OperationVerificationDto",
                 "description": "How verification of the copied files went; absent when it was not requested or nothing\nhas been checked yet (task 0302)."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -20844,11 +20845,11 @@
           "currentEntry": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/EntryRefDto",
                 "description": "Entry currently processed."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -21165,11 +21166,11 @@
           "options": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/KnowledgeSearchOptionsDto",
                 "description": "Optional bounded option overrides."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -21291,11 +21292,11 @@
           "iconTheme": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/PluginIconThemeDto",
                 "description": "The distributable icon theme this plugin contributes, when enabled and valid (task 0095)."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -21314,22 +21315,22 @@
           "preview": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/PluginPreviewDto",
                 "description": "F3 preview renderer metadata, present only for enabled, valid plugins."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "spaPanel": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/PluginSpaPanelDto",
                 "description": "Interactive panel metadata; browser hosts report the action as unavailable."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -21840,11 +21841,11 @@
           "error": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/GeoMessageDto",
                 "description": "Set when the file cannot be read."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -22404,11 +22405,11 @@
           "fallbackReason": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/RagPlanningFallbackReasonDto",
                 "description": "Sanitized reason the single-query control was used."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -22494,11 +22495,11 @@
           "folder": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/LocationDto",
                 "description": "Folder location for current-folder scope."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -22687,11 +22688,11 @@
           "csv": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/CsvGeoOptionsDto",
                 "description": "Which columns and coordinate system to use for a CSV file; detected when omitted."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -23455,11 +23456,11 @@
           "destination": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/LocationDto",
                 "description": "Optional new destination used by explicit Save As conflict resolution."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -23591,10 +23592,10 @@
           "credential": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/LlmCredentialInputDto"
               },
               {
-                "$ref": "#/components/schemas/LlmCredentialInputDto"
+                "type": "null"
               }
             ]
           },
@@ -24087,20 +24088,20 @@
           "concept": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/SearchConceptPredicateDto"
               },
               {
-                "$ref": "#/components/schemas/SearchConceptPredicateDto"
+                "type": "null"
               }
             ]
           },
           "content": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/SearchContentPredicateDto"
               },
               {
-                "$ref": "#/components/schemas/SearchContentPredicateDto"
+                "type": "null"
               }
             ]
           },
@@ -24167,10 +24168,10 @@
           "name": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/SearchNamePredicateDto"
               },
               {
-                "$ref": "#/components/schemas/SearchNamePredicateDto"
+                "type": "null"
               }
             ]
           },
@@ -24185,10 +24186,10 @@
           "semantic": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/SearchSemanticPredicateDto"
               },
               {
-                "$ref": "#/components/schemas/SearchSemanticPredicateDto"
+                "type": "null"
               }
             ]
           },
@@ -24265,10 +24266,10 @@
           "selectedConcept": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/SearchSemanticConceptSourceDto"
               },
               {
-                "$ref": "#/components/schemas/SearchSemanticConceptSourceDto"
+                "type": "null"
               }
             ]
           }
@@ -24491,11 +24492,11 @@
           "model": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SemanticModelIdentityDto",
                 "description": "Exact model identity for a model package."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -24736,11 +24737,11 @@
           "details": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SemanticComponentErrorDetailsDto",
                 "description": "Typed actionable context, when applicable."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -25010,11 +25011,11 @@
           "activeModel": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SemanticModelSelectionDto",
                 "description": "Active profile and exact model revision."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -25043,11 +25044,11 @@
           "migration": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SemanticModelMigrationProgressDto",
                 "description": "Resumable migration state, when a full reindex is pending."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -25334,11 +25335,11 @@
           "unavailableReasonCode": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SemanticUnavailableReasonDto",
                 "description": "Stable code of `unavailableReason` that clients localise."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -25596,11 +25597,11 @@
           "unavailableReasonCode": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SemanticUnavailableReasonDto",
                 "description": "Stable code of `unavailableReason` that clients localise."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -25909,11 +25910,11 @@
           "details": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SemanticLibraryErrorDetailsDto",
                 "description": "Structured details when useful."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -26098,22 +26099,22 @@
           "gemmaMedia": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/GemmaMediaSelectionDto",
                 "description": "Current media consent, present only for a Gemma library."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "library": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SemanticLibraryIdentityDto",
                 "description": "Stable library/model identity."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -26137,11 +26138,11 @@
           "resourceProfile": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SemanticLibraryResourceProfileDto",
                 "description": "Selected resource policy."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -26300,11 +26301,11 @@
           "from": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SemanticModelSelectionDto",
                 "description": "Current selection captured by the plan."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -26901,11 +26902,11 @@
           "receipt": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SemanticInstallReceiptDto",
                 "description": "Installation receipt, or `None` when no compatible patch is available."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -27394,11 +27395,11 @@
           "location": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/LocationDto",
                 "description": "Where the entry exists now, absent for removed entries."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -27549,11 +27550,11 @@
           "snapshot": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/LocationDto",
                 "description": "Where the snapshot was written (create jobs, once finished)."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -27827,11 +27828,11 @@
               "sort": {
                 "oneOf": [
                   {
-                    "type": "null"
-                  },
-                  {
                     "$ref": "#/components/schemas/SqliteSortDto",
                     "description": "Optional sort."
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               },
@@ -28246,22 +28247,22 @@
           "archiveFormat": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ArchiveFormatDto",
                 "description": "Archive format requested by a `createArchive` or `moveToArchive` operation."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "attributeChange": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ChangeAttributesDto",
                 "description": "The change applied by a `changeAttributes` operation (task 0258)."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -28276,11 +28277,11 @@
           "destination": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/LocationDto",
                 "description": "Optional target directory or entry."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -28294,22 +28295,22 @@
           "geoTransform": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/GeoTransformDto",
                 "description": "What a `transformGeo` operation does with each file (tasks 0281, 0282)."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "imageMetadataEdit": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ImageMetadataEditDto",
                 "description": "The edit applied by an `editImageMetadata` operation (task 0274)."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -28323,11 +28324,11 @@
           "link": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/LinkRequestDto",
                 "description": "Link kind and target form for a `createLink` operation (task 0168)."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -28360,11 +28361,11 @@
           "splitFile": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SplitFileDto",
                 "description": "The options of a `splitFile` operation (task 0257)."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -28432,11 +28433,11 @@
           "structuredQuery": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SearchQueryDto",
                 "description": "Preferred versioned query representation. Legacy fields above remain\naccepted for transport compatibility."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -28492,11 +28493,11 @@
           "semanticCoverage": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SemanticSearchCoverageDto",
                 "description": "Scope coverage returned only for semantic mode."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -28999,11 +29000,11 @@
           "left": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ComparisonEntrySideDto",
                 "description": "Left-side metadata, for display."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -29014,11 +29015,11 @@
           "right": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ComparisonEntrySideDto",
                 "description": "Right-side metadata, for display."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -29073,11 +29074,11 @@
           "lastRun": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SyncRunSummaryDto",
                 "description": "Last-run summary."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -29100,11 +29101,11 @@
           "schedule": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/SyncScheduleDto",
                 "description": "Optional schedule."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -29632,11 +29633,11 @@
           "secret": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/ConnectionSecretInputDto",
                 "description": "New secret material to store, replacing any existing credential.\n`None` leaves the existing credential untouched - the secret input is\nnever pre-filled from the stored connection (spec §16, task 0103's\nfrontend requirement \"never pre-filled when editing\")."
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -29760,11 +29761,11 @@
           "headerMode": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/StructuredHeaderModeDto",
                 "description": "Optional header interpretation override."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -30268,11 +30269,11 @@
               "location": {
                 "oneOf": [
                   {
-                    "type": "null"
-                  },
-                  {
                     "$ref": "#/components/schemas/LocationDto",
                     "description": "The explicit target for push/refresh navigation. Omitted for\nbackend-resolved back/forward navigation."
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               },

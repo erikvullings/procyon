@@ -62,7 +62,7 @@ export interface SnapshotJobPageDto {
   phase: SnapshotJobPhaseDto;
   /** Folder that was recorded (create) or compared (compare). */
   root: LocationDto;
-  snapshot?: null | LocationDto;
+  snapshot?: LocationDto | null;
   /**
      * Total differences found so far.
      * @minimum 0

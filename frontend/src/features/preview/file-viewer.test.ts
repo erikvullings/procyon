@@ -1538,13 +1538,13 @@ describe('FileViewer', () => {
       ),
     );
 
-    const values = Array.from(root.querySelectorAll<HTMLInputElement>('input.select-dropdown')).map(
-      (input) => input.value,
-    );
+    const values = Array.from(
+      root.querySelectorAll<HTMLButtonElement>('button.select-dropdown'),
+    ).map((button) => button.textContent);
     expect(values).toEqual(['Semicolon', 'First row']);
     expect(root.querySelectorAll('select')).toHaveLength(0);
 
-    root.querySelectorAll<HTMLInputElement>('input.select-dropdown')[0]?.click();
+    root.querySelectorAll<HTMLButtonElement>('button.select-dropdown')[0]?.click();
     m.redraw.sync();
     Array.from(root.querySelectorAll('li'))
       .find((item) => item.textContent?.includes('Pipe'))

@@ -33,6 +33,26 @@ async fn spawn_server() -> (String, tokio::task::JoinHandle<()>) {
 }
 
 #[test]
+fn every_inline_response_has_an_openapi_31_description() {
+    let bytes = fm_server::openapi_export::canonical_json().expect("export must succeed");
+    let document: serde_json::Value = serde_json::from_slice(&bytes).expect("valid JSON");
+    for (path, item) in document["paths"].as_object().unwrap() {
+        for (method, operation) in item.as_object().unwrap() {
+            if let Some(responses) = operation["responses"].as_object() {
+                for (status, response) in responses {
+                    if response.get("$ref").is_none() {
+                        assert!(
+                            response["description"].as_str().is_some(),
+                            "missing response description: {method} {path} {status}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn canonical_json_is_byte_for_byte_stable_across_runs() {
     let first = fm_server::openapi_export::canonical_json().expect("first export must succeed");
     let second = fm_server::openapi_export::canonical_json().expect("second export must succeed");

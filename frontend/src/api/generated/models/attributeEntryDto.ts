@@ -10,7 +10,7 @@ import type { LocationDto } from './locationDto.ts';
  * Current state of one selected entry.
  */
 export interface AttributeEntryDto {
-  attributes?: null | AttributeSnapshotDto;
+  attributes?: AttributeSnapshotDto | null;
   /** File, folder or symbolic link. */
   kind: EntryKindDto;
   /** The entry. */

@@ -76,7 +76,12 @@ pub(crate) fn preflight<'a>(
         let entry = archive.by_index_raw(index).map_err(|error| {
             PackageError::Malformed(format!("package entry {index} is unreadable: {error}"))
         })?;
-        let name = entry.name().to_owned();
+        let name = entry.name().map_err(|error| {
+            PackageError::Malformed(format!(
+                "package entry {index} has an invalid name: {error}"
+            ))
+        })?;
+        let name = name.into_owned();
         if entry.encrypted() {
             return Err(PackageError::Encrypted(format!(
                 "package entry '{name}' is encrypted"
@@ -104,7 +109,11 @@ pub(crate) fn preflight<'a>(
 
 /// Names of the entries in the package, in archive order.
 pub(crate) fn part_names(archive: &Package<'_>) -> Vec<String> {
-    archive.file_names().map(str::to_owned).collect()
+    archive
+        .file_names()
+        .filter_map(Result::ok)
+        .map(std::borrow::Cow::into_owned)
+        .collect()
 }
 
 /// Reads one part, bounded by `limit` bytes.
@@ -225,13 +234,12 @@ pub(crate) fn read_relationships(
                 let mut external = false;
                 for attribute in start.attributes().flatten() {
                     match local_name(attribute.key.as_ref()).as_str() {
-                        "Id" => id = Some(String::from_utf8_lossy(&attribute.value).into_owned()),
+                        "Id" => id = Some(attribute.value.to_string()),
                         "Target" => {
-                            target = Some(String::from_utf8_lossy(&attribute.value).into_owned());
+                            target = Some(attribute.value.to_string());
                         }
                         "TargetMode" => {
-                            external = String::from_utf8_lossy(&attribute.value)
-                                .eq_ignore_ascii_case("external");
+                            external = attribute.value.eq_ignore_ascii_case("external");
                         }
                         _ => {}
                     }
@@ -351,9 +359,8 @@ pub(crate) fn xml_reader(bytes: &[u8]) -> quick_xml::Reader<&[u8]> {
 
 /// Local element name of an XML event name, with any namespace prefix
 /// removed.
-pub(crate) fn local_name(name: &[u8]) -> String {
-    let text = String::from_utf8_lossy(name);
-    text.rsplit(':').next().unwrap_or_default().to_owned()
+pub(crate) fn local_name(name: &str) -> String {
+    name.rsplit(':').next().unwrap_or_default().to_owned()
 }
 
 /// Applies the shared structural rules to one XML event: DOCTYPE declarations

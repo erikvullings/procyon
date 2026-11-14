@@ -356,7 +356,7 @@ fn preflight_package_with_expanded_limit(
         if expanded_bytes > max_expanded_bytes {
             return Err(budget_error("expanded ZIP", max_expanded_bytes));
         }
-        let name = entry.name().to_owned();
+        let name = String::from_utf8_lossy(entry.name_raw()).into_owned();
         if name.starts_with("ppt/slides/slide") && name.ends_with(".xml") {
             slide_count += 1;
             if slide_count > MAX_PPTX_SLIDES {

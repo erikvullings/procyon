@@ -10,10 +10,10 @@ import type { KnowledgeSearchReasonKindDto } from './knowledgeSearchReasonKindDt
  * One retained reason a logical search exists.
  */
 export interface KnowledgeSearchReasonDto {
-  action?: null | KnowledgeActionDto;
+  action?: KnowledgeActionDto | null;
   /** Reason kind. */
   kind: KnowledgeSearchReasonKindDto;
-  need?: null | KnowledgeNeedDto;
+  need?: KnowledgeNeedDto | null;
   /**
      * Position of the related term, when applicable.
      * @minimum 0

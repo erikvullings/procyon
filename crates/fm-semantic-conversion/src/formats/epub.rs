@@ -2,7 +2,6 @@
 
 use std::collections::{HashMap, HashSet};
 
-use quick_xml::Reader;
 use quick_xml::events::{BytesStart, Event};
 
 use crate::builder::{DocumentBuilder, VisualDraft};
@@ -218,7 +217,7 @@ fn image_sources(bytes: &[u8]) -> Result<Vec<String>, String> {
                 if let Some(source) = start.attributes().flatten().find_map(|attribute| {
                     package::local_name(attribute.key.as_ref())
                         .eq_ignore_ascii_case("src")
-                        .then(|| String::from_utf8_lossy(&attribute.value).into_owned())
+                        .then(|| attribute.value.to_string())
                 }) {
                     sources.push(source);
                 }
@@ -287,10 +286,9 @@ fn parse_container(
             Event::Start(start) | Event::Empty(start)
                 if package::local_name(start.name().as_ref()) == "rootfile" =>
             {
-                let path =
-                    attribute(&reader, start, "full-path", CONTAINER_PART)?.ok_or_else(|| {
-                        PackageError::Malformed("EPUB rootfile has no full-path".to_owned())
-                    })?;
+                let path = attribute(start, "full-path", CONTAINER_PART)?.ok_or_else(|| {
+                    PackageError::Malformed("EPUB rootfile has no full-path".to_owned())
+                })?;
                 let path = normalize_package_path(&path)?;
                 if rootfile.is_none() {
                     rootfile = Some(path);
@@ -334,7 +332,6 @@ fn parse_package_document(
                     in_spine = true;
                 } else {
                     parse_opf_entry(
-                        &reader,
                         start,
                         &local,
                         in_manifest,
@@ -348,7 +345,6 @@ fn parse_package_document(
             Event::Empty(start) => {
                 let local = package::local_name(start.name().as_ref());
                 parse_opf_entry(
-                    &reader,
                     start,
                     &local,
                     in_manifest,
@@ -384,7 +380,6 @@ fn parse_package_document(
 
 #[allow(clippy::too_many_arguments)]
 fn parse_opf_entry(
-    reader: &Reader<&[u8]>,
     start: &BytesStart<'_>,
     local: &str,
     in_manifest: bool,
@@ -394,12 +389,12 @@ fn parse_opf_entry(
     spine: &mut Vec<String>,
 ) -> Result<(), PackageError> {
     if local == "item" && in_manifest {
-        let id = required_attribute(reader, start, "id", name)?;
-        let href = required_attribute(reader, start, "href", name)?;
-        let media_type = required_attribute(reader, start, "media-type", name)?
+        let id = required_attribute(start, "id", name)?;
+        let href = required_attribute(start, "href", name)?;
+        let media_type = required_attribute(start, "media-type", name)?
             .trim()
             .to_ascii_lowercase();
-        let navigation = attribute(reader, start, "properties", name)?
+        let navigation = attribute(start, "properties", name)?
             .is_some_and(|properties| properties.split_whitespace().any(|value| value == "nav"));
         if manifest
             .insert(
@@ -417,18 +412,17 @@ fn parse_opf_entry(
             )));
         }
     } else if local == "itemref" && in_spine {
-        spine.push(required_attribute(reader, start, "idref", name)?);
+        spine.push(required_attribute(start, "idref", name)?);
     }
     Ok(())
 }
 
 fn required_attribute(
-    reader: &Reader<&[u8]>,
     start: &BytesStart<'_>,
     wanted: &str,
     part: &str,
 ) -> Result<String, PackageError> {
-    let value = attribute(reader, start, wanted, part)?.ok_or_else(|| {
+    let value = attribute(start, wanted, part)?.ok_or_else(|| {
         PackageError::Malformed(format!(
             "EPUB element '{}' in '{part}' has no '{wanted}' attribute",
             package::local_name(start.name().as_ref())
@@ -444,7 +438,6 @@ fn required_attribute(
 }
 
 fn attribute(
-    reader: &Reader<&[u8]>,
     start: &BytesStart<'_>,
     wanted: &str,
     part: &str,
@@ -455,7 +448,7 @@ fn attribute(
         })?;
         if package::local_name(attribute.key.as_ref()) == wanted {
             let value = attribute
-                .decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, reader.decoder())
+                .normalized_value(quick_xml::XmlVersion::Implicit1_0)
                 .map_err(|error| {
                     PackageError::Malformed(format!(
                         "{part} has an invalid '{wanted}' attribute: {error}"
@@ -497,7 +490,6 @@ fn parse_encryption(
                     encrypted_data_count += 1;
                 }
                 "CipherReference" => parse_cipher_reference(
-                    &reader,
                     start,
                     in_encrypted_data,
                     &mut references_in_current,
@@ -512,7 +504,6 @@ fn parse_encryption(
                     ));
                 }
                 "CipherReference" => parse_cipher_reference(
-                    &reader,
                     start,
                     in_encrypted_data,
                     &mut references_in_current,
@@ -543,7 +534,6 @@ fn parse_encryption(
 }
 
 fn parse_cipher_reference(
-    reader: &Reader<&[u8]>,
     start: &BytesStart<'_>,
     in_encrypted_data: bool,
     references_in_current: &mut u32,
@@ -554,7 +544,7 @@ fn parse_cipher_reference(
             "EPUB CipherReference is outside EncryptedData".to_owned(),
         ));
     }
-    let uri = required_attribute(reader, start, "URI", ENCRYPTION_PART)?;
+    let uri = required_attribute(start, "URI", ENCRYPTION_PART)?;
     targets.push(normalize_encryption_target(&uri)?);
     *references_in_current += 1;
     Ok(())

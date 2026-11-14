@@ -14,7 +14,7 @@ import type { KnowledgeScopeSelectorDto } from './knowledgeScopeSelectorDto.ts';
 export interface KnowledgeQueryDraftDto {
   /** Ordered retrieval subjects. */
   about?: string[];
-  action?: null | KnowledgeActionDto;
+  action?: KnowledgeActionDto | null;
   /** Answer-only constraints; never used for retrieval. */
   constraints?: string[];
   /**
@@ -22,8 +22,8 @@ export interface KnowledgeQueryDraftDto {
      * @nullable
      */
   context?: string | null;
-  depth?: null | KnowledgeAnswerDepthDto;
-  format?: null | KnowledgeOutputFormatDto;
+  depth?: KnowledgeAnswerDepthDto | null;
+  format?: KnowledgeOutputFormatDto | null;
   /** Explicit information needs. */
   needs?: KnowledgeNeedDto[];
   /** Explicit lower-priority related terms. */

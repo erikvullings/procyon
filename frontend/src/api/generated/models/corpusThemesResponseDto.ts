@@ -13,5 +13,5 @@ export interface CorpusThemesResponseDto {
   modelId: string;
   /** Typed outcome. */
   outcome: CorpusThemeOutcomeDto;
-  themes?: null | CorpusThemesDto;
+  themes?: CorpusThemesDto | null;
 }

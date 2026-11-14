@@ -12,7 +12,7 @@ import type { RagScopeKindDto } from './ragScopeKindDto.ts';
 export interface RagScopeDto {
   /** Enrolled root IDs. */
   enrolledRootIds: string[];
-  folder?: null | LocationDto;
+  folder?: LocationDto | null;
   /** Scope kind. */
   kind: RagScopeKindDto;
   /** User-visible scope label. */

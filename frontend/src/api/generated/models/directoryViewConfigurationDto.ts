@@ -19,7 +19,7 @@ export interface DirectoryViewConfigurationDto {
   foldersFirst: boolean;
   /** Grid tile size, used only when `view_mode` is `grid` (task 0134). */
   iconSize?: IconSizeDto;
-  quickFilter?: null | PersistedFilterDto;
+  quickFilter?: PersistedFilterDto | null;
   /** Whether hidden entries are shown. */
   showHidden: boolean;
   /** The active sort descriptors, in priority order. */

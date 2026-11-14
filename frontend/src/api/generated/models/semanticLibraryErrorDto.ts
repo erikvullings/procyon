@@ -11,7 +11,7 @@ import type { SemanticLibraryErrorDetailsDto } from './semanticLibraryErrorDetai
 export interface SemanticLibraryErrorDto {
   /** Stable machine-readable code. */
   code: SemanticLibraryErrorCodeDto;
-  details?: null | SemanticLibraryErrorDetailsDto;
+  details?: SemanticLibraryErrorDetailsDto | null;
   /** Safe human-readable message. */
   message: string;
   /** Request correlation identity. */

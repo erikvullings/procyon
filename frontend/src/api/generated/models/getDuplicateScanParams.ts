@@ -4,14 +4,14 @@
  */
 
 export type GetDuplicateScanParams = {
-/**
- * Zero-based offset into the result set.
- * @minimum 0
- */
-offset?: number;
-/**
- * Page size, clamped to 1 through 500.
- * @minimum 0
- */
-limit?: number;
+  /**
+   * Zero-based offset into the result set.
+   * @minimum 0
+   */
+  offset?: number;
+  /**
+   * Page size, clamped to 1 through 500.
+   * @minimum 0
+   */
+  limit?: number;
 };

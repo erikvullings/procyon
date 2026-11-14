@@ -520,7 +520,7 @@ fn read_xmp(bytes: &[u8], groups: &mut Vec<ImageTagGroup>) {
                 let (Event::Start(start) | Event::Empty(start)) = event else {
                     continue;
                 };
-                let name = String::from_utf8_lossy(start.name().as_ref()).into_owned();
+                let name = start.name().as_ref().to_owned();
                 if is_start
                     && name == "rdf:li"
                     && let Some((_, values)) = property.as_mut()
@@ -530,14 +530,13 @@ fn read_xmp(bytes: &[u8], groups: &mut Vec<ImageTagGroup>) {
                 }
                 if name == "rdf:Description" && depth == 2 {
                     for attribute in start.attributes().flatten() {
-                        let key = String::from_utf8_lossy(attribute.key.as_ref()).into_owned();
+                        let key = attribute.key.as_ref().to_owned();
                         if key.starts_with("xmlns") || key == "rdf:about" {
                             continue;
                         }
-                        if let Ok(value) = attribute.decoded_and_normalized_value(
-                            quick_xml::XmlVersion::Implicit1_0,
-                            reader.decoder(),
-                        ) {
+                        if let Ok(value) =
+                            attribute.normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                        {
                             properties.push((key, vec![value.into_owned()]));
                         }
                     }
@@ -550,17 +549,18 @@ fn read_xmp(bytes: &[u8], groups: &mut Vec<ImageTagGroup>) {
                 }
             }
             Ok(Event::Text(text)) => {
-                if let (Some((_, values)), Ok(text)) = (property.as_mut(), text.decode())
+                if let Some((_, values)) = property.as_mut()
                     && let Some(last) = values.last_mut()
                 {
                     last.push_str(&text);
                 }
             }
             Ok(Event::GeneralRef(reference)) => {
-                if let (Some((_, values)), Ok(name)) = (property.as_mut(), reference.decode())
+                let name: &str = &reference;
+                if let Some((_, values)) = property.as_mut()
                     && let Some(last) = values.last_mut()
                 {
-                    last.push_str(match name.as_ref() {
+                    last.push_str(match name {
                         "amp" => "&",
                         "lt" => "<",
                         "gt" => ">",

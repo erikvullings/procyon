@@ -4,14 +4,14 @@
  */
 
 export type ListOperationsParams = {
-/**
- * Zero-based entry offset.
- * @minimum 0
- */
-offset?: number;
-/**
- * Page size, clamped to 1 through 100.
- * @minimum 0
- */
-limit?: number;
+  /**
+   * Zero-based entry offset.
+   * @minimum 0
+   */
+  offset?: number;
+  /**
+   * Page size, clamped to 1 through 100.
+   * @minimum 0
+   */
+  limit?: number;
 };

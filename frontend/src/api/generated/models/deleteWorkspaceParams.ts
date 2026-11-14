@@ -4,10 +4,10 @@
  */
 
 export type DeleteWorkspaceParams = {
-/**
- * The revision the caller last observed; enforces the same optimistic
- * concurrency check as every other mutation (spec §5.3.10).
- * @minimum 0
- */
-expectedRevision?: number;
+  /**
+   * The revision the caller last observed; enforces the same optimistic
+   * concurrency check as every other mutation (spec §5.3.10).
+   * @minimum 0
+   */
+  expectedRevision?: number;
 };

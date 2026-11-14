@@ -323,7 +323,7 @@ button.fm-busy-button[aria-busy="true"]::before {
 }
 
 .fm-app-shell .input-field input:not([type="checkbox"]),
-.fm-app-shell .select-wrapper input.select-dropdown,
+.fm-app-shell .select-wrapper button.select-dropdown,
 .fm-app-shell select.browser-default {
   box-sizing: border-box;
   min-height: var(--fm-control-height);
@@ -356,7 +356,7 @@ button.fm-busy-button[aria-busy="true"]::before {
 }
 
 .fm-app-shell .input-field input:not([type="checkbox"]):focus,
-.fm-app-shell .select-wrapper input.select-dropdown:focus,
+.fm-app-shell .select-wrapper button.select-dropdown:focus,
 .fm-app-shell select.browser-default:focus {
   outline: none;
 }
@@ -383,13 +383,13 @@ button.fm-busy-button[aria-busy="true"]::before {
 }
 
 .fm-app-shell .input-field input:not([type="checkbox"]),
-.fm-app-shell .select-wrapper input.select-dropdown,
+.fm-app-shell .select-wrapper button.select-dropdown,
 .fm-app-shell select.browser-default {
   width: 100%;
   line-height: calc(var(--fm-control-height) - 2px);
 }
 
-.fm-app-shell .select-wrapper input.select-dropdown {
+.fm-app-shell .select-wrapper button.select-dropdown {
   padding-right: 1.75rem;
   opacity: 1;
   -webkit-text-fill-color: currentColor;
@@ -408,27 +408,22 @@ button.fm-busy-button[aria-busy="true"]::before {
   z-index: 2;
 }
 
-/*
- * mm's `disabled` prop on Select blocks opening/keyboard interaction and
- * sets `tabindex="-1"` on `.select-wrapper`, but never sets the underlying
- * trigger `<input>`'s `disabled` attribute - so there is no `:disabled` to
- * hook a look into. Style the `tabindex` signal it does set instead.
- */
-.fm-app-shell .select-wrapper[tabindex="-1"] {
+/* Disabled Select wrappers and their button triggers share the muted field treatment. */
+.fm-app-shell .select-wrapper:has(button:disabled) {
   cursor: not-allowed;
 }
 
-.fm-app-shell .select-wrapper[tabindex="-1"] input.select-dropdown {
+.fm-app-shell .select-wrapper button.select-dropdown:disabled {
   background: var(--fm-hover);
   color: var(--fm-text-muted);
   cursor: not-allowed;
 }
 
-.fm-app-shell .select-wrapper[tabindex="-1"] svg.caret {
+.fm-app-shell .select-wrapper:has(button:disabled) svg.caret {
   opacity: 0.4;
 }
 
-.fm-app-shell .select-wrapper input.select-dropdown:focus + svg.caret {
+.fm-app-shell .select-wrapper button.select-dropdown:focus + svg.caret {
   transform: translateY(-50%) rotate(180deg);
 }
 

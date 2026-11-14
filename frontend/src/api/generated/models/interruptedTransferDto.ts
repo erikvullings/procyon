@@ -20,7 +20,7 @@ export interface InterruptedTransferDto {
   committedItems: number;
   /** When the job was accepted. */
   createdAt: string;
-  destination?: null | LocationDto;
+  destination?: LocationDto | null;
   /** What the job was doing. */
   kind: OperationKindDto;
   /** Identifier of the interrupted job. */

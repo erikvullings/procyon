@@ -32,7 +32,7 @@ export interface KnowledgeSearchResultDto {
      * @minimum 0
      */
   tokenCount: number;
-  trace?: null | KnowledgeSearchTraceDto;
+  trace?: KnowledgeSearchTraceDto | null;
   /**
      * Evidence rows dropped by application authorization after retrieval.
      * @minimum 0

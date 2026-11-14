@@ -58,5 +58,5 @@ export interface SemanticEnrolmentEstimateDto {
      * @nullable
      */
   unavailableReason?: string | null;
-  unavailableReasonCode?: null | SemanticUnavailableReasonDto;
+  unavailableReasonCode?: SemanticUnavailableReasonDto | null;
 }

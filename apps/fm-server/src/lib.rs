@@ -40,7 +40,7 @@ use state::AppState;
 /// (which the `export-openapi` CLI command uses). Sharing one builder means
 /// the served and exported documents can never drift apart.
 fn api_router() -> OpenApiRouter<AppState> {
-    OpenApiRouter::with_openapi(routes::api_doc())
+    let mut router = OpenApiRouter::with_openapi(routes::api_doc())
         .routes(utoipa_axum::routes!(routes::health::get_health))
         .routes(utoipa_axum::routes!(
             routes::diagnostics::get_diagnostics,
@@ -462,7 +462,36 @@ fn api_router() -> OpenApiRouter<AppState> {
         ))
         .routes(utoipa_axum::routes!(
             routes::onedrive_authorization::cancel_onedrive_authorization
-        ))
+        ));
+    // Utoipa 6 omits empty descriptions, but OpenAPI 3.1 requires them on responses.
+    for path in router.get_openapi_mut().paths.paths.values_mut() {
+        for operation in [
+            &mut path.get,
+            &mut path.put,
+            &mut path.post,
+            &mut path.delete,
+            &mut path.options,
+            &mut path.head,
+            &mut path.patch,
+            &mut path.trace,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            for (status, response) in &mut operation.responses.responses {
+                if let utoipa::openapi::RefOr::T(response) = response
+                    && response.description.is_empty()
+                {
+                    response.description = axum::http::StatusCode::from_bytes(status.as_bytes())
+                        .ok()
+                        .and_then(|status| status.canonical_reason())
+                        .unwrap_or("Response")
+                        .to_owned();
+                }
+            }
+        }
+    }
+    router
 }
 
 /// Builds the OpenAPI document without constructing application state or

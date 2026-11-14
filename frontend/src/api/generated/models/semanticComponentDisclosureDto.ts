@@ -33,7 +33,7 @@ export interface SemanticComponentDisclosureDto {
   kind: SemanticComponentKindDto;
   /** License displayed before consent. */
   license: SemanticLicenseDto;
-  model?: null | SemanticModelIdentityDto;
+  model?: SemanticModelIdentityDto | null;
   /** Exact signed component version. */
   version: string;
 }

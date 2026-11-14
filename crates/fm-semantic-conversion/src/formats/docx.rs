@@ -99,13 +99,13 @@ pub(crate) fn convert(
                 "pStyle" if in_paragraph_properties => {
                     style = empty.attributes().flatten().find_map(|attribute| {
                         (package::local_name(attribute.key.as_ref()) == "val")
-                            .then(|| String::from_utf8_lossy(&attribute.value).into_owned())
+                            .then(|| attribute.value.to_string())
                     });
                 }
                 "outlineLvl" if in_paragraph_properties && style.is_none() => {
                     if let Some(level) = empty.attributes().flatten().find_map(|attribute| {
                         (package::local_name(attribute.key.as_ref()) == "val")
-                            .then(|| String::from_utf8_lossy(&attribute.value).into_owned())
+                            .then(|| attribute.value.to_string())
                     }) && let Ok(level) = level.parse::<u32>()
                     {
                         style = Some(format!("Heading{}", level + 1));
@@ -122,11 +122,9 @@ pub(crate) fn convert(
                 _ => {}
             },
             Event::Text(text) => {
-                let decoded = text.decode().map_err(|error| {
-                    PackageError::Malformed(format!("word/document.xml has invalid text: {error}"))
-                })?;
+                let decoded: &str = text;
                 if !decoded.is_empty() {
-                    push_text(&mut paragraph, &mut table, &decoded);
+                    push_text(&mut paragraph, &mut table, decoded);
                 }
             }
             Event::End(end) => match package::local_name(end.name().as_ref()).as_str() {
@@ -196,7 +194,7 @@ fn collect_image_reference(
             package::local_name(attribute.key.as_ref()).as_str(),
             "embed" | "link"
         )
-        .then(|| String::from_utf8_lossy(&attribute.value).into_owned())
+        .then(|| attribute.value.to_string())
     }) {
         references.push((
             id,

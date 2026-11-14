@@ -9,7 +9,7 @@ import type { LocationDto } from './locationDto.ts';
  * Reads a geographic file (`POST /api/v1/files/geo/read`).
  */
 export interface ReadGeoFileRequestDto {
-  csv?: null | CsvGeoOptionsDto;
+  csv?: CsvGeoOptionsDto | null;
   /** The GeoJSON, GPX, KML, KMZ or delimited-text (CSV) file. */
   location: LocationDto;
 }

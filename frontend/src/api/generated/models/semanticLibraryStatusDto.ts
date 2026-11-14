@@ -13,8 +13,8 @@ import type { SemanticRootStatusDto } from './semanticRootStatusDto.ts';
 export interface SemanticLibraryStatusDto {
   /** Whether a library is configured. */
   available: boolean;
-  gemmaMedia?: null | GemmaMediaSelectionDto;
-  library?: null | SemanticLibraryIdentityDto;
+  gemmaMedia?: GemmaMediaSelectionDto | null;
+  library?: SemanticLibraryIdentityDto | null;
   /** Explicit retention disclosure. */
   normalizedExcerptsRetainedLocally: boolean;
   /** Whether ingestion is paused. */
@@ -25,7 +25,7 @@ export interface SemanticLibraryStatusDto {
      * @nullable
      */
   reconciliationIntervalSeconds?: number | null;
-  resourceProfile?: null | SemanticLibraryResourceProfileDto;
+  resourceProfile?: SemanticLibraryResourceProfileDto | null;
   /**
      * Optimistic mutation revision.
      * @minimum 0

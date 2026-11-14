@@ -4,9 +4,9 @@
  */
 
 export type RestartInterruptedTransferParams = {
-/**
- * Continue copies from the partials that can be proven instead of starting over
- * (task 0303). Refused when nothing in the transfer can be resumed.
- */
-resume?: boolean;
+  /**
+   * Continue copies from the partials that can be proven instead of starting over
+   * (task 0303). Refused when nothing in the transfer can be resumed.
+   */
+  resume?: boolean;
 };

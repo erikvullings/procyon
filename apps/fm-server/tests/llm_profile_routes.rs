@@ -41,9 +41,17 @@ async fn profile_crud_clone_export_and_test_never_echo_secret_material() {
         .json()
         .await
         .unwrap();
-    assert_eq!(presets.as_array().unwrap().len(), 10);
+    assert_eq!(presets.as_array().unwrap().len(), 11);
     assert_eq!(presets[5]["preset"], "mlxServe");
     assert_eq!(presets[5]["baseUrl"], "http://127.0.0.1:11234");
+    let unsloth = presets
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|preset| preset["preset"] == "unsloth")
+        .expect("the browser host is offered Unsloth Studio too, so the image role can name a local server");
+    assert_eq!(unsloth["name"], "Unsloth Studio");
+    assert_eq!(unsloth["baseUrl"], "http://127.0.0.1:8888");
     let studio = presets
         .as_array()
         .unwrap()

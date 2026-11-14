@@ -10,7 +10,7 @@ import type { LocationDto } from './locationDto.ts';
 export interface SaveEditableFileRequestDto {
   /** New UTF-8 content. */
   content: string;
-  destination?: null | LocationDto;
+  destination?: LocationDto | null;
   /** Revision returned by the last load/save. */
   expectedRevision: string;
   /** File to replace. */
