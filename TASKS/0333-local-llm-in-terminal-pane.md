@@ -114,3 +114,14 @@ Cross-cutting:
   Cmd+click on a row types its absolute path, shell-quoted (`terminal-paths.ts`), at the active
   terminal's prompt, without Enter. Cmd+click no longer toggles selection; Ctrl+click still does.
   Not verified visually: overlay scrolling and highlight colours in the Tauri app. Uncommitted.
+- 2026-11-14 Claude: Assistant UI moved to a bottom strip under the output (Warp-style: input and
+  assistant content sit below the blocks). `terminal-drawer.ts` `stripView` renders the consent
+  prompt, the suggestion and the answer; the strip only takes the room it needs (max 45% of the
+  drawer, scrolls inside). The drawer is a column (output, then strip) and its default height is
+  360px (was 280px). Not visually verified in the Tauri app. Uncommitted.
+- 2026-11-14 Claude: Keyboard shortcuts for the assistant and blocks. While an answer is shown:
+  Enter inserts it (not run), Ctrl+E edits it in a field (Enter inserts, Escape cancels), Ctrl+C
+  or Escape rejects it. Otherwise Ctrl+C reaches the shell. Consent: Alt+Y enables, Alt+N declines.
+  Last command block: Ctrl+Shift+E explain, Ctrl+Shift+F fix (failed only), Ctrl+Shift+C copy
+  output, Ctrl+Shift+R run again. Suggestion: → accepts (unchanged). Buttons show their shortcut.
+  Uncommitted; not verified in the Tauri app.

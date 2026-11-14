@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TerminalClient } from './terminal-client';
 import {
   handleTerminalKeyEvent,
+  questionAtPrompt,
   showTerminalSurface,
   TerminalDrawer,
   terminalHost,
@@ -435,7 +436,7 @@ describe('TerminalDrawer questions with #', () => {
     );
 
     const insert = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent === 'Insert at prompt',
+      (button) => button.textContent?.startsWith('Insert at prompt') === true,
     );
     insert?.click();
 
@@ -443,5 +444,347 @@ describe('TerminalDrawer questions with #', () => {
       expect(write).toHaveBeenLastCalledWith('session-1', new TextEncoder().encode('ls -la')),
     );
     await vi.waitFor(() => expect(root.querySelector('.fm-terminal-assist-panel')).toBeNull());
+  });
+});
+
+describe('TerminalDrawer consent prompt', () => {
+  let root: HTMLElement;
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false, addListener: vi.fn(), removeListener: vi.fn() })),
+    );
+    root = document.createElement('div');
+    document.body.append(root);
+  });
+
+  afterEach(() => {
+    m.mount(root, null);
+    root.remove();
+    vi.unstubAllGlobals();
+  });
+
+  function consentButton(label: string): HTMLButtonElement | undefined {
+    return [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.startsWith(label) === true,
+    );
+  }
+
+  it('goes away once the choice is saved', async () => {
+    let choice: 'unset' | 'enabled' | 'disabled' = 'unset';
+    const save = vi.fn(async (next: 'enabled' | 'disabled') => {
+      choice = next;
+    });
+    const client: TerminalClient = {
+      open: vi.fn(async () => 'session-1'),
+      write: vi.fn(async () => undefined),
+      resize: vi.fn(async () => undefined),
+      close: vi.fn(async () => true),
+      assist: vi.fn(async () => ({ text: '' })),
+    };
+    m.mount(root, {
+      view: () =>
+        m(TerminalDrawer, {
+          open: true,
+          tabKey: 'pane-1:tab-1',
+          location: { providerId: 'local', uri: 'file:///home' },
+          client,
+          onToggle: vi.fn(),
+          shellIntegration: choice,
+          onShellIntegrationChoice: save,
+        }),
+    });
+    await vi.waitFor(() => expect(consentButton('Enable')).toBeDefined());
+
+    consentButton('Enable')?.click();
+
+    await vi.waitFor(() => expect(save).toHaveBeenCalledWith('enabled'));
+    await vi.waitFor(() => expect(consentButton('Enable')).toBeUndefined());
+    expect(root.querySelector('.fm-terminal-consent')).toBeNull();
+  });
+});
+
+describe('TerminalDrawer after inserting a generated command', () => {
+  let root: HTMLElement;
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false, addListener: vi.fn(), removeListener: vi.fn() })),
+    );
+    root = document.createElement('div');
+    document.body.append(root);
+  });
+
+  afterEach(() => {
+    m.mount(root, null);
+    root.remove();
+    vi.unstubAllGlobals();
+  });
+
+  it('still forwards Enter and Ctrl+C to the shell', async () => {
+    const write = vi.fn<TerminalClient['write']>(async () => undefined);
+    const client: TerminalClient = {
+      open: vi.fn(async () => 'session-1'),
+      write,
+      resize: vi.fn(async () => undefined),
+      close: vi.fn(async () => true),
+      assist: vi.fn(async () => ({ text: 'ls -la' })),
+    };
+    m.mount(root, {
+      view: () =>
+        m(TerminalDrawer, {
+          open: true,
+          tabKey: 'pane-1:tab-1',
+          location: { providerId: 'local', uri: 'file:///home' },
+          client,
+          onToggle: vi.fn(),
+          shellIntegration: 'disabled',
+        }),
+    });
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')).not.toBeNull(),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const textarea = root.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea');
+    if (textarea === null) throw new Error('xterm textarea missing');
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', {
+      value: { getData: () => '#list files' },
+    });
+    textarea.dispatchEvent(paste);
+    await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    Object.defineProperty(enter, 'keyCode', { value: 13 });
+    textarea.dispatchEvent(enter);
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-terminal-assist-text')?.textContent).toBe('ls -la'),
+    );
+    const insert = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.startsWith('Insert at prompt') === true,
+    );
+    insert?.click();
+    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(3));
+
+    const submit = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    Object.defineProperty(submit, 'keyCode', { value: 13 });
+    textarea.dispatchEvent(submit);
+    const interrupt = new KeyboardEvent('keydown', {
+      key: 'c',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(interrupt, 'keyCode', { value: 67 });
+    textarea.dispatchEvent(interrupt);
+
+    await vi.waitFor(() =>
+      expect(write.mock.calls.map(([, data]) => [...data])).toContainEqual([3]),
+    );
+  });
+});
+
+describe('TerminalDrawer # after editing keys', () => {
+  let root: HTMLElement;
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false, addListener: vi.fn(), removeListener: vi.fn() })),
+    );
+    root = document.createElement('div');
+    document.body.append(root);
+  });
+
+  afterEach(() => {
+    m.mount(root, null);
+    root.remove();
+    vi.unstubAllGlobals();
+  });
+
+  it('still asks when the line was edited with an arrow key first', async () => {
+    const write = vi.fn<TerminalClient['write']>(async () => undefined);
+    const assist = vi.fn(async () => ({ text: 'ls -la' }));
+    let echo: ((event: { type: 'output'; data: number[] }) => void) | undefined;
+    const client: TerminalClient = {
+      open: vi.fn(async (_location, _cols, _rows, output) => {
+        echo = output;
+        return 'session-1';
+      }),
+      write,
+      resize: vi.fn(async () => undefined),
+      close: vi.fn(async () => true),
+      assist,
+    };
+    m.mount(root, {
+      view: () =>
+        m(TerminalDrawer, {
+          open: true,
+          tabKey: 'pane-1:tab-1',
+          location: { providerId: 'local', uri: 'file:///home' },
+          client,
+          onToggle: vi.fn(),
+          shellIntegration: 'disabled',
+        }),
+    });
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')).not.toBeNull(),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const textarea = root.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea');
+    if (textarea === null) throw new Error('xterm textarea missing');
+    const key = (name: string, keyCode: number) => {
+      const event = new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'keyCode', { value: keyCode });
+      textarea.dispatchEvent(event);
+    };
+    const paste = (text: string) => {
+      const event = new Event('paste', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'clipboardData', { value: { getData: () => text } });
+      textarea.dispatchEvent(event);
+      // The shell echoes what was typed onto the prompt line.
+      echo?.({ type: 'output', data: [...new TextEncoder().encode(`user % ${text}`)] });
+    };
+
+    await vi.waitFor(() => expect(echo).toBeDefined());
+    key('ArrowUp', 38);
+    await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+    paste('# How to list all files sorted by size');
+    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(2));
+    key('Enter', 13);
+
+    await vi.waitFor(() =>
+      expect(assist).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'command',
+          request: 'How to list all files sorted by size',
+        }),
+      ),
+    );
+    const sent = write.mock.calls.map(([, data]) => [...data]);
+    expect(sent.some(([byte]) => byte === 13)).toBe(false);
+  });
+});
+
+describe('questionAtPrompt', () => {
+  it('reads a question from the tracked input when it is known', () => {
+    expect(questionAtPrompt({ text: '# list files', known: true }, '')).toBe('list files');
+  });
+
+  it('reads a question from the screen line when the tracked input is unknown', () => {
+    expect(questionAtPrompt({ text: '', known: false }, 'user % # list files')).toBe('list files');
+    expect(questionAtPrompt({ text: '', known: false }, '# list files')).toBe('list files');
+  });
+
+  it('does not take a # comment after a command as a question', () => {
+    expect(questionAtPrompt({ text: '', known: false }, 'user % ls # list files')).toBeUndefined();
+    expect(questionAtPrompt({ text: 'ls # x', known: true }, '')).toBeUndefined();
+  });
+});
+
+describe('TerminalDrawer keyboard shortcuts for answers', () => {
+  let root: HTMLElement;
+  let write: ReturnType<typeof vi.fn<TerminalClient['write']>>;
+
+  beforeEach(async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false, addListener: vi.fn(), removeListener: vi.fn() })),
+    );
+    root = document.createElement('div');
+    document.body.append(root);
+    write = vi.fn<TerminalClient['write']>(async () => undefined);
+    const client: TerminalClient = {
+      open: vi.fn(async () => 'session-1'),
+      write,
+      resize: vi.fn(async () => undefined),
+      close: vi.fn(async () => true),
+      assist: vi.fn(async () => ({ text: 'ls -la' })),
+    };
+    m.mount(root, {
+      view: () =>
+        m(TerminalDrawer, {
+          open: true,
+          tabKey: 'pane-1:tab-1',
+          location: { providerId: 'local', uri: 'file:///home' },
+          client,
+          onToggle: vi.fn(),
+          shellIntegration: 'disabled',
+        }),
+    });
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')).not.toBeNull(),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  afterEach(() => {
+    m.mount(root, null);
+    root.remove();
+    vi.unstubAllGlobals();
+  });
+
+  function textarea(): HTMLTextAreaElement {
+    const element = root.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea');
+    if (element === null) throw new Error('xterm textarea missing');
+    return element;
+  }
+
+  function press(target: EventTarget, key: string, init: KeyboardEventInit = {}, keyCode = 0) {
+    const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init });
+    if (keyCode !== 0) Object.defineProperty(event, 'keyCode', { value: keyCode });
+    target.dispatchEvent(event);
+  }
+
+  function sent(): number[][] {
+    return write.mock.calls.map(([, data]) => [...data]);
+  }
+
+  async function askForAnswer(): Promise<void> {
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', { value: { getData: () => '#list files' } });
+    textarea().dispatchEvent(paste);
+    await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+    press(textarea(), 'Enter', {}, 13);
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-terminal-assist-text')?.textContent).toBe('ls -la'),
+    );
+  }
+
+  it('inserts a shown answer with Enter, without sending Enter to the shell', async () => {
+    await askForAnswer();
+    press(textarea(), 'Enter', {}, 13);
+
+    await vi.waitFor(() => expect(sent()).toContainEqual([...new TextEncoder().encode('ls -la')]));
+    expect(sent().some(([byte]) => byte === 13)).toBe(false);
+    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-assist-panel')).toBeNull());
+  });
+
+  it('rejects a shown answer with Ctrl+C, and sends Ctrl+C to the shell when no answer is shown', async () => {
+    await askForAnswer();
+    press(textarea(), 'c', { ctrlKey: true }, 67);
+    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-assist-panel')).toBeNull());
+    expect(sent().some(([byte]) => byte === 3)).toBe(false);
+
+    press(textarea(), 'c', { ctrlKey: true }, 67);
+    await vi.waitFor(() => expect(sent()).toContainEqual([3]));
+  });
+
+  it('edits a shown answer with Ctrl+E before inserting it', async () => {
+    await askForAnswer();
+    press(textarea(), 'e', { ctrlKey: true });
+
+    const edit = await vi.waitFor(() => {
+      const element = root.querySelector<HTMLInputElement>('.fm-terminal-assist-edit');
+      if (element === null) throw new Error('edit field missing');
+      return element;
+    });
+    expect(edit.value).toBe('ls -la');
+    edit.value = 'ls -lh';
+    edit.dispatchEvent(new Event('input'));
+    press(edit, 'Enter');
+
+    await vi.waitFor(() => expect(sent()).toContainEqual([...new TextEncoder().encode('ls -lh')]));
   });
 });

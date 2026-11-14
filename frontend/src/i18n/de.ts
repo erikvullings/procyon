@@ -1282,6 +1282,10 @@ export const de = {
     loadFailed: 'Unterhaltungen konnten nicht geladen werden.',
   },
   image: {
+    sourceUnsupported: 'Dieses Bildmodell kann nicht mit einem vorhandenen Bild beginnen.',
+    sourceUnusable:
+      'Diese Datei kann nicht als Ausgangsbild verwendet werden. Wählen Sie ein PNG-, JPEG- oder WebP-Bild.',
+    sourceTooLarge: 'Dieses Bild ist zu groß, um damit zu beginnen. Wählen Sie ein kleineres.',
     actionTitle: 'Bilder erstellen',
     style: 'Stil',
     styleNone: 'Kein Stil',
@@ -1965,6 +1969,9 @@ export const de = {
     statusNeedsConsent:
       'Dieser Endpunkt benötigt eine Zustimmung in den Einstellungen: öffne ihn oben und speichere mit Zustimmung.',
     image: 'Bilder erstellen',
+    allowCloudImage: 'Cloud-Nutzung für Bilderstellung erlauben',
+    cloudHintImage:
+      'Die von Ihnen eingegebenen Wörter werden an diesen Cloud-Endpunkt gesendet; die Bilder kommen von ihm zurück. Aktivieren Sie dies nur, wenn Sie damit einverstanden sind.',
     imageModelHint:
       'Die meisten Modelle können nicht zeichnen. Nennen Sie das Modell, das es kann; das Chatmodell eines Endpunkts kann das meist nicht.',
   },
@@ -2652,6 +2659,7 @@ export const de = {
       'Befehlsblöcke aktivieren? Procyon startet zsh und bash mit eigenen Hooks und lädt weiterhin Ihre eigenen Startdateien. Ihre Dotfiles bleiben unverändert. Fragen mit # funktionieren in beiden Fällen.',
     consentEnable: 'Aktivieren',
     consentDecline: 'Nicht jetzt',
+    assistEdit: 'Bearbeiten',
   },
   contextMenu: {
     directoryActions: 'Verzeichnisaktionen',
@@ -2932,6 +2940,8 @@ export const de = {
     versatiles: 'Vektorstil, weltweit, Community-Server.',
   },
   rejectionReason: {
+    imageSourceUnusable: 'Diese Datei kann nicht als Ausgangsbild verwendet werden.',
+    imageSourceTooLarge: 'Das Ausgangsbild ist zu groß.',
     imageSourceUnsupported: 'Dieses Bildmodell kann nicht mit einem vorhandenen Bild beginnen.',
     workspaceInvalid: 'Der Arbeitsbereich ist ungültig.',
     paneNotFound: 'Dieser Bereich existiert in diesem Arbeitsbereich nicht mehr.',

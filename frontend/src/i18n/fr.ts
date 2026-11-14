@@ -1268,6 +1268,11 @@ export const fr = {
     loadFailed: 'Impossible de charger les conversations.',
   },
   image: {
+    sourceUnsupported: 'Ce modèle d’image ne peut pas partir d’une image existante.',
+    sourceUnusable:
+      'Ce fichier ne peut pas servir d’image de départ. Choisissez une image PNG, JPEG ou WebP.',
+    sourceTooLarge:
+      'Cette image est trop grande pour servir de départ. Choisissez-en une plus petite.',
     actionTitle: 'Génération d’image',
     style: 'Style',
     styleNone: 'Sans style',
@@ -1950,6 +1955,9 @@ export const fr = {
     statusNeedsConsent:
       'Ce point de terminaison nécessite un consentement dans les paramètres : ouvrez-le ci-dessus et enregistrez avec consentement.',
     image: 'Génération d’image',
+    allowCloudImage: 'Autoriser l’usage cloud pour la génération d’images',
+    cloudHintImage:
+      'Les mots que vous saisissez sont envoyés à ce point de terminaison cloud, et les images en reviennent. Ne activez cette option que si vous l’acceptez.',
     imageModelHint:
       'La plupart des modèles ne savent pas dessiner. Nommez celui qui le sait ; le modèle de discussion d’un point de terminaison ne le sait généralement pas.',
   },
@@ -2644,6 +2652,7 @@ export const fr = {
       'Activer les blocs de commandes ? Procyon lance zsh et bash avec ses crochets et charge toujours vos propres fichiers de démarrage. Vos fichiers de configuration restent inchangés. Les questions avec # fonctionnent dans les deux cas.',
     consentEnable: 'Activer',
     consentDecline: 'Pas maintenant',
+    assistEdit: 'Modifier',
   },
   contextMenu: {
     directoryActions: 'Actions de répertoire',
@@ -2914,6 +2923,8 @@ export const fr = {
     versatiles: 'Style vectoriel, monde entier, serveur communautaire.',
   },
   rejectionReason: {
+    imageSourceUnusable: 'Ce fichier ne peut pas servir d’image de départ.',
+    imageSourceTooLarge: 'L’image de départ est trop grande.',
     imageSourceUnsupported: 'Ce modèle d’image ne peut pas partir d’une image existante.',
     workspaceInvalid: 'L’espace de travail n’est pas valide.',
     paneNotFound: 'Ce panneau n’existe plus dans cet espace de travail.',

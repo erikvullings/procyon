@@ -89,6 +89,8 @@ export interface TerminalKeyHandlers {
   readonly onFocusFolder?: () => void;
   /** Accepts the shown suggestion. Returns whether one was accepted. */
   readonly onAcceptSuggestion?: () => boolean;
+  /** The assistant's and block keys (Enter, Ctrl+E, Ctrl+C, ...). Returns whether it used the key. */
+  readonly onAssistantKey?: (event: KeyboardEvent) => boolean;
 }
 
 /**
@@ -109,6 +111,11 @@ export function handleTerminalKeyEvent(
     ((!event.ctrlKey && (event.key === 'F12' || event.code === 'F12')) ||
       (event.ctrlKey && (event.key === '`' || event.code === 'Backquote')));
   if (event.type !== 'keydown') return true;
+  if (handlers.onAssistantKey?.(event) === true) {
+    event.preventDefault();
+    event.stopPropagation();
+    return false;
+  }
   if (bareModifiers && !event.ctrlKey && event.key === 'ArrowRight') {
     if (handlers.onAcceptSuggestion?.() === true) {
       event.preventDefault();
@@ -181,6 +188,24 @@ function blockTranscript(live: LiveTerminal, block: CommandBlock<IMarker>): stri
   return transcriptTail([head, ...linesText(live.terminal, outputMark.line, endMark.line)]);
 }
 
+/** The text of the terminal's cursor line (the line being edited), without its prompt-free trailing blanks. */
+function cursorLine(terminal: Terminal): string {
+  const buffer = terminal.buffer.active;
+  return buffer.getLine(buffer.baseY + buffer.cursorY)?.translateToString(true) ?? '';
+}
+
+/**
+ * The question on the line being submitted, if it is one (`#` at the start of the line, or after
+ * the prompt's last character). The tracked input is used when it is known; otherwise, after
+ * editing keys such as arrows, the line as shown on screen is read. Returns `undefined` when the
+ * line is not a question; `''` for a bare `#`.
+ */
+export function questionAtPrompt(typed: TypedInput, line: string): string | undefined {
+  if (typed.known && typed.text.startsWith('#')) return typed.text.slice(1).trim();
+  const match = /(?:^|[%$>❯»]\s+)#\s*(.*)$/.exec(line.trimEnd());
+  return match === null ? undefined : (match[1] ?? '').trim();
+}
+
 /** Shell text as coloured spans, so commands, options and strings stand apart in the overlay. */
 function highlightedShell(text: string): m.Children {
   return highlightShell(text).map((token) =>
@@ -238,6 +263,8 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   let observer: ResizeObserver | undefined;
   let currentAttrs: TerminalDrawerAttrs | undefined;
   let panel: AssistPanel | undefined;
+  /** The command being edited with Ctrl+E before it is inserted; `undefined` when not editing. */
+  let editing: string | undefined;
 
   /** Asks the chat endpoint about text from one terminal. Nothing is run; the answer is shown. */
   function runAssist(
@@ -285,6 +312,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     void attrs.client.write(live.sessionId, new TextEncoder().encode(command));
     live.terminal.focus();
     panel = undefined;
+    editing = undefined;
     m.redraw();
   }
 
@@ -342,12 +370,23 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   }
 
   /** The actions shown on a finished block's prompt line. */
+  /** The output of a finished block, as plain text. */
+  function blockOutput(live: LiveTerminal, block: CommandBlock<IMarker>): string {
+    return linesText(live.terminal, block.outputMark.line, block.endMark.line).join('\n');
+  }
+
   function blockActions(live: LiveTerminal, block: CommandBlock<IMarker>): m.Children {
     const failed = block.exitCode !== 0;
-    const action = (label: string, icon: m.Children, onclick: () => void) =>
+    const action = (label: string, shortcut: string, icon: m.Children, onclick: () => void) =>
       m(
         'button.fm-terminal-block-action',
-        { type: 'button', title: label, 'aria-label': label, onclick },
+        {
+          type: 'button',
+          title: `${label} (${shortcut})`,
+          'aria-label': label,
+          'aria-keyshortcuts': shortcut,
+          onclick,
+        },
         icon,
       );
     return m('.fm-terminal-block', [
@@ -355,21 +394,90 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         class: failed ? 'fm-terminal-block-status--failed' : 'fm-terminal-block-status--ok',
         title: failed ? t('terminal', 'blockFailed') : t('terminal', 'blockSucceeded'),
       }),
-      action(t('terminal', 'blockExplain'), sparklesIcon({ size: 14 }), () =>
+      action(t('terminal', 'blockExplain'), 'Ctrl+Shift+E', sparklesIcon({ size: 14 }), () =>
         runAssist(live, 'explain', blockTranscript(live, block)),
       ),
       failed
-        ? action(t('terminal', 'blockFix'), wrenchIcon({ size: 14 }), () =>
+        ? action(t('terminal', 'blockFix'), 'Ctrl+Shift+F', wrenchIcon({ size: 14 }), () =>
             runAssist(live, 'fix', blockTranscript(live, block)),
           )
         : undefined,
-      action(t('terminal', 'blockCopy'), copyIcon({ size: 14 }), () =>
-        copyText(linesText(live.terminal, block.outputMark.line, block.endMark.line).join('\n')),
+      action(t('terminal', 'blockCopy'), 'Ctrl+Shift+C', copyIcon({ size: 14 }), () =>
+        copyText(blockOutput(live, block)),
       ),
-      action(t('terminal', 'blockRerun'), refreshIcon({ size: 14 }), () => {
-        if (block.command !== '') writeToShell(live, `${block.command}\r`);
-      }),
+      action(t('terminal', 'blockRerun'), 'Ctrl+Shift+R', refreshIcon({ size: 14 }), () =>
+        rerunBlock(live, block),
+      ),
     ]);
+  }
+
+  function rerunBlock(live: LiveTerminal, block: CommandBlock<IMarker>): void {
+    if (block.command !== '') writeToShell(live, `${block.command}\r`);
+  }
+
+  /**
+   * Keys owned by the assistant and the command blocks (task 0333). While an answer is shown,
+   * Enter inserts it, Ctrl+E edits it and Ctrl+C or Escape rejects it; those keys reach the shell
+   * again once the answer is gone. Ctrl+Shift+E/F/C/R act on the last command block. Alt+Y and
+   * Alt+N answer the shell-integration prompt. Returns whether the key was used.
+   */
+  function assistantKey(event: KeyboardEvent): boolean {
+    const attrs = currentAttrs;
+    const key = attrs?.tabKey;
+    const live = key === undefined ? undefined : terminals.get(key);
+    const name = event.key.toLowerCase();
+    const plain = !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
+    const ctrl = event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
+    const ctrlShift = event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey;
+
+    if (
+      event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      (name === 'y' || name === 'n') &&
+      attrs?.shellIntegration === 'unset' &&
+      attrs.onShellIntegrationChoice !== undefined
+    ) {
+      chooseShellIntegration(live, name === 'y' ? 'enabled' : 'disabled');
+      return true;
+    }
+
+    const shown = panel !== undefined && panel.tabKey === key ? panel : undefined;
+    if (shown?.status === 'done' && live !== undefined) {
+      if (plain && event.key === 'Enter' && shown.command !== undefined) {
+        insertCommand(live, shown.command);
+        return true;
+      }
+      if (plain && event.key === 'Escape') {
+        rejectAnswer();
+        return true;
+      }
+      if (ctrl && name === 'e' && shown.command !== undefined) {
+        editing = shown.command;
+        m.redraw();
+        return true;
+      }
+      if (ctrl && name === 'c') {
+        rejectAnswer();
+        return true;
+      }
+    }
+
+    const block = live?.blocks.blocks.at(-1);
+    if (live === undefined || block === undefined || !ctrlShift) return false;
+    if (name === 'e') runAssist(live, 'explain', blockTranscript(live, block));
+    else if (name === 'f' && block.exitCode !== 0)
+      runAssist(live, 'fix', blockTranscript(live, block));
+    else if (name === 'c') copyText(blockOutput(live, block));
+    else if (name === 'r') rerunBlock(live, block);
+    else return false;
+    return true;
+  }
+
+  function rejectAnswer(): void {
+    panel = undefined;
+    editing = undefined;
+    m.redraw();
   }
 
   /** Accepts the shown suggestion by typing its remainder, as if the person had typed it. */
@@ -389,8 +497,11 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
    */
   function onTypedData(live: LiveTerminal, data: string): void {
     const atPrompt = live.atPrompt || !live.markSeen;
-    if (data === '\r' && atPrompt && live.typed.known && live.typed.text.startsWith('#')) {
-      const question = live.typed.text.slice(1).trim();
+    const question =
+      data === '\r' && atPrompt
+        ? questionAtPrompt(live.typed, cursorLine(live.terminal))
+        : undefined;
+    if (question !== undefined) {
       live.typed = EMPTY_INPUT;
       live.suggestion = undefined;
       writeToShell(live, '\x15');
@@ -490,6 +601,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           ...(attrs.onCycleTab === undefined ? {} : { onCycleTab: attrs.onCycleTab }),
           ...(attrs.onFocusFolder === undefined ? {} : { onFocusFolder: attrs.onFocusFolder }),
           onAcceptSuggestion: () => acceptSuggestion(current),
+          onAssistantKey: (event) => assistantKey(event),
         }),
       );
       terminal.onData((data) => {
@@ -541,30 +653,73 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   }
 
   /** The answer panel and the suggestion, floated over the terminal's top-right corner. */
-  function overlayView(attrs: TerminalDrawerAttrs): m.Children {
+  /**
+   * The assistant strip under the terminal output: the consent prompt, the suggestion and the
+   * answer. It only takes room while it has something to show (Warp-style bottom strip, task 0333).
+   */
+  function stripView(attrs: TerminalDrawerAttrs): m.Children {
     if (attrs.location === undefined || attrs.tabKey === undefined) return undefined;
     const live = terminals.get(attrs.tabKey);
     const shown = panel !== undefined && panel.tabKey === attrs.tabKey ? panel : undefined;
-    return m('.fm-terminal-overlay', [
+    const consent = consentView(attrs, live);
+    const suggestion =
       live?.suggestion === undefined
         ? undefined
         : m('.fm-terminal-suggestion', [
             m('span.fm-terminal-suggestion-hint', t('terminal', 'suggestionAccept')),
             m('code', highlightedShell(`${live.typed.text}${live.suggestion}`)),
-          ]),
-      consentView(attrs, live),
+          ]);
+    if (consent === undefined && suggestion === undefined && shown === undefined) return undefined;
+    return m('.fm-terminal-strip', [
+      suggestion,
+      consent,
       shown === undefined ? undefined : answerPanel(shown, live),
     ]);
   }
 
+  /** An action button with its keyboard shortcut shown beside the label. */
+  function shortcutButton(label: string, shortcut: string | undefined, onclick: () => void) {
+    return m(
+      'button.fm-terminal-assist-action',
+      {
+        type: 'button',
+        disabled: shortcut === undefined,
+        'aria-keyshortcuts': shortcut,
+        onclick,
+      },
+      [label, shortcut === undefined ? undefined : m('kbd.fm-terminal-kbd', shortcut)],
+    );
+  }
+
   function answerPanel(shown: AssistPanel, live: LiveTerminal | undefined): m.Children {
     const busy = shown.status === 'busy';
+    if (shown.status !== 'done') editing = undefined;
     const answer =
       shown.status === 'busy'
         ? m('p.fm-terminal-assist-status', t('terminal', 'assistBusy'))
         : shown.status === 'failed'
           ? m('p.fm-terminal-assist-status', assistFailureText(shown.reason))
-          : m('pre.fm-terminal-assist-text', answerNodes(shown.kind, shown.text));
+          : editing !== undefined && live !== undefined
+            ? m('input.fm-terminal-assist-edit', {
+                type: 'text',
+                value: editing,
+                'aria-label': t('terminal', 'assistInsert'),
+                oncreate: ({ dom }: m.VnodeDOM) => (dom as HTMLInputElement).focus(),
+                oninput: (event: Event) => {
+                  editing = (event.target as HTMLInputElement).value;
+                },
+                onkeydown: (event: KeyboardEvent) => {
+                  if (event.key === 'Enter' && editing !== undefined) {
+                    event.preventDefault();
+                    insertCommand(live, editing);
+                  } else if (event.key === 'Escape') {
+                    event.preventDefault();
+                    editing = undefined;
+                    m.redraw();
+                  }
+                },
+              })
+            : m('pre.fm-terminal-assist-text', answerNodes(shown.kind, shown.text));
     // The body scrolls; the buttons stay in a footer that is always in reach.
     return m('.fm-terminal-assist-panel', { role: 'status' }, [
       m('.fm-terminal-assist-body', [
@@ -576,30 +731,20 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       ]),
       m('.fm-terminal-assist-buttons', [
         shown.status === 'done' && shown.command !== undefined && live !== undefined
-          ? m(
-              'button.fm-terminal-assist-action',
-              {
-                type: 'button',
-                onclick: () => {
-                  if (shown.status === 'done' && shown.command !== undefined) {
-                    insertCommand(live, shown.command);
-                  }
-                },
-              },
-              t('terminal', 'assistInsert'),
-            )
+          ? shortcutButton(t('terminal', 'assistInsert'), 'Enter', () => {
+              if (shown.status === 'done' && shown.command !== undefined) {
+                insertCommand(live, shown.command);
+              }
+            })
           : undefined,
-        m(
-          'button.fm-terminal-assist-action',
-          {
-            type: 'button',
-            disabled: busy,
-            onclick: () => {
-              panel = undefined;
+        shown.status === 'done' && shown.command !== undefined
+          ? shortcutButton(t('terminal', 'assistEdit'), 'Ctrl+E', () => {
+              editing = shown.command;
               m.redraw();
-            },
-          },
-          t('terminal', 'assistDismiss'),
+            })
+          : undefined,
+        shortcutButton(t('terminal', 'assistDismiss'), busy ? undefined : 'Ctrl+C', () =>
+          rejectAnswer(),
         ),
       ]),
     ]);
@@ -621,9 +766,14 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   function chooseShellIntegration(live: LiveTerminal | undefined, choice: 'enabled' | 'disabled') {
     const save = currentAttrs?.onShellIntegrationChoice;
     if (save === undefined) return;
-    void save(choice).then(() => {
-      if (choice === 'enabled' && live !== undefined) restartSession(live);
-    });
+    save(choice).then(
+      () => {
+        if (choice === 'enabled' && live !== undefined) restartSession(live);
+      },
+      (error: unknown) => {
+        console.error('Saving the command-block choice failed.', error);
+      },
+    );
   }
 
   /** Asked once, until answered: explains what changes and lets the person decide. */
@@ -637,15 +787,11 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       [
         m('p.fm-terminal-consent-text', t('terminal', 'consentText')),
         m('.fm-terminal-assist-buttons', [
-          m(
-            'button.fm-terminal-assist-action',
-            { type: 'button', onclick: () => chooseShellIntegration(live, 'enabled') },
-            t('terminal', 'consentEnable'),
+          shortcutButton(t('terminal', 'consentEnable'), 'Alt+Y', () =>
+            chooseShellIntegration(live, 'enabled'),
           ),
-          m(
-            'button.fm-terminal-assist-action',
-            { type: 'button', onclick: () => chooseShellIntegration(live, 'disabled') },
-            t('terminal', 'consentDecline'),
+          shortcutButton(t('terminal', 'consentDecline'), 'Alt+N', () =>
+            chooseShellIntegration(live, 'disabled'),
           ),
         ]),
       ],
@@ -716,7 +862,6 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
             },
             '×',
           ),
-          overlayView(attrs),
           attrs.location === undefined
             ? m('.fm-terminal-unavailable', t('terminal', 'selectDirectory'))
             : m('.fm-terminal-host', {
@@ -729,6 +874,8 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
                 },
                 onupdate: ({ dom }) => ensure(attrs, dom as HTMLElement),
               }),
+          // Below the output, so the terminal shrinks while the strip has content.
+          stripView(attrs),
         ],
       );
     },

@@ -1662,6 +1662,10 @@ export const nl = {
     loadFailed: 'Gesprekken konden niet worden geladen.',
   },
   image: {
+    sourceUnsupported: 'Dit beeldmodel kan niet vanuit een bestaande afbeelding beginnen.',
+    sourceUnusable:
+      'Dat bestand kan niet als startbeeld worden gebruikt. Kies een PNG-, JPEG- of WebP-afbeelding.',
+    sourceTooLarge: 'Die afbeelding is te groot om vanuit te beginnen. Kies een kleinere.',
     actionTitle: 'Afbeelding genereren',
     style: 'Stijl',
     styleNone: 'Geen stijl',
@@ -2337,6 +2341,9 @@ export const nl = {
     statusNeedsConsent:
       'Dit eindpunt heeft toestemming nodig in Instellingen: open het hierboven en sla op met toestemming.',
     image: 'Afbeelding genereren',
+    allowCloudImage: 'Cloudgebruik voor afbeeldingen toestaan',
+    cloudHintImage:
+      'De woorden die je typt gaan naar dit cloud-eindpunt en de afbeeldingen komen ervan terug. Zet dit alleen aan als je dat accepteert.',
     imageModelHint:
       'De meeste modellen kunnen niet tekenen. Noem het model dat het kan; het chatmodel van een endpoint kan dat meestal niet.',
   },
@@ -2623,6 +2630,7 @@ export const nl = {
       'Opdrachtblokken inschakelen? Procyon start zsh en bash met eigen hooks en laadt je eigen opstartbestanden zoals gebruikelijk. Je dotfiles blijven ongewijzigd. Vragen met # werken in beide gevallen.',
     consentEnable: 'Inschakelen',
     consentDecline: 'Niet nu',
+    assistEdit: 'Bewerken',
   },
   contextMenu: {
     directoryActions: 'Mapacties',
@@ -2898,6 +2906,8 @@ export const nl = {
     versatiles: 'Vectorstijl, wereldwijd, communityserver.',
   },
   rejectionReason: {
+    imageSourceUnusable: 'Dat bestand kan niet als startbeeld worden gebruikt.',
+    imageSourceTooLarge: 'De afbeelding om vanuit te beginnen is te groot.',
     imageSourceUnsupported: 'Dit beeldmodel kan niet vanuit een bestaande afbeelding beginnen.',
     workspaceInvalid: 'De werkruimte is niet geldig.',
     paneNotFound: 'Dat paneel bestaat niet meer in deze werkruimte.',

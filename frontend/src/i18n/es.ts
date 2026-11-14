@@ -1265,6 +1265,10 @@ export const es = {
     loadFailed: 'No se pudieron cargar las conversaciones.',
   },
   image: {
+    sourceUnsupported: 'Este modelo de imágenes no puede partir de una imagen existente.',
+    sourceUnusable:
+      'Ese archivo no se puede usar como imagen inicial. Elige una imagen PNG, JPEG o WebP.',
+    sourceTooLarge: 'Esa imagen es demasiado grande para partir de ella. Elige una más pequeña.',
     actionTitle: 'Generación de imágenes',
     style: 'Estilo',
     styleNone: 'Sin estilo',
@@ -1942,6 +1946,9 @@ export const es = {
     statusNeedsConsent:
       'Este endpoint necesita consentimiento en Ajustes: ábrelo arriba y guarda con consentimiento.',
     image: 'Generación de imágenes',
+    allowCloudImage: 'Permitir el uso en la nube para generar imágenes',
+    cloudHintImage:
+      'Las palabras que escribes se envían a este endpoint en la nube y las imágenes vuelven de él. Actívalo solo si te parece bien.',
     imageModelHint:
       'La mayoría de los modelos no pueden dibujar. Nombra el modelo que sí puede; el modelo de chat de un endpoint normalmente no puede.',
   },
@@ -2629,6 +2636,7 @@ export const es = {
       '¿Activar los bloques de comandos? Procyon inicia zsh y bash con sus hooks y sigue cargando tus propios archivos de inicio. Tus dotfiles no cambian. Las preguntas con # funcionan en ambos casos.',
     consentEnable: 'Activar',
     consentDecline: 'Ahora no',
+    assistEdit: 'Editar',
   },
   contextMenu: {
     directoryActions: 'Acciones de directorio',
@@ -2898,6 +2906,8 @@ export const es = {
     versatiles: 'Estilo vectorial, mundial, servidor comunitario.',
   },
   rejectionReason: {
+    imageSourceUnusable: 'Ese archivo no se puede usar como imagen inicial.',
+    imageSourceTooLarge: 'La imagen inicial es demasiado grande.',
     imageSourceUnsupported: 'Este modelo de imágenes no puede partir de una imagen existente.',
     workspaceInvalid: 'El espacio de trabajo no es válido.',
     paneNotFound: 'Ese panel ya no existe en este espacio de trabajo.',

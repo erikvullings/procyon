@@ -1267,6 +1267,11 @@ export const pt = {
     loadFailed: 'Não foi possível carregar as conversas.',
   },
   image: {
+    sourceUnsupported: 'Este modelo de imagens não pode começar a partir de uma imagem existente.',
+    sourceUnusable:
+      'Esse ficheiro não pode ser usado como imagem inicial. Escolha uma imagem PNG, JPEG ou WebP.',
+    sourceTooLarge:
+      'Essa imagem é demasiado grande para começar a partir dela. Escolha uma mais pequena.',
     actionTitle: 'Geração de imagens',
     style: 'Estilo',
     styleNone: 'Sem estilo',
@@ -1945,6 +1950,9 @@ export const pt = {
     statusNeedsConsent:
       'Este endpoint precisa de consentimento nas Definições: abra-o acima e guarde com consentimento.',
     image: 'Geração de imagens',
+    allowCloudImage: 'Permitir o uso na nuvem para gerar imagens',
+    cloudHintImage:
+      'As palavras que escreve são enviadas para este endpoint na nuvem e as imagens vêm dele. Ative apenas se aceitar isso.',
     imageModelHint:
       'A maioria dos modelos não sabe desenhar. Indique o modelo que sabe; o modelo de chat de um endpoint geralmente não sabe.',
   },
@@ -2636,6 +2644,7 @@ export const pt = {
       'Ativar os blocos de comandos? O Procyon inicia o zsh e o bash com os seus hooks e continua a carregar os seus ficheiros de arranque. Os seus dotfiles não mudam. As perguntas com # funcionam em ambos os casos.',
     consentEnable: 'Ativar',
     consentDecline: 'Agora não',
+    assistEdit: 'Editar',
   },
   contextMenu: {
     directoryActions: 'Ações de pasta',
@@ -2906,6 +2915,8 @@ export const pt = {
     versatiles: 'Estilo vetorial, mundial, servidor da comunidade.',
   },
   rejectionReason: {
+    imageSourceUnusable: 'Esse ficheiro não pode ser usado como imagem inicial.',
+    imageSourceTooLarge: 'A imagem inicial é demasiado grande.',
     imageSourceUnsupported:
       'Este modelo de imagens não pode começar a partir de uma imagem existente.',
     workspaceInvalid: 'O espaço de trabalho não é válido.',

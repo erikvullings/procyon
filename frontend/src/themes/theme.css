@@ -548,7 +548,10 @@ main.fm-workspace {
 .fm-terminal-drawer {
   position: relative;
   grid-row: 4;
-  height: 280px;
+  display: flex;
+  flex-direction: column;
+  /* Room for the output and the assistant strip below it (task 0333). */
+  height: 360px;
   min-height: 120px;
   max-height: 80vh;
   background: var(--fm-surface);
@@ -581,7 +584,8 @@ main.fm-workspace {
 .fm-terminal-close {
   position: absolute;
   top: 4px;
-  right: 8px;
+  /* Clear of the 8px scrollbar on the pane's right edge. */
+  right: 12px;
   z-index: 2;
   width: 22px;
   height: 22px;
@@ -600,36 +604,28 @@ main.fm-workspace {
   color: var(--fm-text);
 }
 
-/* Terminal assistance and command blocks (task 0333). The overlay floats over the output so the
-   terminal keeps its full size; only its children take pointer events. */
-.fm-terminal-overlay {
-  position: absolute;
-  top: 4px;
-  bottom: 4px;
-  right: 36px;
-  z-index: 2;
+/* The assistant strip under the terminal output (task 0333). It takes only the room its content
+   needs, and scrolls inside itself when an answer is long. */
+.fm-terminal-strip {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
   gap: 6px;
-  max-width: calc(100% - 80px);
-  /* Scrolls when the banner, answer and suggestion do not fit the drawer's height. */
+  max-height: 45%;
   overflow-y: auto;
-  pointer-events: none;
-}
-
-.fm-terminal-overlay > * {
-  pointer-events: auto;
+  padding: 6px 8px;
+  border-top: 1px solid var(--fm-border);
+  background: var(--fm-surface);
 }
 
 .fm-terminal-suggestion {
   display: flex;
   align-items: center;
   gap: 6px;
+  align-self: flex-start;
   padding: 2px 8px;
   border: 1px solid var(--fm-border);
   border-radius: var(--fm-radius);
-  background: var(--fm-surface);
   color: var(--fm-text-muted);
   font-size: 12px;
 }
@@ -643,6 +639,7 @@ main.fm-workspace {
   display: flex;
   gap: 4px;
   justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .fm-terminal-assist-action {
@@ -656,6 +653,28 @@ main.fm-workspace {
   cursor: pointer;
 }
 
+.fm-terminal-kbd {
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius-control);
+  color: var(--fm-text-muted);
+  font-family: var(--fm-font-mono);
+  font-size: 10px;
+}
+
+.fm-terminal-assist-edit {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--fm-font-mono);
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid var(--fm-accent);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface);
+  color: var(--fm-text);
+}
+
 .fm-terminal-assist-action:hover:not(:disabled) {
   background: var(--fm-hover);
 }
@@ -667,19 +686,16 @@ main.fm-workspace {
 
 .fm-terminal-assist-panel,
 .fm-terminal-consent {
-  width: min(520px, 70vw);
-  box-sizing: border-box;
-  padding: 8px;
-  border: 1px solid var(--fm-border);
-  border-radius: var(--fm-radius);
-  background: var(--fm-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
   color: var(--fm-text);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   font-size: 12px;
 }
 
 .fm-terminal-assist-body {
-  max-height: 180px;
+  max-height: 160px;
   overflow-y: auto;
 }
 
@@ -768,9 +784,33 @@ main.fm-workspace {
 }
 
 .fm-terminal-host {
-  height: calc(100% - 1px);
-  padding: 4px 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  /* No right padding: the terminal's scrollbar sits flush with the pane's right edge. */
+  padding: 4px 0 4px 8px;
   font-size: 0.92em;
+}
+
+/* The terminal draws its own VS Code-style scrollbar (xterm's scrollable element), with inline
+   sizes, so these overrides are !important. It matches the file pane's look (surface track,
+   rounded thumb with a surface ring) but is thinner, and it sits flush with the pane's edge. */
+.fm-terminal-drawer .xterm-scrollable-element > .scrollbar.vertical {
+  width: 8px !important;
+  right: 0 !important;
+  background: var(--fm-surface) !important;
+}
+
+.fm-terminal-drawer .xterm-scrollable-element > .scrollbar.vertical > .slider {
+  width: 8px !important;
+  left: 0 !important;
+  box-sizing: border-box;
+  border: 2px solid var(--fm-surface);
+  border-radius: var(--fm-radius-pill);
+  background: var(--fm-border) !important;
+}
+
+.fm-terminal-drawer .xterm-scrollable-element > .scrollbar.vertical > .slider:hover {
+  background: var(--fm-text-muted) !important;
 }
 
 .fm-terminal-surface {

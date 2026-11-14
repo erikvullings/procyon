@@ -1262,6 +1262,10 @@ export const it = {
     loadFailed: 'Impossibile caricare le conversazioni.',
   },
   image: {
+    sourceUnsupported: 'Questo modello di immagini non può partire da un’immagine esistente.',
+    sourceUnusable:
+      'Questo file non può essere usato come immagine di partenza. Scegli un’immagine PNG, JPEG o WebP.',
+    sourceTooLarge: 'L’immagine di partenza è troppo grande. Scegline una più piccola.',
     actionTitle: 'Generazione di immagini',
     style: 'Stile',
     styleNone: 'Nessuno stile',
@@ -1941,6 +1945,9 @@ export const it = {
     statusNeedsConsent:
       'Questo endpoint richiede il consenso nelle Impostazioni: aprilo sopra e salva con consenso.',
     image: 'Generazione di immagini',
+    allowCloudImage: 'Consenti l’uso del cloud per la generazione di immagini',
+    cloudHintImage:
+      'Le parole che digiti vengono inviate a questo endpoint cloud e le immagini tornano da esso. Attiva solo se accetti.',
     imageModelHint:
       'La maggior parte dei modelli non sa disegnare. Indica il modello che sa farlo; il modello di chat di un endpoint di solito non sa farlo.',
   },
@@ -2624,6 +2631,7 @@ export const it = {
       'Attivare i blocchi di comandi? Procyon avvia zsh e bash con i propri hook e carica comunque i tuoi file di avvio. I tuoi dotfile non cambiano. Le domande con # funzionano in entrambi i casi.',
     consentEnable: 'Attiva',
     consentDecline: 'Non ora',
+    assistEdit: 'Modifica',
   },
   contextMenu: {
     directoryActions: 'Azioni cartella',
@@ -2893,6 +2901,8 @@ export const it = {
     versatiles: 'Stile vettoriale, mondiale, server della community.',
   },
   rejectionReason: {
+    imageSourceUnusable: 'Questo file non può essere usato come immagine di partenza.',
+    imageSourceTooLarge: 'L’immagine di partenza è troppo grande.',
     imageSourceUnsupported: 'Questo modello di immagini non può partire da un’immagine esistente.',
     workspaceInvalid: 'Lo spazio di lavoro non è valido.',
     paneNotFound: 'Quel pannello non esiste più in questo spazio di lavoro.',

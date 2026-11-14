@@ -1633,6 +1633,10 @@ export const en = {
     loadFailed: 'Could not load conversations.',
   },
   image: {
+    sourceUnsupported: 'This image model cannot start from an existing picture.',
+    sourceUnusable:
+      'That file cannot be used as a starting picture. Pick a PNG, JPEG or WebP image.',
+    sourceTooLarge: 'That picture is too large to start from. Pick a smaller one.',
     actionTitle: 'Image generation',
     style: 'Style',
     styleNone: 'No style',
@@ -2297,6 +2301,9 @@ export const en = {
     statusNeedsConsent:
       'This endpoint needs consent in Settings: open it above, and save with consent.',
     image: 'Image generation',
+    allowCloudImage: 'Allow cloud use for image generation',
+    cloudHintImage:
+      'The words you type are sent to this cloud endpoint, and the pictures come back from it. Turn this on only if you accept that.',
     imageModelHint:
       'Most models cannot draw. Name the model that can; the chat model of an endpoint usually cannot.',
   },
@@ -2576,6 +2583,7 @@ export const en = {
       'Enable command blocks? Procyon starts zsh and bash with its hooks and still loads your own startup files. Your dotfiles stay unchanged. # questions work either way.',
     consentEnable: 'Enable',
     consentDecline: 'Not now',
+    assistEdit: 'Edit',
   },
   contextMenu: {
     directoryActions: 'Directory actions',
@@ -2837,6 +2845,8 @@ export const en = {
     versatiles: 'Vector style, worldwide, community server.',
   },
   rejectionReason: {
+    imageSourceUnusable: 'That file cannot be used as a starting picture.',
+    imageSourceTooLarge: 'The picture to start from is too large.',
     imageSourceUnsupported: 'This image model cannot start from an existing picture.',
     workspaceInvalid: 'The workspace is not valid.',
     paneNotFound: 'That pane no longer exists in this workspace.',

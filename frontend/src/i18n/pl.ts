@@ -1262,6 +1262,10 @@ export const pl = {
     loadFailed: 'Nie udało się wczytać rozmów.',
   },
   image: {
+    sourceUnsupported: 'Ten model obrazów nie może zacząć od istniejącego obrazu.',
+    sourceUnusable:
+      'Ten plik nie może być użyty jako obraz początkowy. Wybierz obraz PNG, JPEG lub WebP.',
+    sourceTooLarge: 'Obraz początkowy jest za duży. Wybierz mniejszy.',
     actionTitle: 'Generowanie obrazów',
     style: 'Styl',
     styleNone: 'Bez stylu',
@@ -1938,6 +1942,9 @@ export const pl = {
     statusNeedsConsent:
       'Ten punkt końcowy wymaga zgody w Ustawieniach: otwórz go powyżej i zapisz ze zgodą.',
     image: 'Generowanie obrazów',
+    allowCloudImage: 'Zezwól na użycie chmury do generowania obrazów',
+    cloudHintImage:
+      'Wpisane słowa trafiają do tego punktu końcowego w chmurze, a obrazy z niego wracają. Włącz tylko, jeśli to akceptujesz.',
     imageModelHint:
       'Większość modeli nie umie rysować. Podaj model, który umie; model czatu punktu końcowego zwykle nie umie.',
   },
@@ -2624,6 +2631,7 @@ export const pl = {
       'Włączyć bloki poleceń? Procyon uruchamia zsh i bash z własnymi hookami i nadal wczytuje Twoje pliki startowe. Twoje pliki dotfiles się nie zmieniają. Pytania z # działają w obu przypadkach.',
     consentEnable: 'Włącz',
     consentDecline: 'Nie teraz',
+    assistEdit: 'Edytuj',
   },
   contextMenu: {
     directoryActions: 'Akcje katalogu',
@@ -2892,6 +2900,8 @@ export const pl = {
     versatiles: 'Styl wektorowy, cały świat, serwer społeczności.',
   },
   rejectionReason: {
+    imageSourceUnusable: 'Ten plik nie może być użyty jako obraz początkowy.',
+    imageSourceTooLarge: 'Obraz początkowy jest za duży.',
     imageSourceUnsupported: 'Ten model obrazów nie może zacząć od istniejącego obrazu.',
     workspaceInvalid: 'Obszar roboczy jest nieprawidłowy.',
     paneNotFound: 'Ten panel już nie istnieje w tym obszarze roboczym.',
