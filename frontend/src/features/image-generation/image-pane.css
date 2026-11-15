@@ -32,8 +32,13 @@
   font-size: var(--fm-type-body);
 }
 
+/* One row of settings normally. A narrow pane wraps them onto a second row rather than spilling
+   the discard key out of the pane: nothing is hidden behind a scroll nobody can see. */
 .fm-image-status {
-  height: calc(var(--fm-row-height) + 2px);
+  height: auto;
+  min-height: calc(var(--fm-row-height) + 2px);
+  flex-wrap: wrap;
+  row-gap: var(--fm-space-1);
 }
 
 .fm-image-header {
@@ -444,7 +449,7 @@
 .fm-image-status .fm-image-seed {
   box-sizing: border-box;
   flex: 0 0 auto;
-  width: 4rem;
+  width: 3.5rem;
   height: var(--fm-row-height);
   min-width: 0;
   margin: 0;
@@ -461,7 +466,8 @@
 .fm-image-status .fm-image-dimension {
   box-sizing: border-box;
   flex: 0 0 auto;
-  width: 4rem;
+  /* Four digits is the widest a side ever gets (2048), so the pair stays out of the way. */
+  width: 3.25rem;
   height: var(--fm-row-height);
   min-width: 0;
   margin: 0;

@@ -858,7 +858,9 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
             ? m('span.fm-image-avoid-label.fm-image-reveal-note', t('image', 'sent'))
             : [
                 m('span.fm-image-avoid-label', t('image', 'negative')),
-                m('input.fm-image-avoid', {
+                // `browser-default` keeps Materialize from giving this field its 40px input, which
+                // would tower over the send and stop keys at the end of the row.
+                m('input.fm-image-avoid.browser-default', {
                   type: 'text',
                   'aria-label': t('image', 'negative'),
                   placeholder: t('image', 'negativePlaceholder'),
