@@ -6,10 +6,12 @@ use std::time::Duration;
 
 use russh::client::{self, AuthResult};
 #[cfg(unix)]
+use russh::keys::PublicKey;
+#[cfg(unix)]
 use russh::keys::agent::AgentIdentity;
 #[cfg(unix)]
 use russh::keys::agent::client::{AgentClient, AgentStream};
-use russh::keys::{PrivateKeyWithHashAlg, PublicKey, PublicKeyOrCertificate};
+use russh::keys::{PrivateKeyWithHashAlg, PublicKeyOrCertificate};
 use russh_sftp::client::SftpSession;
 use tokio::sync::Mutex as AsyncMutex;
 
