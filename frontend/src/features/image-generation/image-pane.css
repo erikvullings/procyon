@@ -279,7 +279,8 @@
   width: 100%;
   min-height: 0;
   object-fit: contain;
-  object-position: left top;
+  /* A picture smaller than the pane sits in its middle, not in its top-left corner. */
+  object-position: center;
 }
 
 /* Full: the picture takes the pane's width, however tall that makes it, and the pane scrolls. */
