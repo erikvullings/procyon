@@ -3316,6 +3316,8 @@ export const pt = {
       'Não foi possível ler as definições. Foram carregados os valores predefinidos da aplicação.',
     llmProfilesUnreadable:
       'Não foi possível ler os perfis de IA. Não foi carregado nenhum perfil de geração.',
+    llmLoopbackAllowed:
+      'Este servidor pode alcançar modelos de IA na própria máquina. Quem o utiliza pode fazê-lo contatar o próprio localhost.',
     clipboardCopied: 'Copiado para a área de transferência.',
     pluginIsolated: 'A extensão {plugin} foi isolada: {detail}',
     semanticOcrUnavailable:

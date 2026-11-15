@@ -3214,6 +3214,8 @@ export const en = {
       'The settings file was written by a newer version of Procyon and was left unchanged. Close this older version before changing settings.',
     settingsUnreadable: 'The settings could not be read. Application defaults were loaded.',
     llmProfilesUnreadable: 'AI profiles could not be read. No generation profiles were loaded.',
+    llmLoopbackAllowed:
+      'This server may reach AI models on its own machine, so anyone who can use it can make it contact its own localhost.',
     clipboardCopied: 'Copied to the clipboard.',
     pluginIsolated: 'The plugin {plugin} was isolated: {detail}',
     semanticOcrUnavailable:

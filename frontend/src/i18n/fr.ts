@@ -3329,6 +3329,8 @@ export const fr = {
       'Les paramètres n’ont pas pu être lus. Les valeurs par défaut de l’application ont été chargées.',
     llmProfilesUnreadable:
       'Les profils d’IA n’ont pas pu être lus. Aucun profil de génération n’a été chargé.',
+    llmLoopbackAllowed:
+      'Ce serveur peut atteindre des modèles d’IA sur sa propre machine. Toute personne qui l’utilise peut lui faire atteindre son propre localhost.',
     clipboardCopied: 'Copié dans le presse-papiers.',
     pluginIsolated: 'L’extension {plugin} a été isolée : {detail}',
     semanticOcrUnavailable:

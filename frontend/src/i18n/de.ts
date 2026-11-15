@@ -3350,6 +3350,8 @@ export const de = {
       'Die Einstellungen konnten nicht gelesen werden. Die Standardwerte der Anwendung wurden geladen.',
     llmProfilesUnreadable:
       'KI-Profile konnten nicht gelesen werden. Es wurden keine Generierungsprofile geladen.',
+    llmLoopbackAllowed:
+      'Dieser Server darf KI-Modelle auf dem eigenen Rechner erreichen. Wer ihn nutzen kann, kann ihn auch sein eigenes Localhost erreichen lassen.',
     clipboardCopied: 'In die Zwischenablage kopiert.',
     pluginIsolated: 'Das Plugin {plugin} wurde isoliert: {detail}',
     semanticOcrUnavailable:

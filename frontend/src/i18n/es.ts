@@ -3308,6 +3308,8 @@ export const es = {
       'No se pudo leer la configuración. Se cargaron los valores predeterminados de la aplicación.',
     llmProfilesUnreadable:
       'No se pudieron leer los perfiles de IA. No se cargó ningún perfil de generación.',
+    llmLoopbackAllowed:
+      'Este servidor puede alcanzar modelos de IA en su propia máquina. Quien pueda usarlo puede hacer que contacte con su propio localhost.',
     clipboardCopied: 'Copiado en el portapapeles.',
     pluginIsolated: 'El complemento {plugin} se aisló: {detail}',
     semanticOcrUnavailable:

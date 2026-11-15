@@ -3288,6 +3288,8 @@ export const pl = {
     settingsUnreadable: 'Nie udało się odczytać ustawień. Wczytano domyślne ustawienia aplikacji.',
     llmProfilesUnreadable:
       'Nie udało się odczytać profili AI. Nie wczytano żadnych profili generowania.',
+    llmLoopbackAllowed:
+      'Ten serwer łączy się z modelami AI na własnym komputerze. Każdy, kto z niego korzysta, może kazać mu łączyć się z jego własnym localhostem.',
     clipboardCopied: 'Skopiowano do schowka.',
     pluginIsolated: 'Wtyczka {plugin} została odizolowana: {detail}',
     semanticOcrUnavailable:

@@ -3306,6 +3306,8 @@ export const nl = {
       'De instellingen konden niet worden gelezen. De standaardwaarden van de toepassing zijn geladen.',
     llmProfilesUnreadable:
       'AI-profielen konden niet worden gelezen. Er zijn geen generatieprofielen geladen.',
+    llmLoopbackAllowed:
+      'Deze server mag AI-modellen op zijn eigen computer bereiken. Iedereen die hem gebruikt, kan hem zijn eigen localhost laten bereiken.',
     clipboardCopied: 'Naar het klembord gekopieerd.',
     pluginIsolated: 'De plug-in {plugin} is geïsoleerd: {detail}',
     semanticOcrUnavailable:

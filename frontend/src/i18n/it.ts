@@ -3302,6 +3302,8 @@ export const it = {
       'Impossibile leggere le impostazioni. Sono stati caricati i valori predefiniti dell’applicazione.',
     llmProfilesUnreadable:
       'Impossibile leggere i profili IA. Non è stato caricato alcun profilo di generazione.',
+    llmLoopbackAllowed:
+      'Questo server può raggiungere modelli IA sulla propria macchina. Chiunque lo utilizzi può fargli contattare il proprio localhost.',
     clipboardCopied: 'Copiato negli appunti.',
     pluginIsolated: 'Il plugin {plugin} è stato isolato: {detail}',
     semanticOcrUnavailable:
