@@ -40,6 +40,7 @@ import type {
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   ImageBatch,
+  ImageGenerationProgress,
   ImagePrompt,
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
@@ -196,7 +197,16 @@ function sameMockPromptContent(left: ImagePrompt, right: ImagePrompt): boolean {
   return JSON.stringify(leftContent) === JSON.stringify(rightContent);
 }
 
+/** How many steps the mock draws when the person did not name a number. */
+const MOCK_IMAGE_STEPS = 20;
+
+/** How long the mock spends on one step, so a progress bar has time to be seen moving. */
+const MOCK_IMAGE_STEP_MS = 300;
+
 export class MockSemanticClient implements SemanticClient {
+  /** How far each generation the mock is drawing has got, counted from when it started. */
+  private readonly imageProgress = new Map<string, { startedAt: number; total: number }>();
+
   constructor(private readonly ctx: MockContext) {}
 
   getSemanticComponentCapabilities(signal?: AbortSignal): Promise<SemanticComponentCapabilities> {
@@ -1429,6 +1439,38 @@ export class MockSemanticClient implements SemanticClient {
   }
 
   async generateImages(request: GenerateImagesRequest, signal?: AbortSignal): Promise<ImageBatch> {
+    // The mock counts steps the way a reporting endpoint does, so the pane's progress bar has
+    // something to move on in the host that runs without a model at all.
+    this.imageProgress.set(request.requestId, {
+      startedAt: Date.now(),
+      total: request.steps ?? MOCK_IMAGE_STEPS,
+    });
+    try {
+      return await this.generateImagesThroughRole(request, signal);
+    } finally {
+      this.imageProgress.delete(request.requestId);
+    }
+  }
+
+  /** How far a running generation has got, counted from when the mock started drawing it. */
+  imageGenerationProgress(
+    requestId: string,
+    _signal?: AbortSignal,
+  ): Promise<ImageGenerationProgress | undefined> {
+    const running = this.imageProgress.get(requestId);
+    if (running === undefined) return Promise.resolve(undefined);
+    const drawn = Math.floor((Date.now() - running.startedAt) / MOCK_IMAGE_STEP_MS);
+    return Promise.resolve({
+      stage: drawn === 0 ? 'Preparing' : 'Generating',
+      step: Math.min(running.total, drawn),
+      total: running.total,
+    });
+  }
+
+  private async generateImagesThroughRole(
+    request: GenerateImagesRequest,
+    signal?: AbortSignal,
+  ): Promise<ImageBatch> {
     const batch = await this.ctx.perform('generateImages', signal, () => {
       const problem = mockImageRequestProblem(request);
       if (problem !== undefined) {

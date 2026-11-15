@@ -2994,6 +2994,16 @@ pub(crate) async fn save_generated_image(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// How far one running generation has got, as its endpoint reported it. `None` when the endpoint
+/// has said nothing about its work.
+#[tauri::command]
+pub(crate) fn get_image_generation_progress(
+    state: State<'_, AppState>,
+    request_id: Uuid,
+) -> Option<fm_transport_dto::ImageGenerationProgressDto> {
+    state.service.image_generation_progress(request_id)
+}
+
 /// Drops a batch without saving any of its images.
 #[tauri::command]
 pub(crate) fn discard_image_batch(

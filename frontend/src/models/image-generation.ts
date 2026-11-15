@@ -4,6 +4,7 @@ import type {
   GeneratedImageDto,
   GenerateImagesRequestDto,
   ImageBatchDto,
+  ImageGenerationProgressDto,
   ImagePromptDto,
   SaveGeneratedImageRequestDto,
   SaveGeneratedImageResponseDto,
@@ -36,6 +37,12 @@ export interface GeneratedImageBytesDto {
   mediaType: string;
 }
 
+/**
+ * How far a running generation has got, as its endpoint reported it. `stage` is the endpoint's own
+ * wording, bounded by the backend; `step` and `total` are `0` when it counts nothing.
+ */
+export type ImageGenerationProgress = ImageGenerationProgressDto;
+
 export interface GeneratedImageBytes {
   /** The preview downscale, or the stored original when that was asked for. */
   bytes: Uint8Array;
@@ -45,6 +52,21 @@ export interface GeneratedImageBytes {
 
 /** How a size is described to the person. */
 export type ImageSizeLabel = 'square' | 'landscape' | 'portrait' | 'wide' | 'tall';
+
+/**
+ * Whether a progress report has a step counter a bar can be drawn from. An endpoint that counts
+ * nothing leaves `total` at `0`, and the pane says it is waiting instead of inventing a percentage.
+ */
+export function progressHasSteps(progress: ImageGenerationProgress | undefined): boolean {
+  return progress !== undefined && progress.total > 0;
+}
+
+/** The percentage of the drawing that is finished, or `undefined` when nobody counted it. */
+export function progressPercent(progress: ImageGenerationProgress | undefined): number | undefined {
+  if (!progressHasSteps(progress) || progress === undefined) return undefined;
+  const ratio = Math.min(1, Math.max(0, progress.step / progress.total));
+  return Math.round(ratio * 100);
+}
 
 /** Widths, heights and counts the pane offers; the backend refuses anything outside them. */
 export const IMAGE_SIZES: readonly { width: number; height: number; labelKey: ImageSizeLabel }[] = [

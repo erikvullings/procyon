@@ -1690,6 +1690,8 @@ export const nl = {
     newPrompt: 'Nieuwe afbeeldingsprompt',
     seedPlaceholder: 'seed',
     waitingForModel: 'Wachten op het model…',
+    drawingProgress: 'Hoe ver de tekening is',
+    progressSteps: 'stap {step} van {total}',
     title: 'Afbeelding',
     openDescription: 'Genereer een afbeelding naast de editor of map',
     subject: 'Wat te tekenen',

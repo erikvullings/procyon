@@ -219,6 +219,8 @@ export * from './hostKeyProbeDto.ts';
 export * from './iconSizeDto.ts';
 export * from './imageBatchDto.ts';
 export * from './imageDimensionsDto.ts';
+export * from './imageGenerationProgressDto.ts';
+export * from './imageGenerationProgressParams.ts';
 export * from './imageGpsEntryDto.ts';
 export * from './imageMetadataDto.ts';
 export * from './imageMetadataEditDto.ts';

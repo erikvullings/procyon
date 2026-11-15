@@ -444,6 +444,9 @@ fn api_router() -> OpenApiRouter<AppState> {
             routes::image_generation::cancel_image_generation
         ))
         .routes(utoipa_axum::routes!(
+            routes::image_generation::image_generation_progress
+        ))
+        .routes(utoipa_axum::routes!(
             routes::image_generation::generated_image_bytes
         ))
         .routes(utoipa_axum::routes!(

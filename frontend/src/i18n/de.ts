@@ -1310,6 +1310,8 @@ export const de = {
     newPrompt: 'Neue Bildaufforderung',
     seedPlaceholder: 'Seed',
     waitingForModel: 'Warten auf das Modell…',
+    drawingProgress: 'Wie weit das Bild fortgeschritten ist',
+    progressSteps: 'Schritt {step} von {total}',
     title: 'Bild',
     openDescription: 'Erzeuge ein Bild neben dem Editor oder Ordner',
     subject: 'Was dargestellt werden soll',

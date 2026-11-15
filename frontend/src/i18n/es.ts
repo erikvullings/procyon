@@ -1293,6 +1293,8 @@ export const es = {
     newPrompt: 'Nueva indicación de imagen',
     seedPlaceholder: 'seed',
     waitingForModel: 'Esperando al modelo…',
+    drawingProgress: 'Cómo va el dibujo',
+    progressSteps: 'paso {step} de {total}',
     title: 'Imagen',
     openDescription: 'Genera una imagen junto al editor o la carpeta',
     subject: 'Qué dibujar',

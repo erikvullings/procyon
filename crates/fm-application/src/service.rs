@@ -3578,6 +3578,22 @@ impl FileManagerService {
             .ok_or(ApplicationError::NotFound)
     }
 
+    /// How far one running generation has got, as its endpoint reported it. `None` means the
+    /// endpoint has said nothing about its work, which is how most of them answer.
+    #[must_use]
+    pub fn image_generation_progress(
+        &self,
+        request_id: Uuid,
+    ) -> Option<fm_transport_dto::ImageGenerationProgressDto> {
+        self.image_generation
+            .progress_of(request_id)
+            .map(|progress| fm_transport_dto::ImageGenerationProgressDto {
+                stage: progress.stage,
+                step: progress.step,
+                total: progress.total,
+            })
+    }
+
     /// Drops a batch the person discarded. Returns whether it was still held.
     pub fn discard_image_batch(&self, generation_id: Uuid) -> bool {
         self.image_generation.discard(generation_id)

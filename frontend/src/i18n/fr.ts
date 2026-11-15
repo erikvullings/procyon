@@ -1297,6 +1297,8 @@ export const fr = {
     newPrompt: 'Nouvelle invite d’image',
     seedPlaceholder: 'seed',
     waitingForModel: 'En attente du modèle…',
+    drawingProgress: 'Où en est le dessin',
+    progressSteps: 'étape {step} sur {total}',
     title: 'Images',
     openDescription: 'Générer une image à côté de l’éditeur ou du dossier',
     subject: 'À représenter',

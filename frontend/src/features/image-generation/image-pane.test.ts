@@ -93,6 +93,45 @@ afterEach(() => {
   root.remove();
 });
 
+describe('how far the drawing has got', () => {
+  it('shows how far the model has got while the picture is being drawn', () => {
+    mountLoaded({
+      subject: 'a fox',
+      pendingRequestId: 'r1',
+      progress: { stage: 'Generating', step: 3, total: 4 },
+    });
+
+    const bar = root.querySelector('.fm-image-progress');
+    expect(bar).not.toBeNull();
+    expect(bar?.getAttribute('role')).toBe('progressbar');
+    expect(bar?.getAttribute('aria-valuenow')).toBe('3');
+    expect(bar?.getAttribute('aria-valuemax')).toBe('4');
+    // The stage the endpoint named is shown, and counted, so the wait has a shape to it.
+    expect(root.textContent).toContain('Generating');
+    expect(root.textContent).toContain('3 of 4');
+    expect(root.querySelector('.fm-image-pending')).toBeNull();
+  });
+
+  it('says it is waiting when the endpoint counts nothing', () => {
+    mountLoaded({ subject: 'a fox', pendingRequestId: 'r1', progress: undefined });
+
+    expect(root.querySelector('.fm-image-pending')?.textContent).toContain('Waiting for the model');
+    expect(root.querySelector('.fm-image-progress')).toBeNull();
+  });
+
+  it('shows an endpoint that names a stage but counts no steps as a waiting bar', () => {
+    mountLoaded({
+      subject: 'a fox',
+      pendingRequestId: 'r1',
+      progress: { stage: 'Encoding prompt', step: 0, total: 0 },
+    });
+
+    const bar = root.querySelector('.fm-image-progress');
+    expect(bar?.hasAttribute('aria-valuenow')).toBe(false);
+    expect(root.textContent).toContain('Encoding prompt');
+  });
+});
+
 describe('the image pane header', () => {
   it('is a crumb bar of the generations this pane asked for', () => {
     const views = [{ imageId: 'i1', loading: false, previewUrl: 'blob:1' }];

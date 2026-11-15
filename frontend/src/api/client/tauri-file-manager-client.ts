@@ -105,6 +105,7 @@ import type {
   GitFileHistoryResult,
   HostKeyProbe,
   ImageBatch,
+  ImageGenerationProgress,
   ImageGpsEntry,
   ImageMetadata,
   ImagePrompt,
@@ -1849,6 +1850,16 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   discardImageBatch(generationId: string, _signal?: AbortSignal): Promise<void> {
     return invoke<void>('discard_image_batch', { request: { generationId } });
+  }
+
+  async imageGenerationProgress(
+    requestId: string,
+    _signal?: AbortSignal,
+  ): Promise<ImageGenerationProgress | undefined> {
+    const reported = await invoke<ImageGenerationProgress | null>('get_image_generation_progress', {
+      requestId,
+    });
+    return reported ?? undefined;
   }
 
   listLlmProfiles(_signal?: AbortSignal): Promise<LlmProfile[]> {

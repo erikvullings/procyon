@@ -251,6 +251,69 @@
   color: var(--fm-text-muted);
 }
 
+/* How far the drawing has got: a line of what the endpoint said over a bar of what it counted. */
+.fm-image-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fm-space-1);
+  color: var(--fm-text-muted);
+}
+
+.fm-image-progress-stage,
+.fm-image-progress-count {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-image-progress-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.fm-image-progress-track {
+  display: block;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--fm-border);
+}
+
+.fm-image-progress-fill {
+  display: block;
+  height: 100%;
+  /* The bar grows as the endpoint reports, so the growth itself is the only animation. */
+  transition: width var(--fm-duration-fast, 150ms) ease-out;
+  border-radius: inherit;
+  background: var(--fm-accent);
+}
+
+/* An endpoint that names a stage but counts nothing: the bar cannot say how far, only that it is moving. */
+.fm-image-progress-fill[data-indeterminate="true"] {
+  width: 40% !important;
+  animation: fm-image-progress-slide 1.4s ease-in-out infinite;
+}
+
+@keyframes fm-image-progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fm-image-progress-fill {
+    transition: none;
+  }
+
+  .fm-image-progress-fill[data-indeterminate="true"] {
+    animation: none;
+    width: 100% !important;
+  }
+}
+
 .fm-image-figure {
   display: flex;
   flex-direction: column;

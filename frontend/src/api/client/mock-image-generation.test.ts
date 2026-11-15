@@ -313,4 +313,23 @@ describe('MockFileManagerClient image role bindings', () => {
     const roles = await client.listLlmRoles();
     expect(roles.image?.profileId).toBe(profile.id);
   });
+
+  it('reports how far a drawing has got while the mock is drawing it', async () => {
+    const client = await clientWithImageRole();
+
+    const running = client.generateImages({ ...REQUEST, steps: 6 });
+    const progress = await client.imageGenerationProgress(REQUEST.requestId);
+
+    // The mock counts steps as a reporting endpoint does, so the pane has a bar to show even in the
+    // host that runs without a model behind it.
+    expect(progress?.total).toBe(6);
+    expect(progress?.step ?? -1).toBeGreaterThanOrEqual(0);
+    expect(progress?.step ?? 0).toBeLessThanOrEqual(progress?.total ?? 0);
+    expect(typeof progress?.stage).toBe('string');
+
+    await running;
+
+    // A generation that has answered has nothing left to report.
+    expect(await client.imageGenerationProgress(REQUEST.requestId)).toBeUndefined();
+  });
 });

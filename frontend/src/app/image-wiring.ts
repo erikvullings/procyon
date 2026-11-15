@@ -35,6 +35,9 @@ export interface ImageSaveInput {
   readonly overwrite: boolean;
 }
 
+/** How often a waiting pane asks an endpoint how far its drawing has got (task 0325). */
+const IMAGE_PROGRESS_POLL_MS = 750;
+
 /**
  * Opens, drives and closes the image generation tabs (task 0325).
  *
@@ -237,9 +240,28 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     // The form as it is now is what gets remembered, whatever is edited while the batch is made.
     const remembered = promptOf(entry);
     entry.pendingRequestId = requestId;
+    entry.progress = undefined;
     entry.failure = undefined;
     entry.error = undefined;
     m.redraw();
+
+    // How far the drawing has got is asked for alongside it: an endpoint that reports its steps
+    // turns a silent wait into a bar, and one that says nothing leaves the pane simply waiting.
+    const askForProgress = (): void => {
+      void client
+        .imageGenerationProgress(requestId)
+        .then((progress) => {
+          const current = entryOf(key);
+          if (current !== entry || current.pendingRequestId !== requestId) return;
+          current.progress = progress;
+          m.redraw();
+        })
+        // A host that cannot answer about a running generation says nothing about it.
+        .catch(() => undefined);
+    };
+    askForProgress();
+    const progressTimer = setInterval(askForProgress, IMAGE_PROGRESS_POLL_MS);
+
     try {
       const batch = await client.generateImages({
         requestId,
@@ -258,6 +280,7 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
       });
       if (entryOf(key) !== entry || entry.pendingRequestId !== requestId) return;
       entry.pendingRequestId = undefined;
+      entry.progress = undefined;
       // What was on screen becomes a crumb rather than disappearing.
       archive(entry);
       entry.batch = batch;
@@ -281,10 +304,17 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     } catch (error: unknown) {
       if (entryOf(key) !== entry) return;
       entry.pendingRequestId = undefined;
+      entry.progress = undefined;
       const reason = imageFailureReason(error);
       entry.failure = imageFailureKey(reason);
       entry.error = t('image', entry.failure);
     } finally {
+      clearInterval(progressTimer);
+      const current = entryOf(key);
+      if (current === entry && current.pendingRequestId === requestId) {
+        current.pendingRequestId = undefined;
+        current.progress = undefined;
+      }
       m.redraw();
     }
   }
@@ -295,6 +325,7 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     const requestId = entry?.pendingRequestId;
     if (entry === undefined || requestId === undefined) return;
     entry.pendingRequestId = undefined;
+    entry.progress = undefined;
     m.redraw();
     void client.cancelImageGeneration(requestId).catch(() => undefined);
   }

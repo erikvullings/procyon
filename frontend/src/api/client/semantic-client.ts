@@ -40,6 +40,7 @@ import type {
   GetDocumentSummaryRequest,
   GetSemanticFolderStatusRequest,
   ImageBatch,
+  ImageGenerationProgress,
   ImagePrompt,
   ImportSemanticLocalModelRequest,
   InstallSemanticWorkerPatchRequest,
@@ -394,6 +395,15 @@ export interface SemanticClient {
    * backend holds the bytes until each image is saved or the batch is discarded.
    */
   generateImages(request: GenerateImagesRequest, signal?: AbortSignal): Promise<ImageBatch>;
+
+  /**
+   * How far one running generation has got, as its endpoint reported it (task 0325). `undefined`
+   * means the endpoint has said nothing about its work, which is how most of them answer.
+   */
+  imageGenerationProgress(
+    requestId: string,
+    signal?: AbortSignal,
+  ): Promise<ImageGenerationProgress | undefined>;
 
   /** The remembered image prompts with their settings, most recently used first. */
   listImagePrompts(signal?: AbortSignal): Promise<ImagePrompt[]>;

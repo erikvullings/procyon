@@ -1290,6 +1290,8 @@ export const it = {
     newPrompt: 'Nuovo prompt dell’immagine',
     seedPlaceholder: 'seed',
     waitingForModel: 'In attesa del modello…',
+    drawingProgress: 'A che punto è il disegno',
+    progressSteps: 'passaggio {step} di {total}',
     title: 'Immagine',
     openDescription: 'Genera un immagine accanto all’editor o alla cartella',
     subject: 'Cosa raffigurare',

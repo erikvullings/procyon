@@ -9,6 +9,7 @@ import { t } from '../i18n';
 import type {
   GeneratedImageBytes,
   ImageBatch,
+  ImageGenerationProgress,
   ImagePrompt,
   Location,
   SaveGeneratedImageResponse,
@@ -70,6 +71,7 @@ function imageClient(overrides: Partial<FileManagerClient> = {}): Partial<FileMa
         Promise.resolve({ bytes: new Uint8Array([1, 2, 3]), mediaType: 'image/png' }),
     ),
     cancelImageGeneration: vi.fn(() => Promise.resolve()),
+    imageGenerationProgress: vi.fn(() => Promise.resolve(undefined)),
     saveGeneratedImage: vi.fn(() =>
       Promise.resolve({
         location: { providerId: 'local', uri: 'file:///shots/lighthouse-1024x1024-1.png' },
@@ -267,6 +269,45 @@ describe('image wiring', () => {
     expect(client.generatedImageBytes).toHaveBeenCalledWith('g1', 'i1', false);
     expect(entry.selectedImageId).toBe('i1');
     expect(entry.views.map((view) => view.loading)).toEqual([false, false]);
+  });
+
+  it('follows how far the model has got while the picture is being drawn', async () => {
+    const client = imageClient();
+    let finishBatch!: (value: ImageBatch) => void;
+    client.generateImages = vi.fn(
+      () =>
+        new Promise<ImageBatch>((resolve) => {
+          finishBatch = resolve;
+        }),
+    );
+    let reportProgress!: (value: ImageGenerationProgress | undefined) => void;
+    client.imageGenerationProgress = vi.fn(
+      () =>
+        new Promise<ImageGenerationProgress | undefined>((resolve) => {
+          reportProgress = resolve;
+        }),
+    );
+    const { shell, entry } = fakeShell(client);
+    entry.subject = 'a lighthouse at dusk';
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    const running = wiring.generate(client as unknown as FileManagerClient, entry.key);
+
+    // The pane asks as soon as the drawing starts, so a waiting bar shows without another click.
+    await vi.waitFor(() => {
+      expect(client.imageGenerationProgress).toHaveBeenCalledWith('req-1');
+    });
+    reportProgress({ stage: 'Generating', step: 3, total: 4 });
+    await vi.waitFor(() => {
+      expect(entry.progress).toEqual({ stage: 'Generating', step: 3, total: 4 });
+    });
+
+    finishBatch(batch);
+    await running;
+
+    // A generation that has answered is not still reported as working.
+    expect(entry.progress).toBeUndefined();
+    expect(entry.pendingRequestId).toBeUndefined();
   });
 
   it('stops the request in flight and keeps the prompt', async () => {

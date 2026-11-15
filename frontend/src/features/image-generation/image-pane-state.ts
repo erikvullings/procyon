@@ -1,6 +1,7 @@
 import type {
   GeneratedImageSource,
   ImageBatch,
+  ImageGenerationProgress,
   ImagePrompt,
   ImageQualityId,
   Location,
@@ -81,6 +82,8 @@ export interface ImagePaneEntry {
   selectedImageId?: string | undefined;
   /** Identity of the running request, so Stop can reach it. */
   pendingRequestId?: string | undefined;
+  /** How far the running generation has got, as its endpoint reported it; nothing said is `undefined`. */
+  progress?: ImageGenerationProgress | undefined;
   /** Why the last generation was refused, as a rejection reason. */
   failure?: ImageFailureKey | undefined;
   /** Anything else that went wrong, already worded for display. */

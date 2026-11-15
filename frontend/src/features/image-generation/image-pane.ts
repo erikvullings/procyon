@@ -19,8 +19,15 @@ import {
 } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
-import type { GeneratedImage, ImagePrompt, Location } from '../../models';
-import { IMAGE_QUALITIES, IMAGE_SIZES, isValidImageFileName, qualityIdOf } from '../../models';
+import type { GeneratedImage, ImageGenerationProgress, ImagePrompt, Location } from '../../models';
+import {
+  IMAGE_QUALITIES,
+  IMAGE_SIZES,
+  isValidImageFileName,
+  progressHasSteps,
+  progressPercent,
+  qualityIdOf,
+} from '../../models';
 import {
   activeGeneration,
   canGenerate,
@@ -103,6 +110,47 @@ export interface ImagePaneAttrs {
  * Nothing here writes to disk - the preview only ever shows bytes the backend is holding, and Save
  * is the single path to a file.
  */
+/**
+ * What a waiting pane says while the model draws. An endpoint that reports its steps turns the
+ * wait into a bar with a stage on it; one that says nothing leaves the plain sentence (task 0325).
+ *
+ * The stage is the endpoint's own wording. It reaches here bounded to 80 characters and Mithril
+ * escapes text, so it can only ever be shown as what it is: a label, never markup.
+ */
+function pendingView(progress: ImageGenerationProgress | undefined): m.Child {
+  if (progress === undefined || (progress.stage === '' && progress.total === 0)) {
+    return m('p.fm-image-pending', t('image', 'waitingForModel'));
+  }
+  const counted = progressHasSteps(progress);
+  const percent = progressPercent(progress);
+  return m(
+    'div.fm-image-progress',
+    {
+      role: 'progressbar',
+      'aria-valuemin': '0',
+      ...(counted
+        ? { 'aria-valuenow': String(progress.step), 'aria-valuemax': String(progress.total) }
+        : {}),
+      'aria-label': t('image', 'drawingProgress'),
+    },
+    [
+      progress.stage === '' ? undefined : m('span.fm-image-progress-stage', progress.stage),
+      counted
+        ? m(
+            'span.fm-image-progress-count',
+            t('image', 'progressSteps', { step: progress.step, total: progress.total }),
+          )
+        : undefined,
+      m('span.fm-image-progress-track', [
+        m('span.fm-image-progress-fill', {
+          style: { width: `${percent ?? 100}%` },
+          ...(percent === undefined ? { 'data-indeterminate': 'true' } : {}),
+        }),
+      ]),
+    ],
+  );
+}
+
 export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
   /** The save form is local UI state: a file name, the folder text, and a replace confirmation. */
   let saveImageId: string | undefined;
@@ -753,7 +801,7 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
       },
       [
         pending
-          ? m('p.fm-image-pending', t('image', 'waitingForModel'))
+          ? pendingView(entry.progress)
           : images.length === 0
             ? undefined
             : images.map((image, index) => {

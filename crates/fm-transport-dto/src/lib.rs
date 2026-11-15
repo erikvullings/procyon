@@ -164,8 +164,8 @@ pub use geo::{
 pub use health::{HealthDto, HealthStatusDto};
 pub use image_generation::{
     CancelImageGenerationRequestDto, DiscardImageBatchRequestDto, GenerateImagesRequestDto,
-    GeneratedImageBytesDto, GeneratedImageDto, ImageBatchDto, ImageQualityDto, ImageSourceDto,
-    SaveGeneratedImageRequestDto, SaveGeneratedImageResponseDto,
+    GeneratedImageBytesDto, GeneratedImageDto, ImageBatchDto, ImageGenerationProgressDto,
+    ImageQualityDto, ImageSourceDto, SaveGeneratedImageRequestDto, SaveGeneratedImageResponseDto,
 };
 pub use image_metadata::{
     CaptureTimeDto, GpsPositionDto, ImageGpsEntryDto, ImageMetadataDto, ImageMetadataEditDto,

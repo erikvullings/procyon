@@ -17,8 +17,9 @@ use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use crate::image_generation::{
-    GeneratedBatch, ImageGenerationError, ImageProvider, MAX_IMAGE_BYTES, MAX_IMAGES, SourceImage,
-    ValidatedImageRequest, images_edit_fields, images_request_body, parse_images_response,
+    GeneratedBatch, ImageGenerationError, ImageGenerationProgress, ImageProvider, MAX_IMAGE_BYTES,
+    MAX_IMAGES, SourceImage, ValidatedImageRequest, images_edit_fields, images_of_value,
+    images_request_body, parse_images_response, readable_stage,
 };
 
 /// Largest reply accepted from an images endpoint; base64 makes a reply about a third larger than
@@ -27,6 +28,10 @@ const MAX_REPLY_BYTES: usize = 96 * 1024 * 1024;
 
 /// Largest task reply accepted from an async endpoint: status text, never image bytes.
 const MAX_TASK_REPLY_BYTES: usize = 1024 * 1024;
+
+/// Largest refusal body read to work out whether it was the `stream` parameter that was refused.
+/// The provider's own words are only ever looked at here; they are never kept or shown.
+const MAX_REFUSAL_HINT_BYTES: usize = 8 * 1024;
 
 /// How often a running task is asked whether it is finished.
 const DEFAULT_POLL_INTERVAL: Duration = Duration::from_secs(1);
@@ -167,35 +172,97 @@ impl ImageEndpointTransport {
         request: &ValidatedImageRequest,
         source: Option<&SourceImage>,
         cancellation: &CancellationToken,
+        on_progress: &mut (dyn FnMut(ImageGenerationProgress) + Send),
     ) -> Result<GeneratedBatch, ImageGenerationError> {
-        let builder = match source {
-            None => self
-                .apply_headers(self.client.post(&self.endpoint.url))
-                .json(&images_request_body(&self.endpoint.model, request)),
-            Some(source) => {
-                let part = reqwest::multipart::Part::bytes(source.bytes.clone())
-                    .file_name(source.name.clone())
-                    .mime_str(source.media_type)
-                    .map_err(|_| {
-                        ImageGenerationError::InvalidRequest("the source image cannot be sent")
-                    })?;
-                let form = images_edit_fields(&self.endpoint.model, request)
-                    .into_iter()
-                    .fold(
-                        reqwest::multipart::Form::new().part("image", part),
-                        |form, (name, value)| form.text(name, value),
-                    );
-                self.apply_headers(self.client.post(edits_url(&self.endpoint.url)?))
-                    .multipart(form)
+        let model = self.endpoint.model.clone();
+        if let Some(source) = source {
+            // An edit uploads a picture as a form part, and those servers answer the upload in one
+            // body: the ask is made plainly and the person simply gets no step counter.
+            let builder = self
+                .apply_headers(self.client.post(edits_url(&self.endpoint.url)?))
+                .multipart(self.edit_form(source, request)?);
+            let bytes = self
+                .reply_bytes(builder, MAX_REPLY_BYTES, cancellation)
+                .await?;
+            return Ok(GeneratedBatch {
+                model,
+                images: parse_images_response(&bytes)?,
+            });
+        }
+        match self
+            .images_reply(request, true, cancellation, on_progress)
+            .await?
+        {
+            ImagesReply::Images(images) => Ok(GeneratedBatch { model, images }),
+            // The server does not know the parameter; asking it again without costs one round trip
+            // and it draws the same picture.
+            ImagesReply::RefusedStream => {
+                tracing::debug!("the image endpoint does not say how far it has got");
+                match self
+                    .images_reply(request, false, cancellation, on_progress)
+                    .await?
+                {
+                    ImagesReply::Images(images) => Ok(GeneratedBatch { model, images }),
+                    ImagesReply::RefusedStream => Err(ImageGenerationError::Unavailable),
+                }
             }
-        };
-        let bytes = self
-            .reply_bytes(builder, MAX_REPLY_BYTES, cancellation)
-            .await?;
-        Ok(GeneratedBatch {
-            model: self.endpoint.model.clone(),
-            images: parse_images_response(&bytes)?,
-        })
+        }
+    }
+
+    /// The multipart form of an image edit: the starting picture and the same ask as a generation.
+    fn edit_form(
+        &self,
+        source: &SourceImage,
+        request: &ValidatedImageRequest,
+    ) -> Result<reqwest::multipart::Form, ImageGenerationError> {
+        let part = reqwest::multipart::Part::bytes(source.bytes.clone())
+            .file_name(source.name.clone())
+            .mime_str(source.media_type)
+            .map_err(|_| ImageGenerationError::InvalidRequest("the source image cannot be sent"))?;
+        Ok(images_edit_fields(&self.endpoint.model, request)
+            .into_iter()
+            .fold(
+                reqwest::multipart::Form::new().part("image", part),
+                |form, (name, value)| form.text(name, value),
+            ))
+    }
+
+    /// Asks the images endpoint once. `stream` tells a server that knows the parameter to report
+    /// every step as it draws; one that does not know it says so, and is asked again without it.
+    async fn images_reply(
+        &self,
+        request: &ValidatedImageRequest,
+        stream: bool,
+        cancellation: &CancellationToken,
+        on_progress: &mut (dyn FnMut(ImageGenerationProgress) + Send),
+    ) -> Result<ImagesReply, ImageGenerationError> {
+        let builder = self
+            .apply_headers(self.client.post(&self.endpoint.url))
+            .json(&images_request_body(&self.endpoint.model, request, stream));
+        let response = self.send(builder, cancellation).await?;
+        let status = response.status();
+        if !status.is_success() {
+            if stream && status.is_client_error() {
+                let hint = read_bounded(response, cancellation, MAX_REFUSAL_HINT_BYTES)
+                    .await
+                    .unwrap_or_default();
+                if refusal_about_stream(&hint) {
+                    return Ok(ImagesReply::RefusedStream);
+                }
+            }
+            tracing::warn!(
+                status = status.as_u16(),
+                "image endpoint refused the request"
+            );
+            return Err(ImageGenerationError::Unavailable);
+        }
+        if is_event_stream(&response) {
+            return read_events(response, cancellation, on_progress)
+                .await
+                .map(ImagesReply::Images);
+        }
+        let bytes = read_bounded(response, cancellation, MAX_REPLY_BYTES).await?;
+        parse_images_response(&bytes).map(ImagesReply::Images)
     }
 
     /// One Model Studio generation: create a task, wait for it, then fetch the images it hands
@@ -320,10 +387,12 @@ impl ImageProvider for ImageEndpointTransport {
         request: &ValidatedImageRequest,
         source: Option<&SourceImage>,
         cancellation: &CancellationToken,
+        on_progress: &mut (dyn FnMut(ImageGenerationProgress) + Send),
     ) -> Result<GeneratedBatch, ImageGenerationError> {
         match &self.endpoint.api {
             ImageApiStyle::OpenAiImages => {
-                self.generate_openai(request, source, cancellation).await
+                self.generate_openai(request, source, cancellation, on_progress)
+                    .await
             }
             ImageApiStyle::DashscopeTasks { task_url_prefix } => {
                 if source.is_some() {
@@ -331,11 +400,138 @@ impl ImageProvider for ImageEndpointTransport {
                     // file to somebody else's storage first. That is not this app's call to make.
                     return Err(ImageGenerationError::SourceUnsupported);
                 }
+                // A task is asked whether it has finished rather than watched while it draws, so
+                // this contract has no steps to report.
                 self.generate_dashscope(request, task_url_prefix, cancellation)
                     .await
             }
         }
     }
+}
+
+/// What an images endpoint answered to a request that asked to report how far it had got.
+enum ImagesReply {
+    /// The images it produced.
+    Images(Vec<Vec<u8>>),
+    /// It refused the `stream` parameter itself, so the ask should be made again without it.
+    RefusedStream,
+}
+
+/// Whether a reply arrives as a stream of events rather than as one body.
+fn is_event_stream(response: &reqwest::Response) -> bool {
+    response
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.to_ascii_lowercase().starts_with("text/event-stream"))
+}
+
+/// Whether a refusal was about the `stream` parameter rather than about the ask. Only this one
+/// difference is worth asking about twice; what the provider wrote is kept by nobody and shown to
+/// nobody.
+fn refusal_about_stream(bytes: &[u8]) -> bool {
+    String::from_utf8_lossy(bytes)
+        .to_ascii_lowercase()
+        .contains("stream")
+}
+
+/// Reads an event stream until the images arrive, reporting every step the endpoint mentions on the
+/// way. The reply is bounded exactly as a plain one is: an endpoint that streams has not earned a
+/// licence to send unbounded bytes.
+async fn read_events(
+    response: reqwest::Response,
+    cancellation: &CancellationToken,
+    on_progress: &mut (dyn FnMut(ImageGenerationProgress) + Send),
+) -> Result<Vec<Vec<u8>>, ImageGenerationError> {
+    let mut stream = response.bytes_stream();
+    let mut pending: Vec<u8> = Vec::new();
+    let mut items: Vec<Value> = Vec::new();
+    loop {
+        let next = tokio::select! {
+            () = cancellation.cancelled() => return Err(ImageGenerationError::Cancelled),
+            next = stream.next() => next,
+        };
+        let Some(chunk) = next else {
+            break;
+        };
+        let chunk = chunk.map_err(|_| ImageGenerationError::Unavailable)?;
+        if pending.len().saturating_add(chunk.len()) > MAX_REPLY_BYTES {
+            return Err(ImageGenerationError::TooLarge);
+        }
+        pending.extend_from_slice(&chunk);
+        // Only whole lines are read; the last one waits for the chunk that finishes it.
+        while let Some(index) = pending.iter().position(|byte| *byte == b'\n') {
+            let line: Vec<u8> = pending.drain(..=index).collect();
+            read_event_line(&line, on_progress, &mut items);
+        }
+    }
+    if !pending.is_empty() {
+        read_event_line(&pending, on_progress, &mut items);
+    }
+    let mut reply = serde_json::Map::new();
+    reply.insert("data".to_owned(), Value::Array(items));
+    images_of_value(&Value::Object(reply))
+}
+
+/// Reads one line of an event stream: a step reported, an image produced, or something this
+/// contract has no use for. What cannot be read is not an error - a server may send comments,
+/// heartbeats and events meant for somebody else.
+fn read_event_line(
+    line: &[u8],
+    on_progress: &mut (dyn FnMut(ImageGenerationProgress) + Send),
+    items: &mut Vec<Value>,
+) {
+    let text = String::from_utf8_lossy(line);
+    let Some(payload) = text.trim().strip_prefix("data:") else {
+        return;
+    };
+    let payload = payload.trim();
+    if payload.is_empty() || payload == "[DONE]" {
+        return;
+    }
+    let Ok(value) = serde_json::from_str::<Value>(payload) else {
+        return;
+    };
+    if let Some(progress) = progress_of_event(&value) {
+        on_progress(progress);
+        return;
+    }
+    if let Some(images) = value.get("data").and_then(Value::as_array) {
+        items.extend(
+            images
+                .iter()
+                .filter(|item| item.get("b64_json").is_some())
+                .cloned(),
+        );
+    }
+}
+
+/// The step one event reported, when it was a progress report at all. An event that names neither a
+/// stage nor a step says nothing, and is not made into one.
+fn progress_of_event(value: &Value) -> Option<ImageGenerationProgress> {
+    if value
+        .get("type")
+        .and_then(Value::as_str)
+        .is_some_and(|kind| kind != "progress")
+    {
+        return None;
+    }
+    let stage = readable_stage(
+        value
+            .get("stage")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    );
+    let step = value.get("step").and_then(Value::as_u64).unwrap_or(0);
+    let total = value.get("total").and_then(Value::as_u64).unwrap_or(0);
+    if stage.is_empty() && step == 0 && total == 0 {
+        return None;
+    }
+    Some(ImageGenerationProgress {
+        stage,
+        step: u32::try_from(step).unwrap_or(u32::MAX),
+        total: u32::try_from(total).unwrap_or(u32::MAX),
+    })
 }
 
 /// The edits endpoint beside a generations endpoint: the same server, asked to change a picture
@@ -655,7 +851,7 @@ mod tests {
         let endpoint = Endpoint::start(Some(reply(2))).await;
         let transport = ImageEndpointTransport::new(endpoint.request());
         let batch = transport
-            .generate(&validated(), None, &CancellationToken::new())
+            .generate(&validated(), None, &CancellationToken::new(), &mut |_| {})
             .await
             .expect("generated");
         assert_eq!(batch.model, "flux-schnell");
@@ -679,6 +875,149 @@ mod tests {
         assert_eq!(sent["n"], MAX_IMAGES);
         assert_eq!(sent["response_format"], "b64_json");
         assert_eq!(sent["seed"], 42);
+    }
+
+    /// The JSON body of a recorded request.
+    fn body_of(recorded: &str) -> String {
+        recorded
+            .split_once("\r\n\r\n")
+            .map(|(_, body)| body.to_owned())
+            .unwrap_or_default()
+    }
+
+    /// A local server that says how far it has got (the shape `mlx-serve` answers in): the steps
+    /// arrive while it draws, and the pictures ride in with the last event.
+    #[tokio::test]
+    async fn an_endpoint_that_reports_steps_reports_them_and_still_hands_over_its_pictures() {
+        let encoded = base64::engine::general_purpose::STANDARD.encode(encoded_png());
+        let script = Script::start(
+            "127.0.0.1",
+            vec![events(&[
+                "data: {\"type\":\"progress\",\"stage\":\"Encoding prompt\",\"step\":0,\"total\":30}",
+                "data: {\"type\":\"progress\",\"stage\":\"Generating\",\"step\":1,\"total\":30}",
+                "data: {\"type\":\"progress\",\"stage\":\"Generating\",\"step\":2,\"total\":30}",
+                ": a heartbeat meant for somebody else",
+                "data: {\"type\":\"other\",\"note\":\"an event this contract has no use for\"}",
+                &format!(
+                    "data: {{\"type\":\"complete\",\"data\":[{{\"b64_json\":\"{encoded}\"}}]}}"
+                ),
+                "data: [DONE]",
+            ])],
+        )
+        .await;
+        let mut reported = Vec::new();
+        let transport = ImageEndpointTransport::new(ImageEndpointRequest {
+            url: script.url("/v1/images/generations"),
+            model: "qwen-image".to_owned(),
+            api_key: None,
+            api_key_header: "authorization",
+            headers: BTreeMap::new(),
+            timeout: Duration::from_secs(10),
+            api: ImageApiStyle::OpenAiImages,
+        });
+
+        let batch = transport
+            .generate(
+                &validated(),
+                None,
+                &CancellationToken::new(),
+                &mut |progress| reported.push(progress),
+            )
+            .await
+            .expect("generated");
+
+        assert_eq!(
+            batch.images.len(),
+            1,
+            "the picture came with the last event"
+        );
+        assert_eq!(
+            reported.len(),
+            3,
+            "every step the endpoint named, and nothing else"
+        );
+        assert_eq!(reported[0].stage, "Encoding prompt");
+        assert_eq!(reported[1].stage, "Generating");
+        assert_eq!(reported[1].step, 1);
+        assert_eq!(reported[1].total, 30);
+        assert!(reported[2].has_steps(), "thirty steps were on the card");
+        let sent: serde_json::Value =
+            serde_json::from_str(&body_of(&script.received()[0])).expect("json body");
+        assert_eq!(
+            sent["stream"], true,
+            "the endpoint was asked to report as it drew"
+        );
+    }
+
+    /// An endpoint that does not know the parameter is asked again without it, so a person on a
+    /// plain server notices nothing but the missing step counter.
+    #[tokio::test]
+    async fn an_endpoint_that_does_not_know_the_parameter_is_asked_again_plainly() {
+        let script = Script::start(
+            "127.0.0.1",
+            vec![
+                refused("{\"error\":{\"message\":\"Unsupported parameter: 'stream'\"}}"),
+                json_reply(reply(1)).into(),
+            ],
+        )
+        .await;
+        let transport = ImageEndpointTransport::new(ImageEndpointRequest {
+            url: script.url("/v1/images/generations"),
+            model: "dall-e-3".to_owned(),
+            api_key: None,
+            api_key_header: "authorization",
+            headers: BTreeMap::new(),
+            timeout: Duration::from_secs(10),
+            api: ImageApiStyle::OpenAiImages,
+        });
+
+        let batch = transport
+            .generate(&validated(), None, &CancellationToken::new(), &mut |_| {})
+            .await
+            .expect("generated after being refused the parameter");
+
+        assert_eq!(batch.images.len(), 1);
+        let requests = script.received();
+        assert_eq!(
+            requests.len(),
+            2,
+            "asked once with the parameter and once without"
+        );
+        assert!(body_of(&requests[0]).contains("\"stream\":true"));
+        assert!(
+            !body_of(&requests[1]).contains("stream"),
+            "the second ask is the plain one it can answer"
+        );
+    }
+
+    /// A refusal of the ask itself is the end of it: the same ask is not sent twice, and the
+    /// provider's own explanation stays out of the app.
+    #[tokio::test]
+    async fn a_refusal_of_the_ask_itself_is_not_asked_again() {
+        let script = Script::start(
+            "127.0.0.1",
+            vec![refused(
+                "{\"error\":{\"message\":\"size must be a multiple of 16\"}}",
+            )],
+        )
+        .await;
+        let transport = ImageEndpointTransport::new(ImageEndpointRequest {
+            url: script.url("/v1/images/generations"),
+            model: "dall-e-3".to_owned(),
+            api_key: None,
+            api_key_header: "authorization",
+            headers: BTreeMap::new(),
+            timeout: Duration::from_secs(10),
+            api: ImageApiStyle::OpenAiImages,
+        });
+
+        let error = transport
+            .generate(&validated(), None, &CancellationToken::new(), &mut |_| {})
+            .await
+            .expect_err("refused");
+
+        assert_eq!(error, ImageGenerationError::Unavailable);
+        assert_eq!(script.received().len(), 1, "one ask, one refusal");
     }
 
     #[tokio::test]
@@ -709,7 +1048,7 @@ mod tests {
             api: ImageApiStyle::OpenAiImages,
         });
         let error = transport
-            .generate(&validated(), None, &CancellationToken::new())
+            .generate(&validated(), None, &CancellationToken::new(), &mut |_| {})
             .await
             .expect_err("refused");
         assert_eq!(error, ImageGenerationError::Unavailable);
@@ -727,7 +1066,7 @@ mod tests {
         });
         assert_eq!(
             transport
-                .generate(&validated(), None, &CancellationToken::new())
+                .generate(&validated(), None, &CancellationToken::new(), &mut |_| {})
                 .await
                 .expect_err("timed out"),
             ImageGenerationError::TimedOut
@@ -740,7 +1079,8 @@ mod tests {
         let transport = ImageEndpointTransport::new(endpoint.request());
         let cancellation = CancellationToken::new();
         let request = validated();
-        let generate = transport.generate(&request, None, &cancellation);
+        let mut silent = |_| {};
+        let generate = transport.generate(&request, None, &cancellation, &mut silent);
         let stop = cancellation.clone();
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(50)).await;
@@ -778,15 +1118,61 @@ mod tests {
         assert!(!shown.contains("sk-secret"));
     }
 
-    /// One canned reply: the content type it is served under and its bytes.
-    type CannedReply = (String, Vec<u8>);
+    /// One canned reply: the status it is served with, the content type, and its bytes.
+    struct CannedReply {
+        status: u16,
+        content_type: String,
+        body: Vec<u8>,
+    }
+
+    impl From<(&str, Vec<u8>)> for CannedReply {
+        fn from((content_type, body): (&str, Vec<u8>)) -> Self {
+            Self {
+                status: 200,
+                content_type: content_type.to_owned(),
+                body,
+            }
+        }
+    }
+
+    /// The phrase a canned reply's status line carries.
+    fn reason(status: u16) -> &'static str {
+        match status {
+            200 => "OK",
+            400 => "Bad Request",
+            _ => "Unknown",
+        }
+    }
+
+    /// A refusal, which is how an endpoint that does not know a parameter says so.
+    fn refused(body: &str) -> CannedReply {
+        CannedReply {
+            status: 400,
+            content_type: "application/json".to_owned(),
+            body: body.as_bytes().to_vec(),
+        }
+    }
+
+    /// Replies served as a stream of events, the way a server that reports progress answers. Each
+    /// entry is one wire line, `data:` prefix included.
+    fn events(events: &[&str]) -> CannedReply {
+        CannedReply {
+            status: 200,
+            content_type: "text/event-stream".to_owned(),
+            body: events
+                .iter()
+                .map(|event| format!("{event}\n\n"))
+                .collect::<String>()
+                .into_bytes(),
+        }
+    }
 
     /// The replies a fixture still owes, in the order it owes them.
     type ReplyQueue = Arc<tokio::sync::Mutex<std::collections::VecDeque<CannedReply>>>;
 
-    /// A loopback endpoint that answers each request in turn from a queue of
-    /// `(content-type, body)` pairs and records every request it received. Binding first and
-    /// queueing later lets a test name one fixture's port inside another's reply.
+    /// A loopback endpoint that answers each request in turn from a queue of canned replies and
+    /// records every request it received. Binding first and queueing later lets a test name one
+    /// fixture's port inside another's reply.
     struct Script {
         addr: SocketAddr,
         replies: ReplyQueue,
@@ -829,9 +1215,14 @@ mod tests {
                     };
                     let received = read_request(&mut stream).await;
                     recorded.lock().expect("record").push(received);
-                    let (content_type, body) = next;
+                    let CannedReply {
+                        status,
+                        content_type,
+                        body,
+                    } = next;
                     let header = format!(
-                        "HTTP/1.1 200 OK\r\ncontent-type: {content_type}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                        "HTTP/1.1 {status} {}\r\ncontent-type: {content_type}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                        reason(status),
                         body.len()
                     );
                     let _ = stream.write_all(header.as_bytes()).await;
@@ -847,18 +1238,17 @@ mod tests {
             }
         }
 
-        async fn start(host: &str, replies: Vec<(&'static str, Vec<u8>)>) -> Self {
+        async fn start(host: &str, replies: Vec<impl Into<CannedReply>>) -> Self {
             let script = Self::bind(host).await;
             script.queue(replies).await;
             script
         }
 
-        async fn queue(&self, replies: Vec<(&'static str, Vec<u8>)>) {
-            self.replies.lock().await.extend(
-                replies
-                    .into_iter()
-                    .map(|(kind, body)| (kind.to_owned(), body)),
-            );
+        async fn queue(&self, replies: Vec<impl Into<CannedReply>>) {
+            self.replies
+                .lock()
+                .await
+                .extend(replies.into_iter().map(|reply| reply.into()));
         }
 
         fn url(&self, path: &str) -> String {
@@ -947,7 +1337,7 @@ mod tests {
         );
 
         let batch = transport
-            .generate(&validated(), None, &CancellationToken::new())
+            .generate(&validated(), None, &CancellationToken::new(), &mut |_| {})
             .await
             .expect("generated");
 
@@ -1006,7 +1396,7 @@ mod tests {
             Duration::from_millis(5),
         );
         let error = transport
-            .generate(&validated(), None, &CancellationToken::new())
+            .generate(&validated(), None, &CancellationToken::new(), &mut |_| {})
             .await
             .expect_err("refused");
         assert_eq!(error, ImageGenerationError::Unavailable);
@@ -1050,7 +1440,8 @@ mod tests {
         );
         let cancellation = CancellationToken::new();
         let request = validated();
-        let generate = transport.generate(&request, None, &cancellation);
+        let mut silent = |_| {};
+        let generate = transport.generate(&request, None, &cancellation, &mut silent);
         let stop = cancellation.clone();
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(60)).await;
@@ -1083,7 +1474,7 @@ mod tests {
         );
         assert_eq!(
             transport
-                .generate(&validated(), None, &CancellationToken::new())
+                .generate(&validated(), None, &CancellationToken::new(), &mut |_| {})
                 .await
                 .expect_err("another host is not the endpoint's"),
             ImageGenerationError::Unavailable
@@ -1113,7 +1504,7 @@ mod tests {
         );
         assert_eq!(
             transport
-                .generate(&validated(), None, &CancellationToken::new())
+                .generate(&validated(), None, &CancellationToken::new(), &mut |_| {})
                 .await
                 .expect_err("not an image"),
             ImageGenerationError::Unavailable
@@ -1133,7 +1524,12 @@ mod tests {
             bytes: encoded_png(),
         };
         let batch = transport
-            .generate(&validated(), Some(&source), &CancellationToken::new())
+            .generate(
+                &validated(),
+                Some(&source),
+                &CancellationToken::new(),
+                &mut |_| {},
+            )
             .await
             .expect("generated");
         assert_eq!(batch.images.len(), 1);
@@ -1176,7 +1572,12 @@ mod tests {
         };
         assert_eq!(
             transport
-                .generate(&validated(), Some(&source), &CancellationToken::new())
+                .generate(
+                    &validated(),
+                    Some(&source),
+                    &CancellationToken::new(),
+                    &mut |_| {}
+                )
                 .await,
             Err(ImageGenerationError::SourceUnsupported)
         );
@@ -1186,7 +1587,7 @@ mod tests {
     /// somebody else's storage first. That is refused where they can still act on it.
     #[tokio::test]
     async fn a_task_endpoint_is_not_asked_to_start_from_a_picture_it_cannot_take() {
-        let endpoint = Script::start("127.0.0.1", Vec::new()).await;
+        let endpoint = Script::start("127.0.0.1", Vec::<CannedReply>::new()).await;
         let port = endpoint.addr.port();
         let transport = ImageEndpointTransport::with_poll_interval(
             dashscope_endpoint(endpoint.url(TASK_PATH), "127.0.0.1", port),
@@ -1199,7 +1600,12 @@ mod tests {
         };
         assert_eq!(
             transport
-                .generate(&validated(), Some(&source), &CancellationToken::new())
+                .generate(
+                    &validated(),
+                    Some(&source),
+                    &CancellationToken::new(),
+                    &mut |_| {}
+                )
                 .await,
             Err(ImageGenerationError::SourceUnsupported)
         );

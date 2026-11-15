@@ -8,7 +8,7 @@ use axum::Json;
 use axum::body::Body;
 use axum::extract::{Extension, Query, State};
 use axum::http::{StatusCode, header};
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 use fm_transport_dto::{
     CancelImageGenerationRequestDto, DiscardImageBatchRequestDto, GenerateImagesRequestDto,
     ImageBatchDto, SaveGeneratedImageRequestDto, SaveGeneratedImageResponseDto,
@@ -104,6 +104,36 @@ pub(crate) async fn generated_image_bytes(
         .header(header::CACHE_CONTROL, "private, max-age=300")
         .body(Body::from(image.bytes))
         .map_err(|_| ApiError::new(fm_application::ApplicationError::Internal, request_id))
+}
+
+/// Query string of the progress route.
+#[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub(crate) struct ImageProgressQuery {
+    /// The generation the person is waiting on.
+    request_id: Uuid,
+}
+
+/// How far one running generation has got, as its endpoint reported it. A generation that has
+/// answered, and an endpoint that says nothing about its work, both answer `204`.
+#[utoipa::path(
+    get,
+    path = "/api/v1/images/progress",
+    operation_id = "imageGenerationProgress",
+    params(ImageProgressQuery),
+    responses(
+        (status = 200, description = "How far the generation has got", body = fm_transport_dto::ImageGenerationProgressDto),
+        (status = 204, description = "Nothing has been reported about it"),
+    )
+)]
+pub(crate) async fn image_generation_progress(
+    State(state): State<AppState>,
+    Query(query): Query<ImageProgressQuery>,
+) -> Response {
+    match state.service.image_generation_progress(query.request_id) {
+        Some(progress) => (StatusCode::OK, Json(progress)).into_response(),
+        None => StatusCode::NO_CONTENT.into_response(),
+    }
 }
 
 /// Writes one stored image to the chosen folder and file name. An existing file is refused until the

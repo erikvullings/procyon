@@ -1290,6 +1290,8 @@ export const pl = {
     newPrompt: 'Nowa podpowiedź obrazu',
     seedPlaceholder: 'seed',
     waitingForModel: 'Oczekiwanie na model…',
+    drawingProgress: 'Jak daleko jest rysowanie',
+    progressSteps: 'krok {step} z {total}',
     title: 'Obraz',
     openDescription: 'Wygeneruj obraz obok edytora lub foldera',
     subject: 'Co przedstawić',

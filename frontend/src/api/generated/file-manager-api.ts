@@ -108,6 +108,8 @@ import type {
   HealthDto,
   HostKeyProbeDto,
   ImageBatchDto,
+  ImageGenerationProgressDto,
+  ImageGenerationProgressParams,
   ImageMetadataDto,
   ImagePromptDto,
   ImportSemanticLocalModelRequestDto,
@@ -5327,6 +5329,55 @@ return fetchMutator<generateImagesResponse>(getGenerateImagesUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(generateImagesRequestDto)
+  }
+);}
+
+
+
+export type imageGenerationProgressResponse200 = {
+  data: ImageGenerationProgressDto
+  status: 200
+}
+
+export type imageGenerationProgressResponse204 = {
+  data: void
+  status: 204
+}
+
+export type imageGenerationProgressResponseSuccess = (imageGenerationProgressResponse200 | imageGenerationProgressResponse204) & {
+  headers: Headers;
+};
+;
+
+export type imageGenerationProgressResponse = (imageGenerationProgressResponseSuccess)
+
+export const getImageGenerationProgressUrl = (params: ImageGenerationProgressParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/images/progress?${stringifiedParams}` : `/api/v1/images/progress`
+}
+
+/**
+ * @summary How far one running generation has got, as its endpoint reported it. A generation that has
+answered, and an endpoint that says nothing about its work, both answer `204`.
+ */
+export const imageGenerationProgress = async (params: ImageGenerationProgressParams, options?: Parameters<typeof fetchMutator>[1]): Promise<imageGenerationProgressResponse> => {
+
+  return fetchMutator<imageGenerationProgressResponse>(getImageGenerationProgressUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 

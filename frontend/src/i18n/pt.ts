@@ -1296,6 +1296,8 @@ export const pt = {
     newPrompt: 'Nova indicação de imagem',
     seedPlaceholder: 'seed',
     waitingForModel: 'Aguardando o modelo…',
+    drawingProgress: 'Como está o desenho',
+    progressSteps: 'etapa {step} de {total}',
     title: 'Imagem',
     openDescription: 'Gere uma imagem ao lado do editor ou da pasta',
     subject: 'O que desenhar',

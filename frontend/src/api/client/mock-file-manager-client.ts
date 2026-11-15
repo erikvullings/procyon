@@ -93,6 +93,7 @@ import type {
   GitFileHistoryResult,
   HostKeyProbe,
   ImageBatch,
+  ImageGenerationProgress,
   ImageGpsEntry,
   ImageMetadata,
   ImagePrompt,
@@ -1200,6 +1201,13 @@ export class MockFileManagerClient implements FileManagerClient {
 
   generateImages(request: GenerateImagesRequest, signal?: AbortSignal): Promise<ImageBatch> {
     return this.semanticClient.generateImages(request, signal);
+  }
+
+  imageGenerationProgress(
+    requestId: string,
+    signal?: AbortSignal,
+  ): Promise<ImageGenerationProgress | undefined> {
+    return this.semanticClient.imageGenerationProgress(requestId, signal);
   }
 
   listImagePrompts(signal?: AbortSignal): Promise<ImagePrompt[]> {

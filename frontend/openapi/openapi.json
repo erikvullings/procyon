@@ -3904,6 +3904,39 @@
         }
       }
     },
+    "/api/v1/images/progress": {
+      "get": {
+        "summary": "How far one running generation has got, as its endpoint reported it. A generation that has\nanswered, and an endpoint that says nothing about its work, both answer `204`.",
+        "operationId": "imageGenerationProgress",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "query",
+            "description": "The generation the person is waiting on.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "How far the generation has got",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageGenerationProgressDto"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Nothing has been reported about it"
+          }
+        }
+      }
+    },
     "/api/v1/images/prompts": {
       "get": {
         "summary": "Lists the remembered prompts, most recently used first.",
@@ -16482,6 +16515,33 @@
             "type": "integer",
             "format": "int32",
             "description": "Width in pixels.",
+            "minimum": 0
+          }
+        }
+      },
+      "ImageGenerationProgressDto": {
+        "type": "object",
+        "description": "How far one running generation has got, as its endpoint reported it (task 0325). An endpoint\nthat says nothing about its work reports nothing at all, and the pane keeps its own waiting\nsentence - nothing here is ever guessed at.",
+        "required": [
+          "stage",
+          "step",
+          "total"
+        ],
+        "properties": {
+          "stage": {
+            "type": "string",
+            "description": "What the endpoint says it is doing, bounded and stripped of control characters."
+          },
+          "step": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The step drawn so far; `0` when the endpoint counts nothing.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The steps it intends to draw; `0` when the endpoint does not say.",
             "minimum": 0
           }
         }

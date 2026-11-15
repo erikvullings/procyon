@@ -186,3 +186,17 @@ pub struct GeneratedImageBytesDto {
     /// Their media type, e.g. `image/png`.
     pub media_type: String,
 }
+
+/// How far one running generation has got, as its endpoint reported it (task 0325). An endpoint
+/// that says nothing about its work reports nothing at all, and the pane keeps its own waiting
+/// sentence - nothing here is ever guessed at.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageGenerationProgressDto {
+    /// What the endpoint says it is doing, bounded and stripped of control characters.
+    pub stage: String,
+    /// The step drawn so far; `0` when the endpoint counts nothing.
+    pub step: u32,
+    /// The steps it intends to draw; `0` when the endpoint does not say.
+    pub total: u32,
+}

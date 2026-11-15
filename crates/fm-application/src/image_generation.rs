@@ -279,8 +279,15 @@ pub(crate) fn validate_request(
     })
 }
 
-/// Builds the OpenAI-style images request body. `model` comes from the image role.
-pub(crate) fn images_request_body(model: &str, request: &ValidatedImageRequest) -> Value {
+/// Builds the OpenAI-style images request body. `model` comes from the image role. `stream` asks a
+/// server that knows the parameter to report how far the drawing has got, so the pane can show it;
+/// a server that does not know it is asked again without it (see
+/// [`crate::image_generation_transport::ImageEndpointTransport`]).
+pub(crate) fn images_request_body(
+    model: &str,
+    request: &ValidatedImageRequest,
+    stream: bool,
+) -> Value {
     let mut body = json!({
         "model": model,
         "prompt": request.prompt,
@@ -288,6 +295,9 @@ pub(crate) fn images_request_body(model: &str, request: &ValidatedImageRequest) 
         "size": format!("{}x{}", request.width, request.height),
         "response_format": "b64_json",
     });
+    if stream {
+        body["stream"] = json!(true);
+    }
     if let Some(negative) = &request.negative_prompt {
         body["negative_prompt"] = json!(negative);
     }
@@ -336,6 +346,12 @@ pub(crate) fn images_edit_fields(
 pub(crate) fn parse_images_response(bytes: &[u8]) -> Result<Vec<Vec<u8>>, ImageGenerationError> {
     let value: Value =
         serde_json::from_slice(bytes).map_err(|_| ImageGenerationError::Unavailable)?;
+    images_of_value(&value)
+}
+
+/// The images of an already-read images reply. A streamed reply is folded into the same shape, so
+/// both ways of answering are read the same way.
+pub(crate) fn images_of_value(value: &Value) -> Result<Vec<Vec<u8>>, ImageGenerationError> {
     let items = value
         .get("data")
         .and_then(Value::as_array)
@@ -361,6 +377,43 @@ fn image_of_item(item: &Value) -> Result<Vec<u8>, ImageGenerationError> {
     Ok(bytes)
 }
 
+/// What the person is told about while a batch is still being drawn: how far the endpoint has got.
+///
+/// A server that reports nothing leaves the pane with its plain "waiting" sentence, so every field
+/// here is what the endpoint chose to say, never what Procyon assumes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImageGenerationProgress {
+    /// What the endpoint says it is doing, bounded and stripped of control characters.
+    pub stage: String,
+    /// The step drawn so far; `0` when the endpoint counts nothing.
+    pub step: u32,
+    /// The steps it intends to draw; `0` when the endpoint does not say.
+    pub total: u32,
+}
+
+/// Longest stage text kept from an endpoint. The wording is the provider's own, shown as a hint
+/// rather than as an interface label, so a server that rambles is quietly cut short.
+const MAX_PROGRESS_STAGE_CHARS: usize = 80;
+
+/// The stage text of a progress event, made safe to put in front of a person.
+pub(crate) fn readable_stage(stage: &str) -> String {
+    stage
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(MAX_PROGRESS_STAGE_CHARS)
+        .collect::<String>()
+        .trim()
+        .to_owned()
+}
+
+impl ImageGenerationProgress {
+    /// Whether there is anything a progress bar could be drawn from.
+    #[must_use]
+    pub fn has_steps(&self) -> bool {
+        self.total > 0
+    }
+}
+
 /// What the generation capability produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GeneratedBatch {
@@ -376,11 +429,14 @@ pub struct GeneratedBatch {
 pub trait ImageProvider: Send + Sync {
     /// Produces up to `request.count` images, or fails. `source` carries the bytes of the picture
     /// the request asked to start from, and only a contract that can take one is ever handed it.
+    /// `on_progress` is handed whatever the endpoint reported about how far the drawing has got;
+    /// a contract that cannot know says nothing at all.
     async fn generate(
         &self,
         request: &ValidatedImageRequest,
         source: Option<&SourceImage>,
         cancellation: &CancellationToken,
+        on_progress: &mut (dyn FnMut(ImageGenerationProgress) + Send),
     ) -> Result<GeneratedBatch, ImageGenerationError>;
 }
 
@@ -487,10 +543,12 @@ impl Batch {
     }
 }
 
-/// Owns the generations in flight and the short-lived store both hosts read from.
+/// Owns the generations in flight, how far each has got, and the short-lived store both hosts read
+/// from.
 #[derive(Debug, Default)]
 pub struct ImageGenerationService {
     active: Mutex<HashMap<Uuid, CancellationToken>>,
+    progress: Mutex<HashMap<Uuid, ImageGenerationProgress>>,
     batches: Mutex<HashMap<Uuid, Batch>>,
 }
 
@@ -526,10 +584,20 @@ impl ImageGenerationService {
         let cancellation = CancellationToken::new();
         self.active_lock()
             .insert(request.request_id, cancellation.clone());
+        let request_id = request.request_id;
         let outcome = provider
-            .generate(&validated, source.as_ref(), &cancellation)
+            .generate(
+                &validated,
+                source.as_ref(),
+                &cancellation,
+                &mut |progress| {
+                    self.progress_lock().insert(request_id, progress);
+                },
+            )
             .await;
-        self.active_lock().remove(&request.request_id);
+        self.active_lock().remove(&request_id);
+        // Nothing is left to report once the endpoint has answered, pictures or no pictures.
+        self.progress_lock().remove(&request_id);
         let batch = outcome?;
         if batch.images.is_empty()
             || batch.images.len() > usize::try_from(validated.count).unwrap_or(usize::MAX)
@@ -785,8 +853,21 @@ impl ImageGenerationService {
         })
     }
 
+    /// How far a running generation has got, as its endpoint reported it. `None` means the
+    /// endpoint has said nothing about it, which is how most of them answer.
+    #[must_use]
+    pub fn progress_of(&self, request_id: Uuid) -> Option<ImageGenerationProgress> {
+        self.progress_lock().get(&request_id).cloned()
+    }
+
     fn active_lock(&self) -> std::sync::MutexGuard<'_, HashMap<Uuid, CancellationToken>> {
         self.active
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+    }
+
+    fn progress_lock(&self) -> std::sync::MutexGuard<'_, HashMap<Uuid, ImageGenerationProgress>> {
+        self.progress
             .lock()
             .unwrap_or_else(|error| error.into_inner())
     }
@@ -1181,6 +1262,7 @@ mod tests {
         let body = images_request_body(
             "flux-schnell",
             &validate_request(&request()).expect("accepted"),
+            false,
         );
         assert_eq!(body["model"], "flux-schnell");
         assert_eq!(body["prompt"], "a lighthouse at dusk");
@@ -1201,6 +1283,7 @@ mod tests {
                 ..request()
             })
             .expect("accepted"),
+            false,
         );
         assert_eq!(with_extras["negative_prompt"], "text, watermark");
         assert_eq!(with_extras["n"], 3);
@@ -1265,6 +1348,7 @@ mod tests {
             request: &ValidatedImageRequest,
             source: Option<&SourceImage>,
             cancellation: &CancellationToken,
+            _on_progress: &mut (dyn FnMut(ImageGenerationProgress) + Send),
         ) -> Result<GeneratedBatch, ImageGenerationError> {
             self.seen_sources.lock().unwrap().push(source.cloned());
             if let Some(on_generate) = &self.on_generate {
@@ -1502,11 +1586,97 @@ mod tests {
             _request: &ValidatedImageRequest,
             _source: Option<&SourceImage>,
             cancellation: &CancellationToken,
+            _on_progress: &mut (dyn FnMut(ImageGenerationProgress) + Send),
         ) -> Result<GeneratedBatch, ImageGenerationError> {
             self.started.notify_one();
             cancellation.cancelled().await;
             Err(ImageGenerationError::Cancelled)
         }
+    }
+
+    /// A provider that says how far it has got, then waits to be told to hand its pictures over.
+    struct ReportingProvider<'a> {
+        started: &'a tokio::sync::Notify,
+        finish: &'a tokio::sync::Notify,
+    }
+
+    #[async_trait]
+    impl ImageProvider for ReportingProvider<'_> {
+        async fn generate(
+            &self,
+            _request: &ValidatedImageRequest,
+            _source: Option<&SourceImage>,
+            cancellation: &CancellationToken,
+            on_progress: &mut (dyn FnMut(ImageGenerationProgress) + Send),
+        ) -> Result<GeneratedBatch, ImageGenerationError> {
+            on_progress(ImageGenerationProgress {
+                stage: "Generating".to_owned(),
+                step: 7,
+                total: 30,
+            });
+            self.started.notify_one();
+            tokio::select! {
+                () = cancellation.cancelled() => Err(ImageGenerationError::Cancelled),
+                () = self.finish.notified() => Ok(GeneratedBatch {
+                    model: "flux-schnell".to_owned(),
+                    images: vec![encoded(image::ImageFormat::Png, 32, 32)],
+                }),
+            }
+        }
+    }
+
+    /// The person watching a slow local model gets a step counter rather than one unchanging
+    /// sentence - and once the endpoint has answered, there is nothing left to report.
+    #[tokio::test]
+    async fn how_far_a_generation_has_got_is_kept_while_it_runs_and_forgotten_afterwards() {
+        let service = ImageGenerationService::new();
+        let started = tokio::sync::Notify::new();
+        let finish = tokio::sync::Notify::new();
+        let provider = ReportingProvider {
+            started: &started,
+            finish: &finish,
+        };
+        let registry = registry();
+        let request_id = Uuid::new_v4();
+        let (outcome, ()) = tokio::join!(
+            service.generate(
+                &provider,
+                &registry,
+                GenerateImagesRequestDto {
+                    request_id,
+                    ..request()
+                },
+            ),
+            async {
+                started.notified().await;
+                let progress = service
+                    .progress_of(request_id)
+                    .expect("the endpoint said how far it had got");
+                assert_eq!(progress.stage, "Generating");
+                assert_eq!((progress.step, progress.total), (7, 30));
+                assert!(progress.has_steps());
+                finish.notify_one();
+            }
+        );
+        outcome.expect("generated");
+        assert!(
+            service.progress_of(request_id).is_none(),
+            "a generation that has answered has nothing left to say"
+        );
+    }
+
+    /// An endpoint's own words are a hint, not an interface: they are kept short and printable.
+    #[test]
+    fn an_endpoint_s_stage_is_kept_short_and_printable() {
+        assert_eq!(
+            readable_stage(" Generating\u{1} steps "),
+            "Generating steps"
+        );
+        assert_eq!(
+            readable_stage(&"x".repeat(400)).len(),
+            MAX_PROGRESS_STAGE_CHARS
+        );
+        assert_eq!(readable_stage(""), "");
     }
 
     #[tokio::test]
@@ -1584,6 +1754,7 @@ mod tests {
                 ..request()
             })
             .expect("within bounds"),
+            false,
         );
         // That API's own scale stops at "high", so the top level the person can choose asks for it.
         assert_eq!(body["quality"], "high");
@@ -1600,13 +1771,18 @@ mod tests {
                     ..request()
                 })
                 .expect("within bounds"),
+                false,
             );
             assert!(
                 ["low", "medium", "high"].contains(&body["quality"].as_str().expect("a word")),
                 "{level:?} should ask in the endpoint's own words"
             );
         }
-        let plain = images_request_body("flux-schnell", &validate_request(&request()).expect("ok"));
+        let plain = images_request_body(
+            "flux-schnell",
+            &validate_request(&request()).expect("ok"),
+            false,
+        );
         assert!(plain.get("quality").is_none());
         assert!(plain.get("steps").is_none());
     }

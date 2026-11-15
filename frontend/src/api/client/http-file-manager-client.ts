@@ -95,6 +95,7 @@ import type {
   GitFileHistoryResult,
   HostKeyProbe,
   ImageBatch,
+  ImageGenerationProgress,
   ImageGpsEntry,
   ImageMetadata,
   ImagePrompt,
@@ -341,6 +342,7 @@ import {
   cancelImageGeneration as requestImageGenerationCancel,
   readImageGps as requestImageGps,
   readImageMetadata as requestImageMetadata,
+  imageGenerationProgress as requestImageProgress,
   deleteImagePrompt as requestImagePromptDelete,
   saveImagePrompt as requestImagePromptSave,
   listImagePrompts as requestImagePrompts,
@@ -2882,6 +2884,19 @@ export class HttpFileManagerClient implements FileManagerClient {
     if (response.status !== 200) {
       throw unexpectedResponseError('generateImages', response.status);
     }
+    return response.data;
+  }
+
+  async imageGenerationProgress(
+    requestId: string,
+    signal?: AbortSignal,
+  ): Promise<ImageGenerationProgress | undefined> {
+    const response = await requestImageProgress(
+      { request_id: requestId },
+      signal === undefined ? undefined : { signal },
+    );
+    // Nothing has been reported yet: the endpoint answered 204 and says no more than that.
+    if (response.status === 204) return undefined;
     return response.data;
   }
 

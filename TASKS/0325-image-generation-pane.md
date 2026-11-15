@@ -247,3 +247,48 @@ must review before anything is written. It gets its own role in 0322 and its own
   468 889 with `promptEmbedded: true`; saving it again was refused with `destinationAlreadyExists`,
   and the third attempt, with `overwrite: true`, went through. The file on disk has a valid PNG
   signature and carries both the prompt and the parameters text chunks.
+
+### The wait has a shape now (progress, centring, saving, 2026-11-15)
+
+- Waiting is no longer a bare sentence. `mlx-serve` reports each step over SSE
+  (`data: {"type":"progress","stage":"Generating","step":1,"total":2}` then
+  `{"type":"complete","data":[{"b64_json":…}]}`), and the transport now asks for that: the
+  OpenAI-style request carries `stream: true`, the reply is read as an event stream, and every
+  progress event is stored against the `request_id` while the generation is in flight. A server
+  that rejects the `stream` parameter is asked again without it, once; one that rejects the ask
+  itself is not asked twice. `GET /api/v1/images/progress?request_id=` (and the
+  `get_image_generation_progress` command) hand the same numbers to either host, answering `204`
+  when the endpoint has said nothing - which is how most of them answer, and the pane then keeps its
+  own waiting sentence rather than inventing a percentage.
+- Procyon repeats the endpoint's own words, nothing else. `stage` is kept as the provider wrote it,
+  bounded to 80 characters and stripped of control characters, and is rendered as text; a step
+  counter only appears when `total` is above zero. The pane polls while the drawing runs, and clears
+  what it saw when the generation answers, so a finished batch is never still shown as working.
+  Proven against the live `mlx-serve`, not a fixture: nine reports for an eight-step 512x512 draw -
+  `Encoding prompt 0/8`, `Generating 1/8` … `7/8`, `Decoding image 8/8` - in 10.6 s.
+- A fitted picture now sits in the middle of its pane. `object-position` was `left top`, so a
+  preview smaller than the pane hugged the top-left corner; `contain` with `center` centres it, and
+  the full-width mode is untouched.
+- Saving writes the file the person named. The save request sent the *folder* URI as the destination,
+  so changing the folder, or letting the returned extension decide the suffix, produced a destination
+  with no file name in it and the save was refused. The destination is built from the folder and the
+  name together (`destinationFor`), which is what the backend's own name and extension checks were
+  already expecting. Pinned by a test that reads the destination out of the request.
+- Every folder the person has open is offered when a picture is saved, not only the two panes either
+  side: the other pane's folder first, then this pane's, then every folder still open in any other
+  pane, then where recent saves went - deduplicated, `search://` left out. A save that goes to a third
+  pane's folder is now one click rather than a typed path.
+- Tab is a first-class key in a tool pane. A tool pane is a form, so Tab walks its own controls and
+  the browser moves focus; the pane hands the keystroke back to the shell at its first and last stop,
+  where it switches panes as it always did. The viewer's find box is deliberately left out of the
+  walk, because leaving it with Tab is what the box is for. `tab-traversal.ts` holds the two helpers
+  (`tabStops`, `tabStaysWithin`) and the layout handler asks it per keystroke. Note for anyone
+  extending these tests: jsdom ignores `preventDefault()` on an event created without
+  `cancelable: true`, so a synthetic keydown must ask for it.
+- Verified: 46 `image_generation` Rust tests (including a server that reports steps and still returns
+  images, one that refuses `stream` and is retried without it, and one that refuses the ask itself),
+  3809 frontend tests (three for the bar, one for the mock's own counting, three for Tab in a tool
+  pane, one for the destination, one for the folders on offer); `tsc --noEmit`, Biome, rustfmt,
+  clippy for `fm-application`/`fm-transport-dto`/`fm-server`, and `cargo check -p fm-desktop` clean.
+  Still unverified in this host: the Tauri window and a live cloud endpoint of either contract - a
+  cloud server that streams progress has never been talked to here.

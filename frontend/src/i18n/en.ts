@@ -1661,6 +1661,8 @@ export const en = {
     newPrompt: 'New image prompt',
     seedPlaceholder: 'seed',
     waitingForModel: 'Waiting for the model…',
+    drawingProgress: 'How far the drawing has got',
+    progressSteps: 'step {step} of {total}',
     title: 'Image',
     openDescription: 'Generate an image beside the editor or folder',
     subject: 'What to draw',
