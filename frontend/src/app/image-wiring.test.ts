@@ -927,3 +927,96 @@ describe('how hard the model works, and what it starts from', () => {
     expect(wiring.imageRoleAvailable()).toBe(false);
   });
 });
+
+describe('choosing where a picture lands', () => {
+  const downloads: Location = { providerId: 'local', uri: 'file:///Users/erik/Downloads/' };
+  const shots: Location = { providerId: 'local', uri: 'file:///shots/' };
+
+  /**
+   * A left pane holding the picture tab (`t1`) beside its own folder tab (`t0`), and a right pane
+   * showing `rightActive` - a folder, or a tool with no folder of its own.
+   */
+  function shellLookingAt(options: {
+    views?: Record<string, Location>;
+    rightActive?: string;
+    rightTabs?: string[];
+    homeDirectory?: string;
+  }): { shell: ShellState; entry: ImagePaneEntry } {
+    const entry = emptyImagePane('left:t1', 'left', 't1', 'w1');
+    const shell = {
+      client: imageClient(),
+      imageByTab: new Map([[entry.key, entry]]),
+      imageOpening: false,
+      directories: new Map(
+        Object.entries(options.views ?? {}).map(([key, location]) => [key, { location }]),
+      ),
+      workspace: {
+        paneOrder: ['left', 'right'],
+        panesById: {
+          left: { activeTabId: 't1', tabOrder: ['t0', 't1'] },
+          right: {
+            activeTabId: options.rightActive ?? 'r1',
+            tabOrder: options.rightTabs ?? ['r1'],
+          },
+        },
+      },
+      homeDirectory: options.homeDirectory,
+    } as unknown as ShellState;
+    return { shell, entry };
+  }
+
+  function folderOf(shell: ShellState, entry: ImagePaneEntry): Location | undefined {
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+    return wiring.saveFolder(entry.key)?.location;
+  }
+
+  it('lands in the folder the other pane is looking at', () => {
+    const { shell, entry } = shellLookingAt({
+      views: { 'right:r1': downloads, 'left:t0': shots },
+    });
+
+    expect(folderOf(shell, entry)).toEqual(downloads);
+  });
+
+  it('takes the folder the other pane has open when it is showing something else', () => {
+    const { shell, entry } = shellLookingAt({
+      views: { 'right:r2': downloads, 'left:t0': shots },
+      rightActive: 'r9',
+      rightTabs: ['r9', 'r2'],
+    });
+
+    expect(folderOf(shell, entry)).toEqual(downloads);
+  });
+
+  it('takes a folder of its own pane when the other pane has none', () => {
+    const { shell, entry } = shellLookingAt({ views: { 'left:t0': shots }, rightActive: 'r9' });
+
+    expect(folderOf(shell, entry)).toEqual(shots);
+  });
+
+  it('lands in the pictures folder when no pane shows a folder', () => {
+    const { shell, entry } = shellLookingAt({ rightActive: 'r9', homeDirectory: '/Users/erik' });
+
+    expect(folderOf(shell, entry)).toEqual({
+      providerId: 'local',
+      uri: 'file:///Users/erik/Pictures/',
+    });
+  });
+
+  it('keeps saving to the folder a picture was just saved to', async () => {
+    const client = imageClient();
+    const { shell, entry } = shellLookingAt({ rightActive: 'r9' });
+    entry.batch = batch;
+    entry.views = [{ imageId: 'i1', loading: false }];
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.save(client as unknown as FileManagerClient, entry.key, {
+      imageId: 'i1',
+      fileName: 'a.png',
+      folder: downloads,
+      overwrite: false,
+    });
+
+    expect(wiring.saveFolder(entry.key)).toEqual({ location: downloads, name: 'Downloads' });
+  });
+});

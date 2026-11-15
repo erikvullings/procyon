@@ -1717,6 +1717,7 @@ export const nl = {
     folder: 'Map',
     folderChoices: 'Mappen om naar te slaan',
     saveToFolder: 'Opslaan in {name}',
+    chooseFolder: 'Map wijzigen',
     fileName: 'Bestandsnaam',
     width: 'Breedte',
     height: 'Hoogte',

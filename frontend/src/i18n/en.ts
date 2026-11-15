@@ -1688,6 +1688,7 @@ export const en = {
     folder: 'Folder',
     folderChoices: 'Folders you can save to',
     saveToFolder: 'Save to {name}',
+    chooseFolder: 'Change folder',
     fileName: 'File name',
     width: 'Width',
     height: 'Height',

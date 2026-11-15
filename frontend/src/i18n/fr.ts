@@ -1324,6 +1324,7 @@ export const fr = {
     folder: 'Dossier',
     folderChoices: 'Dossiers d’enregistrement',
     saveToFolder: 'Enregistrer dans {name}',
+    chooseFolder: 'Changer de dossier',
     fileName: 'Nom de fichier',
     width: 'Largeur',
     height: 'Hauteur',

@@ -1320,6 +1320,7 @@ export const es = {
     folder: 'Carpeta',
     folderChoices: 'Carpetas de destino',
     saveToFolder: 'Guardar en {name}',
+    chooseFolder: 'Cambiar carpeta',
     fileName: 'Nombre de archivo',
     width: 'Ancho',
     height: 'Alto',

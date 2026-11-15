@@ -1323,6 +1323,7 @@ export const pt = {
     folder: 'Pasta',
     folderChoices: 'Pastas de destino',
     saveToFolder: 'Salvar em {name}',
+    chooseFolder: 'Alterar pasta',
     fileName: 'Nome do arquivo',
     width: 'Largura',
     height: 'Altura',

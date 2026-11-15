@@ -1317,6 +1317,7 @@ export const pl = {
     folder: 'Katalog',
     folderChoices: 'Foldery zapisu',
     saveToFolder: 'Zapisz w {name}',
+    chooseFolder: 'Zmień folder',
     fileName: 'Nazwa pliku',
     width: 'Szerokość',
     height: 'Wysokość',

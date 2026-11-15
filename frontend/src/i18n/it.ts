@@ -1317,6 +1317,7 @@ export const it = {
     folder: 'Cartella',
     folderChoices: 'Cartelle di destinazione',
     saveToFolder: 'Salva in {name}',
+    chooseFolder: 'Cambia cartella',
     fileName: 'Nome file',
     width: 'Larghezza',
     height: 'Altezza',

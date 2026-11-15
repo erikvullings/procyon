@@ -634,6 +634,30 @@
   font-size: var(--fm-type-label);
 }
 
+/* The destination is stated rather than asked: the folder the person is already looking at, with a
+   single quiet button for somewhere else. The path keeps its middle ellipsis, not its end, so the
+   folder that matters stays readable. */
+.fm-image-save-folder {
+  align-items: center;
+  display: flex;
+  gap: var(--fm-space-2);
+  min-width: 0;
+}
+
+.fm-image-save-folder-label {
+  color: var(--fm-text-muted);
+  flex: none;
+  font-size: var(--fm-type-label);
+}
+
+.fm-image-save-folder-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The folders worth saving to are the ones on screen and the ones saves went to last, so they are
    picked rather than typed; blue stays on the choice made. */
 .fm-image-folder-choices {

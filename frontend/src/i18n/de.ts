@@ -1337,6 +1337,7 @@ export const de = {
     folder: 'Ordner',
     folderChoices: 'Ordner zum Speichern',
     saveToFolder: 'In {name} speichern',
+    chooseFolder: 'Ordner ändern',
     fileName: 'Dateiname',
     width: 'Breite',
     height: 'Höhe',

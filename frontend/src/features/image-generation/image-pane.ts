@@ -108,6 +108,8 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
   let saveImageId: string | undefined;
   let fileName = '';
   let folderText = '';
+  /** Whether the save form shows the way in to other folders, or only states where this one goes. */
+  let choosingFolder = false;
   let confirmingReplace = false;
   /** Which image of the batch the open save form is for, so a new folder can re-suggest its name. */
   let saveImageIndex = 0;
@@ -164,12 +166,15 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
     saveImageIndex = index;
     confirmingReplace = false;
     folderText = folderText0(attrs, attrs.saveFolder);
+    // The folder the person is already looking at needs no choosing; an empty one does.
+    choosingFolder = folderText === '';
     suggestName(attrs, image, index, attrs.saveFolder);
   };
 
   const closeSaveForm = (): void => {
     saveImageId = undefined;
     confirmingReplace = false;
+    choosingFolder = false;
   };
 
   /** A chrome-density flat button (DESIGN.md "button-chrome": 20px, flat). */
@@ -623,58 +628,70 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
         },
       },
       [
-        m('input.fm-image-folder.browser-default', {
-          type: 'text',
-          list: 'fm-image-save-folders',
-          'aria-label': t('image', 'folder'),
-          'aria-invalid': folder === undefined ? 'true' : undefined,
-          value: folderText,
-          placeholder: attrs.saveFolderName ?? '',
-          spellcheck: false,
-          oninput: (event: Event) => {
-            folderText = (event.target as HTMLInputElement).value;
-          },
-          // A folder picked from the list gets a name that is free there, not the one that fit the last folder.
-          onchange: () => {
-            const picked = chosenFolder(attrs);
-            if (picked !== undefined) suggestName(attrs, image, saveImageIndex, picked);
-          },
-        }),
-        // The folders the person is already looking at are one click away; the field stays for the
-        // folder that is none of them, so a path can still be typed.
-        (attrs.saveFolders ?? []).length === 0
-          ? undefined
-          : m(
-              '.fm-image-folder-choices',
-              { role: 'group', 'aria-label': t('image', 'folderChoices') },
-              (attrs.saveFolders ?? []).map((candidate) => {
-                const text = folderText0(attrs, candidate.location);
-                return tooltip(
-                  t('image', 'saveToFolder', { name: candidate.name }),
-                  m(
-                    'button.btn-flat.fm-image-chrome.fm-image-folder-chip',
-                    {
-                      type: 'button',
-                      'aria-pressed': String(text === folderText.trim()),
-                      onclick: () => {
-                        // Re-picking the folder already chosen would silently drop a name that was typed.
-                        if (text === folderText.trim()) return;
-                        folderText = text;
-                        // The free name the other folder offered may be taken here.
-                        suggestName(attrs, image, saveImageIndex, candidate.location);
-                      },
-                    },
-                    candidate.name,
-                  ),
-                );
+        // Where the picture lands is stated rather than asked: the folder the person is already
+        // looking at, or where the last picture went. Somewhere else is one click away.
+        choosingFolder
+          ? [
+              m('input.fm-image-folder.browser-default', {
+                type: 'text',
+                list: 'fm-image-save-folders',
+                'aria-label': t('image', 'folder'),
+                'aria-invalid': folder === undefined ? 'true' : undefined,
+                value: folderText,
+                placeholder: attrs.saveFolderName ?? '',
+                spellcheck: false,
+                oninput: (event: Event) => {
+                  folderText = (event.target as HTMLInputElement).value;
+                },
+                // A folder picked from the list gets a name that is free there, not the one that fit the last folder.
+                onchange: () => {
+                  const picked = chosenFolder(attrs);
+                  if (picked !== undefined) suggestName(attrs, image, saveImageIndex, picked);
+                },
               }),
-            ),
-        m(
-          'datalist#fm-image-save-folders',
-          (attrs.saveFolders ?? []).map((candidate) =>
-            m('option', { value: folderText0(attrs, candidate.location) }, candidate.name),
-          ),
-        ),
+              // The folders the person is already looking at are one click away; the field stays for the
+              // folder that is none of them, so a path can still be typed.
+              (attrs.saveFolders ?? []).length === 0
+                ? undefined
+                : m(
+                    '.fm-image-folder-choices',
+                    { role: 'group', 'aria-label': t('image', 'folderChoices') },
+                    (attrs.saveFolders ?? []).map((candidate) => {
+                      const text = folderText0(attrs, candidate.location);
+                      return tooltip(
+                        t('image', 'saveToFolder', { name: candidate.name }),
+                        m(
+                          'button.btn-flat.fm-image-chrome.fm-image-folder-chip',
+                          {
+                            type: 'button',
+                            'aria-pressed': String(text === folderText.trim()),
+                            onclick: () => {
+                              // Re-picking the folder already chosen would silently drop a name that was typed.
+                              if (text === folderText.trim()) return;
+                              folderText = text;
+                              // The free name the other folder offered may be taken here.
+                              suggestName(attrs, image, saveImageIndex, candidate.location);
+                            },
+                          },
+                          candidate.name,
+                        ),
+                      );
+                    }),
+                  ),
+              m(
+                'datalist#fm-image-save-folders',
+                (attrs.saveFolders ?? []).map((candidate) =>
+                  m('option', { value: folderText0(attrs, candidate.location) }, candidate.name),
+                ),
+              ),
+            ]
+          : m('.fm-image-save-folder', [
+              m('span.fm-image-save-folder-label', t('image', 'folder')),
+              m('span.fm-image-save-folder-path', { title: folderText }, folderText),
+              chromeButton(t('image', 'chooseFolder'), () => {
+                choosingFolder = true;
+              }),
+            ]),
         // The format is not a choice: the extension is shown after the field and cannot be edited.
         m('.fm-image-name-field', [
           m('input.fm-image-name.browser-default', {

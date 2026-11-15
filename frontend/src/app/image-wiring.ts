@@ -509,7 +509,6 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     return names;
   }
 
-  /** The other pane's folder, which a save defaults to. */
   /**
    * Takes the picture the other pane has under its cursor as the one this prompt starts from. The
    * person points at a file they can see rather than typing a path, and the backend reads the bytes
@@ -547,22 +546,46 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     patch(key, { source: undefined });
   }
 
+  /** The folders a pane has open, the one it is showing first. */
+  function foldersOfPane(paneId: PaneId): Location[] {
+    const pane = shellState.workspace?.panesById[paneId];
+    if (pane === undefined) return [];
+    const folders: Location[] = [];
+    for (const tabId of [pane.activeTabId, ...(pane.tabOrder ?? [])]) {
+      const location = shellState.directories.get(tabKey(paneId, tabId))?.location;
+      if (location === undefined || location.uri.startsWith('search://')) continue;
+      if (!folders.some((known) => known.uri === location.uri)) folders.push(location);
+    }
+    return folders;
+  }
+
+  /** Where a picture goes when no pane is looking at a folder: the OS pictures folder. */
+  function picturesFolder(): Location | undefined {
+    const home = shellState.homeDirectory;
+    if (home === undefined || home === '') return undefined;
+    return { providerId: 'local', uri: `file://${home.replace(/\/+$/u, '')}/Pictures/` };
+  }
+
+  /**
+   * The folder a save goes to. The other pane's folder is the answer the person is already looking
+   * at; when that pane shows a tool instead, a folder it has open, then one of this pane's own, then
+   * where the last picture went, and failing all of that the OS pictures folder. Typing a path in the
+   * form stays the way to anywhere else.
+   */
   function saveFolder(key: string): { location: Location; name: string } | undefined {
     const entry = entryOf(key);
-    const workspace = shellState.workspace;
-    if (entry === undefined || workspace === undefined) return undefined;
-    const folderPaneId: PaneId | undefined = imageSaveFolderPaneId(
-      workspace.paneOrder,
-      entry.paneId,
-    );
-    const folderPane = folderPaneId === undefined ? undefined : workspace.panesById[folderPaneId];
-    const folderTabId = folderPane?.activeTabId;
-    if (folderPaneId === undefined || folderTabId === undefined) return undefined;
-    const view = shellState.directories.get(tabKey(folderPaneId, folderTabId));
-    if (view?.location === undefined) return undefined;
-    const uri = view.location.uri;
+    if (entry === undefined || shellState.workspace === undefined) return undefined;
+    const otherPaneId = imageSaveFolderPaneId(shellState.workspace.paneOrder, entry.paneId);
+    const candidates = [
+      ...(otherPaneId === undefined ? [] : foldersOfPane(otherPaneId)),
+      ...foldersOfPane(entry.paneId),
+      ...recentSaveFolders,
+    ];
+    const location = candidates[0] ?? picturesFolder();
+    if (location === undefined) return undefined;
+    const uri = location.uri;
     const name = decodeURIComponent(uri.replace(/\/+$/u, '').split('/').pop() ?? uri);
-    return { location: view.location, name };
+    return { location, name };
   }
 
   /**

@@ -1,7 +1,7 @@
 import m, { type FactoryComponent } from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setLocale } from '../../i18n';
-import type { ImageBatch, Location } from '../../models';
+import type { GeneratedImage, ImageBatch, Location } from '../../models';
 import { ImagePane, type ImagePaneAttrs } from './image-pane';
 import { emptyImagePane, type ImagePaneEntry } from './image-pane-state';
 
@@ -29,6 +29,17 @@ const batch: ImageBatch = {
 };
 
 const folder: Location = { providerId: 'local', uri: 'file:///shots' };
+
+/** What an endpoint that answers in JPEG sends back. */
+const jpegImage: GeneratedImage = {
+  id: 'i1',
+  mediaType: 'image/jpeg',
+  width: 1_024,
+  height: 1_024,
+  bytes: 90,
+  downscaled: false,
+  extension: 'jpg',
+};
 
 /** Mounts the pane with an entry and spies for everything it can ask the shell to do. */
 function mountLoaded(
@@ -739,10 +750,30 @@ describe('saving a picture', () => {
     labelled(root, 'Save')?.click();
     m.redraw.sync();
   };
+  /** Opens the way to another folder; until then the form only states where the picture goes. */
+  const openChoice = () => {
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Change folder')
+      ?.click();
+    m.redraw.sync();
+  };
+
+  it('states where the picture will go, and asks nothing else', () => {
+    mountLoaded(shown, attrsFor());
+    openForm();
+
+    expect(root.querySelector('.fm-image-save-folder-path')?.textContent).toBe('~/Downloads');
+    expect(root.querySelector('input.fm-image-folder'), 'no folder to fill in').toBeNull();
+    expect(root.querySelector('.fm-image-name-extension')?.textContent).toBe('.png');
+    expect(root.querySelector<HTMLInputElement>('.fm-image-name')?.value).not.toContain('.png');
+    expect(root.querySelector('.fm-image-save-hint'), 'no format lecture').toBeNull();
+    expect(root.querySelector('.fm-image-save')?.textContent).not.toContain('has to end in');
+  });
 
   it('shows a plain folder path and a name whose format cannot be edited', () => {
     mountLoaded(shown, attrsFor());
     openForm();
+    openChoice();
     expect(root.querySelector<HTMLInputElement>('.fm-image-folder')?.value).toBe('~/Downloads');
     expect(root.querySelector('.fm-image-name-extension')?.textContent).toBe('.png');
     expect(root.querySelector<HTMLInputElement>('.fm-image-name')?.value).not.toContain('.png');
@@ -750,9 +781,23 @@ describe('saving a picture', () => {
     expect(root.querySelector('.fm-image-save')?.textContent).not.toContain('has to end in');
   });
 
+  it('keeps the format the model returned', () => {
+    const drawn = { ...batch, images: [jpegImage] };
+    mountLoaded(
+      { ...shown, batch: drawn, views: [{ imageId: 'i1', loading: false, previewUrl: 'blob:1' }] },
+      attrsFor(),
+    );
+    openForm();
+
+    // The name is offered with what the model actually sent, not with a format invented for it.
+    expect(root.querySelector('.fm-image-name-extension')?.textContent).toBe('.jpg');
+    expect(root.querySelector('.fm-image-save')?.textContent).not.toContain('.png');
+  });
+
   it('offers the folders it knows, so none has to be typed', () => {
     mountLoaded(shown, attrsFor());
     openForm();
+    openChoice();
     const options = [...root.querySelectorAll('datalist option')].map((option) =>
       option.getAttribute('value'),
     );
@@ -765,6 +810,7 @@ describe('saving a picture', () => {
       attrsFor({ 'file:///Users/erik/Pictures': ['a-lighthouse-at-dusk-1024x1024-1.png'] }),
     );
     openForm();
+    openChoice();
     const chips = [...root.querySelectorAll<HTMLButtonElement>('.fm-image-folder-chip')];
     // A dual-pane manager already knows the two folders on screen; typing a path is the way out.
     expect(chips.map((chip) => chip.textContent)).toEqual(['Downloads', 'Pictures']);
@@ -793,6 +839,7 @@ describe('saving a picture', () => {
   it('leaves a typed name alone when the folder already chosen is clicked again', () => {
     mountLoaded(shown, attrsFor());
     openForm();
+    openChoice();
     const name = root.querySelector<HTMLInputElement>('.fm-image-name');
     if (name === null) throw new Error('name field missing');
     name.value = 'my own name';
@@ -886,6 +933,7 @@ describe('saving a picture', () => {
       }),
     );
     openForm();
+    openChoice();
     const folder = root.querySelector<HTMLInputElement>('.fm-image-folder');
     if (folder === null) throw new Error('folder field missing');
     folder.value = '~/Pictures';
