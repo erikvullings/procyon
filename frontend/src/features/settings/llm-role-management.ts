@@ -77,6 +77,8 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
   };
   /** Models each profile offers, from discovery when the endpoint supports it. */
   let choices: Record<string, string[]> = {};
+  /** Roles whose model is being typed rather than picked from what the endpoint reports. */
+  const typingModel: Record<LlmRole, boolean> = { chat: false, embeddings: false, image: false };
   /** Provider presets the app knows, so the picture role can name a server it has no endpoint for. */
   let presets: LlmProfilePreset[] = [];
   let loading = true;
@@ -115,6 +117,7 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
         embeddings: draftFrom(roles.embeddings),
         image: draftFrom(roles.image),
       };
+      for (const role of LLM_ROLES) typingModel[role] = false;
       const assigned = LLM_ROLES.map((role) => drafts[role].profileId).filter(
         (profileId) => profileId !== '',
       );
@@ -193,32 +196,62 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
             if (value !== '') void loadChoices(attrs.client, value);
           },
         }),
-        // A drawing model is almost never one the endpoint lists for chat, and discovery reports the
-        // chat models, so the name is typed rather than picked. It is never taken from the chat role:
-        // most models cannot generate images at all.
-        role === 'image' || modelOptions(draft, choices).length === 0
-          ? m(TextInput, {
-              className: 'fm-llm-field',
-              label: t('llmRoles', 'model'),
-              disabled: busy || draft.profileId === '',
-              value: draft.model,
-              placeholder:
-                role === 'image' ? t('llmRoles', 'imageModelPlaceholder') : (selected?.model ?? ''),
-              oninput: (value: string) => {
-                drafts = { ...drafts, [role]: { ...draft, model: value } };
-              },
-            })
-          : m(Select<string>, {
-              className: 'fm-llm-field',
-              label: t('llmRoles', 'model'),
-              disabled: busy || draft.profileId === '',
-              options: modelOptions(draft, choices),
-              checkedId: draft.model,
-              onchange: ([value]) => {
-                if (value === undefined) return;
-                drafts = { ...drafts, [role]: { ...draft, model: value } };
-              },
-            }),
+        // Both models are picked from what the endpoint reports. A drawing model can also be typed,
+        // because what an endpoint lists is usually what it chats with, and an endpoint that reports
+        // nothing leaves only the field. Neither model is ever taken from the other role: most
+        // models cannot generate images at all.
+        (() => {
+          const offered = modelOptions(draft, choices);
+          const pickable = role !== 'image' ? offered.length > 0 : offered.length > 1;
+          if (!pickable || (role === 'image' && typingModel.image)) {
+            return [
+              m(TextInput, {
+                className: 'fm-llm-field',
+                label: t('llmRoles', 'model'),
+                disabled: busy || draft.profileId === '',
+                value: draft.model,
+                placeholder:
+                  role === 'image'
+                    ? t('llmRoles', 'imageModelPlaceholder')
+                    : (selected?.model ?? ''),
+                oninput: (value: string) => {
+                  drafts = { ...drafts, [role]: { ...draft, model: value } };
+                },
+              }),
+              role === 'image' && offered.length > 1
+                ? m(
+                    'button.btn-flat.fm-llm-model-back',
+                    {
+                      type: 'button',
+                      disabled: busy,
+                      onclick: () => {
+                        typingModel.image = false;
+                      },
+                    },
+                    t('llmRoles', 'modelFromEndpoint'),
+                  )
+                : undefined,
+            ];
+          }
+          return m(Select<string>, {
+            className: 'fm-llm-field',
+            label: t('llmRoles', 'model'),
+            disabled: busy || draft.profileId === '',
+            options:
+              role === 'image'
+                ? [...offered, { id: '__type__', label: t('llmRoles', 'modelOther') }]
+                : offered,
+            checkedId: draft.model,
+            onchange: ([value]) => {
+              if (value === undefined) return;
+              if (value === '__type__') {
+                typingModel.image = true;
+                return;
+              }
+              drafts = { ...drafts, [role]: { ...draft, model: value } };
+            },
+          });
+        })(),
       ]),
       role === 'image' && draft.profileId !== ''
         ? m('p.fm-llm-role-notice', t('llmRoles', 'imageModelHint'))

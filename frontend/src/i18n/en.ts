@@ -2316,6 +2316,8 @@ export const en = {
     imagePurpose: 'Create images with a dedicated image model.',
     embeddingsPurpose: 'Choose an embedding model for semantic search.',
     imageModelPlaceholder: 'Image model name',
+    modelFromEndpoint: 'Pick from the endpoint',
+    modelOther: 'Type another name…',
     provider: 'Provider',
     providerUnassigned: 'Choose a provider',
     providerCreateHint:

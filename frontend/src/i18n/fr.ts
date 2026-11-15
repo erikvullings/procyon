@@ -1969,6 +1969,8 @@ export const fr = {
     imagePurpose: 'Créer des images avec un modèle dédié.',
     embeddingsPurpose: 'Choisir un modèle d’embeddings pour la recherche sémantique.',
     imageModelPlaceholder: 'Nom du modèle d’images',
+    modelFromEndpoint: 'Choisir dans le point de terminaison',
+    modelOther: 'Saisir un autre nom…',
     provider: 'Fournisseur',
     providerUnassigned: 'Choisir un fournisseur',
     providerCreateHint:

@@ -1983,6 +1983,8 @@ export const de = {
     imagePurpose: 'Bilder mit einem eigenen Bildmodell erstellen.',
     embeddingsPurpose: 'Ein Embedding-Modell für die semantische Suche wählen.',
     imageModelPlaceholder: 'Name des Bildmodells',
+    modelFromEndpoint: 'Aus dem Endpoint wählen',
+    modelOther: 'Anderen Namen eingeben…',
     provider: 'Anbieter',
     providerUnassigned: 'Anbieter wählen',
     providerCreateHint:

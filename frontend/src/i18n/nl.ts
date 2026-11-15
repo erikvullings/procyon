@@ -2354,6 +2354,8 @@ export const nl = {
     imagePurpose: 'Maak afbeeldingen met een afzonderlijk afbeeldingsmodel.',
     embeddingsPurpose: 'Kies een embeddingmodel voor semantisch zoeken.',
     imageModelPlaceholder: 'Naam van het afbeeldingsmodel',
+    modelFromEndpoint: 'Kies uit het endpoint',
+    modelOther: 'Andere naam invoeren…',
     provider: 'Leverancier',
     providerUnassigned: 'Kies een leverancier',
     providerCreateHint:

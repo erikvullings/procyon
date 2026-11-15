@@ -1959,6 +1959,8 @@ export const it = {
     imagePurpose: 'Crea immagini con un modello dedicato.',
     embeddingsPurpose: 'Scegli un modello di embedding per la ricerca semantica.',
     imageModelPlaceholder: 'Nome del modello di immagini',
+    modelFromEndpoint: 'Scegli dall’endpoint',
+    modelOther: 'Digita un altro nome…',
     provider: 'Fornitore',
     providerUnassigned: 'Scegli fornitore',
     providerCreateHint:

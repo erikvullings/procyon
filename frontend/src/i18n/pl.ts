@@ -1955,6 +1955,8 @@ export const pl = {
     imagePurpose: 'Twórz obrazy za pomocą osobnego modelu obrazów.',
     embeddingsPurpose: 'Wybierz model embeddingów do wyszukiwania semantycznego.',
     imageModelPlaceholder: 'Nazwa modelu obrazów',
+    modelFromEndpoint: 'Wybierz z punktu końcowego',
+    modelOther: 'Wpisz inną nazwę…',
     provider: 'Dostawca',
     providerUnassigned: 'Wybierz dostawcę',
     providerCreateHint:

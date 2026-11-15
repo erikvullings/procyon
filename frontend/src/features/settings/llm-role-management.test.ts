@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MockFileManagerClient } from '../../api/client/mock-file-manager-client';
 import { setLocale } from '../../i18n';
-import type { LlmProfile } from '../../models';
+import type { LlmApiCapability, LlmProfile } from '../../models';
 import { LlmRoleManagement } from './llm-role-management';
 
 let root: HTMLElement;
@@ -50,6 +50,13 @@ async function choicesOf(field: HTMLElement | undefined): Promise<(string | unde
   return [...document.body.querySelectorAll('ul.dropdown-content li')].map((option) =>
     option.textContent?.trim(),
   );
+}
+
+/** Types into a field the way a person does, so the component sees the input event. */
+function setValue(input: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 function endpoint(id: string, preset: string, name: string, model: string): LlmProfile {
@@ -182,5 +189,112 @@ describe('LlmRoleManagement', () => {
 
     expect(root.textContent).not.toContain('No endpoint assigned.');
     expect(root.textContent).not.toContain('Ready.');
+  });
+
+  describe('naming the drawing model', () => {
+    /** An endpoint that reports its models, as one with `modelDiscovery` does. */
+    function drawable(name: string, capabilities: LlmApiCapability[]) {
+      return {
+        name,
+        preset: 'mlxServe' as const,
+        baseUrl: 'http://127.0.0.1:11234',
+        deployment: null,
+        apiVersion: null,
+        model: 'fox-draw',
+        credential: null,
+        advanced: {
+          contextWindow: 0,
+          maximumAnswerTokens: 512,
+          temperature: 0,
+          timeoutSeconds: 300,
+          tlsPolicy: 'requireValidCertificate' as const,
+          customHeaders: {},
+        },
+        capabilities,
+        redactFilenames: false,
+      };
+    }
+
+    /** Picks `name` from the picture row's provider pulldown, and waits for the model field to settle. */
+    async function chooseProvider(name: string, picked: 'list' | 'typed'): Promise<void> {
+      await choicesOf(fieldOf('[aria-label="Image generation"]', 'Provider'));
+      [...document.body.querySelectorAll('ul.dropdown-content li')]
+        .find((option) => option.textContent?.trim() === name)
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      m.redraw.sync();
+      // The models arrive with the endpoint's answer, so the field changes shape a moment later.
+      await vi.waitFor(() =>
+        expect(
+          fieldOf('[aria-label="Image generation"]', 'Model')?.querySelector(
+            'button.select-dropdown',
+          ) !== null,
+        ).toBe(picked === 'list'),
+      );
+    }
+
+    it('picks the drawing model from what the endpoint reports', async () => {
+      const client = new MockFileManagerClient();
+      await client.createLlmProfile(drawable('Draw box', ['chatCompletions', 'modelDiscovery']));
+      const save = vi.spyOn(client, 'setLlmRole');
+      await mountLoaded(client);
+      await chooseProvider('Draw box', 'list');
+
+      // the same pulldown the chat model gets, holding what the endpoint listed
+      const model = fieldOf('[aria-label="Image generation"]', 'Model');
+      expect(
+        model?.querySelector('button.select-dropdown'),
+        'a drawing model is picked, not copied by hand',
+      ).not.toBeNull();
+      expect(await choicesOf(model)).toEqual(['fox-draw', 'model-b', 'Type another name…']);
+      [...document.body.querySelectorAll('ul.dropdown-content li')]
+        .find((option) => option.textContent?.trim() === 'model-b')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      m.redraw.sync();
+
+      root
+        .querySelector<HTMLElement>('[aria-label="Image generation"] .fm-primary-action')
+        ?.click();
+      await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+      expect(save).toHaveBeenCalledWith('image', expect.objectContaining({ model: 'model-b' }));
+    });
+
+    it('still takes a typed name for a model the endpoint does not report', async () => {
+      const client = new MockFileManagerClient();
+      await client.createLlmProfile(drawable('Draw box', ['chatCompletions', 'modelDiscovery']));
+      await mountLoaded(client);
+      await chooseProvider('Draw box', 'list');
+
+      const model = fieldOf('[aria-label="Image generation"]', 'Model');
+      await choicesOf(model);
+      [...document.body.querySelectorAll('ul.dropdown-content li')]
+        .find((option) => option.textContent?.trim() === 'Type another name…')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      m.redraw.sync();
+
+      const typed = fieldOf('[aria-label="Image generation"]', 'Model')?.querySelector('input');
+      expect(typed, 'a model nobody listed stays nameable').toBeTruthy();
+      setValue(typed as HTMLInputElement, 'Aurora XL');
+      m.redraw.sync();
+      expect(
+        root
+          .querySelector<HTMLElement>('[aria-label="Image generation"] .fm-primary-action')
+          ?.hasAttribute('disabled'),
+        'a typed name is enough to save',
+      ).toBe(false);
+    });
+
+    it('types the drawing model when the endpoint reports nothing to pick from', async () => {
+      const client = new MockFileManagerClient();
+      await client.createLlmProfile(drawable('Quiet box', ['chatCompletions']));
+      await mountLoaded(client);
+      await chooseProvider('Quiet box', 'typed');
+
+      const model = fieldOf('[aria-label="Image generation"]', 'Model');
+      expect(
+        model?.querySelector('button.select-dropdown'),
+        'a pulldown of one model would only hide the field',
+      ).toBeNull();
+      expect(model?.querySelector('input')).toBeTruthy();
+    });
   });
 });
