@@ -11,6 +11,9 @@ use fm_semantic_worker::gemma_fusion::GemmaFusionEncoder;
 use fm_semantic_worker::gemma_fusion::GemmaFusionError;
 use fm_semantic_worker::gemma_multimodal::{GemmaModality, GemmaProjection};
 use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeEncoder, GemmaNativeError};
+// Only the Metal parity test reads the pinned text tasks, so the import carries the same gate:
+// without it `--features gemma-native` fails `-D warnings` on an unused import.
+#[cfg(all(target_os = "macos", feature = "gemma-metal"))]
 use fm_semantic_worker::gemma_probe::GemmaTextTask;
 use fm_semantic_worker::gemma_vision::{GemmaVisionError, GemmaVisionTower};
 use fm_semantic_worker::gemma_visual::{GemmaVisualError, VisualKind, prepare_frame};
