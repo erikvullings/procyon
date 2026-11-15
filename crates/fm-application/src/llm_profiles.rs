@@ -231,14 +231,28 @@ impl LlmHostPolicy {
         }
     }
 
+    /// The server posture: the administrator's host list and nothing else - not even the machine's
+    /// own loopback, which would let any browser user point this server at services on itself.
     #[must_use]
     pub fn server(allowed_cloud_hosts: impl IntoIterator<Item = String>) -> Self {
+        Self::server_with_loopback(allowed_cloud_hosts, false)
+    }
+
+    /// The server posture with the loopback branch opened on purpose
+    /// (`PROCYON_LLM_ALLOW_LOOPBACK`, task 0325). A single-user server that runs a model on the same
+    /// machine needs this; a shared one should not have it, because every browser user of that
+    /// server can then make it contact its own localhost.
+    #[must_use]
+    pub fn server_with_loopback(
+        allowed_cloud_hosts: impl IntoIterator<Item = String>,
+        allow_loopback: bool,
+    ) -> Self {
         Self {
             allowed_cloud_hosts: allowed_cloud_hosts
                 .into_iter()
                 .map(|host| host.to_ascii_lowercase())
                 .collect(),
-            allow_loopback: false,
+            allow_loopback,
             allow_all_cloud_hosts: false,
         }
     }
@@ -3956,6 +3970,25 @@ mod tests {
     }
 
     #[test]
+    fn the_loopback_opt_in_opens_the_loopback_branch_and_nothing_else() {
+        let policy = LlmHostPolicy::server_with_loopback(["192.168.1.20".to_owned()], true);
+        // A model served on the machine itself is now reachable, by name as well as by address.
+        for url in [
+            "http://127.0.0.1:11234",
+            "http://localhost:11434",
+            "http://[::1]:8000",
+        ] {
+            let endpoint = normalize_endpoint(url).unwrap();
+            assert!(policy.permits(&endpoint), "{url} should be reachable");
+        }
+        // The rest of the server posture is untouched: a LAN address still needs listing, and an
+        // address outside the list - local-looking or not - still stays out.
+        assert!(policy.permits(&normalize_endpoint("http://192.168.1.20:8000").unwrap()));
+        assert!(!policy.permits(&normalize_endpoint("http://192.168.1.21:8000").unwrap()));
+        assert!(!policy.permits(&normalize_endpoint("https://api.example.test").unwrap()));
+    }
+
+    #[test]
     fn dangling_role_is_pruned_without_losing_the_profile_document() {
         let profile = profile_from_draft(
             Uuid::new_v4(),
@@ -4158,6 +4191,22 @@ mod tests {
                 .category,
             Some(LlmTestErrorCategory::PolicyDenied)
         );
+    }
+
+    #[tokio::test]
+    async fn the_loopback_opt_in_lets_a_server_reach_a_model_on_its_own_machine() {
+        let (service, _, _) = service(LlmHostPolicy::server_with_loopback([], true));
+        let local = service
+            .create(draft(LlmPreset::Ollama, "http://127.0.0.1:11434"))
+            .await
+            .unwrap();
+        let result = service
+            .test(local.id, &CancellationToken::new())
+            .await
+            .unwrap();
+        // Whether anything answers on that port is the network's business now; the gate no longer
+        // refuses the request before it leaves, which is what the opt-in is for.
+        assert_ne!(result.category, Some(LlmTestErrorCategory::PolicyDenied));
     }
 
     #[tokio::test]

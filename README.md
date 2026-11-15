@@ -226,6 +226,49 @@ Swagger UI is available at <http://127.0.0.1:8787/api/v1/docs>.
 On Windows, the repository commands above work in PowerShell because environment variables are
 set through `cross-env`.
 
+### AI endpoints, and which hosts the server may reach
+
+Chat, image generation and semantic features call the endpoint you pick in **Settings → LLM (AI)**.
+Whether that endpoint may be called at all is decided by the host, not by Settings:
+
+| Host | Endpoints it will call |
+| --- | --- |
+| Desktop (`pnpm dev:tauri`, packaged app) | Anything - a model on your own machine is the normal case |
+| `fm-server` (browser host) | Only the hosts in `PROCYON_LLM_ALLOWED_HOSTS`, and never its own loopback unless opted in |
+
+The restriction is there because `fm-server` can be a shared, network-reachable service: if
+browser users could name any URL, they would have been handed a proxy into the machine that runs
+the server. Two things are called *local* and they are not the same thing: a private LAN address
+counts as local for **consent** (no cloud prompt), while the **host policy** counts only
+`localhost`, `127.0.0.0/8` and `::1` as loopback.
+
+When the policy refuses, no request leaves the process. Settings → **Test endpoint** reports
+`policyDenied`, and the image generation pane says the server is not allowed to reach that endpoint.
+
+A single-user server may legitimately run its models on the same machine. Opt into that explicitly:
+
+```bash
+# Terminal 1 - development server, model served by e.g. mlx-serve on this machine
+PROCYON_LLM_ALLOW_LOOPBACK=1 pnpm dev:server
+
+# Production server
+PROCYON_LLM_ALLOW_LOOPBACK=1 PROCYON_LLM_ALLOWED_HOSTS=api.example.com fm-server
+```
+
+Accepted values are `1`, `true`, `yes` and `on`; anything else - an empty value included - leaves
+the branch closed. The server says so at startup with a warning notification
+(`llmLoopbackAllowed`), because the switch removes the one thing that normally shields the server's
+own localhost from whoever can reach the API: every user of that server can then make it contact
+whatever is listening on itself. Do not set it on a server others can reach.
+
+To keep the shield and still use a local model, serve it on the machine's LAN address and allow
+that address instead:
+
+```bash
+PROCYON_LLM_ALLOWED_HOSTS=192.168.1.20 fm-server
+# and point the endpoint in Settings at http://192.168.1.20:11234
+```
+
 ## Keyboard essentials
 
 Procyon uses **Cmd** as the primary modifier on macOS and **Ctrl** on Windows and Linux.

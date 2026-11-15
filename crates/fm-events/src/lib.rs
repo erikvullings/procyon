@@ -893,6 +893,9 @@ pub mod notification_codes {
     pub const SETTINGS_UNREADABLE: &str = "settingsUnreadable";
     /// LLM profiles could not be read.
     pub const LLM_PROFILES_UNREADABLE: &str = "llmProfilesUnreadable";
+    /// The server was opted into reaching AI models on its own machine, so its host list no longer
+    /// shields localhost from whoever can reach the API (`PROCYON_LLM_ALLOW_LOOPBACK`).
+    pub const LLM_LOOPBACK_ALLOWED: &str = "llmLoopbackAllowed";
     /// A plugin action copied text to the clipboard.
     pub const CLIPBOARD_COPIED: &str = "clipboardCopied";
     /// A plugin was isolated after repeated failures (`plugin`, `detail`).

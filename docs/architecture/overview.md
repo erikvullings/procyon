@@ -144,7 +144,10 @@ tokens and settings retain only opaque credential references. The capability sup
 presets and explicit cloud endpoints, normalizes bounded Chat Completions probes, and requires
 host-bound informed consent before activating a cloud profile. Axum, Tauri, and the mock adapter
 share the same transport-neutral client contract; server deployments deny loopback and all cloud
-hosts by default unless `PROCYON_LLM_ALLOWED_HOSTS` explicitly allow-lists them.
+hosts by default, cloud hosts being allow-listed through `PROCYON_LLM_ALLOWED_HOSTS` and the
+loopback branch opening only through the operator's explicit `PROCYON_LLM_ALLOW_LOOPBACK` opt-in
+(see README, "AI endpoints, and which hosts the server may reach"). The same gate covers the image
+role, so a browser user of a shared server cannot point it at a model on that server's own machine.
 
 ## Mandatory rules (spec §3)
 

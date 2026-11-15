@@ -421,14 +421,33 @@ impl FileManagerService {
         let settings_store = SettingsStore::new(&settings_directory);
         let llm_transport = Arc::new(ReqwestLlmProbeTransport::new());
         let llm_policy = match runtime {
-            RuntimeKindDto::BrowserServer => LlmHostPolicy::server(
-                std::env::var("PROCYON_LLM_ALLOWED_HOSTS")
+            RuntimeKindDto::BrowserServer => {
+                let allowed_hosts: Vec<String> = std::env::var("PROCYON_LLM_ALLOWED_HOSTS")
                     .unwrap_or_default()
                     .split(',')
                     .map(str::trim)
                     .filter(|host| !host.is_empty())
-                    .map(str::to_owned),
-            ),
+                    .map(str::to_owned)
+                    .collect();
+                let allow_loopback = llm_loopback_opt_in(
+                    std::env::var("PROCYON_LLM_ALLOW_LOOPBACK").ok().as_deref(),
+                );
+                if allow_loopback {
+                    // Said out loud, because the host list is what normally keeps this server's own
+                    // localhost away from whoever can reach the API (README: AI endpoints).
+                    events.publish(
+                        EventAudience::Global,
+                        BackendEventPayload::NotificationCreated {
+                            notification: NotificationPayload::new(
+                                NotificationLevelPayload::Warning,
+                                "This server may reach AI models on its own machine (PROCYON_LLM_ALLOW_LOOPBACK). Anyone who can use it can make it contact its own localhost.",
+                            )
+                            .with_code(fm_events::notification_codes::LLM_LOOPBACK_ALLOWED),
+                        },
+                    );
+                }
+                LlmHostPolicy::server_with_loopback(allowed_hosts, allow_loopback)
+            }
             RuntimeKindDto::Tauri | RuntimeKindDto::Mock => LlmHostPolicy::desktop(),
         };
         let llm_profiles = LlmProfileService::new(
@@ -5355,6 +5374,20 @@ fn with_transfer_journal(
     }
 }
 
+/// Whether the operator opted this server into reaching models on its own machine
+/// (`PROCYON_LLM_ALLOW_LOOPBACK`, documented in the README). Only a clear yes is a yes: an empty
+/// value, a misspelling or nothing at all leaves the loopback branch closed.
+fn llm_loopback_opt_in(value: Option<&str>) -> bool {
+    matches!(
+        value
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_ascii_lowercase())
+            .as_deref(),
+        Some("1") | Some("true") | Some("yes") | Some("on")
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5369,6 +5402,18 @@ mod tests {
         assert_eq!(file_extension("My Movie.TORRENT"), "torrent");
         assert_eq!(file_extension(".torrent"), "");
         assert_eq!(file_extension("README"), "");
+    }
+
+    #[test]
+    fn only_a_clear_yes_opens_the_servers_loopback_branch() {
+        for value in ["1", "true", "TRUE", " yes ", "on"] {
+            assert!(llm_loopback_opt_in(Some(value)), "{value} should open it");
+        }
+        for value in ["", "   ", "0", "false", "off", "sure"] {
+            assert!(!llm_loopback_opt_in(Some(value)), "{value} should not");
+        }
+        // No variable at all is the common case, and it stays closed.
+        assert!(!llm_loopback_opt_in(None));
     }
 
     use std::io::Write;
