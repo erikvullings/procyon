@@ -1322,6 +1322,8 @@ export const fr = {
     replace: 'Remplacer le fichier existant',
     confirmReplace: 'Remplacer et enregistrer',
     folder: 'Dossier',
+    folderChoices: 'Dossiers d’enregistrement',
+    saveToFolder: 'Enregistrer dans {name}',
     fileName: 'Nom de fichier',
     width: 'Largeur',
     height: 'Hauteur',

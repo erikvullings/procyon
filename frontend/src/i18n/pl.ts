@@ -1315,6 +1315,8 @@ export const pl = {
     replace: 'Zastąp istniejący plik',
     confirmReplace: 'Zastąp i zapisz',
     folder: 'Katalog',
+    folderChoices: 'Foldery zapisu',
+    saveToFolder: 'Zapisz w {name}',
     fileName: 'Nazwa pliku',
     width: 'Szerokość',
     height: 'Wysokość',

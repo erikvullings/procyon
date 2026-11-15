@@ -1321,6 +1321,8 @@ export const pt = {
     replace: 'Substituir o arquivo existente',
     confirmReplace: 'Substituir e salvar',
     folder: 'Pasta',
+    folderChoices: 'Pastas de destino',
+    saveToFolder: 'Salvar em {name}',
     fileName: 'Nome do arquivo',
     width: 'Largura',
     height: 'Altura',

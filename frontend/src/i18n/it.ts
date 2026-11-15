@@ -1315,6 +1315,8 @@ export const it = {
     replace: 'Sostituisci il file esistente',
     confirmReplace: 'Sostituisci e salva',
     folder: 'Cartella',
+    folderChoices: 'Cartelle di destinazione',
+    saveToFolder: 'Salva in {name}',
     fileName: 'Nome file',
     width: 'Larghezza',
     height: 'Altezza',

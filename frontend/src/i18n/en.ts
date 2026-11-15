@@ -1686,6 +1686,8 @@ export const en = {
     replace: 'Replace the existing file',
     confirmReplace: 'Replace and save',
     folder: 'Folder',
+    folderChoices: 'Folders you can save to',
+    saveToFolder: 'Save to {name}',
     fileName: 'File name',
     width: 'Width',
     height: 'Height',

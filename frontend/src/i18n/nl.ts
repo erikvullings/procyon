@@ -1715,6 +1715,8 @@ export const nl = {
     replace: 'Bestaand bestand vervangen',
     confirmReplace: 'Vervangen en opslaan',
     folder: 'Map',
+    folderChoices: 'Mappen om naar te slaan',
+    saveToFolder: 'Opslaan in {name}',
     fileName: 'Bestandsnaam',
     width: 'Breedte',
     height: 'Hoogte',

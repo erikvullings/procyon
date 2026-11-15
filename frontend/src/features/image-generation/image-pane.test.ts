@@ -759,6 +759,37 @@ describe('saving a picture', () => {
     expect(options).toEqual(['~/Downloads', '~/Pictures']);
   });
 
+  it('picks a known folder with one click, and fits the name to the folder chosen', () => {
+    const { attrs } = mountLoaded(
+      shown,
+      attrsFor({ 'file:///Users/erik/Pictures': ['a-lighthouse-at-dusk-1024x1024-1.png'] }),
+    );
+    openForm();
+    const chips = [...root.querySelectorAll<HTMLButtonElement>('.fm-image-folder-chip')];
+    // A dual-pane manager already knows the two folders on screen; typing a path is the way out.
+    expect(chips.map((chip) => chip.textContent)).toEqual(['Downloads', 'Pictures']);
+    expect(chips[0]?.getAttribute('aria-pressed')).toBe('true');
+
+    chips[1]?.click();
+    m.redraw.sync();
+    expect(root.querySelector<HTMLInputElement>('.fm-image-folder')?.value).toBe('~/Pictures');
+    expect(chips[0]?.getAttribute('aria-pressed')).not.toBe('true');
+    // The suggestion is made again for the folder now chosen, so it is free there.
+    expect(root.querySelector<HTMLInputElement>('.fm-image-name')?.value).toBe(
+      'a-lighthouse-at-dusk-1024x1024-2',
+    );
+
+    root
+      .querySelector<HTMLFormElement>('.fm-image-save')
+      ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    expect(attrs.onSave).toHaveBeenCalledWith({
+      imageId: 'i1',
+      fileName: 'a-lighthouse-at-dusk-1024x1024-2.png',
+      folder: pictures,
+      overwrite: false,
+    });
+  });
+
   it('suggests a name that is not already in the folder', () => {
     mountLoaded(
       shown,

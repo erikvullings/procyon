@@ -1318,6 +1318,8 @@ export const es = {
     replace: 'Reemplazar el archivo existente',
     confirmReplace: 'Reemplazar y guardar',
     folder: 'Carpeta',
+    folderChoices: 'Carpetas de destino',
+    saveToFolder: 'Guardar en {name}',
     fileName: 'Nombre de archivo',
     width: 'Ancho',
     height: 'Alto',

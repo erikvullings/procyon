@@ -640,6 +640,33 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
             if (picked !== undefined) suggestName(attrs, image, saveImageIndex, picked);
           },
         }),
+        // The folders the person is already looking at are one click away; the field stays for the
+        // folder that is none of them, so a path can still be typed.
+        (attrs.saveFolders ?? []).length === 0
+          ? undefined
+          : m(
+              '.fm-image-folder-choices',
+              { role: 'group', 'aria-label': t('image', 'folderChoices') },
+              (attrs.saveFolders ?? []).map((candidate) => {
+                const text = folderText0(attrs, candidate.location);
+                return tooltip(
+                  t('image', 'saveToFolder', { name: candidate.name }),
+                  m(
+                    'button.btn-flat.fm-image-chrome.fm-image-folder-chip',
+                    {
+                      type: 'button',
+                      'aria-pressed': String(text === folderText.trim()),
+                      onclick: () => {
+                        folderText = text;
+                        // The free name the other folder offered may be taken here.
+                        suggestName(attrs, image, saveImageIndex, candidate.location);
+                      },
+                    },
+                    candidate.name,
+                  ),
+                );
+              }),
+            ),
         m(
           'datalist#fm-image-save-folders',
           (attrs.saveFolders ?? []).map((candidate) =>

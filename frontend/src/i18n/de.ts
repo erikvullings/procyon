@@ -1335,6 +1335,8 @@ export const de = {
     replace: 'Vorhandene Datei ersetzen',
     confirmReplace: 'Ersetzen und speichern',
     folder: 'Ordner',
+    folderChoices: 'Ordner zum Speichern',
+    saveToFolder: 'In {name} speichern',
     fileName: 'Dateiname',
     width: 'Breite',
     height: 'Höhe',
