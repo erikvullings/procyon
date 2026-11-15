@@ -657,6 +657,8 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
                       type: 'button',
                       'aria-pressed': String(text === folderText.trim()),
                       onclick: () => {
+                        // Re-picking the folder already chosen would silently drop a name that was typed.
+                        if (text === folderText.trim()) return;
                         folderText = text;
                         // The free name the other folder offered may be taken here.
                         suggestName(attrs, image, saveImageIndex, candidate.location);

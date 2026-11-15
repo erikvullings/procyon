@@ -790,6 +790,21 @@ describe('saving a picture', () => {
     });
   });
 
+  it('leaves a typed name alone when the folder already chosen is clicked again', () => {
+    mountLoaded(shown, attrsFor());
+    openForm();
+    const name = root.querySelector<HTMLInputElement>('.fm-image-name');
+    if (name === null) throw new Error('name field missing');
+    name.value = 'my own name';
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+    m.redraw.sync();
+
+    // Downloads is the folder already chosen, so this click is a no-op rather than a fresh guess.
+    root.querySelectorAll<HTMLButtonElement>('.fm-image-folder-chip')[0]?.click();
+    m.redraw.sync();
+    expect(root.querySelector<HTMLInputElement>('.fm-image-name')?.value).toBe('my own name');
+  });
+
   it('suggests a name that is not already in the folder', () => {
     mountLoaded(
       shown,

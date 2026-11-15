@@ -192,3 +192,37 @@ must review before anything is written. It gets its own role in 0322 and its own
   never answers), 53 `llm_profiles` tests, 247 frontend tests across the pane, the wiring, the mock
   client and i18n; clippy and rustfmt clean for `fm-application`. Still unverified in this host: the
   Tauri window and a live cloud endpoint of either contract.
+
+### The pane beside the chat pane (UI pass, 2026-11-15)
+
+- The two breadcrumb bars were measured rather than eyeballed: at 620 px both `.fm-image-header` and
+  `.fm-chat-header` compute to `--fm-row-height` (20 px) with no child crossing the row. Their trailing
+  actions are the same three, in the same order - a new prompt or chat, **AI settings**, a new tab - and
+  the favourites heart is gone from both, where it had never done anything. The chat's settings icon now
+  opens Settings at the LLM (AI) section, where its role, endpoint and consent live; it used to land on
+  the semantic section, which is not what "Open AI settings" promises. `chat-tab.test.ts` pins all of it.
+- The prompt box ends its leave-out row with the send and stop keys, the stop drawn filled (an open
+  square reads as a checkbox), and flips to the wording the presets, lens and aperture added instead of
+  the repeated "Sent to the model" note.
+- Materialize's `input[type="text"]` outranks a single class, so the negative-prompt field arrived at its
+  40 px default and towered over the keys beside it; it carries `browser-default` like the pane's other
+  fields. The status bar no longer leaves the pane when narrowed: the size and seed fields are only as
+  wide as four digits, and below about 340 px the row wraps onto a second line instead of pushing
+  Discard out of sight (0 px of spill measured at 380 px and 320 px).
+- Saving: the extension is part of the field but not of what can be edited, folders read `~/Downloads`
+  rather than `file:///Users/…`, the folders worth saving to are one-click chips, a suggestion is counted
+  past what the folder already holds and made again when the folder changes, and the stem comes from the
+  wording typed for that generation - each adaptation reads as itself, and a repeat is numbered - because
+  the endpoint echoes a composed prompt that is cut mid-word at 40 characters.
+- Deliberate deviation from "always use .png": the read-only extension follows the format the endpoint
+  returned. Procyon writes the bytes it was given; there is no re-encode step, and the save path refuses a
+  destination whose extension disagrees with those bytes. Forcing `.png` means choosing to decode and
+  re-encode, which is a different decision with a quality cost.
+- The browser host's loopback rule now has an operator opt-in: `PROCYON_LLM_ALLOW_LOOPBACK`
+  (1, true, yes, on) opens the loopback branch of `LlmHostPolicy` for `fm-server`, announced at startup
+  with an `llmLoopbackAllowed` warning notification. Private LAN addresses stay under
+  `PROCYON_LLM_ALLOWED_HOSTS` either way. README, "AI endpoints, and which hosts the server may reach".
+- Verified: 1640 Rust tests across `fm-application`, `fm-events` and `fm-server` (55 `llm_profiles`),
+  3782 frontend tests; `tsc --noEmit`, Biome, rustfmt and clippy clean. Layout figures come from the real
+  components at pane width in Chrome. Still unverified in this host: the Tauri window and a live cloud
+  endpoint of either contract.

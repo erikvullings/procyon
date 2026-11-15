@@ -261,6 +261,8 @@ the branch closed. The server says so at startup with a warning notification
 own localhost from whoever can reach the API: every user of that server can then make it contact
 whatever is listening on itself. Do not set it on a server others can reach.
 
+In PowerShell, set the variable in the session first: `$env:PROCYON_LLM_ALLOW_LOOPBACK = 1`.
+
 To keep the shield and still use a local model, serve it on the machine's LAN address and allow
 that address instead:
 
