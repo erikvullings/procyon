@@ -293,6 +293,31 @@ describe('image wiring', () => {
     await running;
   });
 
+  it('writes the file the person named, not the folder it belongs to', async () => {
+    const client = imageClient();
+    const { shell, entry } = fakeShell(client);
+    entry.batch = batch;
+    entry.views = [{ imageId: 'i1', loading: false }];
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.save(client as unknown as FileManagerClient, entry.key, {
+      imageId: 'i1',
+      fileName: 'a fox.png',
+      folder: { providerId: 'local', uri: 'file:///shots/' },
+      overwrite: false,
+    });
+
+    // A folder as destination names no file: the backend refuses it, and every save fails.
+    expect(client.saveGeneratedImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        generationId: 'g1',
+        imageId: 'i1',
+        destination: { providerId: 'local', uri: 'file:///shots/a fox.png' },
+        overwrite: false,
+      }),
+    );
+  });
+
   it('refuses to write over an existing file until the person asks for it', async () => {
     const conflict = Object.assign(new Error('exists'), { code: 'destinationAlreadyExists' });
     const client = imageClient({
@@ -1001,6 +1026,39 @@ describe('choosing where a picture lands', () => {
       providerId: 'local',
       uri: 'file:///Users/erik/Pictures/',
     });
+  });
+
+  it('offers a folder from every pane that is open, the one looked at first', () => {
+    const entry = emptyImagePane('left:t1', 'left', 't1', 'w1');
+    const elsewhere: Location = { providerId: 'local', uri: 'file:///tmp/third/' };
+    const shell = {
+      client: imageClient(),
+      imageByTab: new Map([[entry.key, entry]]),
+      directories: new Map(
+        Object.entries({
+          'right:r1': downloads,
+          'left:t0': shots,
+          'third:x1': elsewhere,
+          'third:x2': downloads, // the same folder in two tabs is offered once
+        }).map(([key, location]) => [key, { location }]),
+      ),
+      workspace: {
+        paneOrder: ['left', 'right', 'third'],
+        panesById: {
+          left: { activeTabId: 't1', tabOrder: ['t0', 't1'] },
+          right: { activeTabId: 'r1', tabOrder: ['r1'] },
+          third: { activeTabId: 'x1', tabOrder: ['x1', 'x2'] },
+        },
+      },
+    } as unknown as ShellState;
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    expect(wiring.saveFolders(entry.key).map((folder) => folder.location.uri)).toEqual([
+      'file:///Users/erik/Downloads/',
+      'file:///shots/',
+      'file:///tmp/third/',
+    ]);
+    expect(wiring.saveFolders(entry.key)[0]?.name).toBe('Downloads');
   });
 
   it('keeps saving to the folder a picture was just saved to', async () => {

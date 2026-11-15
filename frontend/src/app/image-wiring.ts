@@ -2,6 +2,7 @@ import m from 'mithril';
 import { toast } from 'mithril-materialized';
 import type { FileManagerClient } from '../api/client/file-manager-client';
 import {
+  destinationFor,
   emptyImagePane,
   firstImageId,
   forgetGeneration,
@@ -382,7 +383,7 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
       const receipt = await client.saveGeneratedImage({
         generationId,
         imageId: input.imageId,
-        destination: { providerId: input.folder.providerId, uri: input.folder.uri },
+        destination: destinationFor(input.folder, input.fileName),
         overwrite: input.overwrite,
       });
       if (entryOf(key) !== entry) return;
@@ -470,17 +471,26 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
   }
 
   /**
-   * Where a save may go, best first: the other pane's folder, this pane's own, then the folders
-   * recent saves went to. Choosing one is a click, so nobody has to type a location.
+   * Where a save may go, best first: the other pane's folder, this pane's own, then every folder
+   * still open in another pane, then the folders recent saves went to. Choosing one is a click, so
+   * nobody has to type a location.
    */
   function saveFolders(key: string): { location: Location; name: string }[] {
     const entry = entryOf(key);
-    if (entry === undefined) return [];
+    if (entry === undefined || shellState.workspace === undefined) return [];
+    const otherPaneId = imageSaveFolderPaneId(shellState.workspace.paneOrder, entry.paneId);
+    const candidates: Location[] = [
+      ...(otherPaneId === undefined ? [] : foldersOfPane(otherPaneId)),
+      ...foldersOfPane(entry.paneId),
+      // Every folder the person still has open somewhere else is a place a picture could go.
+      ...shellState.workspace.paneOrder
+        .filter((paneId) => paneId !== otherPaneId && paneId !== entry.paneId)
+        .flatMap((paneId) => foldersOfPane(paneId)),
+      ...recentSaveFolders,
+    ];
     const folders: Location[] = [];
-    const own = shellState.directories.get(tabKey(entry.paneId, entry.tabId))?.location;
-    const first = saveFolder(key)?.location;
-    for (const location of [first, own, ...recentSaveFolders]) {
-      if (location === undefined || location.uri.startsWith('search://')) continue;
+    for (const location of candidates) {
+      if (location.uri.startsWith('search://')) continue;
       if (!folders.some((known) => known.uri === location.uri)) folders.push(location);
     }
     return folders.map((location) => ({
