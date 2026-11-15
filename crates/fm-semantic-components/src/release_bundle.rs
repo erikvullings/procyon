@@ -43,8 +43,9 @@ const PRODUCTION_ZVEC_VERSION: &str = "0.8.1";
 const PRODUCTION_ZVEC_SOURCE_URL: &str = "https://github.com/zvec-ai/zvec-rust";
 /// Immutable upstream revision recorded for the pinned Zvec release.
 const PRODUCTION_ZVEC_SOURCE_REVISION: &str = "668f8270d3023bda0f3ed2ba650a508dca78d648";
-/// Native Zvec tree (`zvec/`, vendored in the Rust SDK repository) at the v0.8.1 tag.
-const PRODUCTION_ZVEC_NATIVE_SOURCE_REVISION: &str = "9c1a7f95b0ddbf1e478c4fac2d6735903d6e6120";
+/// Native Zvec tree the Rust SDK vendors as its `vendor/zvec` submodule (`alibaba/zvec`). This is
+/// the submodule pointer recorded by the SDK's `v0.8.1` release commit.
+const PRODUCTION_ZVEC_NATIVE_SOURCE_REVISION: &str = "30d662db4d2467937d843443074b34743bcc9baa";
 /// Microsoft ONNX Runtime release used by the Linux x86-64 dynamic loader.
 const PRODUCTION_ONNX_RUNTIME_VERSION: &str = "1.28.0";
 const PRODUCTION_PDFIUM_VERSION: &str = "0.8086.0";

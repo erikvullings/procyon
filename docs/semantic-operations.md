@@ -11,8 +11,9 @@ content search, and baseline document viewing available.
 - `pnpm semantic:bundle:dev` builds a host-platform developer bundle under
   `target/semantic-developer-bundle/<platform>-<architecture>`. The bundle contains the real worker,
   native Zvec runtime, two model packs, SHA-256 checksums, and a catalog signed by the repository's
-  public development key. It is supported where Zvec 0.7 publishes a native runtime: Apple-silicon
-  macOS, x86-64 Windows, and x86-64 or arm64 Linux. Intel macOS is unavailable.
+  public development key. It is supported where Procyon qualifies a native Zvec runtime: Apple-
+  silicon macOS, x86-64 Windows, and x86-64 or arm64 Linux. Intel macOS is unavailable because the
+  desktop build has no qualified x86-64 macOS worker, not because upstream publishes no runtime.
 - Developer artifact IDs and the catalog revision include a content-derived digest. Rebuilding
   changed worker, runtime, or model bytes therefore creates a distinct immutable artifact instead
   of colliding with an earlier bundle installed under the same workspace version.
@@ -172,9 +173,9 @@ installed and activated rather than a fixed one.
   launches no worker.
 - Each worker launch resolves the current active generation again and verifies the installed
   worker, runtime, and model bytes against the signed catalog. Missing, stale, tampered, or mixed
-  generations fail closed. Intel macOS keeps semantic installation unavailable because Zvec 0.7.0
-  has no supported runtime, but the universal desktop application continues to provide ordinary
-  file-management features.
+  generations fail closed. Intel macOS keeps semantic installation unavailable because Procyon has
+  no qualified x86-64 macOS worker for the pinned Zvec release, but the universal desktop
+  application continues to provide ordinary file-management features.
 - Desktop-managed builds install only packages from the signed catalog. The preview reports exact
   package/model identity, download bytes, disk/RAM estimates, and the filesystem authority used.
 - Before enrolment, estimate eligible files, extracted text, vectors, and any missing model bytes.
@@ -220,9 +221,9 @@ SHA-256 prefix; development IDs and the public developer key are never accepted 
 
 1. Build worker/runtime artifacts for macOS arm64, Windows x86-64, Linux x86-64, and Linux arm64,
    and publish immutable payloads through a catalog-ID-only artifact source. Intel macOS is an
-   explicit exception because Zvec 0.7.0 does not publish an x86-64 macOS runtime. Unsupported
-   hosts fail closed instead of receiving another target's payload. Do not accept user-supplied
-   download URLs.
+   explicit exception: 0.8.1 publishes an x86-64 macOS runtime, but Procyon has not qualified that
+   target, so it receives no payload. Unsupported hosts fail closed instead of receiving another
+   target's payload. Do not accept user-supplied download URLs.
 2. Evaluate the exact model revision and package set against the task-0188 baseline, then assemble
    `catalog-input.json` from the build outputs. The release tool enumerates the exact payload set
    and recomputes each file's length and SHA-256 before signing, so an unknown, missing, truncated,

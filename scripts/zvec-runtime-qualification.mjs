@@ -7,9 +7,9 @@ import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-export const ZVEC_VERSION = '0.7.0';
-export const ZVEC_RUST_REVISION = '733e0bc82e02a0c63202bff594a7f4530520dfd0';
-export const ZVEC_NATIVE_REVISION = '8321c1314a559fd5f909e92498f43e5194bf9b99';
+export const ZVEC_VERSION = '0.8.1';
+export const ZVEC_RUST_REVISION = '668f8270d3023bda0f3ed2ba650a508dca78d648';
+export const ZVEC_NATIVE_REVISION = '30d662db4d2467937d843443074b34743bcc9baa';
 
 const rustApacheLicense = {
   url: `https://raw.githubusercontent.com/zvec-ai/zvec-rust/${ZVEC_RUST_REVISION}/LICENSE`,
@@ -41,15 +41,15 @@ const targetDescriptors = new Map([
       architecture: 'aarch64',
       rustTarget: 'aarch64-apple-darwin',
       archive: {
-        assetId: 530247359,
+        assetId: 742882592,
         name: 'zvec-prebuilt-aarch64-apple-darwin.tar.gz',
-        bytes: 8135328,
-        sha256: '59c41dcbaab69b9fbcf3ca0f1997f58f189a025657fd09a464dca199107cdeb2',
+        bytes: 11013728,
+        sha256: 'd2a1e5da3e45404947a4b1810466724c125f3be3e2161406e4c03ac43f421447',
       },
       loader: {
         name: 'libzvec_c_api.dylib',
-        bytes: 23146352,
-        sha256: 'c9e4bf9387ef7261a284de407ec7e48ac9a48309d8daaa4c5ed85a8fa5bb4763',
+        bytes: 27207856,
+        sha256: '6a9c8c58fcddd4e82dc58f1a3206e5e5787277c1f5e4b3408aa3016544bcd322',
         format: 'mach-o',
         machine: 0x0100000c,
       },
@@ -69,22 +69,22 @@ const targetDescriptors = new Map([
       architecture: 'x86_64',
       rustTarget: 'x86_64-pc-windows-msvc',
       archive: {
-        assetId: 530247358,
+        assetId: 742882584,
         name: 'zvec-prebuilt-x86_64-pc-windows-msvc.tar.gz',
-        bytes: 8839865,
-        sha256: 'd8fe5585ad83066038f6e60990fe6e69528637a58fffc5024ca211c187a9d49a',
+        bytes: 11527420,
+        sha256: 'd375c6d96803d6925375e6698715db0c8c59da6969504c7b4382025380f6d857',
       },
       loader: {
         name: 'zvec_c_api.dll',
-        bytes: 26570240,
-        sha256: '3745106b3beee6be2d50ca678b46d3f0289afb5136ff51e1d1ec037a27b29e4a',
+        bytes: 29406720,
+        sha256: '25887240dbce5a5e1719f306dd881223fe27ee25c06c02048729e7b157198788',
         format: 'pe',
         machine: 0x8664,
       },
       linkLibrary: {
         name: 'zvec_c_api.lib',
-        bytes: 110340,
-        sha256: '404d08fc55680a1bbc4351041826d5b643ebeb1767ad19931cb9e077aa24f7f7',
+        bytes: 110282,
+        sha256: '0638d2a286595b313b21a1cd865a0010b872b3588191b640a330996467a07ee3',
       },
       expectedDependencies: [
         'dbghelp.dll',
@@ -105,15 +105,15 @@ const targetDescriptors = new Map([
       architecture: 'x86_64',
       rustTarget: 'x86_64-unknown-linux-gnu',
       archive: {
-        assetId: 530247354,
+        assetId: 742882589,
         name: 'zvec-prebuilt-x86_64-unknown-linux-gnu.tar.gz',
-        bytes: 13331422,
-        sha256: '7e9adbeadc42c772665efed45112220aa895d3f7963fa03c016102f2f414c37f',
+        bytes: 16156796,
+        sha256: 'c678f45db0de17650730b835390219f267b508f28e77291b381138bf74e455ad',
       },
       loader: {
         name: 'libzvec_c_api.so',
-        bytes: 36854864,
-        sha256: '89eac719eb426a2066d2104e5b1199aa83ec18eaa4c31c7797b9bf469904cfd5',
+        bytes: 40560496,
+        sha256: 'f9d83ee18a04ef926a7a5177967c3cb79686eef9051187605d3f42e4b23814a0',
         format: 'elf',
         machine: 62,
       },
@@ -136,19 +136,26 @@ const targetDescriptors = new Map([
       architecture: 'aarch64',
       rustTarget: 'aarch64-unknown-linux-gnu',
       archive: {
-        assetId: 530247355,
+        assetId: 742882586,
         name: 'zvec-prebuilt-aarch64-unknown-linux-gnu.tar.gz',
-        bytes: 11784274,
-        sha256: '0195a85f07370d7bcbf26f990bf794e31430e00224c8b9303d43ea677db6f77d',
+        bytes: 14519213,
+        sha256: '71b03d3e088e701c7926330b4006987d2de02c83a180f1bda45030e1e63d7ca1',
       },
       loader: {
         name: 'libzvec_c_api.so',
-        bytes: 32470624,
-        sha256: '621af6ba8249ce44dc17fb05da6c51c723cc466843e7f46ee44a40bd7eee1169',
+        bytes: 35409600,
+        sha256: '3b02683773d69d002ff61cfb861d24dac75ca8215490563c880f4db03d705ed9',
         format: 'elf',
         machine: 183,
       },
-      expectedDependencies: ['ld-linux-aarch64.so.1', 'libc.so.6', 'libm.so.6'],
+      expectedDependencies: [
+        'ld-linux-aarch64.so.1',
+        'libdl.so.2',
+        'libc.so.6',
+        'libm.so.6',
+        'libpthread.so.0',
+        'librt.so.1',
+      ],
     },
   ],
 ]);
@@ -580,12 +587,12 @@ function expectedUpstreamMetadata(descriptor) {
       crate: {
         name: 'zvec-rust',
         version: ZVEC_VERSION,
-        sha256: '09da6c0c29360b764d54f8d4107174f1fb60921d25387fd433f263ec4bf19e5a',
+        sha256: '2c784dd95b03b840c9607c9716191d81f709ffc0645eaadee4e0a442b910ee74',
       },
       sysCrate: {
         name: 'zvec-rust-sys',
         version: ZVEC_VERSION,
-        sha256: 'e1ea26d758a283798af569947fe9e3fb29e10cbffc5b09f50ef626cedfc4e013',
+        sha256: '48ce89deadf702d2402c84960cd400faf56c62fca5212ef2d2cbceef026c37ee',
       },
     },
     nativeZvec: {

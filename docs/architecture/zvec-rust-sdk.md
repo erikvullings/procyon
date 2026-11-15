@@ -1,17 +1,22 @@
 # Zvec Rust SDK qualification
 
 Task 0181 qualifies the official Rust SDK as an optional, worker-local derived-index backend. The
-qualified versions are:
+pinned release, and the exact identity the production bundle records for it, is:
 
 - `zvec-rust = 0.8.1`
 - `zvec-rust-sys = 0.8.1`
 - Zvec native C API `0.8.1`
-- Rust SDK tag commit `733e0bc82e02a0c63202bff594a7f4530520dfd0`
-- Native Zvec tag commit `8321c1314a559fd5f909e92498f43e5194bf9b99`
+- Rust SDK tag commit `668f8270d3023bda0f3ed2ba650a508dca78d648` (`zvec-ai/zvec-rust` `v0.8.1`)
+- Native Zvec revision `30d662db4d2467937d843443074b34743bcc9baa` (`alibaba/zvec` `v0.8.1`), the
+  commit the SDK's release pins as its `vendor/zvec` submodule
 
 Both Rust crates and native Zvec are Apache-2.0. A binary distribution must include the Apache
 license and the native Zvec `NOTICE`, including its Unicode Character Database and `pyglass` MIT
 attributions. Locally modified upstream files would also need to be identified.
+
+The release evidence below was re-derived from the `v0.8.1` GitHub release for this pin. Task
+0181's functional qualification and the API/FTS audit in this document were performed against
+0.7.0; task 0334 tracks re-running them against 0.8.1.
 
 ## Linkage and default-build policy
 
@@ -52,16 +57,16 @@ The exact release inputs are:
 
 | Target | GitHub asset ID | Archive SHA-256 | Loader SHA-256 |
 | --- | ---: | --- | --- |
-| macOS arm64 | `530247359` | `59c41dcbaab69b9fbcf3ca0f1997f58f189a025657fd09a464dca199107cdeb2` | `c9e4bf9387ef7261a284de407ec7e48ac9a48309d8daaa4c5ed85a8fa5bb4763` |
-| Windows x86-64 | `530247358` | `d8fe5585ad83066038f6e60990fe6e69528637a58fffc5024ca211c187a9d49a` | `3745106b3beee6be2d50ca678b46d3f0289afb5136ff51e1d1ec037a27b29e4a` |
-| Linux x86-64 | `530247354` | `7e9adbeadc42c772665efed45112220aa895d3f7963fa03c016102f2f414c37f` | `89eac719eb426a2066d2104e5b1199aa83ec18eaa4c31c7797b9bf469904cfd5` |
-| Linux arm64 | `530247355` | `0195a85f07370d7bcbf26f990bf794e31430e00224c8b9303d43ea677db6f77d` | `621af6ba8249ce44dc17fb05da6c51c723cc466843e7f46ee44a40bd7eee1169` |
+| macOS arm64 | `742882592` | `d2a1e5da3e45404947a4b1810466724c125f3be3e2161406e4c03ac43f421447` | `6a9c8c58fcddd4e82dc58f1a3206e5e5787277c1f5e4b3408aa3016544bcd322` |
+| Windows x86-64 | `742882584` | `d375c6d96803d6925375e6698715db0c8c59da6969504c7b4382025380f6d857` | `25887240dbce5a5e1719f306dd881223fe27ee25c06c02048729e7b157198788` |
+| Linux x86-64 | `742882589` | `c678f45db0de17650730b835390219f267b508f28e77291b381138bf74e455ad` | `f9d83ee18a04ef926a7a5177967c3cb79686eef9051187605d3f42e4b23814a0` |
+| Linux arm64 | `742882586` | `71b03d3e088e701c7926330b4006987d2de02c83a180f1bda45030e1e63d7ca1` | `3b02683773d69d002ff61cfb861d24dac75ca8215490563c880f4db03d705ed9` |
 
 The upstream GitHub release API publishes the archive digests. Loader digests were independently
 calculated from those checksum-verified archives and are pinned by Procyon. The release archives
 contain `TARGET` and the loader; Windows additionally contains the required
-`zvec_c_api.lib` import library (110,340 B,
-`404d08fc55680a1bbc4351041826d5b643ebeb1767ad19931cb9e077aa24f7f7`).
+`zvec_c_api.lib` import library (110,282 B,
+`0638d2a286595b313b21a1cd865a0010b872b3588191b640a330996467a07ee3`).
 
 The allowed unbundled dependencies are system-owned:
 
@@ -69,7 +74,8 @@ The allowed unbundled dependencies are system-owned:
 - Windows x86-64: `dbghelp.dll`, `KERNEL32.dll`, `ole32.dll`, `RPCRT4.dll`, `SHELL32.dll`,
   `SHLWAPI.dll`.
 - Linux x86-64: the x86-64 loader plus glibc, libdl, libm, libpthread, and librt.
-- Linux arm64: the AArch64 loader plus glibc and libm.
+- Linux arm64: the AArch64 loader plus glibc, libdl, libm, libpthread, and librt (0.8.1 links
+  libdl, libpthread, and librt where 0.7.0 did not).
 
 Release packaging fails if `otool -L`, `dumpbin /dependents`, or `readelf -d` reports a different
 set. Native Zvec's immutable Apache NOTICE is
@@ -77,9 +83,10 @@ set. Native Zvec's immutable Apache NOTICE is
 Unicode Character Database and pyglass attributions. Both upstream Apache license files hash to
 `43070e2d4e532684de521b885f385d0841030efa2b1a20bafb76133a5e1379c1` (11,356 B).
 
-The Rust README claims macOS x64 support, but its v0.7.0 release has no x64 macOS artifact and the
-target is commented out of the SDK's release and CI matrices. Procyon must not advertise the
-optional Zvec component for that target until it has a pinned, tested artifact.
+The `v0.8.1` release does publish an `x86_64-apple-darwin` prebuilt (asset `742882583`,
+12,340,298 B), which the `v0.7.0` release lacked. That removes the packaging blocker but not the
+qualification gap: Procyon builds no macOS x64 worker, so the optional Zvec component stays
+unadvertised for Intel macOS until that target is pinned, built, and tested (task 0334).
 
 ## API and recovery evidence
 
@@ -100,7 +107,9 @@ SQLite publication snapshot before occurrence evidence can leave worker storage.
 ## Native FTS and rank fusion audit
 
 Task 0201 audited the exact pinned `zvec-rust` 0.7.0 source rather than APIs from another binding or
-release. The safe Rust API provides every primitive needed for Structured Knowledge Search:
+release; task 0334 re-runs that audit against 0.8.1, whose release commit adapts the bindings to
+grouped search and IVF product quantization. The safe Rust API provides every primitive needed for
+Structured Knowledge Search:
 
 - `IndexParams::fts(tokenizer_name, filters, extra_params)` creates an FTS index on a
   `DataType::String` field;
@@ -123,14 +132,14 @@ not enumerate other tokenizer/filter names or expose the configured tokenizer th
 inspection, so Procyon must not guess filter names. The selected FTS tokenizer and configuration
 must be recorded in the worker-owned manifest and changed only through a schema migration.
 
-The safe 0.7.0 schema API does not expose a field lookup that would let Procyon read the persisted
-vector metric. Startup therefore verifies every required field/index, executes dimension and FTS
-schema probes, and relies on the authoritative manifest's cosine metric. Collections are created
-only by this adapter; an externally replaced collection is unsupported and query failures remain
-typed rather than silently changing scoring.
+The safe schema API audited at 0.7.0 does not expose a field lookup that would let Procyon read the
+persisted vector metric. Startup therefore verifies every required field/index, executes dimension
+and FTS schema probes, and relies on the authoritative manifest's cosine metric. Collections are
+created only by this adapter; an externally replaced collection is unsupported and query failures
+remain typed rather than silently changing scoring.
 
 These APIs use the same native library on every qualified target in the table above. Native FTS
-does not remove the existing macOS x64 packaging blocker.
+does not qualify macOS x64, whose prebuilt 0.8.1 now publishes but Procyon has not tested.
 
 ## Existing schema and migration decision
 
@@ -153,7 +162,8 @@ than mutate the live collection:
 3. Stream authorized records and vectors from SQLite in bounded batches; no source conversion or
    embedding call is required.
 4. Flush, optimize, verify the rebuilt document count, and inspect the expected FTS and vector
-   schema fields. Zvec 0.7.0 does not expose FTS build completeness through `Collection::stats`.
+   schema fields. The pinned Zvec release does not expose FTS build completeness through
+   `Collection::stats`.
 5. Atomically publish the new collection and manifest only after validation.
 6. Retain the old version-1 directory until publication succeeds, then reclaim it through the
    existing deferred-cleanup path.

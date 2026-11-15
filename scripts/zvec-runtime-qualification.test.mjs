@@ -20,13 +20,16 @@ import {
   verifyArchiveMembers,
   verifyNativeArchitecture,
   verifyPinnedFile,
+  ZVEC_NATIVE_REVISION,
+  ZVEC_RUST_REVISION,
+  ZVEC_VERSION,
   zvecRuntimeTarget,
 } from './zvec-runtime-qualification.mjs';
 
 test('passes repository-local archive paths to GNU tar on Windows', () => {
   const repository = 'D:\\a\\procyon\\procyon';
   const archive = `${repository}\\target\\semantic-zvec-runtime-cache\\archives\\zvec.tar.gz`;
-  const staging = `${repository}\\target\\semantic-zvec-runtime-cache\\0.7.0\\x86_64-pc-windows-msvc.extracting`;
+  const staging = `${repository}\\target\\semantic-zvec-runtime-cache\\${ZVEC_VERSION}\\x86_64-pc-windows-msvc.extracting`;
 
   assert.equal(
     archivePathForTar(archive, repository, 'win32'),
@@ -36,7 +39,7 @@ test('passes repository-local archive paths to GNU tar on Windows', () => {
     '-xzf',
     'target/semantic-zvec-runtime-cache/archives/zvec.tar.gz',
     '-C',
-    'target/semantic-zvec-runtime-cache/0.7.0/x86_64-pc-windows-msvc.extracting',
+    `target/semantic-zvec-runtime-cache/${ZVEC_VERSION}/x86_64-pc-windows-msvc.extracting`,
   ]);
   assert.equal(archivePathForTar('/tmp/zvec.tar.gz', '/workspace', 'linux'), '/tmp/zvec.tar.gz');
 });
@@ -58,12 +61,21 @@ test('pins every supported Zvec runtime to immutable upstream bytes', () => {
     ],
   );
   for (const target of targets) {
-    assert.match(target.archive.url, /releases\/download\/v0\.7\.0/u);
+    assert.match(
+      target.archive.url,
+      new RegExp(`/releases/download/v${ZVEC_VERSION.replaceAll('.', '\\.')}/`, 'u'),
+    );
+    assert.ok(Number.isSafeInteger(target.archive.assetId) && target.archive.assetId > 0);
     assert.match(target.archive.sha256, /^[a-f0-9]{64}$/u);
     assert.match(target.loader.sha256, /^[a-f0-9]{64}$/u);
     assert.ok(target.archive.bytes > 0);
     assert.ok(target.loader.bytes > 0);
     assert.ok(target.expectedDependencies.length > 0);
+  }
+  // A pinned upstream revision is the audit trail for the license and the vendored native tree,
+  // so a truncated or mistyped one has to fail here rather than in a release build.
+  for (const revision of [ZVEC_RUST_REVISION, ZVEC_NATIVE_REVISION]) {
+    assert.match(revision, /^[0-9a-f]{40}$/u);
   }
 });
 

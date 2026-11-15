@@ -297,7 +297,7 @@ const qualificationReport = {
     {
       check: 'macOS x86-64 semantic runtime',
       status: 'unsupported',
-      detail: 'Zvec 0.7.0 publishes no matching runtime.',
+      detail: 'Procyon has no qualified x86-64 macOS worker; upstream publishes the runtime.',
     },
     {
       check: 'guaranteed operating-system crash dump after forced termination',
