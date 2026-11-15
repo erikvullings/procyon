@@ -20,7 +20,8 @@ Run from the repo root via `pnpm run <script>`:
 
 | Command | What it does |
 | --- | --- |
-| `pnpm dev` | Vite dev server against the in-process **mock** client (default, no Rust process needed) |
+| `pnpm dev` | Vite dev server with the **default runtime, which is `http`** (`DEFAULT_RUNTIME_KIND` in `frontend/src/utilities/runtime.ts`) — pair it with `pnpm dev:server`, or it shows the session-token gate |
+| `pnpm dev:mock` | Vite dev server against the in-process **mock** client (no Rust process needed) |
 | `pnpm dev:http` | Vite dev server against the **Axum backend** (`VITE_RUNTIME=http`) — pair with `pnpm dev:server` |
 | `pnpm dev:server` | `fm-server` on port 8787, auth disabled, auto-rebuild on change |
 | `pnpm dev:tauri` | Tauri desktop app in dev mode |
