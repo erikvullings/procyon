@@ -240,9 +240,10 @@ mod tests {
 
     #[test]
     fn a_bash_command_uses_the_wrapper_as_its_init_file() {
+        let wrappers = Path::new("/data/shell-integration");
         let command = integrated_command(
             Path::new("/bin/bash"),
-            Path::new("/data/shell-integration"),
+            wrappers,
             Path::new("/work"),
             Some(Path::new("/home/me")),
             None,
@@ -253,13 +254,16 @@ mod tests {
             .iter()
             .map(|arg| arg.to_string_lossy().into_owned())
             .collect();
+        // The init file is the wrapper inside the wrapper folder, joined with the host separator,
+        // so it is compared against the same join rather than a literal that only a POSIX host
+        // would produce.
         assert_eq!(
             argv,
             [
-                "/bin/bash",
-                "--init-file",
-                "/data/shell-integration/bashrc",
-                "-i"
+                "/bin/bash".to_string(),
+                "--init-file".to_string(),
+                wrappers.join("bashrc").to_string_lossy().into_owned(),
+                "-i".to_string(),
             ]
         );
     }
