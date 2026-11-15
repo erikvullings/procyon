@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   nativeLibraryNames,
@@ -186,12 +187,33 @@ test('macOS production workers require a loader-relative native-library path', (
   assert.doesNotThrow(() => requireRelocatableWorkerLoaderPath('linux', ''));
 });
 
-test('production bundle records the compiled structural chunker identity', () => {
-  assert.equal(PRODUCTION_CHUNKER_IDENTITY, 'structural/4');
-});
+const productionConstants = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'crates',
+  'fm-semantic-components',
+  'src',
+  'production.rs',
+);
 
-test('production bundle records the current PDF and baseline converter identity', () => {
-  assert.equal(PRODUCTION_CONVERTER_IDENTITY, 'docling-pdf/2052009+baseline/14');
+function rustProductionConstant(name) {
+  const match = new RegExp(`pub const ${name}: &str = "([^"]+)";`).exec(
+    fs.readFileSync(productionConstants, 'utf8'),
+  );
+  if (!match) throw new Error(`${name} is no longer a string constant in production.rs`);
+  return match[1];
+}
+
+test('the bundle builder mirrors the pipeline identity compiled into the worker', () => {
+  // The production evaluator rejects a manifest whose pipeline identity differs from
+  // `production_pipeline_identity()` with an opaque InvalidIdentity on every target, and it
+  // did exactly that when a dependency upgrade bumped the Rust converter identity without
+  // this copy. Compare against the constants the worker compiles in, never a literal.
+  assert.equal(
+    PRODUCTION_CONVERTER_IDENTITY,
+    rustProductionConstant('PRODUCTION_CONVERTER_IDENTITY'),
+  );
+  assert.equal(PRODUCTION_CHUNKER_IDENTITY, rustProductionConstant('PRODUCTION_CHUNKER_IDENTITY'));
 });
 
 test('model verification resolves the content-addressed developer artifact', () => {
