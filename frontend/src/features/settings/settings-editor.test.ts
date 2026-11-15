@@ -136,6 +136,21 @@ function openSection(label: string): void {
 }
 
 describe('SettingsEditor', () => {
+  it('starts AI setup with open connections before model assignments', async () => {
+    mountEditor();
+    openSection('LLM (AI)');
+    await vi.waitFor(() => expect(root.querySelector('.fm-llm-roles')).not.toBeNull());
+    const connections = root.querySelector<HTMLDetailsElement>('.fm-llm-connections');
+    const roles = root.querySelector('.fm-llm-roles');
+    expect(connections?.open).toBe(true);
+    expect(connections).not.toBeNull();
+    expect(roles).not.toBeNull();
+    if (connections && roles)
+      expect(
+        connections.compareDocumentPosition(roles) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+  });
+
   it('splits the editor into keyboard-accessible sections', () => {
     mountEditor();
 

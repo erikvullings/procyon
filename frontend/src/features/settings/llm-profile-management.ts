@@ -31,6 +31,13 @@ interface EditorState {
   apiKey: string;
 }
 
+/** Give identically named connections distinct labels without changing stored names. */
+export function connectionLabel(profile: LlmProfile, profiles: readonly LlmProfile[]): string {
+  return profiles.filter((candidate) => candidate.name === profile.name).length > 1
+    ? `${profile.name} (${profile.id.slice(-8)})`
+    : profile.name;
+}
+
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (
@@ -172,6 +179,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
   let message: string | undefined;
   let error: string | undefined;
   let dirty = false;
+  let deletePendingId: string | undefined;
   let availableModels: string[] = [];
   let modelTestRevision = 0;
   let customContext = false;
@@ -237,6 +245,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
   }
 
   function selectProfile(profile: LlmProfile): void {
+    deletePendingId = undefined;
     consentPending = false;
     selectedId = profile.id;
     editor = { profileId: profile.id, request: requestFromProfile(profile), apiKey: '' };
@@ -562,12 +571,13 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                   {
                     type: 'button',
                     'aria-pressed': selectedId === profile.id,
+                    title: `${profile.baseUrl} — ${profile.id}`,
                     onclick: () => {
                       selectProfile(profile);
                       discoverModels(attrs.client, profile);
                     },
                   },
-                  `${profile.name} · ${
+                  `${connectionLabel(profile, profiles)} · ${
                     profile.locality === 'loopback'
                       ? t('llmProfiles', 'local')
                       : t('llmProfiles', 'cloud')
@@ -981,42 +991,18 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                 },
                 t('llmProfiles', 'export'),
               ),
-          active === undefined || !advanced
-            ? undefined
-            : m(Select<OrphanLlmCredentialDisposition>, {
-                className: 'fm-llm-field fm-llm-credential-policy',
-                label: t('llmProfiles', 'credentialOnDelete'),
-                options: [
-                  { id: 'delete', label: t('llmProfiles', 'deleteCredential') },
-                  { id: 'retain', label: t('llmProfiles', 'retainCredential') },
-                ],
-                checkedId: deleteDisposition,
-                onchange: ([value]) => {
-                  if (value !== undefined) deleteDisposition = value;
-                },
-              }),
-          active === undefined || !advanced
+          active === undefined
             ? undefined
             : m(
-                'button.fm-semantic-action',
+                'button.btn-flat',
                 {
                   type: 'button',
                   disabled: busy,
-                  onclick: () =>
-                    void run(async () => {
-                      await attrs.client.deleteLlmProfile(active.id, {
-                        credentialDisposition: deleteDisposition,
-                      });
-                      profiles = profiles.filter((profile) => profile.id !== active.id);
-                      attrs.onChanged?.();
-                      const preset = presets[0];
-                      selectedId = undefined;
-                      if (preset !== undefined) {
-                        editor = { request: requestFromPreset(preset), apiKey: '' };
-                      }
-                    }),
+                  onclick: () => {
+                    deletePendingId = active.id;
+                  },
                 },
-                t('button', 'delete'),
+                t('llmProfiles', 'deleteConnection'),
               ),
           m(
             'button.btn-flat.fm-primary-action',
@@ -1031,6 +1017,73 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
             t('llmProfiles', 'saveConnection'),
           ),
         ]),
+        active === undefined || deletePendingId !== active.id
+          ? undefined
+          : m(
+              'section.fm-llm-delete-confirmation',
+              { 'aria-label': t('llmProfiles', 'deleteConnection') },
+              [
+                m(
+                  'p',
+                  t('llmProfiles', 'deleteConnectionQuestion', {
+                    name: connectionLabel(active, profiles),
+                  }),
+                ),
+                m('p.fm-llm-role-notice', active.baseUrl),
+                m('p.fm-llm-role-notice', t('llmProfiles', 'deleteConnectionHint')),
+                m(Select<OrphanLlmCredentialDisposition>, {
+                  className: 'fm-llm-field',
+                  label: t('llmProfiles', 'credentialOnDelete'),
+                  options: [
+                    { id: 'delete', label: t('llmProfiles', 'deleteCredential') },
+                    { id: 'retain', label: t('llmProfiles', 'retainCredential') },
+                  ],
+                  checkedId: deleteDisposition,
+                  onchange: ([value]) => {
+                    if (value !== undefined) deleteDisposition = value;
+                  },
+                }),
+                m('.fm-form-actions', [
+                  m(
+                    'button.btn-flat',
+                    {
+                      type: 'button',
+                      disabled: busy,
+                      onclick: () => {
+                        deletePendingId = undefined;
+                      },
+                    },
+                    t('button', 'cancel'),
+                  ),
+                  m(
+                    'button.btn-flat.fm-primary-action',
+                    {
+                      type: 'button',
+                      disabled: busy,
+                      onclick: () =>
+                        void run(async () => {
+                          await attrs.client.deleteLlmProfile(active.id, {
+                            credentialDisposition: deleteDisposition,
+                          });
+                          profiles = profiles.filter((profile) => profile.id !== active.id);
+                          deletePendingId = undefined;
+                          const remaining = profiles[0];
+                          if (remaining !== undefined) selectProfile(remaining);
+                          else {
+                            selectedId = undefined;
+                            const preset = presets[0];
+                            if (preset !== undefined)
+                              editor = { request: requestFromPreset(preset), apiKey: '' };
+                            dirty = false;
+                          }
+                          attrs.onChanged?.();
+                        }),
+                    },
+                    t('button', 'delete'),
+                  ),
+                ]),
+              ],
+            ),
         message === undefined ? undefined : m('p.fm-llm-message', { role: 'status' }, message),
         error === undefined ? undefined : m('p.fm-settings-save-error', { role: 'alert' }, error),
       ]);

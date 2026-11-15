@@ -143,7 +143,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
   // A provider chosen in the roles section opens the endpoint editor above with that preset (0325).
   let llmPresetRequest: { presetId: string; revision: number } | undefined;
   let llmPresetRevision = 0;
-  let llmConnectionsOpen = false;
+  let llmConnectionsOpen = true;
   let focusLlmConnection = false;
 
   function resetDraft(current: SettingsEditorAttrs): void {
@@ -813,17 +813,6 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                 '.fm-settings-section-content.fm-llm-settings',
                 { hidden: activeSection !== 'llm' },
                 [
-                  m('h4.fm-llm-settings-title', t('llmRoles', 'title')),
-                  m(LlmRoleManagement, {
-                    client: current.client,
-                    revision: llmRevision,
-                    onCreateEndpoint: (presetId: string) => {
-                      llmConnectionsOpen = true;
-                      focusLlmConnection = true;
-                      llmPresetRevision += 1;
-                      llmPresetRequest = { presetId, revision: llmPresetRevision };
-                    },
-                  }),
                   m(
                     'details.fm-llm-connections',
                     {
@@ -850,6 +839,21 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                       }),
                     ],
                   ),
+                  m('h4.fm-llm-settings-title', t('llmRoles', 'title')),
+                  m(LlmRoleManagement, {
+                    client: current.client,
+                    revision: llmRevision,
+                    embeddingModelId: semanticStatus?.activeModel?.identity.modelId,
+                    onManageSemantic: () => {
+                      activeSection = 'semantic';
+                    },
+                    onCreateEndpoint: (presetId: string) => {
+                      llmConnectionsOpen = true;
+                      focusLlmConnection = true;
+                      llmPresetRevision += 1;
+                      llmPresetRequest = { presetId, revision: llmPresetRevision };
+                    },
+                  }),
                 ],
               ),
 

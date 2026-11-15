@@ -11,12 +11,14 @@ import type {
   LlmRoles,
 } from '../../models';
 import { canAssignRole, LLM_ROLES, type RoleStatus, roleStatus } from '../../models/llm-roles';
-import { errorMessage } from './llm-profile-management';
+import { connectionLabel, errorMessage } from './llm-profile-management';
 
 export interface LlmRoleManagementAttrs {
   readonly client: SemanticClient;
   /** Changes whenever an endpoint changes; a new value reloads the bindings and profiles. */
   readonly revision: number;
+  readonly embeddingModelId?: string | undefined;
+  readonly onManageSemantic?: (() => void) | undefined;
   /**
    * Asks the endpoint editor above to open with one provider's preset, so a provider the person has
    * no endpoint for yet is one choice away rather than a trip through the section above.
@@ -170,7 +172,7 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
             { id: '', label: t('llmRoles', 'unassigned') },
             ...profiles.map((profile) => ({
               id: profile.id,
-              label: profile.name,
+              label: connectionLabel(profile, profiles),
               disabled: !canAssignRole(profile, role, draft.allowCloud),
             })),
             ...(attrs.onCreateEndpoint === undefined
@@ -291,7 +293,26 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
       if (loading) return m('p', t('llmProfiles', 'loading'));
       return m('.fm-llm-roles', { 'aria-label': t('llmRoles', 'title') }, [
         m('p.fm-llm-roles-intro', t('llmRoles', 'intro')),
-        ...(['chat', 'image', 'embeddings'] as const).map((role) => roleBlock(attrs, role)),
+        ...(['chat', 'image'] as const).map((role) => roleBlock(attrs, role)),
+        m('section.fm-llm-role', { 'aria-label': t('llmRoles', 'embeddings') }, [
+          m('h5.fm-llm-role-title', t('llmRoles', 'embeddings')),
+          m('p.fm-llm-role-notice', t('llmRoles', 'embeddingExplanation')),
+          m('p.fm-llm-role-notice', [
+            t('llmRoles', 'embeddingModelLabel'),
+            ': ',
+            attrs.embeddingModelId ?? t('llmRoles', 'embeddingModelManaged'),
+          ]),
+          attrs.onManageSemantic === undefined
+            ? undefined
+            : m(
+                'button.btn-flat',
+                {
+                  type: 'button',
+                  onclick: attrs.onManageSemantic,
+                },
+                t('llmRoles', 'manageSemanticModel'),
+              ),
+        ]),
         error ? m('p.fm-llm-role-error', { role: 'alert' }, error) : undefined,
         message ? m('p.fm-llm-role-message', { role: 'status' }, message) : undefined,
       ]);

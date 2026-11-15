@@ -2180,6 +2180,19 @@ main.fm-workspace {
   margin-bottom: var(--fm-space-3);
 }
 
+.fm-llm-delete-confirmation {
+  display: grid;
+  gap: var(--fm-space-3);
+  padding: var(--fm-space-4);
+  border: 1px solid var(--fm-border);
+  background: var(--fm-surface);
+}
+
+.fm-llm-delete-confirmation > p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .fm-llm-credential-policy {
   flex-basis: 100%;
 }

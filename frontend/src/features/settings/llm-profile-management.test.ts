@@ -89,6 +89,32 @@ describe('the images API choice', () => {
 });
 
 describe('LlmProfileManagement', () => {
+  it('deletes only the selected duplicate connection without opening advanced settings', async () => {
+    const client = new MockFileManagerClient();
+    const preset = (await client.listLlmProfilePresets())[0];
+    if (preset === undefined) throw new Error('Missing preset');
+    const request = { ...preset, name: 'mlx-serve local', credential: null };
+    const first = await client.createLlmProfile(request);
+    const second = await client.createLlmProfile(request);
+    const remove = vi.spyOn(client, 'deleteLlmProfile');
+    await mountLoaded(client);
+    const button = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      (candidate) => candidate.textContent?.trim() === 'Delete connection',
+    );
+    expect(button, 'deletion must not be hidden under Advanced settings').toBeDefined();
+    button?.click();
+    m.redraw.sync();
+    expect(remove).not.toHaveBeenCalled();
+    expect(root.querySelector('.fm-llm-delete-confirmation')?.textContent).toContain(first.name);
+    root
+      .querySelector<HTMLButtonElement>('.fm-llm-delete-confirmation .fm-primary-action')
+      ?.click();
+    await vi.waitFor(() =>
+      expect(remove).toHaveBeenCalledWith(first.id, { credentialDisposition: 'delete' }),
+    );
+    expect((await client.listLlmProfiles()).map((profile) => profile.id)).toEqual([second.id]);
+  });
+
   it('saves a new connection in place without closing its editor', async () => {
     const client = new MockFileManagerClient();
     const create = vi.spyOn(client, 'createLlmProfile');

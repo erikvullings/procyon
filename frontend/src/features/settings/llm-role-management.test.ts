@@ -88,10 +88,15 @@ describe('LlmRoleManagement', () => {
     expect(actions[1]?.classList.contains('fm-primary-action')).toBe(true);
   });
 
-  it('shows all roles without an advanced toggle', async () => {
+  it('explains managed embeddings without offering an unwired provider selector', async () => {
     await mountLoaded(new MockFileManagerClient());
 
     expect(root.querySelector('[aria-label="Semantic search (embeddings)"]')).not.toBeNull();
+    expect(
+      root.querySelector('[aria-label="Semantic search (embeddings)"] .select-dropdown'),
+    ).toBeNull();
+    expect(root.textContent).toContain('The Chat model writes answers.');
+    expect(root.textContent).toContain('Terminal assistance.');
   });
 
   it('binds the picture model beside the chat model, not behind a switch', async () => {
