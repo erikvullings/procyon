@@ -2562,6 +2562,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       clearSource: (key) => imageWiring.clearSource(key),
     },
     imageSaveFolder: (key) => imageWiring.saveFolder(key),
+    getHomeDirectory: () => shellState.homeDirectory,
+    imageSaveFolders: (key) => imageWiring.saveFolders(key),
+    imageFileNamesIn: (folder) => imageWiring.fileNamesIn(folder),
+    // The chat pane's settings icon goes to the endpoints and roles, not to the semantic section.
+    openChatSettings: () => settingsWiring.openSettingsDialog('llm'),
     // The image pane's settings icon goes to the endpoints and roles, not to the semantic section.
     openImageSettings: () => settingsWiring.openSettingsDialog('llm'),
     chatFolderAvailable: (key) => chatWiring.folderAvailable(key),

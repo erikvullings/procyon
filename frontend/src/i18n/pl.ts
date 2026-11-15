@@ -1288,7 +1288,7 @@ export const pl = {
     deletePrompt: 'Zapomnij ten prompt',
     confirmDeletePrompt: 'Kliknij ponownie, aby zapomnieć ten prompt',
     newPrompt: 'Nowa podpowiedź obrazu',
-    seedPlaceholder: 'dowolny seed',
+    seedPlaceholder: 'seed',
     waitingForModel: 'Oczekiwanie na model…',
     title: 'Obraz',
     openDescription: 'Wygeneruj obraz obok edytora lub foldera',
@@ -1316,8 +1316,15 @@ export const pl = {
     confirmReplace: 'Zastąp i zapisz',
     folder: 'Katalog',
     fileName: 'Nazwa pliku',
-    saveHint:
-      'Nazwa musi kończyć się na .{extension}, a nic nie jest zapisywane do momentu zapisu.',
+    width: 'Szerokość',
+    height: 'Wysokość',
+    sizeHint: 'Każdy bok: wielokrotność 8 od {min} do {max}, łącznie najwyżej 2 megapiksele',
+    more: 'Więcej',
+    nameTaken: 'Plik o tej nazwie już istnieje. Zapis go zastąpi.',
+    revealPrompt: 'Pokaż pełny prompt wysyłany do modelu',
+    editPrompt: 'Wróć do edycji',
+    showFullWidth: 'Pokaż na pełną szerokość',
+    fitToPane: 'Dopasuj do panelu',
     savedTo: 'Zapisano w {location}',
     savedWithPrompt: 'Zapisano w {location}, podpowiedź została w metadanych.',
     savedPlain: 'Zapisano w {location}. Ten format nie pomieści podpowiedzi.',
@@ -1935,8 +1942,13 @@ export const pl = {
     unreachable: 'Nie można połączyć się z usługą AI profilu „{name}”.',
   },
   llmRoles: {
+    embeddingExplanation:
+      'Zainstalowany model semantyczny tworzy embeddingi do znajdowania odpowiednich fragmentów. Model czatu pisze odpowiedzi.',
+    embeddingModelLabel: 'Model embeddingów',
+    embeddingModelManaged: 'Zarządzany w Semantyczne (RAG)',
+    manageSemanticModel: 'Zarządzaj modelem semantycznym',
     addConnection: 'Dodaj połączenie…',
-    chatPurpose: 'Rozmowy, podsumowania i pytania o pliki.',
+    chatPurpose: 'Używany również do odpowiedzi o plikach i pomocy w Terminalu.',
     imagePurpose: 'Twórz obrazy za pomocą osobnego modelu obrazów.',
     embeddingsPurpose: 'Wybierz model embeddingów do wyszukiwania semantycznego.',
     imageModelPlaceholder: 'Nazwa modelu obrazów',
@@ -1974,6 +1986,10 @@ export const pl = {
   },
 
   llmProfiles: {
+    deleteConnection: 'Usuń połączenie',
+    deleteConnectionQuestion: 'Usunąć połączenie „{name}”?',
+    deleteConnectionHint:
+      'Usunięte zostanie tylko to połączenie. Pliki i inne połączenia pozostaną. Powiązane role nie będą przypisane.',
     saveConnection: 'Zapisz połączenie',
     connectionsTitle: 'Połączenia',
     consentRequired:

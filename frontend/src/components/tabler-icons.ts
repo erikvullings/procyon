@@ -480,3 +480,21 @@ export const volumeOffIcon = trustedStrokeIcon(
   '<path d="M15 8a5 5 0 0 1 1.912 4.934m-1.377 2.602a5 5 0 0 1 -.535 .464" /><path d="M17.7 5a9 9 0 0 1 2.362 11.086m-1.676 2.299a9 9 0 0 1 -.686 .615" /><path d="M9.069 5.054l.431 -.554a.8 .8 0 0 1 1.5 .5v2m0 4v8a.8 .8 0 0 1 -1.5 .5l-3.5 -4.5h-2a1 1 0 0 1 -1 -1v-4a1 1 0 0 1 1 -1h2l1.294 -1.664" /><path d="M3 3l18 18" />',
   'fm-icon-volume-off',
 );
+
+/** "eye" — reveal something hidden, such as the wording a prompt is sent with. */
+export const eyeIcon = trustedStrokeIcon(
+  '<path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" /><path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" />',
+  'fm-icon-eye',
+);
+
+/** "arrows-maximize" — show something at its full size. */
+export const arrowsMaximizeIcon = trustedStrokeIcon(
+  '<path d="M16 4l4 0l0 4" /><path d="M14 10l6 -6" /><path d="M8 20l-4 0l0 -4" /><path d="M4 20l6 -6" /><path d="M16 20l4 0l0 -4" /><path d="M14 14l6 6" /><path d="M8 4l-4 0l0 4" /><path d="M4 4l6 6" />',
+  'fm-icon-arrows-maximize',
+);
+
+/** "arrows-minimize" — fit something into the space it has. */
+export const arrowsMinimizeIcon = trustedStrokeIcon(
+  '<path d="M5 9l4 0l0 -4" /><path d="M3 3l6 6" /><path d="M5 15l4 0l0 4" /><path d="M3 21l6 -6" /><path d="M19 9l-4 0l0 -4" /><path d="M15 9l6 -6" /><path d="M19 15l-4 0l0 4" /><path d="M15 15l6 6" />',
+  'fm-icon-arrows-minimize',
+);

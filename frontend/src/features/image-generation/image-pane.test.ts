@@ -126,17 +126,18 @@ describe('the image pane header', () => {
     expect(root.querySelector('.fm-image-toggle')?.textContent).toBe('Prompts');
   });
 
-  it('carries the four header actions after the crumbs, each named by a tooltip', () => {
+  it('carries the header actions after the crumbs: new prompt, settings, new tab', () => {
     mountLoaded();
     const header = root.querySelector('.fm-image-header');
     const actions = [
       ...(header?.querySelectorAll<HTMLButtonElement>('button:not(.fm-image-toggle)') ?? []),
     ];
+    // The fit toggle leads; the favourites menu does not apply to this pane.
     expect(actions.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Show at full width',
       'New image prompt',
-      'New tab',
-      'Favourites',
       'Open AI settings',
+      'New tab',
     ]);
     // Nothing but an icon: the label travels with the control, not as visible text.
     for (const action of actions) expect(action.textContent?.trim()).toBe('');
@@ -236,11 +237,45 @@ describe('the prompt and the preview', () => {
     );
   });
 
-  it('shows the wording that will be sent once there are words', () => {
+  it('keeps the wording sent to the model on the back of the box, not beside it', () => {
     mountLoaded({ subject: 'a lighthouse at dusk', presetIds: ['clipart'] });
-    const line = root.querySelector('.fm-image-composed');
-    expect(line?.textContent).toContain('a lighthouse at dusk');
-    expect(line?.textContent).toContain('Sent to the model');
+    expect(root.querySelector('.fm-image-composed'), 'no repeated line under the box').toBeNull();
+    expect(root.querySelector('.fm-image-revealed')).toBeNull();
+
+    labelled(root, 'Show the full prompt sent to the model')?.click();
+    m.redraw.sync();
+
+    expect(root.querySelector('.fm-image-revealed')?.textContent).toContain('a lighthouse at dusk');
+    expect(root.querySelector('.fm-image-revealed')?.textContent).toContain('clipart');
+    expect(root.querySelector('textarea'), 'the editable prompt is flipped away').toBeNull();
+    expect(root.querySelector('.fm-image-avoid-row')?.textContent).toContain('Sent to the model');
+
+    labelled(root, 'Back to editing')?.click();
+    m.redraw.sync();
+    expect(root.querySelector('textarea')).not.toBeNull();
+  });
+
+  it('cannot flip an empty prompt', () => {
+    mountLoaded();
+    expect(labelled(root, 'Show the full prompt sent to the model')?.disabled).toBe(true);
+  });
+
+  it('puts the send key at the end of the leave-out row, below the prompt', () => {
+    mountLoaded({ subject: 'a fox' });
+    const row = root.querySelector('.fm-image-avoid-row');
+    expect(row?.querySelector('.fm-image-send'), 'send ends the leave-out row').not.toBeNull();
+    expect(row?.lastElementChild?.classList.contains('fm-image-composer-actions')).toBe(true);
+    expect(
+      root.querySelector('textarea')?.parentElement?.querySelector('.fm-image-send'),
+      'nothing sits beside the prompt',
+    ).toBe(row?.querySelector('.fm-image-send'));
+  });
+
+  it('draws Stop as a filled square while a generation runs', () => {
+    mountLoaded({ subject: 'a fox', pendingRequestId: 'r1' });
+    const stop = root.querySelector('.fm-image-stop');
+    expect(root.querySelector('.fm-image-avoid-row')?.contains(stop ?? null)).toBe(true);
+    expect(stop?.querySelector('.fm-icon-filled'), 'a filled glyph').not.toBeNull();
   });
 
   it('names the leave-out field, so its example is not read as a feature', () => {
@@ -290,9 +325,17 @@ describe('the status bar', () => {
     m.redraw.sync();
   }
 
+  /** The less-used settings sit behind More; this unfolds them. */
+  function openMore(): void {
+    root.querySelector<HTMLButtonElement>('.fm-image-more-toggle')?.click();
+    m.redraw.sync();
+  }
+
   it('holds the size, the seed and the way to start from a picture', () => {
     mountLoaded();
-    expect(triggerFor('Size'), 'a size control').not.toBeNull();
+    expect(root.querySelector('[aria-label="Width"]'), 'a width field').not.toBeNull();
+    expect(root.querySelector('[aria-label="Height"]'), 'a height field').not.toBeNull();
+    openMore();
     expect(
       root.querySelector('.fm-image-status [aria-label="Seed"]'),
       'a seed field',
@@ -310,7 +353,13 @@ describe('the status bar', () => {
       [...root.querySelectorAll<HTMLButtonElement>('.fm-image-choice-trigger')].map((trigger) =>
         trigger.getAttribute('aria-label'),
       ),
-    ).toEqual(['Style', 'Finish', 'Size', 'Quality', 'Steps']);
+    ).toEqual(['Style', 'Finish', 'Size']);
+    openMore();
+    expect(
+      [...root.querySelectorAll<HTMLButtonElement>('.fm-image-more .fm-image-choice-trigger')].map(
+        (trigger) => trigger.getAttribute('aria-label'),
+      ),
+    ).toEqual(['Quality', 'Steps']);
     expect(triggerFor('Style')?.textContent).toContain('No style');
     expect(triggerFor('Finish')?.textContent).toContain('No finish');
   });
@@ -372,6 +421,7 @@ describe('the status bar', () => {
 
   it('asks how hard the model should work, in words a person has', () => {
     const { attrs } = mountLoaded();
+    openMore();
     expect(triggerFor('Quality')?.textContent).toContain('Any quality');
     clickOption('Quality', 'Super quality');
     expect(attrs.onPatch).toHaveBeenCalledWith({ qualityId: 'superQuality' });
@@ -379,6 +429,7 @@ describe('the status bar', () => {
 
   it('can be told how many steps to take, and asked to leave that to the model', () => {
     const { attrs } = mountLoaded();
+    openMore();
     expect(triggerFor('Steps')?.textContent).toContain('Any steps');
     clickOption('Steps', '30');
     expect(attrs.onPatch).toHaveBeenCalledWith({ steps: 30 });
@@ -386,11 +437,13 @@ describe('the status bar', () => {
 
   it('shows the step count that is set', () => {
     mountLoaded({ steps: 50 });
+    openMore();
     expect(triggerFor('Steps')?.textContent).toContain('50');
   });
 
   it('starts from the picture the other pane has selected, and can be talked out of it', () => {
     const without = mountLoaded();
+    openMore();
     root.querySelector<HTMLButtonElement>('.fm-image-source')?.click();
     m.redraw.sync();
     expect(
@@ -402,6 +455,7 @@ describe('the status bar', () => {
     const withSource = mountLoaded({
       source: { location: { providerId: 'local', uri: 'file:///shots/cat.png' } },
     });
+    openMore();
     expect(root.textContent).toContain('cat.png');
     root.querySelector<HTMLButtonElement>('[aria-label="Stop starting from a picture"]')?.click();
     m.redraw.sync();
@@ -412,8 +466,10 @@ describe('the status bar', () => {
     mountLoaded({ width: 1_216, height: 832 });
     expect(root.querySelector('select'), 'no native select to be hidden').toBeNull();
 
+    // The shapes are a chevron beside the two fields, which show the numbers.
     const trigger = triggerFor('Size');
-    expect(trigger?.textContent).toContain('1216 × 832');
+    expect(root.querySelector<HTMLInputElement>('[aria-label="Width"]')?.value).toBe('1216');
+    expect(root.querySelector<HTMLInputElement>('[aria-label="Height"]')?.value).toBe('832');
     expect(trigger?.querySelector('.fm-icon-chevron-down'), 'a caret to open it').not.toBeNull();
 
     trigger?.click();
@@ -439,6 +495,7 @@ describe('the status bar', () => {
 
   it('opens only one choice at a time', () => {
     mountLoaded();
+    openMore();
     triggerFor('Style')?.click();
     m.redraw.sync();
     expect(root.querySelectorAll('.fm-image-choice-list')).toHaveLength(1);
@@ -453,8 +510,10 @@ describe('the status bar', () => {
 
   it('offers lens wording only when a photographic preset is on', () => {
     mountLoaded({ presetIds: ['clipart'] });
+    openMore();
     expect(root.querySelector('.fm-image-status [aria-label="Lens"]')).toBeNull();
     mountLoaded({ presetIds: ['portrait'] });
+    openMore();
     expect(
       root.querySelector('.fm-image-status [aria-label="Lens"]'),
       'a lens control',
@@ -583,5 +642,212 @@ describe('the remembered prompts', () => {
     toggle()?.click();
     m.redraw.sync();
     expect(root.querySelector('.fm-image-prompts-empty')?.textContent).toContain('No prompts yet');
+  });
+});
+
+describe('the header, the preview mode and the size fields', () => {
+  it('toggles the picture between fit and full width', () => {
+    mountLoaded({ batch, views: [{ imageId: 'i1', loading: false, previewUrl: 'blob:1' }] });
+    expect(
+      root.querySelector('.fm-image-preview')?.classList.contains('fm-image-preview-fit'),
+    ).toBe(true);
+    labelled(root, 'Show at full width')?.click();
+    m.redraw.sync();
+    expect(
+      root.querySelector('.fm-image-preview')?.classList.contains('fm-image-preview-full'),
+    ).toBe(true);
+    labelled(root, 'Fit to the pane')?.click();
+    m.redraw.sync();
+    expect(
+      root.querySelector('.fm-image-preview')?.classList.contains('fm-image-preview-fit'),
+    ).toBe(true);
+  });
+
+  it('sets the width and the height separately', () => {
+    const { attrs } = mountLoaded();
+    const width = root.querySelector<HTMLInputElement>('[aria-label="Width"]');
+    const height = root.querySelector<HTMLInputElement>('[aria-label="Height"]');
+    if (width === null || height === null) throw new Error('size fields missing');
+    width.value = '1000';
+    width.dispatchEvent(new Event('input', { bubbles: true }));
+    height.value = '600';
+    height.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(attrs.onPatch).toHaveBeenCalledWith({ width: 1_000 });
+    expect(attrs.onPatch).toHaveBeenCalledWith({ height: 600 });
+  });
+
+  it('snaps a near miss to a multiple of 8 on leaving the field', () => {
+    const { attrs } = mountLoaded({ width: 1_001 });
+    const width = root.querySelector<HTMLInputElement>('[aria-label="Width"]');
+    width?.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(attrs.onPatch).toHaveBeenCalledWith({ width: 1_000 });
+  });
+
+  it('marks a size the backend would refuse', () => {
+    mountLoaded({ width: 2_048, height: 2_048 });
+    expect(root.querySelector('[aria-label="Width"]')?.getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('shows the seed field as just "seed", smaller than before', () => {
+    mountLoaded();
+    root.querySelector<HTMLButtonElement>('.fm-image-more-toggle')?.click();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-image-seed')?.getAttribute('placeholder')).toBe('seed');
+  });
+
+  it('counts what is set behind More', () => {
+    mountLoaded({ seed: 3, steps: 20 });
+    expect(root.querySelector('.fm-image-more-toggle')?.textContent).toBe('More (2)');
+  });
+
+  it('names its generations briefly and numbers a repeated name', () => {
+    mountLoaded({
+      history: [
+        { generationId: 'a', subject: 'A beautiful woman in the park', batch, views: [] },
+        { generationId: 'b', subject: 'A beautiful woman in a cafe', batch, views: [] },
+      ],
+    });
+    const labels = [...root.querySelectorAll('.fm-image-crumb')].map((crumb) => crumb.textContent);
+    expect(labels).toEqual(['A beautiful woman', 'A beautiful woman (2)']);
+  });
+});
+
+describe('saving a picture', () => {
+  const shown = {
+    batch,
+    views: [{ imageId: 'i1', loading: false, previewUrl: 'blob:1' }],
+  };
+  const files: Location = { providerId: 'local', uri: 'file:///Users/erik/Downloads' };
+  const pictures: Location = { providerId: 'local', uri: 'file:///Users/erik/Pictures' };
+  const attrsFor = (taken: Record<string, string[]> = {}): Partial<ImagePaneAttrs> => ({
+    saveFolder: files,
+    homeDirectory: '/Users/erik',
+    saveFolders: [
+      { location: files, name: 'Downloads' },
+      { location: pictures, name: 'Pictures' },
+    ],
+    fileNamesIn: (folder) => {
+      const names = taken[folder.uri];
+      return names === undefined ? undefined : new Set(names);
+    },
+    resolveFolder: (current, path) => ({
+      ...current,
+      uri: `file://${path.replace(/^~/u, '/Users/erik')}`,
+    }),
+  });
+  const openForm = () => {
+    labelled(root, 'Save')?.click();
+    m.redraw.sync();
+  };
+
+  it('shows a plain folder path and a name whose format cannot be edited', () => {
+    mountLoaded(shown, attrsFor());
+    openForm();
+    expect(root.querySelector<HTMLInputElement>('.fm-image-folder')?.value).toBe('~/Downloads');
+    expect(root.querySelector('.fm-image-name-extension')?.textContent).toBe('.png');
+    expect(root.querySelector<HTMLInputElement>('.fm-image-name')?.value).not.toContain('.png');
+    expect(root.querySelector('.fm-image-save-hint'), 'no format lecture').toBeNull();
+    expect(root.querySelector('.fm-image-save')?.textContent).not.toContain('has to end in');
+  });
+
+  it('offers the folders it knows, so none has to be typed', () => {
+    mountLoaded(shown, attrsFor());
+    openForm();
+    const options = [...root.querySelectorAll('datalist option')].map((option) =>
+      option.getAttribute('value'),
+    );
+    expect(options).toEqual(['~/Downloads', '~/Pictures']);
+  });
+
+  it('suggests a name that is not already in the folder', () => {
+    mountLoaded(
+      shown,
+      attrsFor({
+        'file:///Users/erik/Downloads': [
+          'a-lighthouse-at-dusk-1024x1024-1.png',
+          'a-lighthouse-at-dusk-1024x1024-2.png',
+        ],
+      }),
+    );
+    openForm();
+    expect(root.querySelector<HTMLInputElement>('.fm-image-name')?.value).toBe(
+      'a-lighthouse-at-dusk-1024x1024-3',
+    );
+    expect(root.querySelector('.fm-image-save-note')).toBeNull();
+  });
+
+  it('names the file after what was typed for this generation, not what the presets added', () => {
+    mountLoaded(
+      {
+        ...shown,
+        activeGenerationId: 'g2',
+        history: [
+          { generationId: 'g1', subject: 'a fox', batch, views: [] },
+          { generationId: 'g2', subject: 'a fox in a boat at dusk', batch, views: shown.views },
+        ],
+      },
+      attrsFor(),
+    );
+    openForm();
+    // The endpoint echoes the composed prompt, which runs on past 40 characters of preset wording.
+    expect(root.querySelector<HTMLInputElement>('.fm-image-name')?.value).toBe(
+      'a-fox-in-a-boat-at-dusk-1024x1024-1',
+    );
+  });
+
+  it('saves with the fixed extension and the folder as a location', () => {
+    const { attrs } = mountLoaded(shown, attrsFor());
+    openForm();
+    root
+      .querySelector<HTMLFormElement>('.fm-image-save')
+      ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    expect(attrs.onSave).toHaveBeenCalledWith({
+      imageId: 'i1',
+      fileName: 'a-lighthouse-at-dusk-1024x1024-1.png',
+      folder: files,
+      overwrite: false,
+    });
+  });
+
+  it('says so, and offers Replace, when an edited name is taken', () => {
+    const { attrs } = mountLoaded(
+      shown,
+      attrsFor({ 'file:///Users/erik/Downloads': ['holiday.png'] }),
+    );
+    openForm();
+    const name = root.querySelector<HTMLInputElement>('.fm-image-name');
+    if (name === null) throw new Error('name field missing');
+    name.value = 'Holiday';
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+    m.redraw.sync();
+
+    expect(root.querySelector('.fm-image-save-note')?.textContent).toContain('already there');
+    const replace = buttons(root).find((button) => button.textContent === 'Replace and save');
+    expect(replace, 'a Replace button').toBeDefined();
+    root
+      .querySelector<HTMLFormElement>('.fm-image-save')
+      ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    expect(attrs.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ fileName: 'Holiday.png', overwrite: true }),
+    );
+  });
+
+  it('suggests a free name again after another folder is chosen', () => {
+    mountLoaded(
+      shown,
+      attrsFor({
+        'file:///Users/erik/Pictures': ['a-lighthouse-at-dusk-1024x1024-1.png'],
+      }),
+    );
+    openForm();
+    const folder = root.querySelector<HTMLInputElement>('.fm-image-folder');
+    if (folder === null) throw new Error('folder field missing');
+    folder.value = '~/Pictures';
+    folder.dispatchEvent(new Event('input', { bubbles: true }));
+    folder.dispatchEvent(new Event('change', { bubbles: true }));
+    m.redraw.sync();
+    expect(root.querySelector<HTMLInputElement>('.fm-image-name')?.value).toBe(
+      'a-lighthouse-at-dusk-1024x1024-2',
+    );
   });
 });

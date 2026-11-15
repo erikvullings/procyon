@@ -42,6 +42,9 @@ export interface ImageSaveInput {
  * regenerated or closed is dropped from the store and its object URLs are revoked.
  */
 export function createImageWiring(shellState: ShellState, core: ImageWiringCore) {
+  /** Folders recent saves went to, newest first, and the names written to each this session. */
+  const recentSaveFolders: Location[] = [];
+  const savedNames = new Map<string, Set<string>>();
   function entryOf(key: string): ImagePaneEntry | undefined {
     return shellState.imageByTab.get(key);
   }
@@ -163,8 +166,10 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
   /** Puts the generation on screen into the crumb bar, so it stays reachable. */
   function archive(entry: ImagePaneEntry): void {
     if (entry.batch === undefined) return;
+    const generationId = entry.batch.generationId;
     remember(entry, {
-      generationId: entry.batch.generationId,
+      generationId,
+      subject: entry.history.find((record) => record.generationId === generationId)?.subject,
       batch: entry.batch,
       views: entry.views,
       selectedImageId: entry.selectedImageId,
@@ -267,6 +272,7 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
       // The bar holds every generation the pane asked for, the one on screen included.
       remember(entry, {
         generationId: batch.generationId,
+        subject: remembered.subject,
         batch,
         views: entry.views,
         selectedImageId: entry.selectedImageId,
@@ -382,6 +388,15 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
       if (entryOf(key) !== entry) return;
       const view = entry.views.find((candidate) => candidate.imageId === input.imageId);
       if (view !== undefined) view.savedLocation = receipt.location.uri;
+      const folderUri = input.folder.uri.replace(/\/+$/u, '');
+      savedNames.set(
+        folderUri,
+        (savedNames.get(folderUri) ?? new Set()).add(input.fileName.toLowerCase()),
+      );
+      const at = recentSaveFolders.findIndex((known) => known.uri === input.folder.uri);
+      if (at >= 0) recentSaveFolders.splice(at, 1);
+      recentSaveFolders.unshift(input.folder);
+      recentSaveFolders.length = Math.min(recentSaveFolders.length, 5);
       entry.error = undefined;
       toast({
         html: receipt.promptEmbedded
@@ -452,6 +467,46 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     for (const generationId of new Set(held)) {
       void client.discardImageBatch(generationId).catch(() => undefined);
     }
+  }
+
+  /**
+   * Where a save may go, best first: the other pane's folder, this pane's own, then the folders
+   * recent saves went to. Choosing one is a click, so nobody has to type a location.
+   */
+  function saveFolders(key: string): { location: Location; name: string }[] {
+    const entry = entryOf(key);
+    if (entry === undefined) return [];
+    const folders: Location[] = [];
+    const own = shellState.directories.get(tabKey(entry.paneId, entry.tabId))?.location;
+    const first = saveFolder(key)?.location;
+    for (const location of [first, own, ...recentSaveFolders]) {
+      if (location === undefined || location.uri.startsWith('search://')) continue;
+      if (!folders.some((known) => known.uri === location.uri)) folders.push(location);
+    }
+    return folders.map((location) => ({
+      location,
+      name: decodeURIComponent(location.uri.replace(/\/+$/u, '').split('/').pop() ?? location.uri),
+    }));
+  }
+
+  /**
+   * The names of the files in a folder this app is showing or has just written to, folded to lower
+   * case; `undefined` when it knows nothing about that folder, so no guess is made about it.
+   */
+  function fileNamesIn(folder: Location): ReadonlySet<string> | undefined {
+    const uri = folder.uri.replace(/\/+$/u, '');
+    let names: Set<string> | undefined;
+    for (const view of shellState.directories.values()) {
+      if (view.location?.uri.replace(/\/+$/u, '') !== uri) continue;
+      names ??= new Set();
+      for (const listed of view.entries ?? []) names.add(listed.name.toLowerCase());
+    }
+    const written = savedNames.get(uri);
+    if (written !== undefined) {
+      names ??= new Set();
+      for (const name of written) names.add(name);
+    }
+    return names;
   }
 
   /** The other pane's folder, which a save defaults to. */
@@ -549,6 +604,8 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     regenerate: (client: FileManagerClient, key: string) => void regenerate(client, key),
     forget,
     saveFolder,
+    saveFolders,
+    fileNamesIn,
     selectGeneration: (client: FileManagerClient, key: string, generationId: string) =>
       selectGeneration(client, key, generationId),
     newPrompt,

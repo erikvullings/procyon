@@ -1295,7 +1295,7 @@ export const fr = {
     deletePrompt: 'Oublier ce prompt',
     confirmDeletePrompt: 'Cliquez de nouveau pour oublier ce prompt',
     newPrompt: 'Nouvelle invite d’image',
-    seedPlaceholder: 'graine au hasard',
+    seedPlaceholder: 'seed',
     waitingForModel: 'En attente du modèle…',
     title: 'Images',
     openDescription: 'Générer une image à côté de l’éditeur ou du dossier',
@@ -1323,8 +1323,15 @@ export const fr = {
     confirmReplace: 'Remplacer et enregistrer',
     folder: 'Dossier',
     fileName: 'Nom de fichier',
-    saveHint:
-      'Le nom doit se terminer par .{extension}, et rien n’est écrit avant l’enregistrement.',
+    width: 'Largeur',
+    height: 'Hauteur',
+    sizeHint: 'Chaque côté : un multiple de 8 entre {min} et {max}, 2 mégapixels au plus au total',
+    more: 'Plus',
+    nameTaken: 'Un fichier portant ce nom existe déjà. L’enregistrement le remplace.',
+    revealPrompt: 'Afficher le prompt complet envoyé au modèle',
+    editPrompt: 'Revenir à la modification',
+    showFullWidth: 'Afficher en pleine largeur',
+    fitToPane: 'Ajuster au volet',
     savedTo: 'Enregistré dans {location}',
     savedWithPrompt: 'Enregistré dans {location} avec la requête dans les métadonnées.',
     savedPlain: 'Enregistré dans {location}. Ce format ne peut pas contenir la requête.',
@@ -1948,8 +1955,14 @@ export const fr = {
     unreachable: 'Le service d’IA du profil « {name} » est injoignable.',
   },
   llmRoles: {
+    embeddingExplanation:
+      'Le modèle sémantique installé crée les embeddings pour retrouver les passages pertinents. Le modèle de chat rédige les réponses.',
+    embeddingModelLabel: 'Modèle d’embeddings',
+    embeddingModelManaged: 'Géré dans Sémantique (RAG)',
+    manageSemanticModel: 'Gérer le modèle sémantique',
     addConnection: 'Ajouter une connexion…',
-    chatPurpose: 'Conversations, résumés et questions sur les fichiers.',
+    chatPurpose:
+      'Également utilisé pour les réponses sur les fichiers et l’assistance du Terminal.',
     imagePurpose: 'Créer des images avec un modèle dédié.',
     embeddingsPurpose: 'Choisir un modèle d’embeddings pour la recherche sémantique.',
     imageModelPlaceholder: 'Nom du modèle d’images',
@@ -1987,6 +2000,10 @@ export const fr = {
   },
 
   llmProfiles: {
+    deleteConnection: 'Supprimer la connexion',
+    deleteConnectionQuestion: 'Supprimer la connexion « {name} » ?',
+    deleteConnectionHint:
+      'Seule cette connexion sera supprimée. Les fichiers et les autres connexions sont conservés. Les rôles associés seront désassignés.',
     saveConnection: 'Enregistrer la connexion',
     connectionsTitle: 'Connexions',
     consentRequired:

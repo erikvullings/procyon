@@ -15,10 +15,9 @@
   line-height: 1.35;
 }
 
-/* Same geometry and background as the pane's breadcrumb row and status bar: one 20px row of
-   controls, an elevated background, one hairline. The height adds the hairline and a pixel of slack
-   on each side: `box-sizing: border-box` would otherwise eat the row a bordered control - the seed
-   field - needs, and its bottom border would fall under the row below. */
+/* The header is exactly the pane's breadcrumb row - and the chat header: one row-height strip, an
+   elevated background, one hairline. The status bar is a pixel taller on each side: its bordered
+   fields (width, height, seed) would otherwise lose their bottom border under the row below. */
 .fm-image-header,
 .fm-image-status {
   display: flex;
@@ -26,16 +25,40 @@
   gap: var(--fm-space-2);
   box-sizing: border-box;
   min-width: 0;
-  height: calc(var(--fm-row-height) + 2px);
+  height: var(--fm-row-height);
   padding: 0 var(--fm-space-2);
   background: var(--fm-pane-breadcrumb-background, var(--fm-surface-elevated));
   color: var(--fm-text-muted);
   font-size: var(--fm-type-body);
 }
 
+.fm-image-status {
+  height: calc(var(--fm-row-height) + 2px);
+}
+
 .fm-image-header {
   border-bottom: 1px solid var(--fm-border);
   color: var(--fm-text);
+}
+
+/* The status bar is up to two rows: the settings changed every time, and - behind "More" - the ones
+   set once and left. */
+.fm-image-statusbar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+}
+
+.fm-image-status.fm-image-more {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: calc(var(--fm-row-height) + 2px);
+  padding-block: var(--fm-space-1);
+  border-top: 1px solid var(--fm-border);
+}
+
+.fm-image-more-toggle {
+  gap: var(--fm-space-2);
 }
 
 .fm-image-status {
@@ -233,9 +256,31 @@
 
 .fm-image-figure img {
   display: block;
-  max-width: 100%;
-  height: auto;
   border-radius: var(--fm-radius);
+}
+
+/* Fit: the picture shrinks to the space the pane has, so it never needs scrolling. */
+.fm-image-preview-fit {
+  overflow: hidden;
+}
+
+.fm-image-preview-fit .fm-image-figure {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.fm-image-preview-fit .fm-image-figure img {
+  flex: 1 1 0;
+  width: 100%;
+  min-height: 0;
+  object-fit: contain;
+  object-position: left top;
+}
+
+/* Full: the picture takes the pane's width, however tall that makes it, and the pane scrolls. */
+.fm-image-preview-full .fm-image-figure img {
+  width: 100%;
+  height: auto;
 }
 
 .fm-image-figure:focus-visible {
@@ -273,15 +318,8 @@
   border-color: var(--fm-text-muted);
 }
 
-.fm-image-composer-row {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--fm-space-1);
-  min-width: 0;
-}
-
+/* The prompt takes the box's whole width: the send and stop keys end the row below it. */
 .fm-image-input {
-  flex: 1 1 auto;
   box-sizing: border-box;
   min-width: 0;
   min-height: calc(var(--fm-control-height) * 2);
@@ -336,6 +374,7 @@
 }
 
 .fm-image-avoid {
+  flex: 1 1 auto;
   border-color: transparent;
   background: transparent;
 }
@@ -347,27 +386,36 @@
   outline-offset: 1px;
 }
 
-/* What will be sent, in the muted voice: the person can see what the buttons did to their words. */
-.fm-image-composed {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--fm-space-1) var(--fm-space-2);
-  margin: 0;
+/* The other side of the prompt box: the wording the presets and lens added, as the model gets it.
+   It takes the textarea's place and height, so flipping the box never moves anything around it. */
+.fm-image-revealed {
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: calc(var(--fm-control-height) * 2);
+  max-height: calc(var(--fm-row-height) * 6);
+  padding: var(--fm-space-1) var(--fm-space-2);
+  overflow-y: auto;
   color: var(--fm-text-muted);
-  font-size: var(--fm-type-label);
+  font-size: var(--fm-type-body);
+}
+
+.fm-image-revealed-text {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.fm-image-revealed-text + .fm-image-revealed-text {
+  margin-top: var(--fm-space-1);
 }
 
 .fm-image-composed-label {
-  flex: 0 0 auto;
+  color: var(--fm-text-muted);
 }
 
-.fm-image-composed-text {
-  min-width: 0;
-  overflow: hidden;
-  max-height: calc(var(--fm-row-height) * 3);
-  color: var(--fm-text);
-  text-overflow: ellipsis;
-  overflow-wrap: anywhere;
+.fm-image-reveal-note {
+  flex: 1 1 auto;
 }
 
 /* The status bar holds the settings that shape the request. Each is a drawn choice rather than a
@@ -396,7 +444,7 @@
 .fm-image-status .fm-image-seed {
   box-sizing: border-box;
   flex: 0 0 auto;
-  width: 6.5rem;
+  width: 4rem;
   height: var(--fm-row-height);
   min-width: 0;
   margin: 0;
@@ -408,6 +456,54 @@
   font: inherit;
   font-size: var(--fm-type-body);
   opacity: 1;
+}
+
+.fm-image-status .fm-image-dimension {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 4rem;
+  height: var(--fm-row-height);
+  min-width: 0;
+  margin: 0;
+  padding: 0 var(--fm-space-1);
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius-control);
+  background: transparent;
+  color: var(--fm-text);
+  font: inherit;
+  font-size: var(--fm-type-body);
+  opacity: 1;
+}
+
+.fm-image-status .fm-image-dimension[aria-invalid="true"] {
+  border-color: var(--fm-error);
+}
+
+.fm-image-status .fm-image-dimension:hover {
+  background: var(--fm-hover);
+}
+
+.fm-image-status .fm-image-dimension:focus-visible {
+  outline: 2px solid var(--fm-focus, var(--fm-accent));
+  outline-offset: 1px;
+}
+
+.fm-image-status .fm-image-dimension::-webkit-outer-spin-button,
+.fm-image-status .fm-image-dimension::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Width × height, with the named shapes one chevron away. */
+.fm-image-size {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--fm-space-1);
+}
+
+.fm-image-size-times {
+  color: var(--fm-text-muted);
 }
 
 .fm-image-status .fm-image-seed:hover {
@@ -526,13 +622,54 @@
   background: var(--fm-background);
 }
 
-.fm-image-save-hint {
+.fm-image-save-note {
   margin: 0;
   color: var(--fm-text-muted);
   font-size: var(--fm-type-label);
 }
 
+/* The file name's format is part of the field but not of what can be edited. */
+.fm-image-name-field {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-width: 0;
+  height: var(--fm-row-height);
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius-control);
+  background: var(--fm-surface);
+}
+
+.fm-image-name-field:focus-within {
+  outline: 2px solid var(--fm-focus, var(--fm-accent));
+  outline-offset: 1px;
+}
+
+.fm-image-name-field .fm-image-name {
+  flex: 1 1 auto;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.fm-image-name-field .fm-image-name:focus {
+  outline: none;
+}
+
+.fm-image-name-extension {
+  flex: 0 0 auto;
+  padding: 0 var(--fm-space-2) 0 0;
+  color: var(--fm-text-muted);
+  user-select: none;
+}
+
 .fm-image-save-actions {
   display: flex;
   gap: var(--fm-space-1);
+}
+
+/* A stop key is a filled square, as in every media control; the outline reads as a checkbox. */
+.fm-image-stop .fm-icon-filled {
+  fill: currentColor;
 }

@@ -7,9 +7,11 @@ import {
   canGenerate,
   crumbLabel,
   destinationFor,
+  distinctTitles,
   emptyImagePane,
   failureNeedsSettings,
   firstImageId,
+  folderDisplayPath,
   forgetGeneration,
   hasPreview,
   imagePlacementPaneId,
@@ -18,7 +20,10 @@ import {
   isSaveConflict,
   MAX_GENERATION_CRUMBS,
   rememberGeneration,
+  shortTitle,
+  sizeAllowed,
   suggestedFileName,
+  takenNames,
 } from './image-pane-state';
 
 function pane(overrides: Partial<ReturnType<typeof emptyImagePane>> = {}) {
@@ -66,9 +71,24 @@ describe('imageRequestProblem', () => {
     ).toBeUndefined();
   });
 
-  it('refuses a size the pane never offers', () => {
-    expect(imageRequestProblem(pane({ subject: 'a lighthouse', width: 777, height: 777 }))).toBe(
-      'sizeNotAllowed',
+  it('refuses a size the backend would refuse', () => {
+    for (const [width, height] of [
+      [777, 777], // not a multiple of 8
+      [32, 1_024], // under the smallest edge
+      [4_096, 64], // over the largest edge
+      [2_048, 2_048], // too many pixels
+    ] as const) {
+      expect(imageRequestProblem(pane({ subject: 'a lighthouse', width, height }))).toBe(
+        'sizeNotAllowed',
+      );
+    }
+  });
+
+  it('takes any width and height the backend accepts, set separately', () => {
+    expect(sizeAllowed(1_000, 600)).toBe(true);
+    expect(sizeAllowed(2_048, 1_024)).toBe(true);
+    expect(imageRequestProblem(pane({ subject: 'a lighthouse', width: 1_000, height: 600 }))).toBe(
+      undefined,
     );
   });
 
@@ -297,5 +317,53 @@ describe('crumbLabel', () => {
 
   it('says so when nothing was typed', () => {
     expect(crumbLabel('   ')).toBe('');
+  });
+});
+
+describe('suggestedFileName avoiding what is taken', () => {
+  it('counts the index up past names that are already there', () => {
+    const taken = takenNames(['A-Cat-832x1216-1.PNG', 'a-cat-832x1216-2.png']);
+    expect(suggestedFileName('a cat', 0, 832, 1_216, 'png', taken)).toBe('a-cat-832x1216-3.png');
+  });
+
+  it('keeps the first name when nothing is taken', () => {
+    expect(suggestedFileName('a cat', 0, 832, 1_216, 'png', takenNames([]))).toBe(
+      'a-cat-832x1216-1.png',
+    );
+  });
+});
+
+describe('folderDisplayPath', () => {
+  it('shows a file URI as a plain path, with home as ~', () => {
+    expect(folderDisplayPath('file:///Users/erik/Downloads', '/Users/erik')).toBe('~/Downloads');
+    expect(folderDisplayPath('file:///Users/erik', '/Users/erik/')).toBe('~');
+    expect(folderDisplayPath('file:///Users/erik/My%20Pictures/', undefined)).toBe(
+      '/Users/erik/My Pictures',
+    );
+  });
+
+  it('shows a drive as C:, not as a folder under the root', () => {
+    expect(folderDisplayPath('file:///C:/Users/erik')).toBe('C:/Users/erik');
+  });
+});
+
+describe('short titles', () => {
+  it('keeps the first clause, at most five words, and never ends on a dangling word', () => {
+    expect(shortTitle('A beautiful woman in the park at dusk, soft light')).toBe(
+      'A beautiful woman',
+    );
+    expect(shortTitle('A lighthouse at dusk')).toBe('A lighthouse at dusk');
+    expect(shortTitle('   ')).toBe('');
+  });
+
+  it('numbers a name that comes up again, so no two entries read alike', () => {
+    expect(
+      distinctTitles([
+        'A beautiful woman in the park',
+        'A beautiful woman in a cafe',
+        'A beautiful woman, 30 years old',
+        'A fox',
+      ]),
+    ).toEqual(['A beautiful woman', 'A beautiful woman (2)', 'A beautiful woman (3)', 'A fox']);
   });
 });

@@ -236,6 +236,12 @@ export interface PaneContentContext {
   /** Image generation tabs (task 0325); absent where image generation is not offered. */
   getImageByTab?(): Map<string, ImagePaneEntry>;
   imageSaveFolder?(key: string): { location: Location; name: string } | undefined;
+  /** The home directory, so a folder can be shown as `~/…`. */
+  getHomeDirectory?(): string | undefined;
+  /** Every folder a save may go to, best first. */
+  imageSaveFolders?(key: string): { location: Location; name: string }[];
+  /** Lower-cased names of the files in a folder the app knows, or `undefined` when it does not. */
+  imageFileNamesIn?(folder: Location): ReadonlySet<string> | undefined;
   imageActions?: {
     patch(key: string, changes: Partial<ImagePaneEntry>): void;
     generate(key: string): void;
@@ -350,6 +356,8 @@ export interface PaneContentContext {
   /** Opens search-only knowledge search defaulted to the visible result set (task 0206). */
   openKnowledgeSearch?(): void;
   openKnowledgeAnswerSettings?(): void;
+  /** Opens Settings at the LLM (AI) section, where the chat role, its endpoints and consent live. */
+  openChatSettings?(): void;
   /** Opens Settings at the LLM (AI) section, where the image role and its consent live. */
   openImageSettings?(): void;
   closeKnowledgeSearch(paneId: PaneId, tabId: TabId): void;
@@ -1192,6 +1200,10 @@ export function createPaneContentBuilder(
               entry: image,
               saveFolder: context.imageSaveFolder?.(image.key)?.location,
               saveFolderName: context.imageSaveFolder?.(image.key)?.name,
+              saveFolders: context.imageSaveFolders?.(image.key) ?? [],
+              fileNamesIn: (folder) => context.imageFileNamesIn?.(folder),
+              homeDirectory: context.getHomeDirectory?.(),
+              resolveFolder: (current, path) => context.locationForPath(current, path),
               onPatch: (changes) => context.imageActions?.patch(image.key, changes),
               onGenerate: () => context.imageActions?.generate(image.key),
               onStop: () => context.imageActions?.stop(image.key),
@@ -1241,7 +1253,8 @@ export function createPaneContentBuilder(
                 onPasteImages: (files: Blob[]) => context.chatActions?.pasteImages(chat.key, files),
                 onRemoveImage: (imageId: string) =>
                   context.chatActions?.removeImage(chat.key, imageId),
-                onOpenSettings: () => context.openKnowledgeAnswerSettings?.(),
+                // The chat's own settings are the AI ones: the role that answers, its endpoint, its consent.
+                onOpenSettings: () => context.openChatSettings?.(),
               }),
             }
           : assistant !== undefined

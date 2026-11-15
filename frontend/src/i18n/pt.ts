@@ -1294,7 +1294,7 @@ export const pt = {
     deletePrompt: 'Esquecer este prompt',
     confirmDeletePrompt: 'Clique de novo para esquecer este prompt',
     newPrompt: 'Nova indicação de imagem',
-    seedPlaceholder: 'semente qualquer',
+    seedPlaceholder: 'seed',
     waitingForModel: 'Aguardando o modelo…',
     title: 'Imagem',
     openDescription: 'Gere uma imagem ao lado do editor ou da pasta',
@@ -1322,7 +1322,15 @@ export const pt = {
     confirmReplace: 'Substituir e salvar',
     folder: 'Pasta',
     fileName: 'Nome do arquivo',
-    saveHint: 'O nome precisa terminar em .{extension}, e nada é escrito até você salvar.',
+    width: 'Largura',
+    height: 'Altura',
+    sizeHint: 'Cada lado: um múltiplo de 8 entre {min} e {max}, no máximo 2 megapixels no total',
+    more: 'Mais',
+    nameTaken: 'Já existe um ficheiro com este nome. Guardar substitui-o.',
+    revealPrompt: 'Mostrar o prompt completo enviado ao modelo',
+    editPrompt: 'Voltar à edição',
+    showFullWidth: 'Mostrar em largura total',
+    fitToPane: 'Ajustar ao painel',
     savedTo: 'Salvo em {location}',
     savedWithPrompt: 'Salvo em {location} com a solicitação nos metadados.',
     savedPlain: 'Salvo em {location}. Este formato não comporta a solicitação.',
@@ -1943,8 +1951,13 @@ export const pt = {
     unreachable: 'Não foi possível contactar o serviço de IA do perfil «{name}».',
   },
   llmRoles: {
+    embeddingExplanation:
+      'O modelo semântico instalado cria embeddings para encontrar passagens relevantes. O modelo de chat escreve as respostas.',
+    embeddingModelLabel: 'Modelo de embeddings',
+    embeddingModelManaged: 'Gerido em Semântica (RAG)',
+    manageSemanticModel: 'Gerir modelo semântico',
     addConnection: 'Adicionar ligação…',
-    chatPurpose: 'Conversas, resumos e perguntas sobre ficheiros.',
+    chatPurpose: 'Também utilizado para respostas sobre ficheiros e assistência do Terminal.',
     imagePurpose: 'Crie imagens com um modelo de imagens dedicado.',
     embeddingsPurpose: 'Escolha um modelo de embeddings para a pesquisa semântica.',
     imageModelPlaceholder: 'Nome do modelo de imagens',
@@ -1982,6 +1995,10 @@ export const pt = {
   },
 
   llmProfiles: {
+    deleteConnection: 'Eliminar ligação',
+    deleteConnectionQuestion: 'Eliminar a ligação «{name}»?',
+    deleteConnectionHint:
+      'Só esta ligação é removida. Os ficheiros e as outras ligações são mantidos. As funções associadas ficam sem atribuição.',
     saveConnection: 'Guardar ligação',
     connectionsTitle: 'Ligações',
     consentRequired:

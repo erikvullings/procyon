@@ -22,6 +22,7 @@ export const ENGLISH_IDENTICAL_ALLOWLIST: Readonly<Record<string, Allowlisted>> 
   'connections.webDavAuthBasic': 'all',
   'connections.webDavAuthDigest': 'all',
   // "Style" and "Source" are the same words in French.
+  'image.seedPlaceholder': ['nl', 'fr', 'es', 'it', 'pt', 'pl'],
   'image.prompts': ['nl', 'de', 'fr', 'es', 'pt'],
   'image.source': ['fr'],
   'image.style': ['fr'],

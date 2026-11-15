@@ -7,12 +7,12 @@ import {
   closeIcon,
   copyIcon,
   cornerDownLeftIcon,
-  heartIcon,
   messageCircleIcon,
   pencilIcon,
   playerStopIcon,
   plusIcon,
   refreshIcon,
+  settingsIcon,
   trashIcon,
 } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
@@ -268,17 +268,23 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
           !listOpen && current !== undefined
             ? m('span.fm-chat-current', { title: current }, current)
             : undefined,
-          // The pane's trailing actions, in the same order as the breadcrumb bar: chat, new tab, favourites.
+          // The pane's trailing actions, in the same order as the image pane's: a new chat, the AI
+          // settings, a new tab. The favourites menu the file panes carry means nothing here.
           iconButton(
             t('chat', 'newChat'),
             messageCircleIcon({ size: 16 }),
             () => attrs.onNew(),
             pending,
           ),
+          // The settings sit second, as in the image pane; the favourites menu does not apply here.
+          attrs.onOpenSettings === undefined
+            ? undefined
+            : iconButton(t('chat', 'openSettings'), settingsIcon({ size: 16 }), () =>
+                attrs.onOpenSettings?.(),
+              ),
           attrs.onNewTab === undefined
             ? undefined
             : iconButton(t('pane', 'newTab'), plusIcon({ size: 16 }), () => attrs.onNewTab?.()),
-          iconButton(t('pane', 'favourites'), heartIcon({ size: 16 }), () => undefined),
         ]),
         m('.fm-chat-body', [
           listOpen

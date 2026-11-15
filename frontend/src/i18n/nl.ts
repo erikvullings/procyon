@@ -1688,7 +1688,7 @@ export const nl = {
     deletePrompt: 'Deze prompt vergeten',
     confirmDeletePrompt: 'Klik nogmaals om deze prompt te vergeten',
     newPrompt: 'Nieuwe afbeeldingsprompt',
-    seedPlaceholder: 'willekeurige seed',
+    seedPlaceholder: 'seed',
     waitingForModel: 'Wachten op het model…',
     title: 'Afbeelding',
     openDescription: 'Genereer een afbeelding naast de editor of map',
@@ -1716,7 +1716,15 @@ export const nl = {
     confirmReplace: 'Vervangen en opslaan',
     folder: 'Map',
     fileName: 'Bestandsnaam',
-    saveHint: 'De naam moet eindigen op .{extension}, en er wordt niets geschreven tot je opslaat.',
+    width: 'Breedte',
+    height: 'Hoogte',
+    sizeHint: 'Elke zijde: een veelvoud van 8 van {min} tot {max}, samen hooguit 2 megapixel',
+    more: 'Meer',
+    nameTaken: 'Er staat al een bestand met deze naam. Opslaan vervangt het.',
+    revealPrompt: 'Toon de volledige prompt die naar het model gaat',
+    editPrompt: 'Terug naar bewerken',
+    showFullWidth: 'Op volledige breedte tonen',
+    fitToPane: 'Passend in het paneel',
     savedTo: 'Opgeslagen in {location}',
     savedWithPrompt: 'Opgeslagen in {location} met de prompt in de metadata.',
     savedPlain: 'Opgeslagen in {location}. Dit formaat kan de prompt niet bevatten.',
@@ -2333,8 +2341,13 @@ export const nl = {
     unreachable: 'De AI-dienst van profiel "{name}" is niet bereikbaar.',
   },
   llmRoles: {
+    embeddingExplanation:
+      'Het geïnstalleerde semantische model maakt embeddings om relevante passages te vinden. Het chatmodel schrijft de antwoorden.',
+    embeddingModelLabel: 'Embeddingmodel',
+    embeddingModelManaged: 'Beheerd bij Semantisch (RAG)',
+    manageSemanticModel: 'Semantisch model beheren',
     addConnection: 'Verbinding toevoegen…',
-    chatPurpose: 'Gesprekken, samenvattingen en vragen over bestanden.',
+    chatPurpose: 'Ook gebruikt voor antwoorden op bestandsvragen en hulp in de Terminal.',
     imagePurpose: 'Maak afbeeldingen met een afzonderlijk afbeeldingsmodel.',
     embeddingsPurpose: 'Kies een embeddingmodel voor semantisch zoeken.',
     imageModelPlaceholder: 'Naam van het afbeeldingsmodel',
@@ -2372,6 +2385,10 @@ export const nl = {
   },
 
   llmProfiles: {
+    deleteConnection: 'Verbinding verwijderen',
+    deleteConnectionQuestion: 'Verbinding “{name}” verwijderen?',
+    deleteConnectionHint:
+      'Alleen deze verbinding wordt verwijderd. Bestanden en andere verbindingen blijven behouden. Taken die deze verbinding gebruiken worden losgekoppeld.',
     saveConnection: 'Verbinding opslaan',
     connectionsTitle: 'Verbindingen',
     consentRequired:

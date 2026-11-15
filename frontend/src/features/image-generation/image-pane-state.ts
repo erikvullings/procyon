@@ -29,6 +29,8 @@ export interface GeneratedImageView {
 /** One generation this pane has asked for, kept so the crumb bar can go back to it. */
 export interface ImageGenerationRecord {
   readonly generationId: string;
+  /** What the person typed for it, before presets and lens wording were added; names the crumb. */
+  readonly subject?: string | undefined;
   /** What the endpoint returned: its prompt, size and images. */
   readonly batch: ImageBatch;
   /** How each of its images is displayed; held so revisiting costs no fetch. */
@@ -125,6 +127,24 @@ export function sourceNameOf(source: GeneratedImageSource | null | undefined): s
   return decodeURIComponent(tail) || uri;
 }
 
+/** The bounds the backend enforces on a size: each edge a multiple of 8 in range, and a pixel cap. */
+export const IMAGE_SIZE_LIMITS = {
+  minEdge: 64,
+  maxEdge: 2_048,
+  step: 8,
+  maxPixels: 2_097_152,
+} as const;
+
+/** Whether a width and height are inside what the backend accepts; the person may type any pair. */
+export function sizeAllowed(width: number, height: number): boolean {
+  const { minEdge, maxEdge, step, maxPixels } = IMAGE_SIZE_LIMITS;
+  return (
+    [width, height].every(
+      (edge) => Number.isInteger(edge) && edge >= minEdge && edge <= maxEdge && edge % step === 0,
+    ) && width * height <= maxPixels
+  );
+}
+
 /** Why a request cannot be sent, as an i18n key; `undefined` when it can. */
 export type ImageRequestProblem =
   | 'needSubject'
@@ -155,10 +175,7 @@ export function imageRequestProblem(entry: ImagePaneEntry): ImageRequestProblem 
   if (entry.negativePrompt.trim().length > IMAGE_LIMITS.negativePromptChars) {
     return 'negativeTooLong';
   }
-  const known = IMAGE_SIZES.some(
-    (size) => size.width === entry.width && size.height === entry.height,
-  );
-  if (!known) return 'sizeNotAllowed';
+  if (!sizeAllowed(entry.width, entry.height)) return 'sizeNotAllowed';
   if (!IMAGE_COUNTS.includes(entry.count)) return 'countNotAllowed';
   if (entry.seed !== undefined && (entry.seed < 0 || entry.seed > IMAGE_LIMITS.maxSeed)) {
     return 'seedTooLarge';
@@ -174,22 +191,62 @@ export function canGenerate(entry: ImagePaneEntry): boolean {
   return entry.pendingRequestId === undefined && imageRequestProblem(entry) === undefined;
 }
 
-/** A file name for the Nth image of a batch: a readable stem, the size, and the format. */
-export function suggestedFileName(
-  prompt: string,
-  index: number,
-  width: number,
-  height: number,
-  extension: string,
-): string {
+/** A readable file stem for a prompt: lower case, dashes, at most 40 characters. */
+function fileStem(prompt: string): string {
   const stem = prompt
     .toLowerCase()
     .replace(/[^a-z0-9]+/gu, '-')
     .replace(/^-+|-+$/gu, '')
     .slice(0, 40)
     .replace(/-+$/gu, '');
-  const base = stem === '' ? 'image' : stem;
-  return `${base}-${width}x${height}-${index + 1}.${extension}`;
+  return stem === '' ? 'image' : stem;
+}
+
+/**
+ * A file name for the Nth image of a batch: a readable stem, the size, and the format. When `taken`
+ * names files already in the folder (compared without regard to case), the index counts up until
+ * the name is free, so the suggestion never points at a file that is there.
+ */
+export function suggestedFileName(
+  prompt: string,
+  index: number,
+  width: number,
+  height: number,
+  extension: string,
+  taken?: ReadonlySet<string>,
+): string {
+  const base = `${fileStem(prompt)}-${width}x${height}`;
+  let next = index + 1;
+  while (taken?.has(`${base}-${next}.${extension}`.toLowerCase()) === true && next < index + 1000) {
+    next += 1;
+  }
+  return `${base}-${next}.${extension}`;
+}
+
+/** The names in a listing, folded for a case-insensitive "is it taken" test. */
+export function takenNames(names: Iterable<string>): ReadonlySet<string> {
+  return new Set([...names].map((name) => name.toLowerCase()));
+}
+
+/** A folder as the person reads it: a plain path, with the home directory written as `~`. */
+export function folderDisplayPath(uri: string, home?: string): string {
+  let path = uri;
+  if (uri.startsWith('file://')) {
+    try {
+      path = decodeURIComponent(new URL(uri).pathname);
+    } catch {
+      path = uri.slice('file://'.length);
+    }
+    // `file:///C:/Users` is the drive `C:`, not a folder named `C:` under the root.
+    if (/^\/[A-Za-z]:/u.test(path)) path = path.slice(1);
+  }
+  const trimmed = path.length > 1 ? path.replace(/\/+$/u, '') : path;
+  const base = home?.replace(/\/+$/u, '');
+  if (base !== undefined && base !== '') {
+    if (trimmed === base) return '~';
+    if (trimmed.startsWith(`${base}/`)) return `~${trimmed.slice(base.length)}`;
+  }
+  return trimmed;
 }
 
 /** The location a save would write to. */
@@ -306,6 +363,62 @@ export function crumbLabel(prompt: string): string {
 }
 
 const CRUMB_MAX = 40;
+
+/** Words a short title should not end on: they promise a noun that was cut off. */
+const DANGLING_WORDS = new Set([
+  'a',
+  'an',
+  'the',
+  'in',
+  'on',
+  'at',
+  'of',
+  'to',
+  'with',
+  'and',
+  'or',
+  'for',
+  'by',
+  'from',
+  'into',
+  'near',
+]);
+
+/** The most words a short title keeps. */
+const TITLE_WORDS = 5;
+
+/**
+ * A short name for a prompt: its first clause, at most five words, never ending on a word like
+ * "in" or "the". The whole prompt stays one hover away, so the name only has to say which is which.
+ */
+export function shortTitle(prompt: string): string {
+  const clause =
+    prompt
+      .replace(/\s+/gu, ' ')
+      .split(/[.,;:!?]/u)
+      .map((part) => part.trim())
+      .find((part) => part !== '') ?? '';
+  const words = clause.split(' ').filter((word) => word !== '');
+  let kept = words.slice(0, TITLE_WORDS);
+  while (kept.length > 1 && DANGLING_WORDS.has((kept.at(-1) ?? '').toLowerCase()))
+    kept = kept.slice(0, -1);
+  const title = kept.join(' ');
+  return title.length > CRUMB_MAX ? `${title.slice(0, CRUMB_MAX - 1).trimEnd()}…` : title;
+}
+
+/**
+ * Short titles for a list of prompts, each one a new name: when two prompts get the same title the
+ * later one is numbered - `A beautiful woman`, `A beautiful woman (2)` - so no two entries read the same.
+ */
+export function distinctTitles(prompts: readonly string[]): string[] {
+  const seen = new Map<string, number>();
+  return prompts.map((prompt) => {
+    const title = shortTitle(prompt);
+    const count = (seen.get(title) ?? 0) + 1;
+    seen.set(title, count);
+    return count === 1 || title === '' ? title : `${title} (${count})`;
+  });
+}
 
 /** The image of a batch the preview should select: the first, or the one still held. */
 export function firstImageId(batch: ImageBatch | undefined): string | undefined {
