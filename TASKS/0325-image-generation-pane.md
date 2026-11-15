@@ -226,3 +226,11 @@ must review before anything is written. It gets its own role in 0322 and its own
   3782 frontend tests; `tsc --noEmit`, Biome, rustfmt and clippy clean. Layout figures come from the real
   components at pane width in Chrome. Still unverified in this host: the Tauri window and a live cloud
   endpoint of either contract.
+- The opt-in was proven against the live `mlx-serve` rather than a fixture. With the default posture
+  the server answered `403 permissionDenied` before anything left the process; with
+  `PROCYON_LLM_ALLOW_LOOPBACK=1` the same request drew a 512x512 picture in 3 s at `steps: 2` - on the
+  person's own `mlx-serve` profile, which advertises only `chatCompletions` and `modelDiscovery`, so
+  an unadorned profile does get the OpenAI-style contract. Saving that picture wrote 468 700 bytes as
+  468 889 with `promptEmbedded: true`; saving it again was refused with `destinationAlreadyExists`,
+  and the third attempt, with `overwrite: true`, went through. The file on disk has a valid PNG
+  signature and carries both the prompt and the parameters text chunks.
