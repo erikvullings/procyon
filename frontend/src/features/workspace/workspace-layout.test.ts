@@ -676,6 +676,79 @@ describe('tab strip wiring', () => {
   });
 });
 
+describe('Tab inside a tool pane', () => {
+  /**
+   * A tool pane - the shape an image or chat tab takes - with two controls of its own. The shell is
+   * mounted with a spy for pane switching, so a Tab either walks the controls or moves panes.
+   */
+  function toolPane(): {
+    first: HTMLInputElement;
+    last: HTMLInputElement;
+    onActivatePane: ReturnType<typeof vi.fn>;
+  } {
+    const onActivatePane = vi.fn<(paneId: PaneId) => void>();
+    mount(attrs({ onActivatePane }));
+    const pane = root.querySelector<HTMLElement>('[data-pane-id="left"] > .fm-pane');
+    if (pane === null) throw new Error('the pane is missing');
+    const viewer = document.createElement('section');
+    viewer.className = 'fm-pane-viewer';
+    const first = document.createElement('input');
+    const last = document.createElement('input');
+    viewer.append(first, last);
+    pane.append(viewer);
+    return { first, last, onActivatePane };
+  }
+
+  /**
+   * Presses Tab on a control, recording whether the key escaped the pane (it must not: the shell
+   * takes it from there either way) and whether the shell claimed it as its own.
+   */
+  function pressTab(target: HTMLElement, shiftKey = false): KeyboardEvent {
+    // A real keydown is cancelable; jsdom ignores preventDefault on one that is not.
+    const event = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      shiftKey,
+      bubbles: true,
+      cancelable: true,
+    });
+    target.dispatchEvent(event);
+    return event;
+  }
+
+  it('walks its own controls rather than switching panes', () => {
+    const { first, onActivatePane } = toolPane();
+
+    const event = pressTab(first);
+
+    // The shell never learns of the key, so no pane is activated and the browser moves focus on:
+    // the event is stopped on its way up, but nobody takes the keystroke away from the browser.
+    expect(event.defaultPrevented).toBe(false);
+    expect(onActivatePane).not.toHaveBeenCalled();
+    expect(document.activeElement).not.toBe(
+      root.querySelector('[data-pane-id="right"] > .fm-pane'),
+    );
+  });
+
+  it('hands the shell a Tab pressed on its last control', () => {
+    const { last, onActivatePane } = toolPane();
+
+    const event = pressTab(last);
+
+    // At the last control Tab belongs to the shell again, which claims it as a pane switch.
+    expect(event.defaultPrevented).toBe(true);
+    expect(onActivatePane).toHaveBeenCalledExactlyOnceWith('right');
+  });
+
+  it('hands the shell a Shift+Tab pressed on its first control', () => {
+    const { first, onActivatePane } = toolPane();
+
+    const event = pressTab(first, true);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(onActivatePane).toHaveBeenCalledExactlyOnceWith('right');
+  });
+});
+
 describe('splitter constraints', () => {
   it('keeps both sides above their minimum width', () => {
     expect(constrainSplitRatio(10, 1_000, 240)).toBeCloseTo(0.24);

@@ -34,6 +34,7 @@ import type { NativeIconLoader } from '../directory-table/native-icon-loader';
 import type { ThumbnailLoader } from '../directory-table/thumbnail-loader';
 import type { DropEventState, DropModifiers } from '../drag-drop/drag-drop';
 import type { EntryFormatSettings } from '../entry-formatting/entry-formatting';
+import { tabStaysWithin } from '../keybindings/tab-traversal';
 import type { ActiveSourceState } from '../operations/operation-state';
 import type {
   DirectorySummaryAttrs,
@@ -521,14 +522,27 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
             event.target instanceof HTMLTextAreaElement ||
             event.target instanceof HTMLSelectElement ||
             (event.target instanceof HTMLElement && event.target.isContentEditable);
+          const viewer =
+            event.target instanceof Element ? event.target.closest('.fm-pane-viewer') : null;
+          const startedInsideViewer = viewer !== null;
+          if (isEditableTarget && !(isUnmodifiedTab && startedInsideViewer)) {
+            return;
+          }
+          // A tool pane (image generation, chat, checksums) is a form: Tab walks its controls, and
+          // only hands over to the pane cycle at its first and last stop. The viewer's own find box
+          // is left out - leaving it with Tab is what people actually do with it.
           if (
-            isEditableTarget &&
+            isUnmodifiedTab &&
+            viewer !== null &&
             !(
-              isUnmodifiedTab &&
               event.target instanceof Element &&
-              event.target.closest('.fm-pane-viewer') !== null
-            )
+              event.target.matches('.fm-file-viewer-search-input')
+            ) &&
+            tabStaysWithin(event, viewer)
           ) {
+            // The document handler reads an unmodified Tab as "switch pane" whenever focus is not
+            // in a field, so a walk through the pane's own controls has to stop here.
+            event.stopPropagation();
             return;
           }
           if (
@@ -560,9 +574,7 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
           // This layout handler also moves DOM focus. Letting the same Tab reach the document
           // handler would switch workspace.activePaneId a second time, back to the old pane.
           event.stopPropagation();
-          const eventStartedInsideViewer =
-            event.target instanceof Element && event.target.closest('.fm-pane-viewer') !== null;
-          if (!eventStartedInsideViewer && attrs.onFocusViewer?.() === true) {
+          if (!startedInsideViewer && attrs.onFocusViewer?.() === true) {
             return;
           }
           const paneOrder = paneIdsInLayout(attrs.workspace.layout);
