@@ -214,18 +214,31 @@ must review before anything is written. It gets its own role in 0322 and its own
   past what the folder already holds and made again when the folder changes, and the stem comes from the
   wording typed for that generation - each adaptation reads as itself, and a repeat is numbered - because
   the endpoint echoes a composed prompt that is cut mid-word at 40 characters.
-- Deliberate deviation from "always use .png": the read-only extension follows the format the endpoint
-  returned. Procyon writes the bytes it was given; there is no re-encode step, and the save path refuses a
-  destination whose extension disagrees with those bytes. Forcing `.png` means choosing to decode and
-  re-encode, which is a different decision with a quality cost.
+- The read-only extension follows the format the endpoint returned, agreed with the person: Procyon
+  writes the bytes it was given, there is no re-encode step, and the save path refuses a destination
+  whose extension disagrees with those bytes. Forcing `.png` would mean decoding and re-encoding, a
+  quality cost nobody asked for. Pinned: a JPEG batch offers `.jpg` and the form never says `.png`.
+- The bar and the tab header read "Image"; the tool entry in the pane's overflow menu and the command
+  palette keep the full "Image generation" (`image.title` versus `image.actionTitle`).
+- The picture model is picked from what the endpoint reports, in the same pulldown the chat model uses,
+  with "Type another name…" for a model nobody listed and a plain field when the endpoint reports
+  nothing to pick from. Nothing is filtered out: `mlx-serve` marks its drawing model
+  `capabilities: ["image"]`, but model discovery returns names only, and hiding a model the person
+  needs is worse than listing ones that cannot draw. A capability-aware filter needs the discovery
+  DTO to carry the fields it currently drops.
+- Where a picture lands is stated rather than asked. The save form shows one line - `Folder
+  ~/Downloads   Change folder` - and the folder is resolved in order: the other pane's folder, a
+  folder that pane has open while it shows a tool, a folder of the pane's own, where the last picture
+  went, and finally the OS pictures folder. Somewhere else stays one click away, chips and all.
 - The browser host's loopback rule now has an operator opt-in: `PROCYON_LLM_ALLOW_LOOPBACK`
   (1, true, yes, on) opens the loopback branch of `LlmHostPolicy` for `fm-server`, announced at startup
   with an `llmLoopbackAllowed` warning notification. Private LAN addresses stay under
   `PROCYON_LLM_ALLOWED_HOSTS` either way. README, "AI endpoints, and which hosts the server may reach".
 - Verified: 1640 Rust tests across `fm-application`, `fm-events` and `fm-server` (55 `llm_profiles`),
-  3782 frontend tests; `tsc --noEmit`, Biome, rustfmt and clippy clean. Layout figures come from the real
-  components at pane width in Chrome. Still unverified in this host: the Tauri window and a live cloud
-  endpoint of either contract.
+  3793 frontend tests; `tsc --noEmit`, Biome, rustfmt and clippy clean. Both states of the save form -
+  the stated folder and the opened choice - were looked at in Chrome at pane width, and the figures come
+  from the real components. Still unverified in this host: the Tauri window and a live cloud endpoint of
+  either contract.
 - The opt-in was proven against the live `mlx-serve` rather than a fixture. With the default posture
   the server answered `403 permissionDenied` before anything left the process; with
   `PROCYON_LLM_ALLOW_LOOPBACK=1` the same request drew a 512x512 picture in 3 s at `steps: 2` - on the
