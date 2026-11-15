@@ -11,8 +11,8 @@ use std::time::Instant;
 #[cfg(feature = "gemma-native")]
 use fm_semantic_worker::gemma_native::{GemmaMedia, GemmaNativeFiles};
 use fm_semantic_worker::{
-    IngestionScope, IngestionState, ManagedWorkerLaunch, ManagedWorkerResolver, WorkerConnector,
-    WorkerHealth,
+    IngestionJobStatus, IngestionScope, IngestionState, ManagedWorkerLaunch, ManagedWorkerResolver,
+    WorkerConnector, WorkerHealth,
 };
 #[cfg(feature = "gemma-native")]
 use serde_json::json;
@@ -56,26 +56,27 @@ fn privacy_canaries() -> BTreeMap<String, String> {
     canaries
 }
 
+/// Waits for a packaged ingestion job to settle, returning the whole status so a failing
+/// qualification can report the worker's own `detail` rather than only the lifecycle state.
 async fn wait_for_ingestion(
     client: &fm_semantic_worker::WorkerClient,
     job_id: &str,
     timeout: Duration,
-) -> IngestionState {
+) -> IngestionJobStatus {
     let started = Instant::now();
     while started.elapsed() < timeout {
-        let state = client
+        let status = client
             .ingestion_job("qualification-tenant", "qualification-library", job_id)
             .await
-            .expect("read packaged ingestion")
-            .state;
+            .expect("read packaged ingestion");
         if matches!(
-            state,
+            status.state,
             IngestionState::Completed
                 | IngestionState::Failed
                 | IngestionState::Cancelled
                 | IngestionState::Skipped
         ) {
-            return state;
+            return status;
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
@@ -128,7 +129,7 @@ fn sample_macos_worker_rss(
                 if output.status.success() {
                     maximum = maximum.max(
                         String::from_utf8(output.stdout)
-                            .unwrap()
+                            .expect("macOS worker RSS output is UTF-8")
                             .trim()
                             .parse::<u64>()
                             .expect("macOS worker RSS is numeric")
@@ -509,9 +510,13 @@ async fn packaged_worker_ingests_recovers_after_crash_and_reopens_offline() {
         )
         .await
         .expect("ingest privacy fixture through packaged worker");
+    let privacy = wait_for_ingestion(&client, &job_id, Duration::from_secs(60)).await;
     assert_eq!(
-        wait_for_ingestion(&client, &job_id, Duration::from_secs(60)).await,
-        IngestionState::Completed
+        privacy.state,
+        IngestionState::Completed,
+        "packaged privacy ingestion ended in {:?}: {}",
+        privacy.state,
+        privacy.detail.as_deref().unwrap_or("<no detail>")
     );
     assert!(
         client
@@ -664,10 +669,13 @@ async fn packaged_gemma_worker_ingests_multimodal_sources_offline() {
             )
             .await
             .expect("submit packaged media");
+        let settled = wait_for_ingestion(&client, &job_id, Duration::from_secs(300)).await;
         assert_eq!(
-            wait_for_ingestion(&client, &job_id, Duration::from_secs(300)).await,
+            settled.state,
             IngestionState::Completed,
-            "{name}"
+            "{name} packaged ingestion ended in {:?}: {}",
+            settled.state,
+            settled.detail.as_deref().unwrap_or("<no detail>")
         );
         println!(
             "Gemma {name} packaged ingestion completed in {:.1}s",
