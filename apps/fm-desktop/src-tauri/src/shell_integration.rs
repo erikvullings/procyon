@@ -279,6 +279,7 @@ mod tests {
     }
 
     /// Runs `command` in a pseudo-terminal with `lines` typed in, and returns everything printed.
+    #[cfg(unix)]
     fn run_in_pty(command: CommandBuilder, lines: &[&str]) -> String {
         use std::io::{Read, Write};
         let pair = portable_pty::native_pty_system()
