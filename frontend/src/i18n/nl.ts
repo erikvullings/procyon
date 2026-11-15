@@ -1676,6 +1676,10 @@ export const nl = {
     qualityAny: 'Elke kwaliteit',
     steps: 'Stappen',
     stepsAny: 'Elk aantal stappen',
+    stepsHint:
+      'Een paar stappen testen alleen of het eindpunt antwoordt. Een plaatje heeft er acht of meer nodig.',
+    seedUsed: 'met seed {seed}',
+    seedFromModel: 'seed gekozen door het model',
     source: 'Bron',
     sourceHint: 'Begin vanuit de afbeelding in het andere paneel',
     sourceClear: 'Niet meer vanuit een afbeelding beginnen',

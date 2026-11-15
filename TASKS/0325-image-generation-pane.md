@@ -292,3 +292,34 @@ must review before anything is written. It gets its own role in 0322 and its own
   clippy for `fm-application`/`fm-transport-dto`/`fm-server`, and `cargo check -p fm-desktop` clean.
   Still unverified in this host: the Tauri window and a live cloud endpoint of either contract - a
   cloud server that streams progress has never been talked to here.
+
+### "The seed had no impact" (2026-11-15)
+
+- Measured, not assumed. Straight to `mlx-serve`: `seed: 7` → `ef8dcef9…` twice, `seed: 8` →
+  `7f38298c…`, no seed → `ac6229ae…`. Through Procyon with the pane's own ask (composed prompt,
+  negative prompt, `stream: true`, quality, 1024×768): `seed: 7` → `0f94d52c…` three times,
+  `seed: 8` → `d0f100da…`, no seed → `69690beb…`. A seed is honoured, and the same seed draws the
+  same picture. `generator_seed`, which diffusers users reach for, is ignored by this server - the
+  OpenAI name `seed` is the one that works, and it is the one sent.
+- Why it looked like nothing happened: at two steps the model has drawn no structure yet. The two
+  seed-7 and seed-8 pictures at `steps: 2` are both a featureless gradient - different bytes,
+  indistinguishable to a person. At eight steps the same two seeds give two different foxes. A cheap
+  step count, which is what the pane now offers for quick checks, is therefore the one setting where
+  a seed cannot show, and nothing in the pane said so.
+- So the seed is now named where it belongs. Under the picture: `seed 7`, or `seed chosen by the
+  model`. What the endpoint echoed back wins, since it knows what it used; `mlx-serve` echoes
+  nothing, so the ask remembered with the generation is shown, and going back through the crumb bar
+  brings that seed back into the field beside the prompt. The remembered seed is kept on the
+  generation the first time it is archived: archiving again behind a crumb must not overwrite it with
+  a field that has moved on to the next ask.
+- The steps list ends with one line of its own, which cannot be picked: "A couple of steps only
+  checks the endpoint answers. A picture needs eight or more."
+- Both status rows are now the row height they were promised. They measured 22px against the
+  breadcrumb's 20px: a `min-height` of row-height-plus-a-hairline, plus `padding-block`, made the row
+  taller than the header above it. The hairline that separates them from the rows around them is now
+  an inset shadow, which costs no height, and their padding is gone - crumb bar, header, status row
+  and "More" row all measure 20px, with a 20px seed field sitting flush inside the "More" row and
+  `scrollHeight` equal to `clientHeight`, so no border is clipped either.
+- Verified: 3820 frontend tests (the seed readout, the note, `seedUsedFor`'s three cases, the seed
+  returning with its generation, and the seed reaching the request both typed and reused);
+  `tsc --noEmit` and Biome clean.

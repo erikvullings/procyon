@@ -1279,6 +1279,10 @@ export const es = {
     qualityAny: 'Cualquier calidad',
     steps: 'Pasos',
     stepsAny: 'Cualquier número de pasos',
+    stepsHint:
+      'Unos pocos pasos solo comprueban que el endpoint responde. Una imagen necesita ocho o más.',
+    seedUsed: 'semilla {seed}',
+    seedFromModel: 'semilla elegida por el modelo',
     source: 'Fuente',
     sourceHint: 'Empezar desde la imagen del otro panel',
     sourceClear: 'Dejar de empezar desde una imagen',

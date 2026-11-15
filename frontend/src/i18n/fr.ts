@@ -1283,6 +1283,10 @@ export const fr = {
     qualityAny: 'Qualité au choix',
     steps: 'Étapes',
     stepsAny: 'Étapes au choix',
+    stepsHint:
+      'Quelques étapes vérifient seulement que le point de réponse répond. Une image en demande huit ou plus.',
+    seedUsed: 'graine {seed}',
+    seedFromModel: 'graine choisie par le modèle',
     source: 'Source',
     sourceHint: 'Partir de l’image sélectionnée dans l’autre volet',
     sourceClear: 'Ne plus partir d’une image',

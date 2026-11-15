@@ -39,6 +39,7 @@ import {
   IMAGE_STEP_OPTIONS,
   type ImagePaneEntry,
   isSaveConflict,
+  seedUsedFor,
   shortTitle,
   sizeAllowed,
   sourceNameOf,
@@ -261,6 +262,8 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
     disabled: boolean,
     onchange: (id: string) => void,
     compact = false,
+    /** One line at the foot of the list, for a choice whose meaning is not in its numbers. */
+    hint?: string,
   ) => {
     const current = options.find((option) => option.id === checkedId) ?? options[0];
     const open = openChoice === key;
@@ -292,27 +295,29 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
         ? m(
             `ul#${listId}.fm-image-choice-list`,
             { role: 'listbox', 'aria-label': label },
-            options.map((option) =>
-              m(
-                'li.fm-image-choice-option',
-                {
-                  role: 'option',
-                  'aria-selected': String(option.id === checkedId),
-                  tabindex: '0',
-                  onclick: () => {
-                    openChoice = undefined;
-                    onchange(option.id);
+            options
+              .map((option) =>
+                m(
+                  'li.fm-image-choice-option',
+                  {
+                    role: 'option',
+                    'aria-selected': String(option.id === checkedId),
+                    tabindex: '0',
+                    onclick: () => {
+                      openChoice = undefined;
+                      onchange(option.id);
+                    },
+                    onkeydown: (event: KeyboardEvent) => {
+                      if (event.key !== 'Enter' && event.key !== ' ') return;
+                      event.preventDefault();
+                      openChoice = undefined;
+                      onchange(option.id);
+                    },
                   },
-                  onkeydown: (event: KeyboardEvent) => {
-                    if (event.key !== 'Enter' && event.key !== ' ') return;
-                    event.preventDefault();
-                    openChoice = undefined;
-                    onchange(option.id);
-                  },
-                },
-                option.label,
-              ),
-            ),
+                  option.label,
+                ),
+              )
+              .concat(hint === undefined ? [] : [m('li.fm-image-choice-note', hint)]),
           )
         : undefined,
     ]);
@@ -492,6 +497,10 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
               })),
               pending,
               (value) => attrs.onPatch({ steps: value === '' ? undefined : Number(value) }),
+              false,
+              // Two steps proves an endpoint answers; it is not a picture, and nothing in it -
+              // a seed least of all - has had time to take shape.
+              t('image', 'stepsHint'),
             ),
             photographic
               ? statusChoice(
@@ -786,6 +795,18 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
     ]);
   };
 
+  /**
+   * Which seed drew the picture on screen. It belongs to the picture, not to the field beside the
+   * prompt, which is already about the next ask.
+   */
+  const seedLine = (attrs: ImagePaneAttrs): m.Child => {
+    const seed = seedUsedFor(attrs.entry);
+    return m(
+      'p.fm-image-seed-used',
+      seed === undefined ? t('image', 'seedFromModel') : t('image', 'seedUsed', { seed }),
+    );
+  };
+
   const preview = (attrs: ImagePaneAttrs) => {
     const { entry } = attrs;
     const pending = entry.pendingRequestId !== undefined;
@@ -830,6 +851,7 @@ export const ImagePane: FactoryComponent<ImagePaneAttrs> = () => {
                         ? undefined
                         : m('img', { src: view.previewUrl, alt: t('image', 'previewAlt') }),
                     selected ? imageActions(attrs, image, index) : undefined,
+                    selected ? seedLine(attrs) : undefined,
                   ],
                 );
               }),

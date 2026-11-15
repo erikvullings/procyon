@@ -16,8 +16,9 @@
 }
 
 /* The header is exactly the pane's breadcrumb row - and the chat header: one row-height strip, an
-   elevated background, one hairline. The status bar is a pixel taller on each side: its bordered
-   fields (width, height, seed) would otherwise lose their bottom border under the row below. */
+   elevated background, one hairline. The status bar and its "More" row are the same height: a tool
+   pane's rows are chrome, and chrome that is a pixel taller than every other row in the pane reads
+   as a mistake. Fields that draw a border are sized a pixel short of the row so both edges show. */
 .fm-image-header,
 .fm-image-status {
   display: flex;
@@ -33,12 +34,14 @@
 }
 
 /* One row of settings normally. A narrow pane wraps them onto a second row rather than spilling
-   the discard key out of the pane: nothing is hidden behind a scroll nobody can see. */
+   the discard key out of the pane: nothing is hidden behind a scroll nobody can see. Each line of a
+   wrapped row is a row height, so a wrapped status bar reads as two rows, not as a taller one. */
 .fm-image-status {
   height: auto;
-  min-height: calc(var(--fm-row-height) + 2px);
+  min-height: var(--fm-row-height);
+  padding-block: 0;
   flex-wrap: wrap;
-  row-gap: var(--fm-space-1);
+  row-gap: 0;
 }
 
 .fm-image-header {
@@ -57,9 +60,12 @@
 .fm-image-status.fm-image-more {
   flex-wrap: wrap;
   height: auto;
-  min-height: calc(var(--fm-row-height) + 2px);
-  padding-block: var(--fm-space-1);
-  border-top: 1px solid var(--fm-border);
+  min-height: var(--fm-row-height);
+  padding-block: 0;
+  border-top: 0;
+  /* A hairline that costs no height: a border would make the row a pixel taller than the
+     breadcrumb above it, which is the difference that reads as a mistake. */
+  box-shadow: inset 0 1px 0 var(--fm-border);
 }
 
 .fm-image-more-toggle {
@@ -68,7 +74,8 @@
 
 .fm-image-status {
   flex: 0 0 auto;
-  border-top: 1px solid var(--fm-border);
+  border-top: 0;
+  box-shadow: inset 0 1px 0 var(--fm-border);
 }
 
 /* Chrome-density flat button (DESIGN.md "button-chrome": 20px, 2px 4px padding, body type). */
@@ -363,6 +370,14 @@
   gap: var(--fm-space-1);
 }
 
+/* Which seed drew this picture. Quiet: it answers a question, it is not a control. */
+.fm-image-seed-used {
+  margin: 0;
+  color: var(--fm-text-muted);
+  font-size: var(--fm-type-meta);
+  line-height: var(--fm-row-height);
+}
+
 .fm-image-error {
   display: flex;
   flex-wrap: wrap;
@@ -648,6 +663,16 @@
 
 .fm-image-choice-option[aria-selected="true"] {
   color: var(--fm-accent);
+}
+
+/* One explanatory line at the foot of a list, not a choice: it cannot be picked or highlighted. */
+.fm-image-choice-note {
+  border-top: 1px solid var(--fm-border);
+  color: var(--fm-text-muted);
+  font-size: var(--fm-type-meta);
+  line-height: 1.3;
+  margin-top: var(--fm-space-1);
+  padding: var(--fm-space-1) var(--fm-space-1) 0;
 }
 
 /* A preset is a row of the list: its label only. An icon name is drawn as an icon, never spelled

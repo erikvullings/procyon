@@ -1296,6 +1296,10 @@ export const de = {
     qualityAny: 'Beliebige Qualität',
     steps: 'Schritte',
     stepsAny: 'Beliebige Schritte',
+    stepsHint:
+      'Einige Schritte prüfen nur, ob der Endpunkt antwortet. Ein Bild braucht acht oder mehr.',
+    seedUsed: 'Seed {seed}',
+    seedFromModel: 'Seed vom Modell gewählt',
     source: 'Vorlage',
     sourceHint: 'Mit dem Bild im anderen Bereich beginnen',
     sourceClear: 'Nicht mehr mit einem Bild beginnen',

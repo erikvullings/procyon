@@ -1276,6 +1276,10 @@ export const it = {
     qualityAny: 'Qualsiasi qualità',
     steps: 'Passaggi',
     stepsAny: 'Qualsiasi numero di passaggi',
+    stepsHint:
+      'Qualche passo verifica solo che l’endpoint risponda. Un’immagine ne richiede otto o più.',
+    seedUsed: 'con seed {seed}',
+    seedFromModel: 'seed scelto dal modello',
     source: 'Sorgente',
     sourceHint: 'Inizia dall’immagine selezionata nell’altro riquadro',
     sourceClear: 'Non iniziare più da un’immagine',

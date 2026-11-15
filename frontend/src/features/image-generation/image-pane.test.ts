@@ -733,6 +733,20 @@ describe('the header, the preview mode and the size fields', () => {
     expect(attrs.onPatch).toHaveBeenCalledWith({ width: 1_000 });
   });
 
+  it('takes the seed typed behind More into the entry that gets sent', () => {
+    const { attrs } = mountLoaded();
+    root.querySelector<HTMLButtonElement>('.fm-image-more-toggle')?.click();
+    m.redraw.sync();
+
+    const field = root.querySelector<HTMLInputElement>('.fm-image-seed');
+    expect(field, 'the seed field').not.toBeNull();
+    if (field === null) return;
+    field.value = '7';
+    field.dispatchEvent(new Event('input'));
+
+    expect(attrs.onPatch).toHaveBeenCalledWith({ seed: 7 });
+  });
+
   it('marks a size the backend would refuse', () => {
     mountLoaded({ width: 2_048, height: 2_048 });
     expect(root.querySelector('[aria-label="Width"]')?.getAttribute('aria-invalid')).toBe('true');
@@ -982,5 +996,57 @@ describe('saving a picture', () => {
     expect(root.querySelector<HTMLInputElement>('.fm-image-name')?.value).toBe(
       'a-lighthouse-at-dusk-1024x1024-2',
     );
+  });
+});
+
+describe('the seed beside the picture', () => {
+  const loaded = (overrides: Partial<ImagePaneEntry> = {}) =>
+    mountLoaded({
+      batch,
+      views: [{ imageId: 'i1', loading: false, previewUrl: 'blob:1' }],
+      selectedImageId: 'i1',
+      activeGenerationId: 'g1',
+      ...overrides,
+    });
+
+  it('names the seed the generation was asked for', () => {
+    // An endpoint that echoes no seed back leaves the ask as the only record of it.
+    loaded({
+      batch: { ...batch, seed: null },
+      history: [{ generationId: 'g1', seed: 7, batch, views: [] }],
+    });
+    expect(root.querySelector('.fm-image-seed-used')?.textContent).toBe('seed 7');
+  });
+
+  it('prefers the seed the endpoint echoed back', () => {
+    loaded({
+      batch: { ...batch, seed: 12 },
+      history: [{ generationId: 'g1', seed: 7, batch, views: [] }],
+    });
+    expect(root.querySelector('.fm-image-seed-used')?.textContent).toBe('seed 12');
+  });
+
+  it('says the model chose when nothing fixed it', () => {
+    loaded({
+      batch: { ...batch, seed: null },
+      history: [{ generationId: 'g1', batch, views: [] }],
+    });
+    expect(root.querySelector('.fm-image-seed-used')?.textContent).toBe('seed chosen by the model');
+  });
+
+  it('explains what a couple of steps is for where the count is chosen', () => {
+    mountLoaded({ seed: 7, steps: 2 });
+    root.querySelector<HTMLButtonElement>('.fm-image-more-toggle')?.click();
+    m.redraw.sync();
+    const steps = [
+      ...(root.querySelectorAll<HTMLButtonElement>('.fm-image-choice-trigger') ?? []),
+    ].find((trigger) => trigger.getAttribute('aria-label') === 'Steps');
+    expect(steps, 'the steps choice').not.toBeNull();
+    steps?.click();
+    m.redraw.sync();
+    const note = root.querySelector('.fm-image-choice-note')?.textContent;
+    expect(note).toContain('A couple of steps only checks the endpoint answers');
+    // The note is not a choice: it cannot be picked.
+    expect(root.querySelector('.fm-image-choice-note')?.getAttribute('role')).toBeNull();
   });
 });

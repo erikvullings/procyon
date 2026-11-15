@@ -20,6 +20,7 @@ import {
   isSaveConflict,
   MAX_GENERATION_CRUMBS,
   rememberGeneration,
+  seedUsedFor,
   shortTitle,
   sizeAllowed,
   suggestedFileName,
@@ -365,5 +366,39 @@ describe('short titles', () => {
         'A fox',
       ]),
     ).toEqual(['A beautiful woman', 'A beautiful woman (2)', 'A beautiful woman (3)', 'A fox']);
+  });
+});
+
+describe('the seed a picture was drawn with', () => {
+  const record = (overrides: Partial<ImageGenerationRecord> = {}): ImageGenerationRecord => ({
+    generationId: 'generation-1',
+    seed: 7,
+    batch,
+    views: [],
+    ...overrides,
+  });
+
+  it('takes what the endpoint echoed, since it knows what it used', () => {
+    const entry = pane({
+      batch: { ...batch, seed: 12 },
+      history: [record({ seed: 7 })],
+    });
+    expect(seedUsedFor(entry)).toBe(12);
+  });
+
+  it('falls back to the seed that was asked for when the endpoint says nothing', () => {
+    // `mlx-serve` returns no seed at all, so the ask is the only record of it.
+    const entry = pane({ batch: { ...batch, seed: null }, history: [record({ seed: 7 })] });
+    expect(seedUsedFor(entry)).toBe(7);
+  });
+
+  it('says nothing when nothing fixed the seed', () => {
+    const entry = pane({
+      batch: { ...batch, seed: null },
+      seed: 7,
+      history: [record({ seed: undefined })],
+    });
+    // The field beside the prompt holds the *next* ask, so it is not evidence about this picture.
+    expect(seedUsedFor(entry)).toBeUndefined();
   });
 });

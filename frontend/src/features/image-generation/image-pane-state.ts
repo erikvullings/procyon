@@ -32,6 +32,12 @@ export interface ImageGenerationRecord {
   readonly generationId: string;
   /** What the person typed for it, before presets and lens wording were added; names the crumb. */
   readonly subject?: string | undefined;
+  /**
+   * The seed this generation was asked for, `undefined` when the model was left to choose. Held
+   * because the batch only carries a seed when the endpoint bothers to echo one back, and because
+   * the field beside the prompt moves on to the next ask.
+   */
+  readonly seed?: number | undefined;
   /** What the endpoint returned: its prompt, size and images. */
   readonly batch: ImageBatch;
   /** How each of its images is displayed; held so revisiting costs no fetch. */
@@ -426,6 +432,20 @@ export function distinctTitles(prompts: readonly string[]): string[] {
 /** The image of a batch the preview should select: the first, or the one still held. */
 export function firstImageId(batch: ImageBatch | undefined): string | undefined {
   return batch?.images[0]?.id;
+}
+
+/**
+ * The seed the picture on screen was drawn with, `undefined` when nothing fixed it. What the
+ * endpoint echoed wins, since it knows what it actually used; the ask remembered with the
+ * generation comes next, because the field beside the prompt has usually moved on by then.
+ */
+export function seedUsedFor(entry: ImagePaneEntry): number | undefined {
+  const echoed = entry.batch?.seed ?? undefined;
+  if (echoed !== undefined) return echoed;
+  const record = entry.history.find(
+    (candidate) => candidate.generationId === entry.batch?.generationId,
+  );
+  return record?.seed;
 }
 
 /** The changes that put a remembered prompt, with every setting it was used with, back in the form. */

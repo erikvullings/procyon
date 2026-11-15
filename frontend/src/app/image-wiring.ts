@@ -167,13 +167,17 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     entry.history = after;
   }
 
-  /** Puts the generation on screen into the crumb bar, so it stays reachable. */
+  /** Puts a generation into the crumb bar, so it stays reachable. */
   function archive(entry: ImagePaneEntry): void {
     if (entry.batch === undefined) return;
     const generationId = entry.batch.generationId;
+    const known = entry.history.find((record) => record.generationId === generationId);
     remember(entry, {
       generationId,
-      subject: entry.history.find((record) => record.generationId === generationId)?.subject,
+      subject: known?.subject,
+      // What the ask carried, kept once known: the field beside the prompt has usually moved on to
+      // the next ask by the time this generation is archived again behind a crumb.
+      seed: known?.seed ?? entry.seed,
       batch: entry.batch,
       views: entry.views,
       selectedImageId: entry.selectedImageId,
@@ -297,6 +301,9 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
       remember(entry, {
         generationId: batch.generationId,
         subject: remembered.subject,
+        // The seed the ask carried, from the form as it stood when Generate was pressed: an
+        // endpoint that echoes no seed back leaves this as the only record of what drew it.
+        seed: remembered.seed ?? undefined,
         batch,
         views: entry.views,
         selectedImageId: entry.selectedImageId,
@@ -364,6 +371,8 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     entry.qualityId = qualityIdOf(record.batch.quality ?? '');
     entry.steps = record.batch.steps ?? undefined;
     entry.source = record.batch.source ?? undefined;
+    // The seed beside the prompt describes the picture on screen, not the next ask.
+    entry.seed = record.seed;
     m.redraw();
     for (const image of record.batch.images) {
       const view = record.views.find((item) => item.imageId === image.id);

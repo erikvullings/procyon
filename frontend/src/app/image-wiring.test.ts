@@ -256,6 +256,55 @@ describe('image wiring', () => {
     expect(client.saveGeneratedImage).not.toHaveBeenCalled();
   });
 
+  it('asks for the seed the status row shows', async () => {
+    const client = imageClient();
+    const { shell, entry } = fakeShell(client);
+    entry.subject = 'a fox in a boat';
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    // What the seed field does when a number is typed into it.
+    wiring.patch(entry.key, { seed: 7 });
+    await wiring.generate(client as unknown as FileManagerClient, entry.key);
+
+    const asked = (client.generateImages as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as {
+      seed: number | null;
+    };
+    expect(asked.seed).toBe(7);
+  });
+
+  it('asks for the seed added to a prompt used a second time', async () => {
+    const client = imageClient();
+    const { shell, entry } = fakeShell(client);
+    entry.subject = 'a fox in a boat';
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.generate(client as unknown as FileManagerClient, entry.key);
+    // The same prompt reused from Image > Prompts, this time with a seed beside it.
+    wiring.applyPrompt(entry.key, {
+      id: 'prompt-1',
+      title: 'A fox',
+      updatedAt: '2026-11-15T09:00:00.000Z',
+      subject: 'a fox in a boat',
+      negativePrompt: '',
+      presetIds: [],
+      lensId: '',
+      apertureId: '',
+      width: 1_024,
+      height: 1_024,
+      count: 1,
+      seed: null,
+      quality: null,
+      steps: null,
+    });
+    wiring.patch(entry.key, { seed: 7 });
+    await wiring.generate(client as unknown as FileManagerClient, entry.key);
+
+    const calls = (client.generateImages as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls).toHaveLength(2);
+    const second = calls[1];
+    expect(second === undefined ? undefined : (second[0] as { seed: number | null }).seed).toBe(7);
+  });
+
   it('asks for each stored image once and selects the first', async () => {
     const client = imageClient();
     const { shell, entry } = fakeShell(client);
@@ -668,6 +717,33 @@ describe('the crumb bar of previous generations', () => {
     expect(entry.views[0]?.previewUrl).toBe('blob:1');
     // Its pictures were already fetched, so going back costs nothing.
     expect(client.generatedImageBytes).toHaveBeenCalledTimes(fetched);
+  });
+
+  it('brings the seed back with the generation it goes back to', async () => {
+    const client = imageClient({
+      generateImages: vi
+        .fn<() => Promise<ImageBatch>>()
+        .mockResolvedValueOnce({ ...batch, seed: null })
+        .mockResolvedValueOnce({ ...otherBatch, seed: null }),
+    });
+    const { shell, entry } = fakeShell(client);
+    entry.subject = 'a fox';
+    const wiring = createImageWiring(shell, { replaceWorkspace: vi.fn() });
+    const clientAsClient = client as unknown as FileManagerClient;
+
+    // Neither endpoint echoed a seed, so only what Procyon remembered can say what drew each.
+    wiring.patch(entry.key, { seed: 7 });
+    await wiring.generate(clientAsClient, entry.key);
+    await settle();
+    wiring.patch(entry.key, { seed: undefined });
+    await wiring.generate(clientAsClient, entry.key);
+    await settle();
+    expect(entry.seed).toBeUndefined();
+
+    wiring.selectGeneration(clientAsClient, entry.key, 'g1');
+    expect(entry.seed).toBe(7);
+    wiring.selectGeneration(clientAsClient, entry.key, 'g2');
+    expect(entry.seed).toBeUndefined();
   });
 
   it('brings back the prompt that produced the generation it goes back to', async () => {

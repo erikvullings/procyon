@@ -1276,6 +1276,10 @@ export const pl = {
     qualityAny: 'Dowolna jakość',
     steps: 'Kroki',
     stepsAny: 'Dowolna liczba kroków',
+    stepsHint:
+      'Kilka kroków tylko sprawdza, czy punkt końcowy odpowiada. Obraz potrzebuje ośmiu lub więcej.',
+    seedUsed: 'ziarno {seed}',
+    seedFromModel: 'ziarno wybrane przez model',
     source: 'Źródło',
     sourceHint: 'Zacznij od obrazu zaznaczonego w innym panelu',
     sourceClear: 'Nie zaczynaj już od obrazu',
