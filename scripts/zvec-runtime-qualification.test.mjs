@@ -302,18 +302,36 @@ test('private qualification rejects release events and enabled release gates', (
     }),
     {
       workflowDispatchOnly: true,
+      mainPushQualification: false,
       publishMode: false,
     },
   );
+  const push = {
+    eventName: 'push',
+    qualificationRunId: '',
+    semanticComponentsReleaseQualified: '',
+  };
   assert.throws(
-    () =>
-      assertQualificationDispatchEnvironment({
-        eventName: 'push',
-        qualificationRunId: '',
-        semanticComponentsReleaseQualified: '',
-      }),
+    () => assertQualificationDispatchEnvironment(push),
     /restricted to workflow_dispatch/u,
   );
+  // A main push may qualify, but only where the caller opts in, only on main, never to publish.
+  assert.deepEqual(
+    assertQualificationDispatchEnvironment({
+      ...push,
+      ref: 'refs/heads/main',
+      allowMainPush: true,
+    }),
+    { workflowDispatchOnly: false, mainPushQualification: true, publishMode: false },
+  );
+  for (const rejected of [
+    { ...push, ref: 'refs/heads/feature', allowMainPush: true },
+    { ...push, ref: 'refs/heads/main' },
+    { ...push, ref: 'refs/heads/main', allowMainPush: true, qualificationRunId: '123' },
+    { ...push, ref: 'refs/tags/v1', allowMainPush: true },
+  ]) {
+    assert.throws(() => assertQualificationDispatchEnvironment(rejected), /restricted/u);
+  }
   assert.throws(
     () =>
       assertQualificationDispatchEnvironment({

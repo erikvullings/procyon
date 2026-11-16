@@ -4,9 +4,15 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { semanticWorkerChanges } from './check-desktop-gemma-release.mjs';
+import {
+  semanticWorkerChanges,
+  verifySemanticWorkerSource,
+} from './check-desktop-gemma-release.mjs';
 import { riskAcceptedGemmaManifestPath } from './gemma-risk-acceptance.mjs';
 import { prepareRiskAcceptedGemmaManifest } from './prepare-risk-accepted-gemma-manifest.mjs';
+import { nextSemanticTag } from './semantic-release-tags.mjs';
+
+export { nextSemanticTag };
 
 /**
  * One-command version of "Re-signing the risk-accepted Gemma worker candidate"
@@ -23,10 +29,21 @@ const WORKFLOW = 'release-semantic-components.yml';
 const MAX_FLAKE_RERUNS = 2;
 const POLL_MS = 30_000;
 
-/** `semantic-v0.7.5` -> `semantic-v0.7.6`; anything without a trailing number gets `.1` appended. */
-export function nextSemanticTag(tag) {
-  const match = /^(.*?)(\d+)$/u.exec(tag);
-  return match === null ? `${tag}.1` : `${match[1]}${Number(match[2]) + 1}`;
+/**
+ * The immutable tag the manifest and publication must use. A qualification run's tag is baked
+ * into its signed catalog URLs, so a resumed run (`--qualification-run`, including one started by
+ * a push to main) dictates the tag; a fresh run takes the next number in the series.
+ */
+export function resolveReleaseTag({ explicitTag, candidateTag, currentTag }) {
+  if (candidateTag !== undefined) {
+    if (explicitTag !== undefined && explicitTag !== candidateTag) {
+      throw new Error(
+        `--tag ${explicitTag} differs from the qualified candidate's tag ${candidateTag}`,
+      );
+    }
+    return candidateTag;
+  }
+  return explicitTag ?? nextSemanticTag(currentTag);
 }
 
 /** The newest workflow_dispatch run created at or after `since` (ms epoch), if any. */
@@ -181,18 +198,28 @@ async function main() {
   }
   log(`worker inputs changed since the signed candidate:\n  ${changed.join('\n  ')}`);
 
-  const tag = options.tag ?? nextSemanticTag(current.releaseTag);
-  if (
-    gh(['release', 'list', '--limit', '100', '--json', 'tagName', '-q', '.[].tagName'])
-      .split('\n')
-      .includes(tag)
-  ) {
-    throw new Error(`${tag} is already published (immutable): pass a new --tag`);
-  }
+  const assertTagFree = (tag) => {
+    const published = gh([
+      'release',
+      'list',
+      '--limit',
+      '100',
+      '--json',
+      'tagName',
+      '-q',
+      '.[].tagName',
+    ]);
+    if (published.split('\n').includes(tag)) {
+      throw new Error(`${tag} is already published (immutable): pass a new --tag`);
+    }
+  };
 
-  // 1. Qualify the candidate on the exact HEAD revision.
+  // 1. Qualify the candidate (a fresh run on HEAD) or resume one that already succeeded, such as
+  //    the run a push to main started automatically.
   let qualificationRun = options.qualificationRun;
+  let tag = resolveReleaseTag({ explicitTag: options.tag, currentTag: current.releaseTag });
   if (qualificationRun === undefined) {
+    assertTagFree(tag);
     qualificationRun = String(await dispatch({ release_tag: tag, qualify_gemma: 'true' }));
     log(`qualification dispatched as run ${qualificationRun}`);
   }
@@ -206,20 +233,21 @@ async function main() {
   if (artifact === undefined)
     throw new Error('candidate artifact missing from the qualification run');
   gh(['run', 'download', qualificationRun, '-n', artifact.name, '-D', directory]);
-  const manifest = prepareRiskAcceptedGemmaManifest(
-    fs.readFileSync(path.join(directory, 'semantic-component-release.json')),
-    {
-      modelRevision: current.riskAcceptedGemma.modelRevision,
-      approvedBy: current.riskAcceptedGemma.approvedBy,
-      approvedAt: new Date().toISOString().replace(/\.\d+Z$/u, 'Z'),
-    },
-  );
-  if (manifest.sourceRevision !== head) {
-    throw new Error(
-      `candidate was built from ${manifest.sourceRevision.slice(0, 8)}, not HEAD ${head.slice(0, 8)}: ` +
-        'main moved during qualification, start over',
-    );
-  }
+  const candidateBytes = fs.readFileSync(path.join(directory, 'semantic-component-release.json'));
+  tag = resolveReleaseTag({
+    explicitTag: options.tag,
+    candidateTag: JSON.parse(candidateBytes).releaseTag,
+    currentTag: current.releaseTag,
+  });
+  assertTagFree(tag);
+  const manifest = prepareRiskAcceptedGemmaManifest(candidateBytes, {
+    modelRevision: current.riskAcceptedGemma.modelRevision,
+    approvedBy: current.riskAcceptedGemma.approvedBy,
+    approvedAt: new Date().toISOString().replace(/\.\d+Z$/u, 'Z'),
+  });
+  // The desktop gate's own condition: the candidate must be an ancestor of HEAD with no worker
+  // build input changed since. HEAD itself may be newer (main moved, or the run was automatic).
+  verifySemanticWorkerSource(manifest.sourceRevision, head, process.cwd());
   fs.writeFileSync(riskAcceptedGemmaManifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
   // 3. Commit (touches no worker build input) and push.

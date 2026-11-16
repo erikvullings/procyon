@@ -26,8 +26,31 @@ function publishingStep(step) {
 export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflow) {
   const workflow = loadYaml(fs.readFileSync(workflowPath, 'utf8'));
   const failures = [];
-  if (workflow.on?.push !== undefined || workflow.on?.workflow_dispatch === undefined) {
-    failures.push('semantic component releases must be manual workflow_dispatch runs only');
+  // Publication stays manual workflow_dispatch. The only other trigger is qualification of main
+  // pushes, which can never publish: see the publish-gate checks below.
+  const push = workflow.on?.push;
+  if (
+    workflow.on?.workflow_dispatch === undefined ||
+    Object.keys(workflow.on).some((trigger) => !['push', 'workflow_dispatch'].includes(trigger)) ||
+    (push !== undefined &&
+      (JSON.stringify(push.branches) !== '["main"]' || push.tags !== undefined))
+  ) {
+    failures.push(
+      'semantic component releases must be manual workflow_dispatch runs, plus optional qualification-only pushes to main',
+    );
+  }
+  if (push !== undefined) {
+    const plan = workflow.jobs?.plan;
+    const gate = String(workflow.jobs?.['semantic-payloads']?.if ?? '');
+    if (
+      !String(plan?.if ?? '').includes("github.event_name == 'push'") ||
+      !(workflow.jobs?.['semantic-payloads']?.needs ?? []).includes('plan') ||
+      !gate.includes("needs.plan.outputs.qualify == 'true'") ||
+      (plan?.steps ?? []).some((step) => publishingStep(step)) ||
+      plan?.permissions !== undefined
+    ) {
+      failures.push('push qualification must be planned by a read-only plan job');
+    }
   }
   if (workflow.permissions?.contents !== 'read') {
     failures.push('semantic component workflow must be read-only by default');
@@ -226,18 +249,23 @@ export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflo
 
 export function assertQualificationDispatchEnvironment({
   eventName,
+  ref,
   qualificationRunId,
   semanticComponentsReleaseQualified,
+  allowMainPush = false,
 }) {
-  if (eventName !== 'workflow_dispatch') {
+  const publishMode = String(qualificationRunId ?? '').trim() !== '';
+  const mainPush =
+    allowMainPush && eventName === 'push' && ref === 'refs/heads/main' && !publishMode;
+  if (eventName !== 'workflow_dispatch' && !mainPush) {
     throw new Error('semantic component qualification is restricted to workflow_dispatch');
   }
-  const publishMode = String(qualificationRunId ?? '').trim() !== '';
   if (publishMode && String(semanticComponentsReleaseQualified ?? '').trim() !== 'true') {
     throw new Error('SEMANTIC_COMPONENTS_RELEASE_QUALIFIED must be true for publication');
   }
   return {
-    workflowDispatchOnly: true,
+    workflowDispatchOnly: !mainPush,
+    mainPushQualification: mainPush,
     publishMode,
   };
 }

@@ -159,6 +159,7 @@ export function checkDesktopGemmaRelease(
   semanticEnabled,
   experimentalEnabled,
   releaseSourceRevision,
+  repositoryRoot = repoRoot,
 ) {
   if (semanticEnabled !== 'true' || experimentalEnabled !== 'true') {
     throw new Error('experimental Gemma desktop requires both independent release approvals');
@@ -167,7 +168,7 @@ export function checkDesktopGemmaRelease(
     throw new Error('an explicit experimental Gemma approval is required');
   }
   if (releaseSourceRevision !== undefined) {
-    verifySemanticWorkerSource(manifest.sourceRevision, releaseSourceRevision, repoRoot);
+    verifySemanticWorkerSource(manifest.sourceRevision, releaseSourceRevision, repositoryRoot);
   }
   for (const target of ['linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64']) {
     semanticComponentReleasePlan(manifest, target);
