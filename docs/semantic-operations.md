@@ -287,7 +287,11 @@ manifest, pushes, and publishes the already-qualified run under the same immutab
 early, changing nothing, when the worker build inputs are unchanged. The flag is required because
 the manifest records the release owner's risk acceptance (`approvedBy` carries over from the
 current manifest). `--tag` overrides the next `semantic-v*` tag; `--qualification-run <id>`
-resumes from a qualification run that already succeeded. Afterwards, tag the desktop release on the
+resumes from a qualification run that already succeeded, including the one a push to `main`
+starts automatically when worker build inputs change (its `semantic-v*-auto.N` tag is taken from
+the candidate, and the candidate may predate HEAD as long as no worker input changed since).
+`pnpm run release:preflight` tells beforehand whether a desktop tag would pass and which command
+fixes it. Afterwards, tag the desktop release on the
 printed commit.
 
 The manual steps, if the script cannot be used:

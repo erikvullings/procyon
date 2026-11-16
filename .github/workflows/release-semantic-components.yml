@@ -1,6 +1,17 @@
 name: Release semantic components
 
 on:
+  # Qualification only, never publication: a push to main that changes a semantic worker build
+  # input qualifies a fresh candidate (the `plan` job decides, with the same function the desktop
+  # release gate uses), so a recent signed candidate exists when a desktop release is tagged.
+  # Publication needs `inputs.qualification_run_id`, which a push never has.
+  push:
+    branches: [main]
+    paths:
+      - crates/**
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
   workflow_dispatch:
     inputs:
       release_tag:
@@ -71,7 +82,28 @@ on:
 permissions:
   contents: read
 
+# Pushes to main coalesce (one running, one pending, never cancelled mid-qualification); manual
+# dispatches stay independent of each other and of the automatic run.
+concurrency:
+  group: semantic-qualification-${{ github.event_name == 'push' && 'main' || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
+  plan:
+    name: Plan automatic qualification
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      qualify: ${{ steps.plan.outputs.qualify }}
+      release_tag: ${{ steps.plan.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Qualify only when a worker build input changed since the signed candidate
+        id: plan
+        run: node scripts/semantic-qualification-plan.mjs
+
   validate-pdf-vision-request:
     name: Validate PDF vision qualification inputs
     if: inputs.qualify_pdf_vision == true || inputs.qualify_pdf_host_sample == true
@@ -95,7 +127,8 @@ jobs:
 
   semantic-payloads:
     name: Semantic payloads (${{ matrix.target }})
-    if: inputs.qualification_run_id == '' && inputs.qualify_installed_gemma != true && inputs.measure_installed_gemma != true && inputs.qualify_pdf_vision != true && inputs.qualify_pdf_host_sample != true
+    needs: plan
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.plan.outputs.qualify == 'true') && inputs.qualification_run_id == '' && inputs.qualify_installed_gemma != true && inputs.measure_installed_gemma != true && inputs.qualify_pdf_vision != true && inputs.qualify_pdf_host_sample != true }}
     runs-on: ${{ matrix.runner }}
     environment: desktop-release
     timeout-minutes: 240
@@ -122,14 +155,14 @@ jobs:
       - name: Validate immutable component release tag
         shell: bash
         env:
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ inputs.release_tag || needs.plan.outputs.release_tag }}
         run: |
           [[ "$RELEASE_TAG" =~ ^semantic-v[0-9][0-9A-Za-z.-]*$ ]]
           test -z "$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Fetch verified Gemma originals
-        if: inputs.qualify_gemma == true
+        if: inputs.qualify_gemma == true || github.event_name == 'push'
         shell: bash
         run: |
           printf 'GEMMA_ORIGINAL_FILES=' >> "$GITHUB_ENV"
@@ -202,7 +235,7 @@ jobs:
         env:
           PROCYON_REQUIRE_CLEAN_SOURCE: "1"
           PROCYON_REQUIRE_PLATFORM_SIGNING: "1"
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ inputs.release_tag || needs.plan.outputs.release_tag }}
           QUALIFY_PDF_RENDER: ${{ inputs.qualify_pdf_render }}
         run: |
           gemma_args=()
@@ -303,7 +336,7 @@ jobs:
 
   semantic-collect:
     name: Collect qualified semantic component assets
-    needs: [semantic-payloads, semantic-catalogs]
+    needs: [plan, semantic-payloads, semantic-catalogs]
     if: ${{ always() && inputs.qualification_run_id == '' && needs.semantic-payloads.result == 'success' && needs.semantic-catalogs.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
@@ -329,7 +362,7 @@ jobs:
           docs/evaluations/semantic-production-v1.json
       - name: Generate the reviewable component fingerprint lock
         env:
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ inputs.release_tag || needs.plan.outputs.release_tag }}
         run: >
           node scripts/create-semantic-component-release-manifest.mjs
           semantic-release-assets
@@ -489,8 +522,12 @@ jobs:
             const fs = require("node:fs");
             const run = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
             const candidate = require("./risk-accepted-candidate-lock/semantic-component-release.json");
+            // A dispatch, or the qualification a push to main started automatically (never
+            // publishes by itself; this approval step is what publishes).
+            const fromMain = run.event === "workflow_dispatch" ||
+                (run.event === "push" && run.head_branch === "main");
             if (run.conclusion !== "success" ||
-                run.event !== "workflow_dispatch" ||
+                !fromMain ||
                 run.head_sha !== candidate.sourceRevision ||
                 run.path !== ".github/workflows/release-semantic-components.yml") {
               throw new Error("risk-accepted Gemma run is not successful on the exact candidate source");

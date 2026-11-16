@@ -545,7 +545,11 @@ test('desktop releases consume one approved semantic component release without r
 test('semantic components qualify and publish exact retained artifacts independently', () => {
   const componentText = workflowText('release-semantic-components.yml');
   const component = workflow('release-semantic-components.yml');
-  assert.equal(component.on.push, undefined);
+  // Pushes to main only qualify (via the plan job); publication still needs an exact run ID.
+  assert.deepEqual(component.on.push.branches, ['main']);
+  assert.equal(component.on.push.tags, undefined);
+  assert.match(component.jobs['semantic-payloads'].if, /needs\.plan\.outputs\.qualify == 'true'/);
+  assert.match(component.jobs['semantic-publish'].if, /inputs\.qualification_run_id != ''/);
   assert.ok(component.on.workflow_dispatch);
   assert.ok(component.on.workflow_dispatch.inputs.release_tag.required);
   assert.ok(component.on.workflow_dispatch.inputs.qualification_run_id);
@@ -585,7 +589,7 @@ test('semantic components qualify and publish exact retained artifacts independe
   assert.match(msvcLinker.run, /VCToolsInstallDir/u);
   assert.match(msvcLinker.run, /CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER/u);
   assert.equal(catalogs.uses, './.github/workflows/sign-semantic-catalog.yml');
-  assert.deepEqual(collect.needs, ['semantic-payloads', 'semantic-catalogs']);
+  assert.deepEqual(collect.needs, ['plan', 'semantic-payloads', 'semantic-catalogs']);
   assert.match(collect.if, /inputs\.qualification_run_id == ''/);
   assert.match(JSON.stringify(collect), /aggregate-semantic-production-evaluation\.mjs/);
   assert.match(JSON.stringify(collect), /create-semantic-component-release-manifest\.mjs/);

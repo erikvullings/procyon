@@ -19,6 +19,7 @@
     "semantic:bundle:production": "node scripts/build-semantic-production-bundle.mjs",
     "semantic:catalog": "node scripts/semantic-production-catalog.mjs",
     "semantic:evaluation:check": "node scripts/check-semantic-release-preconditions.mjs",
+    "release:preflight": "node scripts/release-preflight.mjs",
     "semantic:qualification:check": "node scripts/check-semantic-qualification-workflow.mjs",
     "semantic:measure:worker": "node scripts/measure-semantic-worker-resources.mjs",
     "semantic:quality:compare": "node scripts/semantic-quality-compare.mjs",

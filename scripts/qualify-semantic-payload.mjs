@@ -19,6 +19,8 @@ if (process.env.CI !== 'true') {
 }
 assertQualificationDispatchEnvironment({
   eventName: process.env.GITHUB_EVENT_NAME,
+  ref: process.env.GITHUB_REF,
+  allowMainPush: true,
   qualificationRunId: process.env.QUALIFICATION_RUN_ID,
   semanticComponentsReleaseQualified: process.env.SEMANTIC_COMPONENTS_RELEASE_QUALIFIED_VALUE,
 });

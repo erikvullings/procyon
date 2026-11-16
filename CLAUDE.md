@@ -204,6 +204,20 @@ when either checked-in HTTP artifact is stale relative to the backend.
 
 Version is workspace-wide via `[workspace.package].version` in the root `Cargo.toml` (MSI/WiX only
 accepts numeric pre-release identifiers, hence `0.1.0-1`, `0.1.0-2`, ... not `0.1.0-alpha.1`).
+**Before bumping/tagging, run `pnpm run release:preflight`** (read-only; add `--tag vX.Y.Z-N`,
+`--mode`, `--no-gh` as needed). It runs the workflow's own Gemma gate for the active mode (repo
+variables) and checks tag/version/immutability/on-`main`, and prints the fix command for each
+failure. The desktop gate refuses any `fm-semantic-worker` closure change (crates, `Cargo.lock`
+closure, toolchain; tests/benches/examples and version bumps excluded) after the signed Gemma
+candidate. That candidate is refreshed like this: a push to `main` that changes the closure starts
+`release-semantic-components.yml` automatically (qualification only, never publishes; tag
+`semantic-vX.Y.Z-auto.N`; the `plan` job skips it when the gate already passes). Once it is green,
+preflight prints
+`node scripts/resign-gemma-candidate.mjs --approve-risk-accepted --qualification-run <id>`, which
+commits the manifest, pushes `main` and publishes the tag (without `--qualification-run` it
+dispatches its own run). Only the risk-accepted mode has this mechanical path; experimental and
+five-gate manifests need reviewed evidence (docs/semantic-operations.md).
+
 Flow: bump version → commit → push → wait for `main` CI green (near-instant when the PR was up to
 date with `main` and fully green: `scripts/ci-reuse-gate.mjs` reuses that run for an identical tree) → tag (`vX.Y.Z-N`, matching the
 Cargo version) → push tag → `release-desktop.yml` builds macOS/Windows/Linux and publishes a **beta**
