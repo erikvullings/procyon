@@ -46,6 +46,9 @@ pub struct GemmaVideoEmbedding {
 pub struct GemmaNativeEncoder {
     compute: GemmaCompute,
     upstream: EmbeddingGemma2Model,
+    /// Link directory the upstream model may reopen weights from after loading; it must
+    /// outlive the model.
+    _upstream_staging: Option<tempfile::TempDir>,
     #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
     upstream_metal: Option<Mutex<MetalEmbeddingGemma2State>>,
     upstream_gpu_passes: AtomicUsize,
@@ -172,7 +175,7 @@ impl GemmaNativeEncoder {
         let eoa = tokenizer
             .token_to_id("<audio|>")
             .ok_or(GemmaNativeError::Input("missing end-of-audio token"))?;
-        let upstream = open_upstream(files)?;
+        let (upstream, upstream_staging) = open_upstream(files)?;
         #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
         let upstream_metal = if compute.uses_metal() {
             Some(Mutex::new(
@@ -221,6 +224,7 @@ impl GemmaNativeEncoder {
         Ok(Self {
             compute,
             upstream,
+            _upstream_staging: upstream_staging,
             #[cfg(all(target_os = "macos", feature = "gemma-metal"))]
             upstream_metal,
             upstream_gpu_passes: AtomicUsize::new(0),
@@ -547,7 +551,9 @@ impl GemmaNativeEncoder {
 /// Upstream loads from a directory with canonical names, so files that do not already share
 /// one are exposed through a private staging directory of links; the weights stay memory
 /// mapped from their original location.
-fn open_upstream(files: &GemmaNativeFiles) -> Result<EmbeddingGemma2Model, GemmaNativeError> {
+fn open_upstream(
+    files: &GemmaNativeFiles,
+) -> Result<(EmbeddingGemma2Model, Option<tempfile::TempDir>), GemmaNativeError> {
     let canonical = |path: &Path, name: &str| path.file_name().is_some_and(|value| value == name);
     let shared = files.weights.parent().filter(|directory| {
         canonical(&files.weights, "model.safetensors")
@@ -557,7 +563,7 @@ fn open_upstream(files: &GemmaNativeFiles) -> Result<EmbeddingGemma2Model, Gemma
             && files.tokenizer.parent() == Some(*directory)
     });
     if let Some(directory) = shared {
-        return Ok(EmbeddingGemma2Model::from_model_dir(directory)?);
+        return Ok((EmbeddingGemma2Model::from_model_dir(directory)?, None));
     }
     let staging = tempfile::tempdir()?;
     for (source, name) in [
@@ -567,7 +573,8 @@ fn open_upstream(files: &GemmaNativeFiles) -> Result<EmbeddingGemma2Model, Gemma
     ] {
         link_file(&std::fs::canonicalize(source)?, &staging.path().join(name))?;
     }
-    Ok(EmbeddingGemma2Model::from_model_dir(staging.path())?)
+    let model = EmbeddingGemma2Model::from_model_dir(staging.path())?;
+    Ok((model, Some(staging)))
 }
 
 #[cfg(unix)]
