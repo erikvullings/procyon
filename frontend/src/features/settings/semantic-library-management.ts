@@ -1122,6 +1122,12 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
           (selectedRoot, reason, selectedOverride) =>
             void updateOverride(attrs, selectedRoot, reason, selectedOverride),
         );
+      const indexedDocuments = includedRoots.reduce(
+        (sum, root) =>
+          sum +
+          (indexedRoots.find((item) => item.rootId === root.id)?.confirmedCompletedSources ?? 0),
+        0,
+      );
       const media = status.gemmaMedia;
       const enabledMedia = media
         ? (['images', 'audio', 'video'] as const)
@@ -1142,6 +1148,21 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
             refreshError === undefined
               ? undefined
               : m('p.fm-semantic-library-error', { role: 'alert' }, refreshError),
+            m('details.fm-semantic-library-indexed-folders', [
+              m(
+                'summary',
+                t('semanticLibrary', 'indexedFoldersSummary', {
+                  folders: includedRoots.length,
+                  documents: indexedDocuments,
+                }),
+              ),
+              m('section.fm-semantic-library-roots', [
+                m('p.fm-semantic-library-guidance', t('semanticLibrary', 'includedFoldersHelp')),
+                includedRoots.length === 0
+                  ? m('p', t('semanticLibrary', 'noEnrolledRoots'))
+                  : m('ul', includedRoots.map(rootView)),
+              ]),
+            ]),
             capabilities.authority === 'administratorProvisioned'
               ? m('p.fm-semantic-library-authority', t('semanticLibrary', 'administratorManaged'))
               : undefined,
@@ -1316,13 +1337,6 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
             error === undefined
               ? undefined
               : m('p.fm-semantic-library-error', { role: 'alert' }, error),
-            m('section.fm-semantic-library-roots', [
-              m('h6', t('semanticLibrary', 'enrolledRoots')),
-              m('p.fm-semantic-library-guidance', t('semanticLibrary', 'includedFoldersHelp')),
-              includedRoots.length === 0
-                ? m('p', t('semanticLibrary', 'noEnrolledRoots'))
-                : m('ul', includedRoots.map(rootView)),
-            ]),
             removedRoots.filter((root) => rootExclusion(root)?.cleanup.status !== 'complete')
               .length > 0
               ? m('section.fm-semantic-library-roots', [

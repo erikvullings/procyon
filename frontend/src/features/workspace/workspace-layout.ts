@@ -851,26 +851,31 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
     return m(
       'nav.fm-compact-pane-switcher',
       { key: 'compact-pane-switcher', 'aria-label': t('action', 'switchPane') },
-      paneIds.map((paneId, index) => {
+      paneIds.flatMap((paneId, index) => {
         const pane = attrs.workspace.panesById[paneId];
         const tab = pane?.tabsById[pane.activeTabId];
-        if (pane === undefined || tab === undefined) return undefined;
+        if (pane === undefined || tab === undefined) return [];
         const content = attrs.paneContent(paneId);
         const title = connectionRootTitle(tab.location, tab.title, content.connections);
         const side = t('pane', index === 0 ? 'leftPane' : 'rightPane');
         const active = attrs.workspace.activePaneId === paneId;
-        return m(
-          'button.fm-compact-pane-switch',
-          {
-            key: paneId,
-            type: 'button',
-            'data-active': String(active),
-            'aria-pressed': String(active),
-            'aria-label': `${side}: ${title}`,
-            onclick: () => attrs.onActivatePane(paneId),
-          },
-          [m('span.fm-compact-pane-side', side), m('span.fm-compact-pane-title', { title }, title)],
-        );
+        return [
+          m(
+            'button.fm-compact-pane-switch',
+            {
+              key: paneId,
+              type: 'button',
+              'data-active': String(active),
+              'aria-pressed': String(active),
+              'aria-label': `${side}: ${title}`,
+              onclick: () => attrs.onActivatePane(paneId),
+            },
+            [
+              m('span.fm-compact-pane-side', side),
+              m('span.fm-compact-pane-title', { title }, title),
+            ],
+          ),
+        ];
       }),
     );
   }

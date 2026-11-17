@@ -1774,6 +1774,7 @@ export const it = {
     categoryVectors: 'Vettori non referenziati',
     categoryConversationPins: 'Pin di prove delle conversazioni salvati',
     enrolledRoots: 'Cartelle incluse',
+    indexedFoldersSummary: 'Cartelle indicizzate ({folders}) · {documents} documenti',
     includedFoldersHelp:
       'Solo queste cartelle e le relative sottocartelle idonee vengono indicizzate. Aprire una cartella in un pannello non la include.',
     noEnrolledRoots: 'Non è ancora inclusa alcuna cartella.',
@@ -2122,6 +2123,9 @@ export const it = {
     searchInTheme: 'Cerca in questo tema',
     searchFailed: 'Impossibile preparare la ricerca.',
     scopeSelectedFolders: 'Cartelle selezionate',
+    viewsLabel: 'Viste',
+    foldersTab: 'Cartelle',
+    exportTab: 'Esporta',
     foldersHeading: 'Cartelle da analizzare',
     foldersHint:
       'Gli argomenti di cartelle non correlate si fondono male. Scegli le cartelle che vanno insieme.',
@@ -2470,6 +2474,8 @@ export const it = {
     title: 'Ricerca semantica',
     openTitle: 'Ricerca semantica…',
     subjectsPlaceholder: 'Inserisci i termini di ricerca',
+    includeFolderNamed: 'Includi la cartella "{folder}" nella ricerca semantica',
+    folderNotIndexedHint: '"{folder}" non è ancora indicizzata, quindi non si può cercare da sola.',
     includeOnlyCurrentFolder: 'Includi solo la cartella corrente "{folder}"',
     ask: 'Chiedi',
     question: 'Domanda su questi risultati',

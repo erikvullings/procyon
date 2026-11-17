@@ -301,6 +301,17 @@ describe('ThemesView', () => {
     expect(onSearchSources).not.toHaveBeenCalled();
   });
 
+  /** Switches the status-bar view once the themes have loaded. */
+  const openTab = async (label: string): Promise<void> => {
+    const tab = (): HTMLButtonElement | undefined =>
+      [...root.querySelectorAll<HTMLButtonElement>('.fm-themes-status-tab')].find(
+        (button) => button.textContent === label,
+      );
+    await vi.waitFor(() => expect(tab()).toBeDefined());
+    tab()?.click();
+    m.redraw.sync();
+  };
+
   describe('folder scope', () => {
     const HANDBOOK = 'mock-knowledge-root-handbook';
     const ARCHIVE = 'mock-knowledge-root-archive';
@@ -319,6 +330,7 @@ describe('ThemesView', () => {
       mount(client);
       await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
       expect(analyze.mock.calls[0]?.[0].scope.kind).toBe('entireLibrary');
+      await openTab('Folders');
       expect(checkboxes().map((box) => box.checked)).toEqual([true, true]);
       expect(root.querySelector('.fm-themes-root')?.textContent).toContain(
         'Handbook · 3 documents',
@@ -340,6 +352,7 @@ describe('ThemesView', () => {
       const onSelectRoots = vi.fn();
       mount(client, { onSelectRoots });
       await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+      await openTab('Folders');
       expect(applyButton()?.disabled).toBe(true);
 
       checkboxes()[1]?.click();
@@ -363,6 +376,7 @@ describe('ThemesView', () => {
       await vi.waitFor(() => expect(analyze).toHaveBeenCalledOnce());
       expect(analyze.mock.calls[0]?.[0].scope.enrolledRootIds).toEqual([ARCHIVE]);
       await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+      await openTab('Folders');
       expect(checkboxes().map((box) => box.checked)).toEqual([false, true]);
 
       checkboxes()[0]?.click();
@@ -380,6 +394,7 @@ describe('ThemesView', () => {
       await vi.waitFor(() => expect(analyze).toHaveBeenCalledOnce());
       expect(analyze.mock.calls[0]?.[0].scope.kind).toBe('entireLibrary');
       await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+      await openTab('Folders');
 
       for (const box of checkboxes()) box.click();
       m.redraw.sync();
@@ -413,7 +428,8 @@ describe('ThemesView', () => {
       const exportThemes = vi.spyOn(client, 'exportCorpusThemes');
       const onExported = vi.fn();
       mount(client, { exportFolder: FOLDER, onExported });
-      await vi.waitFor(() => expect(panel()).not.toBeNull());
+      await openTab('Export');
+      expect(panel()).not.toBeNull();
 
       exportButton().click();
       await vi.waitFor(() => expect(exportThemes).toHaveBeenCalledOnce());
@@ -437,7 +453,15 @@ describe('ThemesView', () => {
       const exportThemes = vi.spyOn(client, 'exportCorpusThemes');
       mount(client, { exportFolder: FOLDER });
       await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
+      await openTab('Export');
       expect(root.querySelector('.fm-themes-export input[type="url"]')).toBeNull();
+      expect(root.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1]?.disabled).toBe(
+        true,
+      );
+      await openTab('Theme map');
+      (root.querySelectorAll('.fm-themes-row')[1] as HTMLButtonElement).click();
+      m.redraw.sync();
+      await openTab('Export');
 
       const select = field<HTMLSelectElement>('select');
       select.value = 'skosTurtle';
@@ -453,9 +477,6 @@ describe('ThemesView', () => {
       base.dispatchEvent(new Event('input'));
 
       const radios = [...root.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
-      expect(radios[1]?.disabled).toBe(true);
-      (root.querySelectorAll('.fm-themes-row')[1] as HTMLButtonElement).click();
-      m.redraw.sync();
       expect(radios[1]?.disabled).toBe(false);
       radios[1]?.click();
       m.redraw.sync();
@@ -476,7 +497,8 @@ describe('ThemesView', () => {
       vi.spyOn(client, 'exportCorpusThemes').mockRejectedValue(new Error('File already exists'));
       const onExported = vi.fn();
       mount(client, { exportFolder: FOLDER, onExported });
-      await vi.waitFor(() => expect(panel()).not.toBeNull());
+      await openTab('Export');
+      expect(panel()).not.toBeNull();
       exportButton().click();
       await vi.waitFor(() =>
         expect(root.querySelector('.fm-themes-export .fm-themes-error')).not.toBeNull(),

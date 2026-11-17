@@ -1775,6 +1775,7 @@ export const es = {
     categoryVectors: 'Vectores sin referencia',
     categoryConversationPins: 'Marcadores de evidencia de conversaciones guardados',
     enrolledRoots: 'Carpetas incluidas',
+    indexedFoldersSummary: 'Carpetas indexadas ({folders}) · {documents} documentos',
     includedFoldersHelp:
       'Solo se indexan estas carpetas y sus subcarpetas elegibles. Abrir una carpeta en un panel no la incluye.',
     noEnrolledRoots: 'Todavía no hay carpetas incluidas.',
@@ -2124,6 +2125,9 @@ export const es = {
     searchInTheme: 'Buscar dentro de este tema',
     searchFailed: 'No se pudo preparar la búsqueda.',
     scopeSelectedFolders: 'Carpetas seleccionadas',
+    viewsLabel: 'Vistas',
+    foldersTab: 'Carpetas',
+    exportTab: 'Exportar',
     foldersHeading: 'Carpetas que analizar',
     foldersHint:
       'Los temas de carpetas sin relación se combinan mal. Elija las carpetas que van juntas.',
@@ -2473,6 +2477,9 @@ export const es = {
     title: 'Búsqueda semántica',
     openTitle: 'Búsqueda semántica…',
     subjectsPlaceholder: 'Introduce los términos de búsqueda',
+    includeFolderNamed: 'Incluir la carpeta "{folder}" en la búsqueda semántica',
+    folderNotIndexedHint:
+      '"{folder}" aún no está indexada, por lo que no se puede buscar por separado.',
     includeOnlyCurrentFolder: 'Incluir solo la carpeta actual "{folder}"',
     ask: 'Preguntar',
     question: 'Pregunta sobre estos resultados',

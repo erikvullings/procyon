@@ -154,6 +154,8 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
   let dslText = '';
   let includeTrace = false;
   let currentFolderIndexed = false;
+  /** Whether including the opening folder is something the user can still do (not excluded, status known). */
+  let currentFolderIncludable = false;
   let openingFolder: Location | undefined;
   let pinnedFolder: Location | undefined;
   let openedWorkspaceId: string | undefined;
@@ -435,6 +437,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     subjectsText = attrs.initialSubject ?? '';
     dslText = '';
     currentFolderIndexed = false;
+    currentFolderIncludable = false;
     openingFolder = attrs.currentFolder;
     pinnedFolder = undefined;
     openedWorkspaceId = attrs.workspaceId;
@@ -472,14 +475,22 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
       const currentFolder = openingFolder;
       const folderIndexedRequest =
         currentFolder === undefined
-          ? Promise.resolve(false)
+          ? Promise.resolve({ indexed: false, includable: false })
           : attrs.client
               .getSemanticFolderStatus({ workspaceId: attrs.workspaceId, location: currentFolder })
               .then(
-                (folder) =>
-                  (folder.consent === 'includedHere' || folder.consent === 'inheritedFromParent') &&
-                  folder.workspaceReferenced,
-                () => false,
+                (folder) => {
+                  const included =
+                    folder.consent === 'includedHere' || folder.consent === 'inheritedFromParent';
+                  return {
+                    indexed: included && folder.workspaceReferenced,
+                    // An excluded folder needs its exclusion lifted first; offering it again
+                    // would only fail.
+                    includable:
+                      folder.consent !== 'excluded' && !(included && folder.workspaceReferenced),
+                  };
+                },
+                () => ({ indexed: false, includable: false }),
               );
       const [reportedCapabilities, availableRoots, profileResult, folderIndexed] =
         await Promise.all([
@@ -502,7 +513,10 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
         : reportedCapabilities.fullText
           ? 'hybrid'
           : 'fullText';
-      if (currentFolder !== undefined) currentFolderIndexed = folderIndexed;
+      if (currentFolder !== undefined) {
+        currentFolderIndexed = folderIndexed.indexed;
+        currentFolderIncludable = folderIndexed.includable;
+      }
       scopeKind = 'enrolledRoots';
     } catch {
       if (loadGeneration !== generation) return;
@@ -1387,8 +1401,23 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                       folder: lastPathSegment(openingFolder) ?? pathFromUri(openingFolder.uri),
                     }),
                   ),
+                  currentFolderIndexed || busy === 'loading'
+                    ? undefined
+                    : m(
+                        'small.fm-knowledge-hint',
+                        t('knowledgeSearch', 'folderNotIndexedHint', {
+                          folder: lastPathSegment(openingFolder) ?? pathFromUri(openingFolder.uri),
+                        }),
+                      ),
                 ]),
-            !currentFolderIndexed && openingFolder !== undefined && busy !== 'loading'
+            !currentFolderIndexed &&
+            currentFolderIncludable &&
+            openingFolder !== undefined &&
+            // The backend only enrols the folder shown in the active pane, so a stale
+            // opening folder cannot be included from here.
+            attrs.currentFolder?.providerId === openingFolder.providerId &&
+            attrs.currentFolder.uri === openingFolder.uri &&
+            busy !== 'loading'
               ? m(
                   'button.fm-knowledge-include-folder-action',
                   {
@@ -1397,7 +1426,9 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                       enrolmentOpen = true;
                     },
                   },
-                  t('knowledgeSearch', 'includeFolder'),
+                  t('knowledgeSearch', 'includeFolderNamed', {
+                    folder: lastPathSegment(openingFolder) ?? pathFromUri(openingFolder.uri),
+                  }),
                 )
               : undefined,
             openingFolder === undefined
@@ -1417,6 +1448,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                         location: openingFolder,
                         onEnrolled: () => {
                           currentFolderIndexed = true;
+                          currentFolderIncludable = false;
                           scopeKind = 'enrolledRoots';
                           enrolmentOpen = false;
                           void refreshRoots(attrs).then(() => {

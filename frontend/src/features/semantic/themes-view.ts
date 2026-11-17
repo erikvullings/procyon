@@ -78,6 +78,9 @@ const EXPORT_FORMATS: readonly {
   { format: 'skosJsonLd', label: 'exportFormatSkosJsonLd' },
 ];
 
+/** The views the status bar toggles between; the map is the reason the pane was opened. */
+type ThemesPanel = 'map' | 'folders' | 'export';
+
 const isSkos = (format: CorpusThemeExportFormat): boolean => format.startsWith('skos');
 
 /** Selection in the list or on the map; `null` is the "no theme" bucket. */
@@ -352,6 +355,7 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
   /** Roots the shown themes were computed for, and the checkboxes' not yet applied state. */
   let appliedRoots: readonly string[] = [];
   let draftRoots: readonly string[] = [];
+  let panel: ThemesPanel = 'map';
   let exportFormat: CorpusThemeExportFormat = 'markdown';
   let exportOnlySelected = false;
   let includePassages = false;
@@ -411,14 +415,19 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
     appliedRoots = chosen;
     draftRoots = chosen;
     attrs.onSelectRoots?.(chosen.length === roots.length ? [] : chosen);
+    panel = 'map';
     void load(attrs);
   }
 
   /** Folder multi-select: unrelated topics cluster poorly together, so analyse a chosen subset. */
+  function hasRootsPanel(): boolean {
+    return roots.length >= 2 && baseScope()?.kind === 'entireLibrary';
+  }
+
   function rootsPanel(attrs: ThemesViewAttrs): Vnode | undefined {
-    if (roots.length < 2 || baseScope()?.kind !== 'entireLibrary') return undefined;
-    return m('fieldset.fm-themes-roots', [
-      m('legend', t('themes', 'foldersHeading')),
+    if (!hasRootsPanel()) return undefined;
+    return m('section.fm-themes-roots', [
+      m('h4', t('themes', 'foldersHeading')),
       m('p.fm-themes-muted', t('themes', 'foldersHint')),
       m(
         'ul.fm-themes-root-list',
@@ -516,8 +525,7 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
   function exportPanel(attrs: ThemesViewAttrs, themes: CorpusThemes): Vnode | undefined {
     if (attrs.exportFolder === undefined) return undefined;
     const singleTheme = typeof selected === 'number';
-    return m('details.fm-themes-export', [
-      m('summary', t('themes', 'exportTitle')),
+    return m('section.fm-themes-export', [
       m('.fm-themes-export-body', [
         m('label.fm-themes-field', [
           m('span', t('themes', 'exportFormat')),
@@ -835,14 +843,14 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
           ],
         ),
       );
-    return m('ul.fm-themes-list', { 'aria-label': t('themes', 'listHeading') }, [
-      ...themes.themes.map((theme) =>
-        row(theme.id, themeLabel(theme.id, themes), theme.chunkCount, theme.share),
-      ),
-      themes.noTheme.chunkCount > 0
-        ? row(null, t('themes', 'noTheme'), themes.noTheme.chunkCount, themes.noTheme.share)
-        : undefined,
-    ]);
+    // Keyed rows must not be mixed with a hole: Mithril rejects a fragment that does.
+    const rows = themes.themes.map((theme) =>
+      row(theme.id, themeLabel(theme.id, themes), theme.chunkCount, theme.share),
+    );
+    if (themes.noTheme.chunkCount > 0) {
+      rows.push(row(null, t('themes', 'noTheme'), themes.noTheme.chunkCount, themes.noTheme.share));
+    }
+    return m('ul.fm-themes-list', { 'aria-label': t('themes', 'listHeading') }, rows);
   }
 
   function outcomeMessage(result: CorpusThemesResponse): string | undefined {
@@ -885,103 +893,143 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
       const themes = response?.themes ?? undefined;
       const message = response === undefined ? undefined : outcomeMessage(response);
       const stale = themes !== undefined && themesAreStale(themes, status);
+      const available: readonly ThemesPanel[] = [
+        'map',
+        ...(hasRootsPanel() ? (['folders'] as const) : []),
+        ...(attrs.exportFolder === undefined || themes === undefined ? [] : (['export'] as const)),
+      ];
+      const shown: ThemesPanel = available.includes(panel) ? panel : 'map';
       return m('.fm-themes.fm-themes-view', [
-        m('.fm-themes-header', [m('h3', t('themes', 'title'))]),
-        m('.fm-themes-content', [
-          visibleScopes.length > 1
-            ? m(
-                '.fm-themes-scopes',
-                { role: 'group', 'aria-label': t('themes', 'scopeLabel') },
-                visibleScopes.map((scope, index) =>
-                  m(
-                    'button.fm-themes-scope',
-                    {
-                      type: 'button',
-                      key: scope.kind,
-                      'aria-pressed': String(index === scopeIndex),
-                      disabled: busy,
-                      onclick: () => {
-                        if (index === scopeIndex) return;
-                        scopeIndex = index;
-                        void load(attrs);
+        m('.fm-themes-scroll', [
+          m('.fm-themes-header', [m('h3', t('themes', 'title'))]),
+          m('.fm-themes-content', [
+            visibleScopes.length > 1
+              ? m(
+                  '.fm-themes-scopes',
+                  { role: 'group', 'aria-label': t('themes', 'scopeLabel') },
+                  visibleScopes.map((scope, index) =>
+                    m(
+                      'button.fm-themes-scope',
+                      {
+                        type: 'button',
+                        key: scope.kind,
+                        'aria-pressed': String(index === scopeIndex),
+                        disabled: busy,
+                        onclick: () => {
+                          if (index === scopeIndex) return;
+                          scopeIndex = index;
+                          void load(attrs);
+                        },
                       },
+                      scope.kind === 'currentFolder' && scope.folder != null
+                        ? `${scope.label}: ${folderName(scope.folder.uri)}`
+                        : scope.label,
+                    ),
+                  ),
+                )
+              : undefined,
+            shown === 'folders' ? rootsPanel(attrs) : undefined,
+            busy
+              ? m('.fm-themes-progress', { role: 'status', 'aria-busy': 'true' }, [
+                  m('span', t('themes', 'analyzing')),
+                  m(Skeleton, { count: 4, className: 'fm-themes-skeleton' }),
+                ])
+              : undefined,
+            error === undefined ? undefined : m('p.fm-themes-error', { role: 'alert' }, error),
+            message === undefined
+              ? undefined
+              : m('p.fm-themes-notice', { role: 'status' }, message),
+            stale
+              ? m('.fm-themes-notice.fm-themes-stale', { role: 'status' }, [
+                  m('span', t('themes', 'stale')),
+                  m(
+                    'button.btn-flat',
+                    { type: 'button', disabled: busy, onclick: () => void load(attrs) },
+                    t('themes', 'refresh'),
+                  ),
+                ])
+              : undefined,
+            themes === undefined || shown === 'folders'
+              ? undefined
+              : m('.fm-themes-body', [
+                  m(
+                    'p.fm-themes-muted',
+                    t('themes', 'analysed', {
+                      documents: themes.documentCount,
+                      passages: themes.chunkCount,
+                      shown: themes.mapPoints.length,
+                    }),
+                  ),
+                  shown === 'export' ? exportPanel(attrs, themes) : undefined,
+                  shown !== 'map'
+                    ? undefined
+                    : m('.fm-themes-layout', [
+                        m('.fm-themes-map', [
+                          m('h4', t('themes', 'mapHeading')),
+                          m(Scatter, {
+                            points: themes.mapPoints,
+                            selected,
+                            hovered,
+                            onHover: (point) => {
+                              hovered = point;
+                            },
+                            onPick: (point) => {
+                              selected = point.theme ?? null;
+                              selectedPoint = point;
+                              void Promise.resolve(attrs.onOpenPassage(point.passage)).catch(
+                                (cause: unknown) => {
+                                  error = errorMessage(cause, t('themes', 'openSourceFailed'));
+                                  m.redraw();
+                                },
+                              );
+                            },
+                          }),
+                          m('p.fm-themes-muted', t('themes', 'mapLabel')),
+                        ]),
+                        m('.fm-themes-listing', [
+                          m('h4', t('themes', 'listHeading')),
+                          themeList(themes),
+                        ]),
+                      ]),
+                  shown !== 'map'
+                    ? undefined
+                    : m(
+                        'p.fm-themes-hover',
+                        { role: 'status' },
+                        hovered === undefined
+                          ? undefined
+                          : [
+                              m('strong', cleanTitle(hovered.passage.title)),
+                              ` — ${decodeEntities(hovered.passage.excerpt)}`,
+                            ],
+                      ),
+                  shown === 'map' ? themeDetails(themes, attrs) : undefined,
+                ]),
+          ]),
+        ]),
+        available.length < 2
+          ? undefined
+          : m(
+              '.fm-pane-status.fm-themes-statusbar',
+              { role: 'group', 'aria-label': t('themes', 'viewsLabel') },
+              available.map((id) =>
+                m(
+                  'button.btn-flat.fm-themes-status-tab',
+                  {
+                    type: 'button',
+                    key: id,
+                    'aria-pressed': String(id === shown),
+                    onclick: () => {
+                      panel = id;
                     },
-                    scope.kind === 'currentFolder' && scope.folder != null
-                      ? `${scope.label}: ${folderName(scope.folder.uri)}`
-                      : scope.label,
+                  },
+                  t(
+                    'themes',
+                    id === 'map' ? 'mapHeading' : id === 'folders' ? 'foldersTab' : 'exportTab',
                   ),
                 ),
-              )
-            : undefined,
-          rootsPanel(attrs),
-          busy
-            ? m('.fm-themes-progress', { role: 'status', 'aria-busy': 'true' }, [
-                m('span', t('themes', 'analyzing')),
-                m(Skeleton, { count: 4, className: 'fm-themes-skeleton' }),
-              ])
-            : undefined,
-          error === undefined ? undefined : m('p.fm-themes-error', { role: 'alert' }, error),
-          message === undefined ? undefined : m('p.fm-themes-notice', { role: 'status' }, message),
-          stale
-            ? m('.fm-themes-notice.fm-themes-stale', { role: 'status' }, [
-                m('span', t('themes', 'stale')),
-                m(
-                  'button.btn-flat',
-                  { type: 'button', disabled: busy, onclick: () => void load(attrs) },
-                  t('themes', 'refresh'),
-                ),
-              ])
-            : undefined,
-          themes === undefined
-            ? undefined
-            : m('.fm-themes-body', [
-                m(
-                  'p.fm-themes-muted',
-                  t('themes', 'analysed', {
-                    documents: themes.documentCount,
-                    passages: themes.chunkCount,
-                    shown: themes.mapPoints.length,
-                  }),
-                ),
-                exportPanel(attrs, themes),
-                m('.fm-themes-layout', [
-                  m('.fm-themes-map', [
-                    m('h4', t('themes', 'mapHeading')),
-                    m(Scatter, {
-                      points: themes.mapPoints,
-                      selected,
-                      hovered,
-                      onHover: (point) => {
-                        hovered = point;
-                      },
-                      onPick: (point) => {
-                        selected = point.theme ?? null;
-                        selectedPoint = point;
-                        void Promise.resolve(attrs.onOpenPassage(point.passage)).catch(
-                          (cause: unknown) => {
-                            error = errorMessage(cause, t('themes', 'openSourceFailed'));
-                            m.redraw();
-                          },
-                        );
-                      },
-                    }),
-                    m('p.fm-themes-muted', t('themes', 'mapLabel')),
-                  ]),
-                  m('.fm-themes-listing', [m('h4', t('themes', 'listHeading')), themeList(themes)]),
-                ]),
-                m(
-                  'p.fm-themes-hover',
-                  { role: 'status' },
-                  hovered === undefined
-                    ? undefined
-                    : [
-                        m('strong', cleanTitle(hovered.passage.title)),
-                        ` — ${decodeEntities(hovered.passage.excerpt)}`,
-                      ],
-                ),
-                themeDetails(themes, attrs),
-              ]),
-        ]),
+              ),
+            ),
       ]);
     },
   };

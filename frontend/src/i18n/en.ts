@@ -1100,6 +1100,9 @@ export const en = {
     searchInTheme: 'Search within this theme',
     searchFailed: 'The search could not be prepared.',
     scopeSelectedFolders: 'Selected folders',
+    viewsLabel: 'Views',
+    foldersTab: 'Folders',
+    exportTab: 'Export',
     foldersHeading: 'Folders to analyse',
     foldersHint:
       'Topics from unrelated folders do not merge well. Choose the folders that belong together.',
@@ -1261,6 +1264,8 @@ export const en = {
     scopeEntireLibrary: 'All indexed folders in this workspace',
     scopeEnrolledRoots: 'Selected indexed roots',
     scopeCurrentFolder: 'Current indexed folder',
+    includeFolderNamed: 'Include folder "{folder}" for semantic search',
+    folderNotIndexedHint: '"{folder}" is not indexed yet, so it cannot be searched on its own.',
     includeOnlyCurrentFolder: 'Include only current folder "{folder}"',
     scopeSemanticResults: 'Current semantic result set',
     roots: 'Indexed roots',
@@ -2136,6 +2141,7 @@ export const en = {
     categoryVectors: 'Unreferenced vectors',
     categoryConversationPins: 'Saved conversation evidence pins',
     enrolledRoots: 'Included folders',
+    indexedFoldersSummary: 'Indexed folders ({folders}) · {documents} documents',
     includedFoldersHelp:
       'Only these folders and eligible subfolders are indexed. Opening a folder in a pane does not include it.',
     noEnrolledRoots: 'No folders are included yet.',

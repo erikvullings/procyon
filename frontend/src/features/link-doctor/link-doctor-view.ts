@@ -45,33 +45,38 @@ function renderCandidates(attrs: LinkDoctorViewAttrs, problem: LinkProblem) {
   if (entry.candidates.length === 0) {
     return m('p.link-doctor__hint', t('linkDoctor', 'noCandidates'));
   }
-  return m('ul.link-doctor__candidates', [
-    ...entry.candidates.map((candidate) =>
-      m('li', { key: candidate.location.uri }, [
-        m(
-          'span.link-doctor__path',
-          { title: candidate.location.uri },
-          decoded(candidate.location.uri),
-        ),
-        m(
-          'span.link-doctor__hint',
-          ` · ${candidate.sameSize ? t('linkDoctor', 'sameSize') : t('linkDoctor', 'differentSize')}`,
-        ),
-        problem.kind === 'brokenSymlink'
-          ? m(
-              'button',
-              {
-                type: 'button',
-                disabled: attrs.state.repairing !== undefined,
-                onclick: () => attrs.onRepoint(problem, candidate),
-              },
-              t('linkDoctor', 'useThis'),
-            )
-          : undefined,
-      ]),
-    ),
-    entry.truncated ? m('li.link-doctor__hint', t('linkDoctor', 'candidatesTruncated')) : undefined,
-  ]);
+  // Keyed rows must not share a fragment with a hole or an unkeyed row, so the notice is keyed too
+  // and only added when present.
+  const rows = entry.candidates.map((candidate) =>
+    m('li', { key: candidate.location.uri }, [
+      m(
+        'span.link-doctor__path',
+        { title: candidate.location.uri },
+        decoded(candidate.location.uri),
+      ),
+      m(
+        'span.link-doctor__hint',
+        ` · ${candidate.sameSize ? t('linkDoctor', 'sameSize') : t('linkDoctor', 'differentSize')}`,
+      ),
+      problem.kind === 'brokenSymlink'
+        ? m(
+            'button',
+            {
+              type: 'button',
+              disabled: attrs.state.repairing !== undefined,
+              onclick: () => attrs.onRepoint(problem, candidate),
+            },
+            t('linkDoctor', 'useThis'),
+          )
+        : undefined,
+    ]),
+  );
+  if (entry.truncated) {
+    rows.push(
+      m('li.link-doctor__hint', { key: '__truncated__' }, t('linkDoctor', 'candidatesTruncated')),
+    );
+  }
+  return m('ul.link-doctor__candidates', rows);
 }
 
 /** Review panel for broken links found by the link doctor (task 0266). */

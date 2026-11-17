@@ -179,32 +179,36 @@ export const GeoFeaturePanel: FactoryComponent<GeoFeaturePanelAttrs> = () => {
             m(
               '.fm-geo-window',
               { style: { transform: `translateY(${first * rowHeight}px)` } },
-              rows.slice(first, last).map((row) => {
-                if (row.kind === 'property') return propertyRow(row.row, toggle);
+              rows.slice(first, last).flatMap((row) => {
+                if (row.kind === 'property') return [propertyRow(row.row, toggle)];
                 if (row.kind === 'empty') {
-                  return m('.fm-geo-row.fm-geo-empty', { key: 'empty' }, t('geo', 'noProperties'));
+                  return [
+                    m('.fm-geo-row.fm-geo-empty', { key: 'empty' }, t('geo', 'noProperties')),
+                  ];
                 }
                 const feature = document.collection.features[row.original];
-                if (feature === undefined) return undefined;
+                if (feature === undefined) return [];
                 const kind = geometryKind(feature.geometry);
                 const selected = row.original === selectedIndex;
                 const label = featureLabel(feature);
                 const typeLabel = kindLabel(kind, feature.geometry?.type);
-                return m(
-                  'button.fm-geo-row.fm-geo-feature',
-                  {
-                    key: `f${row.original}`,
-                    type: 'button',
-                    role: 'row',
-                    class: selected ? 'is-selected' : undefined,
-                    'aria-expanded': String(selected),
-                    onclick: () => onSelect(selected ? undefined : row.original),
-                  },
-                  [
-                    tooltip(typeLabel, geometryIcon(kind), { class: 'fm-geo-kind-wrap' }),
-                    label === '' ? m('span.fm-geo-label.is-empty') : cell(label, 'is-label'),
-                  ],
-                );
+                return [
+                  m(
+                    'button.fm-geo-row.fm-geo-feature',
+                    {
+                      key: `f${row.original}`,
+                      type: 'button',
+                      role: 'row',
+                      class: selected ? 'is-selected' : undefined,
+                      'aria-expanded': String(selected),
+                      onclick: () => onSelect(selected ? undefined : row.original),
+                    },
+                    [
+                      tooltip(typeLabel, geometryIcon(kind), { class: 'fm-geo-kind-wrap' }),
+                      label === '' ? m('span.fm-geo-label.is-empty') : cell(label, 'is-label'),
+                    ],
+                  ),
+                ];
               }),
             ),
           ]),

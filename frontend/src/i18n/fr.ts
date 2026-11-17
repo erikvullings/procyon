@@ -1785,6 +1785,7 @@ export const fr = {
     categoryVectors: 'Vecteurs non référencés',
     categoryConversationPins: 'Épingles de preuves de conversation enregistrées',
     enrolledRoots: 'Dossiers inclus',
+    indexedFoldersSummary: 'Dossiers indexés ({folders}) · {documents} documents',
     includedFoldersHelp:
       "Seuls ces dossiers et leurs sous-dossiers éligibles sont indexés. Ouvrir un dossier dans un volet ne l'inclut pas.",
     noEnrolledRoots: "Aucun dossier n'est encore inclus.",
@@ -2134,6 +2135,9 @@ export const fr = {
     searchInTheme: 'Rechercher dans ce thème',
     searchFailed: 'La recherche n’a pas pu être préparée.',
     scopeSelectedFolders: 'Dossiers sélectionnés',
+    viewsLabel: 'Vues',
+    foldersTab: 'Dossiers',
+    exportTab: 'Exporter',
     foldersHeading: 'Dossiers à analyser',
     foldersHint:
       'Les sujets de dossiers sans rapport se regroupent mal. Choisissez les dossiers qui vont ensemble.',
@@ -2487,6 +2491,9 @@ export const fr = {
     title: 'Recherche sémantique',
     openTitle: 'Recherche sémantique…',
     subjectsPlaceholder: 'Saisissez vos termes de recherche',
+    includeFolderNamed: 'Inclure le dossier « {folder} » dans la recherche sémantique',
+    folderNotIndexedHint:
+      '« {folder} » n’est pas encore indexé : il ne peut pas être recherché seul.',
     includeOnlyCurrentFolder: 'Inclure uniquement le dossier actuel « {folder} »',
     ask: 'Demander',
     question: 'Question sur ces résultats',

@@ -1770,6 +1770,7 @@ export const pl = {
     categoryVectors: 'Nieużywane wektory',
     categoryConversationPins: 'Zapisane przypięcia dowodów z rozmów',
     enrolledRoots: 'Uwzględnione foldery',
+    indexedFoldersSummary: 'Zindeksowane foldery ({folders}) · {documents} dokumentów',
     includedFoldersHelp:
       'Indeksowane są tylko te foldery i ich kwalifikujące się podfoldery. Otwarcie folderu w panelu nie powoduje jego uwzględnienia.',
     noEnrolledRoots: 'Nie uwzględniono jeszcze żadnych folderów.',
@@ -2119,6 +2120,9 @@ export const pl = {
     searchInTheme: 'Szukaj w tym temacie',
     searchFailed: 'Nie udało się przygotować wyszukiwania.',
     scopeSelectedFolders: 'Wybrane foldery',
+    viewsLabel: 'Widoki',
+    foldersTab: 'Foldery',
+    exportTab: 'Eksport',
     foldersHeading: 'Foldery do analizy',
     foldersHint:
       'Tematy z niepowiązanych folderów słabo się łączą. Wybierz foldery, które do siebie pasują.',
@@ -2467,6 +2471,9 @@ export const pl = {
     title: 'Wyszukiwanie semantyczne',
     openTitle: 'Wyszukiwanie semantyczne…',
     subjectsPlaceholder: 'Wpisz szukane terminy',
+    includeFolderNamed: 'Uwzględnij folder "{folder}" w wyszukiwaniu semantycznym',
+    folderNotIndexedHint:
+      '"{folder}" nie jest jeszcze zindeksowany, więc nie można w nim wyszukiwać osobno.',
     includeOnlyCurrentFolder: 'Uwzględnij tylko bieżący folder „{folder}”',
     ask: 'Zapytaj',
     question: 'Pytanie o te wyniki',

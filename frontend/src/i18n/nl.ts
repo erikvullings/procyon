@@ -1113,6 +1113,9 @@ export const nl = {
     searchInTheme: 'Zoeken binnen dit thema',
     searchFailed: 'De zoekopdracht kon niet worden voorbereid.',
     scopeSelectedFolders: 'Geselecteerde mappen',
+    viewsLabel: 'Weergaven',
+    foldersTab: 'Mappen',
+    exportTab: 'Exporteren',
     foldersHeading: 'Te analyseren mappen',
     foldersHint:
       'Onderwerpen uit niet-verwante mappen voegen slecht samen. Kies de mappen die bij elkaar horen.',
@@ -1277,6 +1280,9 @@ export const nl = {
     scopeEntireLibrary: 'Alle geïndexeerde mappen in deze werkruimte',
     scopeEnrolledRoots: 'Geselecteerde geïndexeerde bronmappen',
     scopeCurrentFolder: 'Huidige geïndexeerde map',
+    includeFolderNamed: 'Map "{folder}" opnemen voor semantisch zoeken',
+    folderNotIndexedHint:
+      '"{folder}" is nog niet geïndexeerd en kan dus niet los worden doorzocht.',
     includeOnlyCurrentFolder: 'Alleen huidige map "{folder}" meenemen',
     scopeSemanticResults: 'Huidige semantische resultatenset',
     roots: 'Geïndexeerde bronmappen',
@@ -2172,6 +2178,7 @@ export const nl = {
     categoryVectors: 'Niet-gerefereerde vectoren',
     categoryConversationPins: 'Opgeslagen gespreksbewijspinnen',
     enrolledRoots: 'Opgenomen mappen',
+    indexedFoldersSummary: 'Geïndexeerde mappen ({folders}) · {documents} documenten',
     includedFoldersHelp:
       'Alleen deze mappen en geschikte submappen worden geïndexeerd. Een map openen in een paneel neemt deze niet op.',
     noEnrolledRoots: 'Er zijn nog geen mappen opgenomen.',

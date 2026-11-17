@@ -1780,6 +1780,7 @@ export const pt = {
     categoryVectors: 'Vetores não referenciados',
     categoryConversationPins: 'Marcadores de evidência de conversas guardados',
     enrolledRoots: 'Pastas incluídas',
+    indexedFoldersSummary: 'Pastas indexadas ({folders}) · {documents} documentos',
     includedFoldersHelp:
       'Apenas estas pastas e as respetivas subpastas elegíveis são indexadas. Abrir uma pasta num painel não a inclui.',
     noEnrolledRoots: 'Ainda não há pastas incluídas.',
@@ -2128,6 +2129,9 @@ export const pt = {
     searchInTheme: 'Pesquisar neste tema',
     searchFailed: 'Não foi possível preparar a pesquisa.',
     scopeSelectedFolders: 'Pastas selecionadas',
+    viewsLabel: 'Vistas',
+    foldersTab: 'Pastas',
+    exportTab: 'Exportar',
     foldersHeading: 'Pastas a analisar',
     foldersHint:
       'Temas de pastas não relacionadas combinam mal. Escolha as pastas que pertencem juntas.',
@@ -2480,6 +2484,9 @@ export const pt = {
     title: 'Pesquisa semântica',
     openTitle: 'Pesquisa semântica…',
     subjectsPlaceholder: 'Introduza os termos de pesquisa',
+    includeFolderNamed: 'Incluir a pasta "{folder}" na pesquisa semântica',
+    folderNotIndexedHint:
+      '"{folder}" ainda não está indexada, por isso não pode ser pesquisada isoladamente.',
     includeOnlyCurrentFolder: 'Incluir apenas a pasta atual "{folder}"',
     ask: 'Perguntar',
     question: 'Pergunta sobre estes resultados',

@@ -1801,6 +1801,7 @@ export const de = {
     categoryVectors: 'Nicht referenzierte Vektoren',
     categoryConversationPins: 'Gespeicherte Belegmarkierungen aus Gesprächen',
     enrolledRoots: 'Einbezogene Ordner',
+    indexedFoldersSummary: 'Indizierte Ordner ({folders}) · {documents} Dokumente',
     includedFoldersHelp:
       'Nur diese Ordner und infrage kommende Unterordner werden indiziert. Das Öffnen eines Ordners in einem Bereich bezieht ihn nicht ein.',
     noEnrolledRoots: 'Es sind noch keine Ordner einbezogen.',
@@ -2145,6 +2146,9 @@ export const de = {
     searchInTheme: 'In diesem Thema suchen',
     searchFailed: 'Die Suche konnte nicht vorbereitet werden.',
     scopeSelectedFolders: 'Ausgewählte Ordner',
+    viewsLabel: 'Ansichten',
+    foldersTab: 'Ordner',
+    exportTab: 'Exportieren',
     foldersHeading: 'Zu analysierende Ordner',
     foldersHint:
       'Themen aus nicht zusammengehörigen Ordnern lassen sich schlecht zusammenführen. Wählen Sie die Ordner, die zusammengehören.',
@@ -2497,6 +2501,9 @@ export const de = {
     title: 'Semantische Suche',
     openTitle: 'Semantische Suche…',
     subjectsPlaceholder: 'Suchbegriffe eingeben',
+    includeFolderNamed: 'Ordner "{folder}" für die semantische Suche einbeziehen',
+    folderNotIndexedHint:
+      '"{folder}" ist noch nicht indiziert und kann daher nicht allein durchsucht werden.',
     includeOnlyCurrentFolder: 'Nur aktuellen Ordner "{folder}" einbeziehen',
     ask: 'Fragen',
     question: 'Frage zu diesen Ergebnissen',

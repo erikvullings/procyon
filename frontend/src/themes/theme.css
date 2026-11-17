@@ -6028,9 +6028,37 @@ button.fm-activity-count {
 .fm-themes-view {
   box-sizing: border-box;
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.fm-themes-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   padding: 1rem;
+  display: grid;
+  gap: 0.75rem;
   align-content: start;
+}
+
+.fm-themes-statusbar {
+  flex: 0 0 auto;
+}
+
+.fm-themes-status-tab {
+  height: calc(var(--fm-row-height) - 2px) !important;
+  padding: 0 0.6rem !important;
+  color: var(--fm-text-muted);
+  font: inherit;
+  line-height: calc(var(--fm-row-height) - 2px) !important;
+  text-transform: none;
+}
+
+.fm-themes-status-tab[aria-pressed="true"] {
+  color: var(--fm-accent);
+  background: color-mix(in srgb, var(--fm-text) 10%, transparent);
 }
 
 .fm-themes-header {
@@ -6406,11 +6434,6 @@ button.fm-activity-count {
   flex-wrap: wrap;
 }
 
-.fm-themes-export summary {
-  cursor: pointer;
-  font-weight: 600;
-}
-
 .fm-themes-export-body {
   display: flex;
   flex-direction: column;
@@ -6571,6 +6594,16 @@ button.fm-activity-count {
 .fm-toolbar-overflow-button {
   position: relative;
   z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  text-align: center;
+}
+
+.fm-toolbar-overflow-button svg {
+  display: block;
+  margin: 0;
 }
 
 .fm-toolbar-overflow-backdrop {

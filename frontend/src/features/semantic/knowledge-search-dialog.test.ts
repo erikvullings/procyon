@@ -318,7 +318,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
   it('offers one-way inclusion for an unindexed current folder', async () => {
     const currentFolder = { providerId: 'local', uri: 'file:///documents' };
-    let displayedFolder = currentFolder;
+    const displayedFolder = currentFolder;
     const client = new MockFileManagerClient();
     vi.spyOn(client, 'getSemanticFolderStatus').mockResolvedValue({
       consent: 'notIncluded',
@@ -333,20 +333,38 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     await ready();
 
     const include = root.querySelector<HTMLButtonElement>('.fm-knowledge-include-folder-action');
-    expect(include?.textContent).toBe('Include folder for semantic search');
+    expect(include?.textContent).toBe('Include folder "documents" for semantic search');
     const confirm = vi.spyOn(client, 'confirmSemanticEnrolment');
     const preview = vi.spyOn(client, 'previewSemanticEnrolment');
     include?.focus();
     expect(document.activeElement).toBe(include);
     expect(confirm).not.toHaveBeenCalled();
-    displayedFolder = { providerId: 'local', uri: 'file:///other' };
-    m.redraw.sync();
     include?.click();
     await vi.waitFor(() => expect(root.querySelector('.fm-semantic-folder-prompt')).not.toBeNull());
     await vi.waitFor(() =>
       expect(preview).toHaveBeenCalledWith(expect.objectContaining({ location: currentFolder })),
     );
     expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('stops offering inclusion once another folder is shown (the backend would refuse it)', async () => {
+    const currentFolder = { providerId: 'local', uri: 'file:///documents' };
+    let displayedFolder = currentFolder;
+    const client = new MockFileManagerClient();
+    vi.spyOn(client, 'getSemanticFolderStatus').mockResolvedValue({
+      consent: 'notIncluded',
+      rootId: null,
+      exclusionId: null,
+      workspaceReferenced: false,
+      sourceAvailable: true,
+      unavailableReason: null,
+    });
+    mount({ client, currentFolder: () => displayedFolder });
+    await ready();
+    expect(root.querySelector('.fm-knowledge-include-folder-action')).not.toBeNull();
+    displayedFolder = { providerId: 'local', uri: 'file:///other' };
+    m.redraw.sync();
+    expect(root.querySelector('.fm-knowledge-include-folder-action')).toBeNull();
   });
 
   it('does not offer folder removal when the current folder is already included', async () => {
