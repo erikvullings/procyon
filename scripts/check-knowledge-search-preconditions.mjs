@@ -7,7 +7,8 @@
 // so the ordinary workspace test run does not cover them; a release that claims
 // a measured go must therefore run them on the platform it is building for.
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /// Exactly the checks that must hold on the platform being released.
@@ -107,9 +108,48 @@ if (process.argv.includes('--check-report')) {
   process.exit(0);
 }
 
+/**
+ * Zvec 0.8.1's build script canonicalizes its native library directory, which on Windows yields a
+ * `\\?\` verbatim path that Cargo then puts on the test executable's PATH; the DLL loader does
+ * not honour that prefix, so the tests die with STATUS_DLL_NOT_FOUND. Find the real directory and
+ * put it on PATH ourselves. Other platforms resolve the library through rpath.
+ */
+function windowsZvecPath() {
+  if (process.platform !== 'win32') return process.env;
+  const build = spawnSync(command, [...commonArguments, '--no-run'], { encoding: 'utf8' });
+  if (build.error) throw build.error;
+  if (build.status !== 0) {
+    process.stderr.write(`${build.stdout ?? ''}${build.stderr ?? ''}`);
+    throw new Error('building the full-text checks failed');
+  }
+  const root = fileURLToPath(new URL('../target/debug/build', import.meta.url));
+  const directories = existsSync(root)
+    ? readdirSync(root, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory() && entry.name.startsWith('zvec-rust-sys-'))
+        .flatMap((entry) => {
+          const prebuilt = path.join(root, entry.name, 'out', 'zvec-prebuilt');
+          return existsSync(prebuilt)
+            ? readdirSync(prebuilt, { recursive: true, withFileTypes: true })
+                .filter((file) => file.isFile() && file.name === 'zvec_c_api.dll')
+                .map((file) => file.parentPath)
+            : [];
+        })
+    : [];
+  if (directories.length === 0) throw new Error('zvec_c_api.dll was not found after the build');
+  const key = Object.keys(process.env).find((name) => name.toLowerCase() === 'path') ?? 'PATH';
+  return {
+    ...process.env,
+    [key]: [...new Set(directories), process.env[key]].join(path.delimiter),
+  };
+}
+const testEnvironment = windowsZvecPath();
+
 for (let index = 0; index < REQUIRED_TESTS.length; index += 1) {
   const name = REQUIRED_TESTS[index];
-  const result = spawnSync(plan.command, plan.invocations[index], { encoding: 'utf8' });
+  const result = spawnSync(plan.command, plan.invocations[index], {
+    encoding: 'utf8',
+    env: testEnvironment,
+  });
   if (result.error) throw result.error;
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   process.stdout.write(output);
