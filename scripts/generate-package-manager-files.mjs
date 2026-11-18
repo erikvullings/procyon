@@ -98,7 +98,7 @@ function generateChocolatey() {
   // (e.g. "0.1.0-6") - it wants dotted numeric identifiers instead ("0.1.0.6").
   const chocolateyVersion = options.version.replace('-', '.');
   const nuspec = `<?xml version="1.0" encoding="utf-8"?>
-<package xmlns="http://schemas.microsoft.com/packaging/2011/10/nuspec.xsd">
+<package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
   <metadata>
     <id>procyon</id>
     <version>${chocolateyVersion}</version>
@@ -120,15 +120,11 @@ function generateChocolatey() {
 
     <iconUrl>https://cdn.jsdelivr.net/gh/${options.repository}@v${options.version}/apps/fm-desktop/src-tauri/icons/icon.png</iconUrl>
 
-    <summary>
-      Dual-pane file manager for Windows and macOS.
-    </summary>
+    <summary>Dual-pane file manager for Windows and macOS.</summary>
 
-    <description>
-      Procyon is a modern dual-pane file manager built with Tauri.
+    <description>Procyon is a modern dual-pane file manager built with Tauri.
       It provides efficient file navigation and file management with
-      native desktop hosts for Windows and macOS.
-    </description>
+      native desktop hosts for Windows and macOS.</description>
 
     <tags>
       file-manager dual-pane explorer tauri windows macos productivity
