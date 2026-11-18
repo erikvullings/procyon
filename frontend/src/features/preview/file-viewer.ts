@@ -32,7 +32,7 @@ import { PlaylistView, type PlaylistViewAttrs } from '../playlist/playlist-view'
 import { copyText } from './clipboard';
 import { previewExtension } from './content-preview';
 import { copyWithToast } from './copy-with-toast';
-import { supportsDocumentSummary } from './document-summary-support';
+import { documentSummaryActionKey, supportsDocumentSummary } from './document-summary-support';
 import type { FileViewerMetadata } from './file-metadata';
 import type {
   FileViewerEpubSearchState,
@@ -55,7 +55,7 @@ import {
   renderPdfPageToCanvas,
   renderPdfSearchHighlights,
 } from './pdf-preview';
-import { SqliteBrowser, type SqliteBrowserActions } from './sqlite-view';
+import { SqliteBrowser, type SqliteBrowserActions, sqliteTablePicker } from './sqlite-view';
 import './file-viewer.css';
 
 const noop = (): void => undefined;
@@ -1811,7 +1811,19 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                   ),
                 )
               : undefined,
-            m('strong.fm-file-viewer-title', state.entry.name),
+            m(
+              'strong.fm-file-viewer-title',
+              {
+                class:
+                  state.status === 'ready' && state.content.kind === 'sqlite'
+                    ? 'is-crumb'
+                    : undefined,
+              },
+              state.entry.name,
+            ),
+            state.status === 'ready' && state.content.kind === 'sqlite'
+              ? sqliteTablePicker(state.content, attrs.sqlite)
+              : undefined,
             attrs.gallery === undefined
               ? undefined
               : m('.fm-file-viewer-gallery', { role: 'group' }, [
@@ -2109,7 +2121,7 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                     type: 'button',
                     onclick: attrs.onDocumentSummary,
                   },
-                  t('documentSummary', 'generate'),
+                  t('documentSummary', documentSummaryActionKey(state.entry)),
                 ),
             // A pane tab is closed from the tab header, so the header offers a new tab instead.
             // A standalone viewer window has no tab header and keeps the close button.
