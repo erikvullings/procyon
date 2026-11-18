@@ -3321,6 +3321,55 @@ describe('AppShell', () => {
       capabilities: ['chatCompletions'],
       redactFilenames: false,
     });
+    const originalListDirectory = client.listDirectory.bind(client);
+    vi.spyOn(client, 'listDirectory').mockImplementation(async (request, signal) => {
+      const snapshot = await originalListDirectory(request, signal);
+      return {
+        ...snapshot,
+        entries: snapshot.entries.map((entry) =>
+          entry.name === '.env'
+            ? {
+                ...entry,
+                id: 'entry-notes',
+                name: 'notes.md',
+                extension: 'md',
+                location: { ...entry.location, uri: 'mock:///notes.md' },
+              }
+            : entry,
+        ),
+      };
+    });
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+
+    await vi.waitFor(() => expect(directoryRowNamed(root, 'notes.md')).not.toBeUndefined());
+    const activePane = root.querySelector<HTMLElement>('[data-active="true"] > .fm-pane');
+    directoryRowNamed(activePane, 'notes.md')?.click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F3', bubbles: true }));
+
+    await vi.waitFor(() => expect(root.querySelector('.fm-file-viewer-summary')).not.toBeNull());
+  });
+
+  it('offers no summary for data files such as JSON', async () => {
+    const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
+    await client.createLlmProfile({
+      name: 'Local profile',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'qwen3:8b',
+      credential: null,
+      advanced: {
+        contextWindow: 8192,
+        maximumAnswerTokens: 1024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions'],
+      redactFilenames: false,
+    });
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
 
     await vi.waitFor(() => expect(root.textContent).toContain('.env'));
@@ -3328,7 +3377,8 @@ describe('AppShell', () => {
     directoryRowNamed(activePane, '.env')?.click();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F3', bubbles: true }));
 
-    await vi.waitFor(() => expect(root.querySelector('.fm-file-viewer-summary')).not.toBeNull());
+    await vi.waitFor(() => expect(root.querySelector('.fm-file-viewer')).not.toBeNull());
+    expect(root.querySelector('.fm-file-viewer-summary')).toBeNull();
   });
 
   it('opens an external-only F3 video in the OS default player', async () => {
@@ -3672,7 +3722,7 @@ describe('AppShell', () => {
     );
   });
 
-  it('closes the Lister viewer via its close button', async () => {
+  it('closes the Lister viewer via its tab close button', async () => {
     const client = new MockFileManagerClient();
     m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
     await vi.waitFor(() => expect(root.textContent).toContain('.env'));
@@ -3695,7 +3745,7 @@ describe('AppShell', () => {
     viewerPane?.querySelectorAll<HTMLButtonElement>('.fm-pane-tab')[1]?.click();
     await vi.waitFor(() => expect(root.querySelector('.fm-file-viewer')).not.toBeNull());
 
-    root.querySelector<HTMLButtonElement>('.fm-file-viewer-close')?.click();
+    viewerPane?.querySelectorAll<HTMLButtonElement>('.fm-pane-tab-close')[1]?.click();
 
     await vi.waitFor(() => expect(root.querySelector('.fm-file-viewer')).toBeNull());
     expect(viewerPane?.classList.contains('fm-pane-viewer')).toBe(false);
@@ -5412,15 +5462,13 @@ describe('AppShell', () => {
     expect(root.querySelector('.fm-knowledge-search')?.textContent).not.toContain(
       'Generate answer',
     );
-    expect(root.querySelector('.fm-pane-tabs')?.textContent).toContain('Semantic Search');
+    expect(root.querySelector('.fm-pane-tabs')?.textContent).toContain('Semantic');
     expect(dispatchWorkspaceCommand).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'addTransientTab' }),
       undefined,
     );
 
-    root
-      .querySelector<HTMLButtonElement>('.fm-pane-tab-close[aria-label*="Semantic Search"]')
-      ?.click();
+    root.querySelector<HTMLButtonElement>('.fm-pane-tab-close[aria-label*="Semantic"]')?.click();
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-search')).toBeNull());
   });
 
@@ -5565,10 +5613,10 @@ describe('AppShell', () => {
     );
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-workspace')).not.toBeNull());
     expect(root.querySelector('.fm-rag-ask-modal')).toBeNull();
-    expect(root.querySelector('.fm-knowledge-include-folder-action')?.textContent).toBe(
+    expect(root.querySelector('.fm-knowledge-folder-filter span')?.textContent).toBe(
       'Include folder "/" for semantic search',
     );
-    root.querySelector<HTMLButtonElement>('.fm-knowledge-include-folder-action')?.click();
+    root.querySelector<HTMLInputElement>('.fm-knowledge-folder-filter input')?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
     [...root.querySelectorAll<HTMLButtonElement>('.fm-semantic-enrolment-modal button')]
       .find((button) => button.textContent?.trim() === 'Cancel')
@@ -5578,7 +5626,7 @@ describe('AppShell', () => {
         'true',
       ),
     );
-    root.querySelector<HTMLButtonElement>('.fm-knowledge-include-folder-action')?.click();
+    root.querySelector<HTMLInputElement>('.fm-knowledge-folder-filter input')?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('Include this folder?'));
     expect(root.querySelector<HTMLInputElement>('#fm-semantic-folder-consent')).toBeNull();
     const includeButton = await vi.waitFor(() => {
@@ -5591,7 +5639,9 @@ describe('AppShell', () => {
     includeButton?.click();
 
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-knowledge-include-folder-action')).toBeNull(),
+      expect(
+        root.querySelector('.fm-knowledge-folder-filter span')?.textContent ?? '',
+      ).not.toContain('for semantic search'),
     );
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-semantic-enrolment-modal')?.getAttribute('aria-hidden')).toBe(
@@ -5673,7 +5723,7 @@ describe('AppShell', () => {
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-workspace')).not.toBeNull());
     const tabs = (): number =>
       [...root.querySelectorAll('.fm-pane-tab')].filter((tab) =>
-        tab.textContent?.includes('Semantic Search'),
+        tab.textContent?.includes('Semantic'),
       ).length;
     expect(tabs()).toBe(1);
 

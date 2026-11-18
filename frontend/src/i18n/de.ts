@@ -2106,6 +2106,7 @@ export const de = {
     testFailed: 'Verbindungstest fehlgeschlagen: {category}.',
   },
   themes: {
+    tabTitle: 'Themen',
     title: 'Themen der Sammlung',
     openTitle: 'Themen erkunden',
     openDescription: 'Die Themen Ihrer indizierten Dokumente entdecken',
@@ -2151,7 +2152,7 @@ export const de = {
     viewsLabel: 'Ansichten',
     foldersTab: 'Ordner',
     exportTab: 'Exportieren',
-    foldersHeading: 'Zu analysierende Ordner',
+    foldersHeading: 'Ordner zum Gruppieren',
     foldersHint:
       'Themen aus nicht zusammengehörigen Ordnern lassen sich schlecht zusammenführen. Wählen Sie die Ordner, die zusammengehören.',
     applyFolders: 'Themen für diese Ordner anzeigen',
@@ -2178,6 +2179,11 @@ export const de = {
   },
   documentSummary: {
     title: 'Zusammenfassung · {name}',
+    describeCode: 'Code beschreiben',
+    codeTitle: 'Beschreibung · {name}',
+    writeToFile: 'Als Kommentar in die Datei schreiben',
+    writeFailed: 'Die Datei konnte nicht geändert werden.',
+    writtenToFile: 'Als Kommentar am Anfang der Datei eingefügt.',
     copy: 'Kopieren',
     copied: 'Kopiert',
     copyAll: 'Zusammenfassung kopieren',
@@ -2344,6 +2350,7 @@ export const de = {
       'Diese Felder gelten nur für die Antwort; sie werden mit der Abfrage gespeichert, aber nie durchsucht.',
     excludedField: '{field}: {value}',
     plan: 'Abfrageplan',
+    showPlan: 'Plan anzeigen',
     planVersion: 'Planer {version}',
     planScope: 'Umfang: {scope}',
     planSources: '{count} autorisierte indizierte Quelle(n)',
@@ -2483,7 +2490,6 @@ export const de = {
     answerCitations: 'Quellen ({count})',
     answerCitationNotDisplayed: 'nicht Teil der angezeigten Belege',
     openCitation: '{label} öffnen',
-    showAdvanced: 'Erweitert',
     trace: 'Abrufprotokoll einbeziehen',
     traceHeading: 'Abrufprotokoll',
     traceSummary:
@@ -2500,6 +2506,7 @@ export const de = {
     pdfImageResult: 'Eingebettetes PDF-Bild · Seite {page} · Bild {image}',
     pdfPageRenderEvidence: 'Gerenderte PDF-Seite (kein eingebettetes Bild)',
     pdfPageRenderResult: 'Gerenderte PDF-Seite · Seite {page}',
+    tabTitle: 'Semantisch',
     title: 'Semantische Suche',
     openTitle: 'Semantische Suche…',
     subjectsPlaceholder: 'Suchbegriffe eingeben',

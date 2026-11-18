@@ -5,6 +5,9 @@ allowBuilds:
 overrides:
   '@codemirror/state': 6.7.6
   '@codemirror/view': 6.43.13
+  # One @lezer/highlight for the parsers and @codemirror/language: two copies give mismatched
+  # tags, so no token is ever styled.
+  '@lezer/highlight': 1.2.5
 minimumReleaseAgeExclude:
   - jsdom@30.0.1
   - mithril-materialized@3.17.7 || 3.17.9 || 4.0.0

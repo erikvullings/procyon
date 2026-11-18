@@ -486,8 +486,8 @@ content streaming, and mapping concerns live in dedicated modules with interface
 - [x] 0283 Semantic indexing for large JSONL files *(streamed converter; whole-line windows fed to the
   worker as sub-documents with absolute line/byte provenance, no file-size limit; skipped-line counts
   are in the host report/log only, not the UI, see task notes)*
-- [ ] 0284 Corpus themes and 2D embedding cluster map *(in_progress — slices 1-3 built, gaps listed in task notes;
-  needs 0185, 0283)*
+- [x] 0284 Corpus themes and 2D embedding cluster map *(done — themes, map, folder selection, SKOS labels;
+  document-granular theme search by decision, see task notes; needs 0185, 0283)*
 - [ ] 0285 Rebuild PDF table rows in semantic conversion *(open — text-layer path emits one paragraph per
   table cell; related to 0284)*
 - [x] 0286 OCR: opt-in replace original PDF with OCR'd version *(done — local writable files only,

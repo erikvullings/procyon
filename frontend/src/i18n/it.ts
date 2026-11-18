@@ -2084,6 +2084,7 @@ export const it = {
     testFailed: 'Test di connessione non riuscito: {category}.',
   },
   themes: {
+    tabTitle: 'Temi',
     title: 'Temi del corpus',
     openTitle: 'Esplora i temi',
     openDescription: 'Scopri gli argomenti dei tuoi documenti indicizzati',
@@ -2128,7 +2129,7 @@ export const it = {
     viewsLabel: 'Viste',
     foldersTab: 'Cartelle',
     exportTab: 'Esporta',
-    foldersHeading: 'Cartelle da analizzare',
+    foldersHeading: 'Cartelle da raggruppare',
     foldersHint:
       'Gli argomenti di cartelle non correlate si fondono male. Scegli le cartelle che vanno insieme.',
     applyFolders: 'Mostra i temi per queste cartelle',
@@ -2155,6 +2156,11 @@ export const it = {
   },
   documentSummary: {
     title: 'Riepilogo · {name}',
+    describeCode: 'Descrivi codice',
+    codeTitle: 'Descrizione · {name}',
+    writeToFile: 'Aggiungi come commento al file',
+    writeFailed: 'Impossibile modificare il file.',
+    writtenToFile: 'Aggiunto come commento in cima al file.',
     copy: 'Copia',
     copied: 'Copiato',
     copyAll: 'Copia riepilogo',
@@ -2317,6 +2323,7 @@ export const it = {
       'Questi campi servono solo per la risposta: vengono conservati con la query ma non vengono mai cercati.',
     excludedField: '{field}: {value}',
     plan: 'Piano di query',
+    showPlan: 'Mostra piano',
     planVersion: 'Pianificatore {version}',
     planScope: 'Ambito: {scope}',
     planSources: '{count} fonte/i indicizzata/e autorizzata/e',
@@ -2455,7 +2462,6 @@ export const it = {
     answerCitations: 'Fonti ({count})',
     answerCitationNotDisplayed: 'non fa parte delle prove mostrate',
     openCitation: 'Apri {label}',
-    showAdvanced: 'Avanzate',
     trace: 'Includi la traccia di recupero',
     traceHeading: 'Traccia di recupero',
     traceSummary:
@@ -2473,6 +2479,7 @@ export const it = {
     pdfImageResult: 'Immagine incorporata nel PDF · Pagina {page} · Immagine {image}',
     pdfPageRenderEvidence: 'Pagina PDF renderizzata (non immagine incorporata)',
     pdfPageRenderResult: 'Pagina PDF renderizzata · Pagina {page}',
+    tabTitle: 'Semantica',
     title: 'Ricerca semantica',
     openTitle: 'Ricerca semantica…',
     subjectsPlaceholder: 'Inserisci i termini di ricerca',

@@ -2080,6 +2080,7 @@ export const pl = {
     testFailed: 'Test połączenia nie powiódł się: {category}.',
   },
   themes: {
+    tabTitle: 'Tematy',
     title: 'Tematy korpusu',
     openTitle: 'Przeglądaj tematy',
     openDescription: 'Odkryj tematy w zindeksowanych dokumentach',
@@ -2125,7 +2126,7 @@ export const pl = {
     viewsLabel: 'Widoki',
     foldersTab: 'Foldery',
     exportTab: 'Eksport',
-    foldersHeading: 'Foldery do analizy',
+    foldersHeading: 'Foldery do grupowania',
     foldersHint:
       'Tematy z niepowiązanych folderów słabo się łączą. Wybierz foldery, które do siebie pasują.',
     applyFolders: 'Pokaż tematy dla tych folderów',
@@ -2152,6 +2153,11 @@ export const pl = {
   },
   documentSummary: {
     title: 'Podsumowanie · {name}',
+    describeCode: 'Opisz kod',
+    codeTitle: 'Opis · {name}',
+    writeToFile: 'Dodaj jako komentarz do pliku',
+    writeFailed: 'Nie udało się zmienić pliku.',
+    writtenToFile: 'Dodano jako komentarz na początku pliku.',
     copy: 'Kopiuj',
     copied: 'Skopiowano',
     copyAll: 'Kopiuj podsumowanie',
@@ -2318,6 +2324,7 @@ export const pl = {
       'Te pola służą tylko do odpowiedzi: są przechowywane z zapytaniem, ale nigdy nie są przeszukiwane.',
     excludedField: '{field}: {value}',
     plan: 'Plan zapytania',
+    showPlan: 'Pokaż plan',
     planVersion: 'Planista {version}',
     planScope: 'Zakres: {scope}',
     planSources: 'Autoryzowane zindeksowane źródła: {count}',
@@ -2453,7 +2460,6 @@ export const pl = {
     answerCitations: 'Źródła ({count})',
     answerCitationNotDisplayed: 'nie wchodzi w skład wyświetlanych dowodów',
     openCitation: 'Otwórz {label}',
-    showAdvanced: 'Zaawansowane',
     trace: 'Dołącz ślad pobierania',
     traceHeading: 'Ślad pobierania',
     traceSummary:
@@ -2470,6 +2476,7 @@ export const pl = {
     pdfImageResult: 'Obraz osadzony w pliku PDF · Strona {page} · Obraz {image}',
     pdfPageRenderEvidence: 'Wyrenderowana strona PDF (nie osadzony obraz)',
     pdfPageRenderResult: 'Wyrenderowana strona PDF · Strona {page}',
+    tabTitle: 'Semantyczne',
     title: 'Wyszukiwanie semantyczne',
     openTitle: 'Wyszukiwanie semantyczne…',
     subjectsPlaceholder: 'Wpisz szukane terminy',

@@ -27,10 +27,12 @@ import {
 } from '../entry-formatting/entry-formatting';
 import { isCsvEntry } from '../geo/geo-document';
 import { GeoView, type GeoViewAttrs } from '../geo/geo-view';
+import { newTabButton } from '../panes/tab-strip';
 import { PlaylistView, type PlaylistViewAttrs } from '../playlist/playlist-view';
 import { copyText } from './clipboard';
 import { previewExtension } from './content-preview';
 import { copyWithToast } from './copy-with-toast';
+import { documentSummaryActionKey, supportsDocumentSummary } from './document-summary-support';
 import type { FileViewerMetadata } from './file-metadata';
 import type {
   FileViewerEpubSearchState,
@@ -53,7 +55,7 @@ import {
   renderPdfPageToCanvas,
   renderPdfSearchHighlights,
 } from './pdf-preview';
-import { SqliteBrowser, type SqliteBrowserActions } from './sqlite-view';
+import { SqliteBrowser, type SqliteBrowserActions, sqliteTablePicker } from './sqlite-view';
 import './file-viewer.css';
 
 const noop = (): void => undefined;
@@ -134,6 +136,8 @@ export interface FileViewerAttrs {
     readonly onNext: () => void;
   };
   readonly onClose: () => void;
+  /** Opens a new tab beside this one; the header shows it in place of the close button when set. */
+  readonly onNewTab?: () => void;
 }
 
 /** Renders markdown as sanitized HTML and, whenever a search match is highlighted, wraps it in a
@@ -1807,7 +1811,19 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                   ),
                 )
               : undefined,
-            m('strong.fm-file-viewer-title', state.entry.name),
+            m(
+              'strong.fm-file-viewer-title',
+              {
+                class:
+                  state.status === 'ready' && state.content.kind === 'sqlite'
+                    ? 'is-crumb'
+                    : undefined,
+              },
+              state.entry.name,
+            ),
+            state.status === 'ready' && state.content.kind === 'sqlite'
+              ? sqliteTablePicker(state.content, attrs.sqlite)
+              : undefined,
             attrs.gallery === undefined
               ? undefined
               : m('.fm-file-viewer-gallery', { role: 'group' }, [
@@ -2097,7 +2113,7 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                   t('geoEdit', 'edit'),
                 )
               : undefined,
-            attrs.onDocumentSummary === undefined
+            attrs.onDocumentSummary === undefined || !supportsDocumentSummary(state.entry)
               ? undefined
               : m(
                   'button.fm-file-viewer-summary',
@@ -2105,20 +2121,24 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                     type: 'button',
                     onclick: attrs.onDocumentSummary,
                   },
-                  t('documentSummary', 'generate'),
+                  t('documentSummary', documentSummaryActionKey(state.entry)),
                 ),
-            tooltip(
-              t('viewer', 'closeViewer'),
-              m(
-                'button.fm-file-viewer-close',
-                {
-                  type: 'button',
-                  'aria-label': t('viewer', 'closeViewer'),
-                  onclick: attrs.onClose,
-                },
-                closeIcon({ size: 13 }),
-              ),
-            ),
+            // A pane tab is closed from the tab header, so the header offers a new tab instead.
+            // A standalone viewer window has no tab header and keeps the close button.
+            attrs.onNewTab === undefined
+              ? tooltip(
+                  t('viewer', 'closeViewer'),
+                  m(
+                    'button.fm-file-viewer-close',
+                    {
+                      type: 'button',
+                      'aria-label': t('viewer', 'closeViewer'),
+                      onclick: attrs.onClose,
+                    },
+                    closeIcon({ size: 13 }),
+                  ),
+                )
+              : newTabButton(attrs.onNewTab),
           ]),
           outlineOpen && outline.length > 0
             ? m(

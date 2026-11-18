@@ -1219,6 +1219,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     await shellState.workspaceController.switchWorkspace(workspaceId);
   }
 
+  /** Reads open viewers of `uri` again, so a file changed from outside the viewer shows at once. */
+  function reloadViewersOf(uri: string): void {
+    for (const viewer of shellState.viewerByTab.values()) {
+      if (viewer.state.entry.location.uri === uri) viewer.controller.reload();
+    }
+  }
+
   function refetchAffectedPanes(
     paneId?: PaneId,
     options?: {
@@ -2913,6 +2920,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
   }
 
   const appDialogsContext: AppDialogsContext = {
+    reloadViewersOf,
     resolveArchiveEditPrompt: (choice) => void resolveArchiveEditPrompt(choice),
     getHomeDirectory: () => shellState.homeDirectory,
     getOperationCentreVisible: () => shellState.workspace?.operationCentre.visible === true,

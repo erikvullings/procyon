@@ -162,7 +162,7 @@ identified above and does not inherit their image-only measurements.
 
 ## Installed development worker (feature-gated automatic selection)
 
-`pnpm dev:tauri:semantic:gemma:metal` builds a separately signed development
+`pnpm dev:tauri:semantic:gemma` builds a separately signed development
 bundle with `developer-bundle,gemma-native,gemma-metal`; no runtime Metal
 opt-in flag or environment variable is needed. The worker selects the backend
 from its compiled feature and device availability.

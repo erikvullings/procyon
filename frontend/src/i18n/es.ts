@@ -2086,6 +2086,7 @@ export const es = {
     testFailed: 'Falló la prueba de conexión: {category}.',
   },
   themes: {
+    tabTitle: 'Temas',
     title: 'Temas del corpus',
     openTitle: 'Explorar temas',
     openDescription: 'Descubra los temas de sus documentos indexados',
@@ -2130,7 +2131,7 @@ export const es = {
     viewsLabel: 'Vistas',
     foldersTab: 'Carpetas',
     exportTab: 'Exportar',
-    foldersHeading: 'Carpetas que analizar',
+    foldersHeading: 'Carpetas para agrupar',
     foldersHint:
       'Los temas de carpetas sin relación se combinan mal. Elija las carpetas que van juntas.',
     applyFolders: 'Mostrar temas de estas carpetas',
@@ -2157,6 +2158,11 @@ export const es = {
   },
   documentSummary: {
     title: 'Resumen · {name}',
+    describeCode: 'Describir código',
+    codeTitle: 'Descripción · {name}',
+    writeToFile: 'Añadir como comentario al archivo',
+    writeFailed: 'No se pudo modificar el archivo.',
+    writtenToFile: 'Añadido como comentario al principio del archivo.',
     copy: 'Copiar',
     copied: 'Copiado',
     copyAll: 'Copiar resumen',
@@ -2321,6 +2327,7 @@ export const es = {
       'Estos campos son solo para la respuesta: se conservan con la consulta, pero nunca se buscan.',
     excludedField: '{field}: {value}',
     plan: 'Plan de consulta',
+    showPlan: 'Mostrar plan',
     planVersion: 'Planificador {version}',
     planScope: 'Ámbito: {scope}',
     planSources: '{count} fuente(s) indexada(s) autorizada(s)',
@@ -2458,7 +2465,6 @@ export const es = {
     answerCitations: 'Fuentes ({count})',
     answerCitationNotDisplayed: 'no forma parte de la evidencia mostrada',
     openCitation: 'Abrir {label}',
-    showAdvanced: 'Avanzado',
     trace: 'Incluir el rastreo de recuperación',
     traceHeading: 'Rastreo de recuperación',
     traceSummary:
@@ -2476,6 +2482,7 @@ export const es = {
     pdfImageResult: 'Imagen incrustada en el PDF · Página {page} · Imagen {image}',
     pdfPageRenderEvidence: 'Página PDF renderizada (no es una imagen incrustada)',
     pdfPageRenderResult: 'Página PDF renderizada · Página {page}',
+    tabTitle: 'Semántica',
     title: 'Búsqueda semántica',
     openTitle: 'Búsqueda semántica…',
     subjectsPlaceholder: 'Introduce los términos de búsqueda',

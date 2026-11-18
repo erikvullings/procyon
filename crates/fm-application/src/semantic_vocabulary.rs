@@ -4,7 +4,7 @@
     reason = "worker-facing labelling primitives are consumed by injected semantic capabilities"
 )]
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
@@ -897,6 +897,27 @@ pub(crate) enum VocabularyError {
 }
 
 // --- Conversions (folded from `semantic_vocabulary_mapping`) ---
+
+/// Preferred label per concept URI across vocabularies. English wins, then any language; the first
+/// vocabulary naming a URI decides, so the result is deterministic for a given store.
+pub(crate) fn preferred_labels(vocabularies: &[Vocabulary]) -> HashMap<String, String> {
+    let mut labels = HashMap::new();
+    for vocabulary in vocabularies {
+        for concept in vocabulary.concepts.values() {
+            if labels.contains_key(&concept.uri) {
+                continue;
+            }
+            let label = concept
+                .pref_labels
+                .get("en")
+                .or_else(|| concept.pref_labels.values().next());
+            if let Some(label) = label.filter(|label| !label.trim().is_empty()) {
+                labels.insert(concept.uri.clone(), label.clone());
+            }
+        }
+    }
+    labels
+}
 
 pub(crate) fn vocabulary_to_dto(vocabulary: Vocabulary) -> SemanticVocabularyDto {
     SemanticVocabularyDto {

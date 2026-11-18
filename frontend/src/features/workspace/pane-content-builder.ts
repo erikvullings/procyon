@@ -558,10 +558,10 @@ export function createPaneContentBuilder(
         viewerTitles.set(tabId, t('diskUsage', 'tabTitle'));
       }
       if (context.getKnowledgeSearchByTab().has(context.tabKey(paneId, tabId))) {
-        viewerTitles.set(tabId, t('knowledgeSearch', 'title'));
+        viewerTitles.set(tabId, t('knowledgeSearch', 'tabTitle'));
       }
       if (context.getThemesByTab().has(context.tabKey(paneId, tabId))) {
-        viewerTitles.set(tabId, t('themes', 'title'));
+        viewerTitles.set(tabId, t('themes', 'tabTitle'));
       }
       if (context.getAssistantByTab?.().has(context.tabKey(paneId, tabId))) {
         viewerTitles.set(tabId, t('assistant', 'title'));
@@ -1328,12 +1328,15 @@ export function createPaneContentBuilder(
                       themes !== undefined ||
                       context.getViewerByTab().has(key))
                   ? {
+                      // Themes, search and viewers draw their own header with the new-tab button.
+                      viewerOwnsTabActions: true,
                       viewerContent: (() => {
                         if (themes !== undefined) {
                           const exportFolder = exportFolderOf(themes.scopes);
                           return m(ThemesView, {
                             client,
                             scopes: themes.scopes,
+                            onNewTab: () => context.openNewTab?.(paneId),
                             onOpenPassage: context.openThemePassage,
                             onSearchSources: context.searchThemeSources,
                             selectedRootIds:
@@ -1354,6 +1357,7 @@ export function createPaneContentBuilder(
                         if (knowledgeSearch !== undefined) {
                           return m(KnowledgeSearchPane, {
                             open: true,
+                            onNewTab: () => context.openNewTab?.(paneId),
                             client,
                             workspaceId: knowledgeSearch.workspaceId,
                             currentFolder: knowledgeSearch.currentFolder,
@@ -1391,6 +1395,7 @@ export function createPaneContentBuilder(
                           FileViewer,
                           fileViewerAttrs(viewer.state, viewer.controller, {
                             openExternalUrl: (url) => void client.openExternalUrl(url),
+                            onNewTab: () => context.openNewTab?.(paneId),
                             mapClient: client,
                             ...(videoPosterDataUri === undefined ? {} : { videoPosterDataUri }),
                             quickLookAvailable,

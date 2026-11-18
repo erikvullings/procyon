@@ -2089,6 +2089,7 @@ export const pt = {
     testFailed: 'O teste de ligação falhou: {category}.',
   },
   themes: {
+    tabTitle: 'Temas',
     title: 'Temas do corpus',
     openTitle: 'Explorar temas',
     openDescription: 'Descubra os assuntos dos seus documentos indexados',
@@ -2134,7 +2135,7 @@ export const pt = {
     viewsLabel: 'Vistas',
     foldersTab: 'Pastas',
     exportTab: 'Exportar',
-    foldersHeading: 'Pastas a analisar',
+    foldersHeading: 'Pastas a agrupar',
     foldersHint:
       'Temas de pastas não relacionadas combinam mal. Escolha as pastas que pertencem juntas.',
     applyFolders: 'Mostrar temas destas pastas',
@@ -2161,6 +2162,11 @@ export const pt = {
   },
   documentSummary: {
     title: 'Resumo · {name}',
+    describeCode: 'Descrever código',
+    codeTitle: 'Descrição · {name}',
+    writeToFile: 'Adicionar como comentário ao ficheiro',
+    writeFailed: 'Não foi possível alterar o ficheiro.',
+    writtenToFile: 'Adicionado como comentário no início do ficheiro.',
     copy: 'Copiar',
     copied: 'Copiado',
     copyAll: 'Copiar resumo',
@@ -2325,6 +2331,7 @@ export const pt = {
       'Estes campos servem apenas para a resposta: são mantidos com a consulta, mas nunca são pesquisados.',
     excludedField: '{field}: {value}',
     plan: 'Plano de consulta',
+    showPlan: 'Mostrar plano',
     planVersion: 'Planeador {version}',
     planScope: 'Âmbito: {scope}',
     planSources: '{count} fonte(s) indexada(s) autorizada(s)',
@@ -2464,7 +2471,6 @@ export const pt = {
     answerCitations: 'Fontes ({count})',
     answerCitationNotDisplayed: 'não faz parte da evidência apresentada',
     openCitation: 'Abrir {label}',
-    showAdvanced: 'Avançado',
     trace: 'Incluir o rastreio de obtenção',
     traceHeading: 'Rastreio de obtenção',
     traceSummary:
@@ -2483,6 +2489,7 @@ export const pt = {
     pdfImageResult: 'Imagem incorporada no PDF · Página {page} · Imagem {image}',
     pdfPageRenderEvidence: 'Página PDF renderizada (não é imagem incorporada)',
     pdfPageRenderResult: 'Página PDF renderizada · Página {page}',
+    tabTitle: 'Semântica',
     title: 'Pesquisa semântica',
     openTitle: 'Pesquisa semântica…',
     subjectsPlaceholder: 'Introduza os termos de pesquisa',

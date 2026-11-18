@@ -1,9 +1,9 @@
 import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { SqliteCell } from '../../models';
+import type { SqliteCell, SqliteObject } from '../../models';
 import { EMPTY_SQLITE_RESULT, type FileViewerSqliteContent } from './sqlite-browser';
-import { SqliteBrowser, type SqliteBrowserActions } from './sqlite-view';
+import { SqliteBrowser, type SqliteBrowserActions, sqliteTablePicker } from './sqlite-view';
 
 let root: HTMLElement;
 
@@ -95,11 +95,6 @@ function mount(attrs: { content: FileViewerSqliteContent; actions: SqliteBrowser
 describe('SqliteBrowser', () => {
   it('renders objects, rows and shows NULL, empty string and blobs distinctly', () => {
     mount({ content: content(), actions: actions() });
-    expect([...root.querySelectorAll('.fm-sqlite-object-name')].map((n) => n.textContent)).toEqual([
-      'people',
-      'recent',
-    ]);
-    expect(root.querySelector('.fm-sqlite-object.active')?.textContent).toContain('people');
     const cells = [...root.querySelectorAll('tbody tr')].map((row) =>
       [...row.querySelectorAll('td')].map((cell) => ({
         text: cell.textContent,
@@ -117,8 +112,6 @@ describe('SqliteBrowser', () => {
   it('selects objects, switches tabs, and pages', () => {
     const handlers = actions();
     mount({ content: content(), actions: handlers });
-    root.querySelectorAll<HTMLButtonElement>('.fm-sqlite-object')[1]?.click();
-    expect(handlers.onSelectObject).toHaveBeenCalledWith('recent');
     root.querySelectorAll<HTMLButtonElement>('.fm-sqlite-tab')[2]?.click();
     expect(handlers.onTab).toHaveBeenCalledWith('sql');
     const [previous, next] = root.querySelectorAll<HTMLButtonElement>('.fm-sqlite-pager button');
@@ -223,6 +216,39 @@ describe('SqliteBrowser', () => {
       actions: actions(),
     });
     expect(root.querySelector('.fm-sqlite-warning')?.textContent).toContain('write-ahead');
-    expect(root.querySelector('.fm-sqlite-objects')?.textContent).toContain('no tables');
+    expect(root.querySelector('.fm-sqlite-empty')?.textContent).toContain('no tables');
+  });
+});
+
+describe('sqliteTablePicker', () => {
+  function mountPicker(objects: SqliteObject[], selected: string | undefined) {
+    const handlers = actions();
+    const data = content({ objects, selected });
+    m.mount(root, { view: () => m('.crumb', sqliteTablePicker(data, handlers)) });
+    m.redraw.sync();
+    return handlers;
+  }
+
+  it('lists every table in a select and reports the chosen one', () => {
+    const handlers = mountPicker(
+      [
+        { name: 'people', kind: 'table', columns: [] },
+        { name: 'recent', kind: 'view', columns: [] },
+      ],
+      'people',
+    );
+    const select = root.querySelector<HTMLSelectElement>('.fm-file-viewer-table-select');
+    expect(select?.value).toBe('people');
+    expect(select?.options[1]?.textContent).toBe('recent (view)');
+    if (select === null) throw new Error('table select missing');
+    select.value = 'recent';
+    select.dispatchEvent(new Event('change'));
+    expect(handlers.onSelectObject).toHaveBeenCalledWith('recent');
+  });
+
+  it('shows the lone table as plain text', () => {
+    mountPicker([{ name: 'people', kind: 'table', columns: [] }], 'people');
+    expect(root.querySelector('.fm-file-viewer-table-select')).toBeNull();
+    expect(root.querySelector('.fm-file-viewer-crumb')?.textContent).toBe('people');
   });
 });

@@ -16,6 +16,7 @@ import {
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { ActiveSourceState } from '../operations/operation-state';
+import { documentSummaryActionKey } from '../preview/document-summary-support';
 import { pdfImageProvenance, pdfPageRenderProvenance } from '../semantic/evidence-provenance';
 
 /** Renders an icon-only toggle button matching `IconButton`'s `.btn-flat.btn-icon` styling, but
@@ -642,7 +643,7 @@ function semanticEvidencePanel(attrs: PaneAttrs): m.Children {
               if (entry !== undefined) attrs.onDocumentSummary?.(entry);
             },
           },
-          t('documentSummary', 'generate'),
+          t('documentSummary', documentSummaryActionKey(entry)),
         ),
         m(
           'button',

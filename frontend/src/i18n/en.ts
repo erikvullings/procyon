@@ -1060,6 +1060,7 @@ export const en = {
     deleteSavedSearch: 'Delete saved search',
   },
   themes: {
+    tabTitle: 'Themes',
     title: 'Corpus themes',
     openTitle: 'Explore themes',
     openDescription: 'Discover the topics across your indexed documents',
@@ -1104,7 +1105,7 @@ export const en = {
     viewsLabel: 'Views',
     foldersTab: 'Folders',
     exportTab: 'Export',
-    foldersHeading: 'Folders to analyse',
+    foldersHeading: 'Folders to cluster',
     foldersHint:
       'Topics from unrelated folders do not merge well. Choose the folders that belong together.',
     applyFolders: 'Show themes for these folders',
@@ -1131,6 +1132,11 @@ export const en = {
   },
   documentSummary: {
     title: 'Summary · {name}',
+    describeCode: 'Describe code',
+    codeTitle: 'Description · {name}',
+    writeToFile: 'Add as comment to file',
+    writeFailed: 'The file could not be changed.',
+    writtenToFile: 'Added as a comment at the top of the file.',
     copy: 'Copy',
     copied: 'Copied',
     copyAll: 'Copy summary',
@@ -1233,6 +1239,7 @@ export const en = {
     savedConversation: '{turns} turn(s) · {bytes} bytes',
   },
   knowledgeSearch: {
+    tabTitle: 'Semantic',
     title: 'Semantic Search',
     openTitle: 'Semantic Search…',
     openWithAskTitle: 'Semantic search & Ask',
@@ -1295,6 +1302,7 @@ export const en = {
       'These answer-only fields are kept with the query but never searched for.',
     excludedField: '{field}: {value}',
     plan: 'Query plan',
+    showPlan: 'Show plan',
     planVersion: 'Planner {version}',
     planScope: 'Scope: {scope}',
     planSources: '{count} authorized indexed source(s)',
@@ -1438,7 +1446,6 @@ export const en = {
     answerCitations: 'Sources ({count})',
     answerCitationNotDisplayed: 'not part of the displayed evidence',
     openCitation: 'Open {label}',
-    showAdvanced: 'Advanced',
     trace: 'Include retrieval trace',
     traceHeading: 'Retrieval trace',
     traceSummary: '{queries} bounded query(ies) · {fused} fused row(s) · rank constant {constant}',

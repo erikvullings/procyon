@@ -14,4 +14,9 @@ export interface ThemeConceptDto {
   chunkCount: number;
   /** Stable concept identity. */
   conceptId: string;
+  /**
+     * Preferred label from a device SKOS vocabulary, when one names this concept.
+     * @nullable
+     */
+  label?: string | null;
 }

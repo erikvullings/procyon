@@ -1073,6 +1073,7 @@ export const nl = {
     deleteSavedSearch: 'Opgeslagen zoekopdracht verwijderen',
   },
   themes: {
+    tabTitle: "Thema's",
     title: 'Thema’s in de collectie',
     openTitle: 'Thema’s verkennen',
     openDescription: 'Ontdek de onderwerpen in je geïndexeerde documenten',
@@ -1118,7 +1119,7 @@ export const nl = {
     viewsLabel: 'Weergaven',
     foldersTab: 'Mappen',
     exportTab: 'Exporteren',
-    foldersHeading: 'Te analyseren mappen',
+    foldersHeading: 'Mappen om te clusteren',
     foldersHint:
       'Onderwerpen uit niet-verwante mappen voegen slecht samen. Kies de mappen die bij elkaar horen.',
     applyFolders: 'Thema’s voor deze mappen tonen',
@@ -1145,6 +1146,11 @@ export const nl = {
   },
   documentSummary: {
     title: 'Samenvatting · {name}',
+    describeCode: 'Code beschrijven',
+    codeTitle: 'Beschrijving · {name}',
+    writeToFile: 'Als commentaar aan bestand toevoegen',
+    writeFailed: 'Het bestand kon niet worden gewijzigd.',
+    writtenToFile: 'Als commentaar bovenaan het bestand toegevoegd.',
     copy: 'Kopiëren',
     copied: 'Gekopieerd',
     copyAll: 'Samenvatting kopiëren',
@@ -1250,6 +1256,7 @@ export const nl = {
     savedConversation: '{turns} beurt(en) · {bytes} bytes',
   },
   knowledgeSearch: {
+    tabTitle: 'Semantisch',
     title: 'Semantisch zoeken',
     openTitle: 'Semantisch zoeken…',
     openWithAskTitle: 'Semantisch zoeken & vragen',
@@ -1314,6 +1321,7 @@ export const nl = {
       'Deze velden horen bij het antwoord en worden bewaard, maar er wordt nooit op gezocht.',
     excludedField: '{field}: {value}',
     plan: 'Queryplan',
+    showPlan: 'Plan tonen',
     planVersion: 'Planner {version}',
     planScope: 'Bereik: {scope}',
     planSources: '{count} geautoriseerde geïndexeerde bron(nen)',
@@ -1461,7 +1469,6 @@ export const nl = {
     answerCitations: 'Bronnen ({count})',
     answerCitationNotDisplayed: 'geen onderdeel van het getoonde bewijs',
     openCitation: '{label} openen',
-    showAdvanced: 'Geavanceerd',
     trace: 'Ophaalspoor opnemen',
     traceHeading: 'Ophaalspoor',
     traceSummary:

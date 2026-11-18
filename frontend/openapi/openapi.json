@@ -29618,6 +29618,13 @@
           "conceptId": {
             "type": "string",
             "description": "Stable concept identity."
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Preferred label from a device SKOS vocabulary, when one names this concept."
           }
         }
       },

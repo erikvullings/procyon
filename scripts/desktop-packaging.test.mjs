@@ -1195,6 +1195,10 @@ test('package-manager generator creates a Homebrew cask and Chocolatey installer
   const nuspec = readFileSync(join(chocolateyDir, 'procyon.nuspec'), 'utf8');
   const install = readFileSync(join(chocolateyDir, 'tools', 'chocolateyinstall.ps1'), 'utf8');
   assert.match(nuspec, /<id>procyon<\/id>/);
+  // The namespace and inline summary match the package Chocolatey already accepted (0.3.1).
+  assert.match(nuspec, /nuspec\.xsd"/);
+  assert.match(nuspec, /packaging\/2011\/08\/nuspec\.xsd/);
+  assert.match(nuspec, /<summary>Dual-pane file manager for Windows and macOS\.<\/summary>/);
   assert.match(nuspec, /<version>1\.2\.3<\/version>/);
   assert.match(nuspec, /<authors>Erik Vullings<\/authors>/);
   assert.match(nuspec, /<owners>Erik Vullings<\/owners>/);

@@ -374,8 +374,40 @@ function renderSqlTab(content: FileViewerSqliteContent, actions: SqliteBrowserAc
   ]);
 }
 
-/** Read-only SQLite database browser: table list, data grid with search/filters/sort, structure
- * and a SQL console (task 0251). Stateless: everything lives in the viewer controller. */
+/** The table named in the viewer breadcrumb after the file name. With several tables it is a
+ * select to switch between them. */
+export function sqliteTablePicker(
+  content: FileViewerSqliteContent,
+  actions: SqliteBrowserActions,
+): m.Children {
+  if (content.selected === undefined) return undefined;
+  const objectLabel = (object: SqliteObject): string =>
+    object.kind === 'view' ? `${object.name} (${t('viewer', 'sqliteViewLabel')})` : object.name;
+  return [
+    m('span.fm-file-viewer-crumb-separator', { 'aria-hidden': 'true' }, '›'),
+    content.objects.length < 2
+      ? m('span.fm-file-viewer-crumb', content.selected)
+      : m(
+          'select.fm-file-viewer-table-select.browser-default',
+          {
+            'aria-label': t('viewer', 'sqliteTables'),
+            onchange: (event: Event) =>
+              actions.onSelectObject((event.currentTarget as HTMLSelectElement).value),
+          },
+          content.objects.map((object) =>
+            m(
+              'option',
+              { value: object.name, selected: object.name === content.selected },
+              objectLabel(object),
+            ),
+          ),
+        ),
+  ];
+}
+
+/** Read-only SQLite database browser: data grid with search/filters/sort, structure and a SQL
+ * console (task 0251). The table is picked from the viewer breadcrumb. Stateless: everything
+ * lives in the viewer controller. */
 export const SqliteBrowser: FactoryComponent<SqliteBrowserAttrs> = () => ({
   view: ({ attrs: { content, actions } }) => {
     const object = selectedSqliteObject(content);
@@ -383,65 +415,37 @@ export const SqliteBrowser: FactoryComponent<SqliteBrowserAttrs> = () => ({
       content.warning !== undefined
         ? m('.fm-sqlite-warning', { role: 'note' }, content.warning)
         : undefined,
-      m('.fm-sqlite-layout', [
-        m(
-          'nav.fm-sqlite-objects',
-          { 'aria-label': t('viewer', 'sqliteTables') },
-          content.objects.length === 0
-            ? m('.fm-sqlite-empty', t('viewer', 'sqliteEmptyDatabase'))
-            : content.objects.map((candidate) =>
+      content.objects.length === 0
+        ? m('.fm-sqlite-empty', t('viewer', 'sqliteEmptyDatabase'))
+        : m('.fm-sqlite-main', [
+            m('.fm-sqlite-tabs', { role: 'tablist' }, [
+              ...TABS.map((tab) =>
                 m(
-                  'button.fm-sqlite-object',
+                  'button.fm-sqlite-tab',
                   {
-                    key: candidate.name,
                     type: 'button',
-                    class: candidate.name === content.selected ? 'active' : '',
-                    'aria-current': candidate.name === content.selected ? 'true' : undefined,
-                    title:
-                      candidate.kind === 'view'
-                        ? `${candidate.name} (${t('viewer', 'sqliteViewLabel')})`
-                        : candidate.name,
-                    onclick: () => actions.onSelectObject(candidate.name),
+                    role: 'tab',
+                    'aria-selected': content.tab === tab.id ? 'true' : 'false',
+                    class: content.tab === tab.id ? 'active' : '',
+                    onclick: () => actions.onTab(tab.id),
                   },
-                  [
-                    m('span.fm-sqlite-object-name', candidate.name),
-                    candidate.kind === 'view'
-                      ? m('span.fm-sqlite-object-kind', t('viewer', 'sqliteViewLabel'))
-                      : undefined,
-                  ],
+                  t('viewer', tab.key),
                 ),
               ),
-        ),
-        m('.fm-sqlite-main', [
-          m('.fm-sqlite-tabs', { role: 'tablist' }, [
-            ...TABS.map((tab) =>
               m(
-                'button.fm-sqlite-tab',
-                {
-                  type: 'button',
-                  role: 'tab',
-                  'aria-selected': content.tab === tab.id ? 'true' : 'false',
-                  class: content.tab === tab.id ? 'active' : '',
-                  onclick: () => actions.onTab(tab.id),
-                },
-                t('viewer', tab.key),
+                'span.fm-sqlite-info',
+                t('viewer', 'sqliteInfo', {
+                  version: content.sqliteVersion,
+                  size: formatBytes(content.sourceBytes),
+                }),
               ),
-            ),
-            m(
-              'span.fm-sqlite-info',
-              t('viewer', 'sqliteInfo', {
-                version: content.sqliteVersion,
-                size: formatBytes(content.sourceBytes),
-              }),
-            ),
+            ]),
+            content.tab === 'data'
+              ? renderDataTab(content, actions)
+              : content.tab === 'structure'
+                ? renderStructureTab(object)
+                : renderSqlTab(content, actions),
           ]),
-          content.tab === 'data'
-            ? renderDataTab(content, actions)
-            : content.tab === 'structure'
-              ? renderStructureTab(object)
-              : renderSqlTab(content, actions),
-        ]),
-      ]),
     ]);
   },
 });

@@ -115,6 +115,23 @@ describe('PluginManagement', () => {
     );
   });
 
+  it('shows no diagnostic for an active plugin whose diagnostic the host sent as null', () => {
+    m.mount(root, {
+      view: () =>
+        m(PluginManagement, {
+          // The host serialises an absent diagnostic as `null`, which the model type does not allow.
+          plugins: [
+            { ...fixturePlugin({ enabled: true }), diagnostic: null },
+          ] as unknown as PluginDescriptor[],
+          onToggle: vi.fn(),
+          onRequestLogs: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+
+    expect(root.querySelector('.fm-plugin-diagnostic')).toBeNull();
+  });
+
   it('toggles a plugin through the mithril-materialized switch', () => {
     const onToggle = vi.fn().mockResolvedValue(undefined);
     m.mount(root, {

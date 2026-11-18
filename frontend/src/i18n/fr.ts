@@ -2094,6 +2094,7 @@ export const fr = {
     testFailed: 'Échec du test de connexion : {category}.',
   },
   themes: {
+    tabTitle: 'Thèmes',
     title: 'Thèmes du corpus',
     openTitle: 'Explorer les thèmes',
     openDescription: 'Découvrir les sujets de vos documents indexés',
@@ -2140,7 +2141,7 @@ export const fr = {
     viewsLabel: 'Vues',
     foldersTab: 'Dossiers',
     exportTab: 'Exporter',
-    foldersHeading: 'Dossiers à analyser',
+    foldersHeading: 'Dossiers à regrouper',
     foldersHint:
       'Les sujets de dossiers sans rapport se regroupent mal. Choisissez les dossiers qui vont ensemble.',
     applyFolders: 'Afficher les thèmes de ces dossiers',
@@ -2167,6 +2168,11 @@ export const fr = {
   },
   documentSummary: {
     title: 'Résumé · {name}',
+    describeCode: 'Décrire le code',
+    codeTitle: 'Descriptif · {name}',
+    writeToFile: 'Ajouter en commentaire au fichier',
+    writeFailed: 'Le fichier n’a pas pu être modifié.',
+    writtenToFile: 'Ajouté en commentaire en haut du fichier.',
     copy: 'Copier',
     copied: 'Copié',
     copyAll: 'Copier le résumé',
@@ -2333,6 +2339,7 @@ export const fr = {
       "Ces champs ne servent qu'à la réponse : ils sont conservés avec la requête mais jamais recherchés.",
     excludedField: '{field} : {value}',
     plan: 'Plan de requête',
+    showPlan: 'Afficher le plan',
     planVersion: 'Planificateur {version}',
     planScope: 'Portée : {scope}',
     planSources: '{count} source(s) indexée(s) autorisée(s)',
@@ -2471,7 +2478,6 @@ export const fr = {
     answerCitations: 'Sources ({count})',
     answerCitationNotDisplayed: 'ne fait pas partie des preuves affichées',
     openCitation: 'Ouvrir {label}',
-    showAdvanced: 'Avancé',
     trace: 'Inclure la trace de récupération',
     traceHeading: 'Trace de récupération',
     traceSummary:
@@ -2490,6 +2496,7 @@ export const fr = {
     pdfImageResult: 'Image intégrée au PDF · Page {page} · Image {image}',
     pdfPageRenderEvidence: 'Page PDF rendue (pas une image intégrée)',
     pdfPageRenderResult: 'Page PDF rendue · Page {page}',
+    tabTitle: 'Sémantique',
     title: 'Recherche sémantique',
     openTitle: 'Recherche sémantique…',
     subjectsPlaceholder: 'Saisissez vos termes de recherche',

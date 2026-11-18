@@ -263,6 +263,59 @@
   font-size: 0.92em;
 }
 
+.fm-file-viewer-title.is-crumb {
+  flex: 0 1 auto;
+}
+
+/* The new-tab button matches the file manager breadcrumb row's add button: row-height, 16px
+ * glyph, and pushed to the right edge of the header. */
+.fm-file-viewer-header > .fm-tooltip:last-child {
+  margin-left: auto;
+}
+
+.fm-file-viewer-header .fm-pane-tab-new {
+  width: var(--fm-row-height) !important;
+  height: var(--fm-row-height) !important;
+  min-width: var(--fm-row-height) !important;
+  min-height: var(--fm-row-height) !important;
+  padding: 0 !important;
+  line-height: 1;
+}
+
+.fm-file-viewer-header .fm-pane-tab-new .fm-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  transform: none;
+}
+
+.fm-file-viewer-crumb-separator {
+  flex: 0 0 auto;
+  color: var(--fm-text-muted);
+}
+
+.fm-file-viewer-crumb {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-file-viewer-table-select {
+  flex: 0 1 auto;
+  max-width: 16rem;
+  min-width: 0;
+  height: calc(var(--fm-header-height) - 0.5rem);
+  margin: 0;
+  padding: 0 0.25rem;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  font: inherit;
+}
+
 .fm-file-viewer-title {
   overflow: hidden;
   min-width: 0;
@@ -1404,62 +1457,6 @@
   color: var(--fm-text-secondary);
 }
 
-.fm-sqlite-layout {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
-}
-
-.fm-sqlite-objects {
-  display: flex;
-  flex: 0 0 13rem;
-  flex-direction: column;
-  overflow: auto;
-  border-right: 1px solid var(--fm-border);
-  background: var(--fm-surface-elevated);
-}
-
-.fm-sqlite-object {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
-  min-height: var(--fm-row-height);
-  padding: 0 0.625rem;
-  border: 0;
-  background: transparent;
-  color: var(--fm-text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.fm-sqlite-object:hover,
-.fm-sqlite-object:focus-visible {
-  background: var(--fm-hover);
-}
-
-.fm-sqlite-object.active {
-  background: var(--fm-selection);
-  color: var(--fm-selected-row-text);
-}
-
-.fm-sqlite-object-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.fm-sqlite-object-kind {
-  flex: 0 0 auto;
-  color: var(--fm-text-muted);
-  font-size: 0.85em;
-}
-
-.fm-sqlite-object.active .fm-sqlite-object-kind {
-  color: inherit;
-}
-
 .fm-sqlite-main {
   display: flex;
   min-width: 0;
@@ -1470,6 +1467,8 @@
 
 .fm-sqlite-tabs {
   display: flex;
+  box-sizing: border-box;
+  height: var(--fm-row-height);
   flex: 0 0 auto;
   align-items: stretch;
   border-bottom: 1px solid var(--fm-border);
@@ -1477,7 +1476,8 @@
 }
 
 .fm-sqlite-tab {
-  min-height: var(--fm-row-height);
+  box-sizing: border-box;
+  height: 100%;
   padding: 0 0.875rem;
   border: 0;
   border-bottom: 2px solid transparent;
@@ -1719,12 +1719,6 @@ textarea.fm-sqlite-sql.browser-default {
   overflow: auto;
   font-family: var(--fm-font-mono);
   white-space: pre-wrap;
-}
-
-@media (max-width: 40rem) {
-  .fm-sqlite-objects {
-    flex-basis: 8rem;
-  }
 }
 
 .fm-playlist {

@@ -772,6 +772,27 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
           <p>Multiple tabs per pane, bookmarks and recent locations, saved workspaces that restore your layout — plus an Alt+F10 directory-tree sidebar with lazy expansion across every provider.</p>
           <div class="keys"><span class="kbd">⌘T</span><span class="kbd">Alt+F10</span></div>
         </article>
+        <article class="feat" data-od-id="feature-card-sync">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-move"/></svg></div>
+          <h3>Synchronized browsing &amp; branch view</h3>
+          <p>Mirror navigation between the two panes with one toggle. Flatten a folder tree into one list with Ctrl/Cmd+B, and save synchronisation profiles and filter presets for reuse.</p>
+          <div class="keys"><span class="kbd">⌘B</span></div>
+        </article>
+        <article class="feat" data-od-id="feature-card-compare">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-split"/></svg></div>
+          <h3>Compare, split &amp; permissions</h3>
+          <p>Compare two files by content in a side-by-side diff. Split a large file and rejoin it, checked against a BLAKE3 manifest. Edit permissions and ownership recursively, with undo.</p>
+        </article>
+        <article class="feat" data-od-id="feature-card-transfers">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-hour"/></svg></div>
+          <h3>Transfers that survive restarts</h3>
+          <p>A durable journal keeps queued and running copies across a restart. Interrupted copies resume from a proven partial over SFTP, S3 and FTP, with bounded retries and optional verification before a file is saved.</p>
+        </article>
+        <article class="feat" data-od-id="feature-card-languages">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-globe"/></svg></div>
+          <h3>Eight languages</h3>
+          <p>The interface is available in English, German, French, Spanish, Italian, Dutch, Polish and Portuguese.</p>
+        </article>
       </div>
 
       <div class="sec-head" style="margin-top:72px">
@@ -782,7 +803,7 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
         <article class="feat" data-od-id="feature-card-search">
           <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-search"/></svg></div>
           <h3>Recursive &amp; content search</h3>
-          <p>Deep filesystem search plus literal content search across files, served by a dedicated Rust search engine.</p>
+          <p>Deep filesystem search plus literal content search across files, served by a dedicated Rust search engine. Content search also reads Word, Excel, PowerPoint, OpenDocument and EPUB text, and looks inside ZIP archives.</p>
           <div class="keys"><span class="kbd">⌘F</span></div>
         </article>
         <article class="feat" data-od-id="feature-card-semantic-search">
@@ -805,8 +826,18 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
         <article class="feat" data-od-id="feature-card-archive">
           <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-archive"/></svg></div>
           <h3>Browse &amp; mutate archives</h3>
-          <p>Preview an archive's contents, then open zip, tar and friends like folders — browse, extract and add files, including password-protected archives.</p>
+          <p>Preview an archive's contents, then open zip, tar and friends like folders — browse, extract and add files, including password-protected archives and archives nested inside archives.</p>
           <div class="keys"><span class="kbd">Enter</span></div>
+        </article>
+        <article class="feat" data-od-id="feature-card-themes">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-palette"/></svg></div>
+          <h3>Themes in your documents</h3>
+          <p>With semantic search enabled, cluster the documents in chosen folders into themes, explore them on a map and open the passages behind each theme. Export the themes as SKOS or Turtle.</p>
+        </article>
+        <article class="feat" data-od-id="feature-card-template">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-file"/></svg></div>
+          <h3>New file from template</h3>
+          <p>Create files from your own templates, from a picker, the editor, the command palette or the context menu.</p>
         </article>
         <article class="feat" data-od-id="feature-card-drag">
           <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-move"/></svg></div>
@@ -819,6 +850,26 @@ code,kbd{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
           <h3>Themeable file icons</h3>
           <p>Themeable icon sets with optional native macOS file-icon overlay, shipped as distributable plugins.</p>
           <div class="keys"><span class="kbd">Catppuccin</span></div>
+        </article>
+        <article class="feat" data-od-id="feature-card-chat">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-pen"/></svg></div>
+          <h3>Chat &amp; AI assistant</h3>
+          <p>Chat in any pane with saved conversations, or open a chat from the editor that drafts a file for you. Bring your own model, local or cloud: role settings choose the model for each task, and each cloud endpoint needs your consent first.</p>
+        </article>
+        <article class="feat" data-od-id="feature-card-describe">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-eye"/></svg></div>
+          <h3>Summaries &amp; code descriptions</h3>
+          <p>Generate a summary of a document, or a description of a source file, from the viewer. Copy the result, or add it to the top of a code, Markdown or text file as a comment.</p>
+        </article>
+        <article class="feat" data-od-id="feature-card-terminal">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-term"/></svg></div>
+          <h3>Terminal with shell integration</h3>
+          <p>The embedded terminal integrates with zsh and fish: command blocks, Cmd+click on paths, and a one-time consent before setup. Type a question starting with # to get an answer from your model.</p>
+        </article>
+        <article class="feat" data-od-id="feature-card-images">
+          <div class="ico"><svg aria-hidden="true" focusable="false" class="icon"><use href="#i-palette"/></svg></div>
+          <h3>Image generation pane</h3>
+          <p>Generate images in a pane with any configured endpoint, keep a history of prompts with their settings, and write nothing to disk until you choose Save.</p>
         </article>
       </div>
     </div>

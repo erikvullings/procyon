@@ -203,7 +203,8 @@ describe('ThemesView', () => {
       ],
     });
     await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
-    expect(root.querySelector('.fm-themes-scope')).toBeNull();
+    await openDialog('folders');
+    expect(root.querySelector('.fm-themes-folders input[type="radio"]')).toBeNull();
   });
 
   it('switches scope and summarizes documents, passages and displayed points', async () => {
@@ -220,12 +221,15 @@ describe('ThemesView', () => {
     await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
     expect(root.textContent).toMatch(/\d+ documents · 24 passages · 24 displayed/);
 
-    const buttons = [...root.querySelectorAll<HTMLButtonElement>('.fm-themes-scope')];
-    expect(buttons.map((button) => button.textContent)).toEqual([
+    await openDialog('folders');
+    const radios = [
+      ...root.querySelectorAll<HTMLInputElement>('.fm-themes-folders input[type="radio"]'),
+    ];
+    expect(radios.map((radio) => radio.closest('label')?.textContent?.trim())).toEqual([
       'Entire library',
       'Current folder: chapters',
     ]);
-    buttons[1]?.click();
+    radios[1]?.click();
     await vi.waitFor(() => expect(analyze).toHaveBeenCalledTimes(2));
     expect(analyze.mock.calls[1]?.[0].scope.kind).toBe('currentFolder');
   });
@@ -301,14 +305,13 @@ describe('ThemesView', () => {
     expect(onSearchSources).not.toHaveBeenCalled();
   });
 
-  /** Switches the status-bar view once the themes have loaded. */
-  const openTab = async (label: string): Promise<void> => {
-    const tab = (): HTMLButtonElement | undefined =>
-      [...root.querySelectorAll<HTMLButtonElement>('.fm-themes-status-tab')].find(
-        (button) => button.textContent === label,
-      );
-    await vi.waitFor(() => expect(tab()).toBeDefined());
-    tab()?.click();
+  /** Opens the folder or export dialog from the breadcrumb bar once the themes have loaded. */
+  const openDialog = async (kind: 'folders' | 'export'): Promise<void> => {
+    const label = kind === 'folders' ? 'Folders' : 'Export…';
+    const icon = (): HTMLButtonElement | null =>
+      root.querySelector<HTMLButtonElement>(`.fm-themes-breadcrumb button[aria-label="${label}"]`);
+    await vi.waitFor(() => expect(icon()).not.toBeNull());
+    icon()?.click();
     m.redraw.sync();
   };
 
@@ -317,7 +320,7 @@ describe('ThemesView', () => {
     const ARCHIVE = 'mock-knowledge-root-archive';
 
     const checkboxes = (): HTMLInputElement[] => [
-      ...root.querySelectorAll<HTMLInputElement>('.fm-themes-root input[type="checkbox"]'),
+      ...root.querySelectorAll<HTMLInputElement>('.fm-themes-root-list input[type="checkbox"]'),
     ];
     const applyButton = (): HTMLButtonElement | undefined =>
       [...root.querySelectorAll<HTMLButtonElement>('.fm-themes-root-actions button')].find(
@@ -330,9 +333,9 @@ describe('ThemesView', () => {
       mount(client);
       await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
       expect(analyze.mock.calls[0]?.[0].scope.kind).toBe('entireLibrary');
-      await openTab('Folders');
+      await openDialog('folders');
       expect(checkboxes().map((box) => box.checked)).toEqual([true, true]);
-      expect(root.querySelector('.fm-themes-root')?.textContent).toContain(
+      expect(root.querySelector('.fm-themes-root-list')?.textContent).toContain(
         'Handbook · 3 documents',
       );
       m.mount(root, null);
@@ -352,7 +355,7 @@ describe('ThemesView', () => {
       const onSelectRoots = vi.fn();
       mount(client, { onSelectRoots });
       await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
-      await openTab('Folders');
+      await openDialog('folders');
       expect(applyButton()?.disabled).toBe(true);
 
       checkboxes()[1]?.click();
@@ -376,7 +379,7 @@ describe('ThemesView', () => {
       await vi.waitFor(() => expect(analyze).toHaveBeenCalledOnce());
       expect(analyze.mock.calls[0]?.[0].scope.enrolledRootIds).toEqual([ARCHIVE]);
       await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
-      await openTab('Folders');
+      await openDialog('folders');
       expect(checkboxes().map((box) => box.checked)).toEqual([false, true]);
 
       checkboxes()[0]?.click();
@@ -394,7 +397,7 @@ describe('ThemesView', () => {
       await vi.waitFor(() => expect(analyze).toHaveBeenCalledOnce());
       expect(analyze.mock.calls[0]?.[0].scope.kind).toBe('entireLibrary');
       await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
-      await openTab('Folders');
+      await openDialog('folders');
 
       for (const box of checkboxes()) box.click();
       m.redraw.sync();
@@ -428,7 +431,7 @@ describe('ThemesView', () => {
       const exportThemes = vi.spyOn(client, 'exportCorpusThemes');
       const onExported = vi.fn();
       mount(client, { exportFolder: FOLDER, onExported });
-      await openTab('Export');
+      await openDialog('export');
       expect(panel()).not.toBeNull();
 
       exportButton().click();
@@ -453,26 +456,27 @@ describe('ThemesView', () => {
       const exportThemes = vi.spyOn(client, 'exportCorpusThemes');
       mount(client, { exportFolder: FOLDER });
       await vi.waitFor(() => expect(root.querySelector('.fm-themes-row')).not.toBeNull());
-      await openTab('Export');
-      expect(root.querySelector('.fm-themes-export input[type="url"]')).toBeNull();
+      await openDialog('export');
+      expect(root.querySelector('#fm-themes-export-base-uri')).toBeNull();
       expect(root.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1]?.disabled).toBe(
         true,
       );
-      await openTab('Theme map');
       (root.querySelectorAll('.fm-themes-row')[1] as HTMLButtonElement).click();
       m.redraw.sync();
-      await openTab('Export');
 
-      const select = field<HTMLSelectElement>('select');
-      select.value = 'skosTurtle';
-      select.dispatchEvent(new Event('change'));
+      field<HTMLButtonElement>('#fm-themes-export-format').click();
+      m.redraw.sync();
+      const turtle = [...document.querySelectorAll<HTMLElement>('ul.dropdown-content li')].find(
+        (item) => item.textContent?.includes('Turtle'),
+      );
+      turtle?.click();
       m.redraw.sync();
       const [passages, documents] = [
         ...root.querySelectorAll<HTMLInputElement>('.fm-themes-export input[type="checkbox"]'),
       ];
       passages?.click();
       documents?.click();
-      const base = field<HTMLInputElement>('input[type="url"]');
+      const base = field<HTMLInputElement>('#fm-themes-export-base-uri');
       base.value = ' https://example.org/themes ';
       base.dispatchEvent(new Event('input'));
 
@@ -497,7 +501,7 @@ describe('ThemesView', () => {
       vi.spyOn(client, 'exportCorpusThemes').mockRejectedValue(new Error('File already exists'));
       const onExported = vi.fn();
       mount(client, { exportFolder: FOLDER, onExported });
-      await openTab('Export');
+      await openDialog('export');
       expect(panel()).not.toBeNull();
       exportButton().click();
       await vi.waitFor(() =>

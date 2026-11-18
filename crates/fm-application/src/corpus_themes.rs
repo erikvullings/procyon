@@ -307,6 +307,7 @@ impl CorpusThemeCoordinator {
         scope: CorpusScope,
         max_themes: Option<u32>,
         titles: &HashMap<String, String>,
+        concept_labels: &HashMap<String, String>,
         cancellation: &CancellationToken,
     ) -> Result<CorpusThemesResponseDto, ApplicationError> {
         let mut config = CorpusThemeConfig::default();
@@ -333,7 +334,7 @@ impl CorpusThemeCoordinator {
             Ok(themes) => Ok(CorpusThemesResponseDto {
                 outcome: CorpusThemeOutcomeDto::Ready,
                 model_id: model_id.clone(),
-                themes: Some(themes_to_dto(themes, titles)),
+                themes: Some(themes_to_dto(themes, titles, concept_labels)),
             }),
             Err(CorpusThemeCapabilityError::Worker(CorpusThemeError::ProfileTooWeak {
                 ..
@@ -403,7 +404,11 @@ pub(crate) fn theme_error_to_application(error: CorpusThemeCapabilityError) -> A
     }
 }
 
-fn themes_to_dto(themes: CorpusThemes, titles: &HashMap<String, String>) -> CorpusThemesDto {
+fn themes_to_dto(
+    themes: CorpusThemes,
+    titles: &HashMap<String, String>,
+    concept_labels: &HashMap<String, String>,
+) -> CorpusThemesDto {
     let title = |source_id: &str| titles.get(source_id).cloned().unwrap_or_default();
     CorpusThemesDto {
         index_revision: themes.index_revision,
@@ -417,7 +422,7 @@ fn themes_to_dto(themes: CorpusThemes, titles: &HashMap<String, String>) -> Corp
         themes: themes
             .themes
             .into_iter()
-            .map(|theme| theme_to_dto(theme, &title))
+            .map(|theme| theme_to_dto(theme, &title, concept_labels))
             .collect(),
         no_theme: no_theme_to_dto(themes.no_theme, &title),
         document_mixtures: themes
@@ -440,7 +445,11 @@ fn themes_to_dto(themes: CorpusThemes, titles: &HashMap<String, String>) -> Corp
     }
 }
 
-fn theme_to_dto(theme: Theme, title: &impl Fn(&str) -> String) -> CorpusThemeDto {
+fn theme_to_dto(
+    theme: Theme,
+    title: &impl Fn(&str) -> String,
+    concept_labels: &HashMap<String, String>,
+) -> CorpusThemeDto {
     CorpusThemeDto {
         id: theme.id,
         chunk_count: theme.chunk_count,
@@ -463,6 +472,7 @@ fn theme_to_dto(theme: Theme, title: &impl Fn(&str) -> String) -> CorpusThemeDto
             .concepts
             .into_iter()
             .map(|concept| ThemeConceptDto {
+                label: concept_labels.get(&concept.concept_id).cloned(),
                 concept_id: concept.concept_id,
                 chunk_count: concept.chunk_count,
             })
@@ -579,7 +589,7 @@ mod tests {
     #[test]
     fn dto_carries_host_titles_line_provenance_and_no_worker_identities() {
         let titles = HashMap::from([("source-a".to_owned(), "feed.jsonl".to_owned())]);
-        let dto = themes_to_dto(themes(), &titles);
+        let dto = themes_to_dto(themes(), &titles, &HashMap::new());
         assert_eq!(dto.map_points[0].passage.title, "feed.jsonl");
         assert!(dto.map_points[0].passage.provenance.contains("\"line\":42"));
         assert!(dto.map_sampled);
@@ -593,7 +603,7 @@ mod tests {
 
     #[test]
     fn unknown_titles_stay_empty_rather_than_exposing_source_ids_as_names() {
-        let dto = themes_to_dto(themes(), &HashMap::new());
+        let dto = themes_to_dto(themes(), &HashMap::new(), &HashMap::new());
         assert_eq!(dto.map_points[0].passage.title, "");
     }
 }
