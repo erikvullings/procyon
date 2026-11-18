@@ -2320,6 +2320,7 @@ export const es = {
       'Estos campos son solo para la respuesta: se conservan con la consulta, pero nunca se buscan.',
     excludedField: '{field}: {value}',
     plan: 'Plan de consulta',
+    showPlan: 'Mostrar plan',
     planVersion: 'Planificador {version}',
     planScope: 'Ámbito: {scope}',
     planSources: '{count} fuente(s) indexada(s) autorizada(s)',
@@ -2457,7 +2458,6 @@ export const es = {
     answerCitations: 'Fuentes ({count})',
     answerCitationNotDisplayed: 'no forma parte de la evidencia mostrada',
     openCitation: 'Abrir {label}',
-    showAdvanced: 'Avanzado',
     trace: 'Incluir el rastreo de recuperación',
     traceHeading: 'Rastreo de recuperación',
     traceSummary:
@@ -2475,6 +2475,7 @@ export const es = {
     pdfImageResult: 'Imagen incrustada en el PDF · Página {page} · Imagen {image}',
     pdfPageRenderEvidence: 'Página PDF renderizada (no es una imagen incrustada)',
     pdfPageRenderResult: 'Página PDF renderizada · Página {page}',
+    tabTitle: 'Semántica',
     title: 'Búsqueda semántica',
     openTitle: 'Búsqueda semántica…',
     subjectsPlaceholder: 'Introduce los términos de búsqueda',

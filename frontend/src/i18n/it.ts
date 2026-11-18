@@ -2316,6 +2316,7 @@ export const it = {
       'Questi campi servono solo per la risposta: vengono conservati con la query ma non vengono mai cercati.',
     excludedField: '{field}: {value}',
     plan: 'Piano di query',
+    showPlan: 'Mostra piano',
     planVersion: 'Pianificatore {version}',
     planScope: 'Ambito: {scope}',
     planSources: '{count} fonte/i indicizzata/e autorizzata/e',
@@ -2454,7 +2455,6 @@ export const it = {
     answerCitations: 'Fonti ({count})',
     answerCitationNotDisplayed: 'non fa parte delle prove mostrate',
     openCitation: 'Apri {label}',
-    showAdvanced: 'Avanzate',
     trace: 'Includi la traccia di recupero',
     traceHeading: 'Traccia di recupero',
     traceSummary:
@@ -2472,6 +2472,7 @@ export const it = {
     pdfImageResult: 'Immagine incorporata nel PDF · Pagina {page} · Immagine {image}',
     pdfPageRenderEvidence: 'Pagina PDF renderizzata (non immagine incorporata)',
     pdfPageRenderResult: 'Pagina PDF renderizzata · Pagina {page}',
+    tabTitle: 'Semantica',
     title: 'Ricerca semantica',
     openTitle: 'Ricerca semantica…',
     subjectsPlaceholder: 'Inserisci i termini di ricerca',

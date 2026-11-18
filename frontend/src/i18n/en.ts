@@ -1233,6 +1233,7 @@ export const en = {
     savedConversation: '{turns} turn(s) · {bytes} bytes',
   },
   knowledgeSearch: {
+    tabTitle: 'Semantic',
     title: 'Semantic Search',
     openTitle: 'Semantic Search…',
     openWithAskTitle: 'Semantic search & Ask',
@@ -1295,6 +1296,7 @@ export const en = {
       'These answer-only fields are kept with the query but never searched for.',
     excludedField: '{field}: {value}',
     plan: 'Query plan',
+    showPlan: 'Show plan',
     planVersion: 'Planner {version}',
     planScope: 'Scope: {scope}',
     planSources: '{count} authorized indexed source(s)',
@@ -1438,7 +1440,6 @@ export const en = {
     answerCitations: 'Sources ({count})',
     answerCitationNotDisplayed: 'not part of the displayed evidence',
     openCitation: 'Open {label}',
-    showAdvanced: 'Advanced',
     trace: 'Include retrieval trace',
     traceHeading: 'Retrieval trace',
     traceSummary: '{queries} bounded query(ies) · {fused} fused row(s) · rank constant {constant}',

@@ -1249,6 +1249,7 @@ export const nl = {
     savedConversation: '{turns} beurt(en) · {bytes} bytes',
   },
   knowledgeSearch: {
+    tabTitle: 'Semantisch',
     title: 'Semantisch zoeken',
     openTitle: 'Semantisch zoeken…',
     openWithAskTitle: 'Semantisch zoeken & vragen',
@@ -1313,6 +1314,7 @@ export const nl = {
       'Deze velden horen bij het antwoord en worden bewaard, maar er wordt nooit op gezocht.',
     excludedField: '{field}: {value}',
     plan: 'Queryplan',
+    showPlan: 'Plan tonen',
     planVersion: 'Planner {version}',
     planScope: 'Bereik: {scope}',
     planSources: '{count} geautoriseerde geïndexeerde bron(nen)',
@@ -1460,7 +1462,6 @@ export const nl = {
     answerCitations: 'Bronnen ({count})',
     answerCitationNotDisplayed: 'geen onderdeel van het getoonde bewijs',
     openCitation: '{label} openen',
-    showAdvanced: 'Geavanceerd',
     trace: 'Ophaalspoor opnemen',
     traceHeading: 'Ophaalspoor',
     traceSummary:

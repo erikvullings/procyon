@@ -558,7 +558,7 @@ export function createPaneContentBuilder(
         viewerTitles.set(tabId, t('diskUsage', 'tabTitle'));
       }
       if (context.getKnowledgeSearchByTab().has(context.tabKey(paneId, tabId))) {
-        viewerTitles.set(tabId, t('knowledgeSearch', 'title'));
+        viewerTitles.set(tabId, t('knowledgeSearch', 'tabTitle'));
       }
       if (context.getThemesByTab().has(context.tabKey(paneId, tabId))) {
         viewerTitles.set(tabId, t('themes', 'tabTitle'));
@@ -1328,8 +1328,8 @@ export function createPaneContentBuilder(
                       themes !== undefined ||
                       context.getViewerByTab().has(key))
                   ? {
-                      // Themes draw their own breadcrumb bar with the new-tab button.
-                      viewerOwnsTabActions: themes !== undefined,
+                      // Themes and search draw their own toolbar with the new-tab button.
+                      viewerOwnsTabActions: themes !== undefined || knowledgeSearch !== undefined,
                       viewerContent: (() => {
                         if (themes !== undefined) {
                           const exportFolder = exportFolderOf(themes.scopes);
@@ -1357,6 +1357,7 @@ export function createPaneContentBuilder(
                         if (knowledgeSearch !== undefined) {
                           return m(KnowledgeSearchPane, {
                             open: true,
+                            onNewTab: () => context.openNewTab?.(paneId),
                             client,
                             workspaceId: knowledgeSearch.workspaceId,
                             currentFolder: knowledgeSearch.currentFolder,

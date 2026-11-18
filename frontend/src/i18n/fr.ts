@@ -2332,6 +2332,7 @@ export const fr = {
       "Ces champs ne servent qu'à la réponse : ils sont conservés avec la requête mais jamais recherchés.",
     excludedField: '{field} : {value}',
     plan: 'Plan de requête',
+    showPlan: 'Afficher le plan',
     planVersion: 'Planificateur {version}',
     planScope: 'Portée : {scope}',
     planSources: '{count} source(s) indexée(s) autorisée(s)',
@@ -2470,7 +2471,6 @@ export const fr = {
     answerCitations: 'Sources ({count})',
     answerCitationNotDisplayed: 'ne fait pas partie des preuves affichées',
     openCitation: 'Ouvrir {label}',
-    showAdvanced: 'Avancé',
     trace: 'Inclure la trace de récupération',
     traceHeading: 'Trace de récupération',
     traceSummary:
@@ -2489,6 +2489,7 @@ export const fr = {
     pdfImageResult: 'Image intégrée au PDF · Page {page} · Image {image}',
     pdfPageRenderEvidence: 'Page PDF rendue (pas une image intégrée)',
     pdfPageRenderResult: 'Page PDF rendue · Page {page}',
+    tabTitle: 'Sémantique',
     title: 'Recherche sémantique',
     openTitle: 'Recherche sémantique…',
     subjectsPlaceholder: 'Saisissez vos termes de recherche',

@@ -688,7 +688,7 @@ describe('theme stylesheet', () => {
       /\.fm-knowledge-search-toolbar > textarea#fm-knowledge-subjects\s*\{[^}]*outline:\s*0/s,
     );
     expect(themeCss).toMatch(
-      /\.fm-app-shell \.fm-knowledge-search-submit\.btn-icon,\s*\.fm-app-shell \.fm-knowledge-search-close\.btn-icon,\s*\.fm-app-shell \.fm-knowledge-settings-trigger\.btn-icon\s*\{[^}]*width:\s*var\(--fm-row-height\)[^}]*height:\s*var\(--fm-row-height\)[^}]*padding:\s*0/s,
+      /\.fm-app-shell \.fm-knowledge-search-submit\.btn-icon,\s*\.fm-app-shell \.fm-knowledge-settings-trigger\.btn-icon\s*\{[^}]*width:\s*var\(--fm-row-height\)[^}]*height:\s*var\(--fm-row-height\)[^}]*padding:\s*0/s,
     );
     expect(themeCss).toMatch(
       /\.fm-app-shell \.fm-knowledge-search-toolbar > select\.fm-knowledge-intent\.browser-default\s*\{[^}]*height:\s*calc\(var\(--fm-row-height\) - 4px\)/s,

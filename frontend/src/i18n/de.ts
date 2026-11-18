@@ -2343,6 +2343,7 @@ export const de = {
       'Diese Felder gelten nur für die Antwort; sie werden mit der Abfrage gespeichert, aber nie durchsucht.',
     excludedField: '{field}: {value}',
     plan: 'Abfrageplan',
+    showPlan: 'Plan anzeigen',
     planVersion: 'Planer {version}',
     planScope: 'Umfang: {scope}',
     planSources: '{count} autorisierte indizierte Quelle(n)',
@@ -2482,7 +2483,6 @@ export const de = {
     answerCitations: 'Quellen ({count})',
     answerCitationNotDisplayed: 'nicht Teil der angezeigten Belege',
     openCitation: '{label} öffnen',
-    showAdvanced: 'Erweitert',
     trace: 'Abrufprotokoll einbeziehen',
     traceHeading: 'Abrufprotokoll',
     traceSummary:
@@ -2499,6 +2499,7 @@ export const de = {
     pdfImageResult: 'Eingebettetes PDF-Bild · Seite {page} · Bild {image}',
     pdfPageRenderEvidence: 'Gerenderte PDF-Seite (kein eingebettetes Bild)',
     pdfPageRenderResult: 'Gerenderte PDF-Seite · Seite {page}',
+    tabTitle: 'Semantisch',
     title: 'Semantische Suche',
     openTitle: 'Semantische Suche…',
     subjectsPlaceholder: 'Suchbegriffe eingeben',

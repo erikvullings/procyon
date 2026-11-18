@@ -2324,6 +2324,7 @@ export const pt = {
       'Estes campos servem apenas para a resposta: são mantidos com a consulta, mas nunca são pesquisados.',
     excludedField: '{field}: {value}',
     plan: 'Plano de consulta',
+    showPlan: 'Mostrar plano',
     planVersion: 'Planeador {version}',
     planScope: 'Âmbito: {scope}',
     planSources: '{count} fonte(s) indexada(s) autorizada(s)',
@@ -2463,7 +2464,6 @@ export const pt = {
     answerCitations: 'Fontes ({count})',
     answerCitationNotDisplayed: 'não faz parte da evidência apresentada',
     openCitation: 'Abrir {label}',
-    showAdvanced: 'Avançado',
     trace: 'Incluir o rastreio de obtenção',
     traceHeading: 'Rastreio de obtenção',
     traceSummary:
@@ -2482,6 +2482,7 @@ export const pt = {
     pdfImageResult: 'Imagem incorporada no PDF · Página {page} · Imagem {image}',
     pdfPageRenderEvidence: 'Página PDF renderizada (não é imagem incorporada)',
     pdfPageRenderResult: 'Página PDF renderizada · Página {page}',
+    tabTitle: 'Semântica',
     title: 'Pesquisa semântica',
     openTitle: 'Pesquisa semântica…',
     subjectsPlaceholder: 'Introduza os termos de pesquisa',

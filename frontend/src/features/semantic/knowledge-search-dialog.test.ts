@@ -94,7 +94,7 @@ function searchButton(): HTMLButtonElement {
 async function ready(): Promise<void> {
   await vi.waitFor(() => {
     expect(root.textContent).not.toContain('Loading semantic search…');
-    expect(root.querySelector('.fm-knowledge-advanced')).not.toBeNull();
+    expect(root.querySelector('.fm-knowledge-advanced-body')).not.toBeNull();
   });
   m.redraw.sync();
 }
@@ -241,7 +241,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     );
   });
 
-  it('keeps prompt focus beside the query and moves retrieval refinements into Advanced', async () => {
+  it('keeps prompt focus beside the query and moves retrieval refinements into the settings', async () => {
     mount();
 
     await ready();
@@ -262,15 +262,19 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
       toolbar?.querySelector<HTMLSelectElement>('select[name="knowledge-intent"]')?.value,
     ).toBe('search');
     expect(root.querySelector('.fm-knowledge-search-options')).toBeNull();
-    expect(root.querySelector('.fm-knowledge-composer > .fm-knowledge-advanced')).toBeNull();
+    expect(root.querySelector('.fm-knowledge-composer > .fm-knowledge-advanced-body')).toBeNull();
+    expect(toolbar?.querySelector('.fm-knowledge-search-close')).toBeNull();
 
     settings?.click();
     m.redraw.sync();
 
     expect(root.querySelector('.fm-knowledge-settings-modal')).not.toBeNull();
     expect(
-      root.querySelector('.fm-knowledge-settings-modal .fm-knowledge-advanced'),
+      root.querySelector('.fm-knowledge-settings-modal .fm-knowledge-advanced-body'),
     ).not.toBeNull();
+    expect(
+      root.querySelector('.fm-knowledge-settings-modal details.fm-knowledge-advanced'),
+    ).toBeNull();
     expect(
       root.querySelector('.fm-knowledge-settings-modal .fm-knowledge-needs input'),
     ).not.toBeNull();
@@ -385,12 +389,14 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(root.querySelector('.fm-knowledge-search-options')).toBeNull();
   });
 
-  it('closes the transient search pane from the toolbar close button', async () => {
+  it('closes the transient search pane with Escape from the prompt', async () => {
     const onClose = vi.fn();
     mount({ onClose });
 
     await ready();
-    button('Close Semantic Search').click();
+    root
+      .querySelector('#fm-knowledge-subjects')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 
     expect(onClose).toHaveBeenCalledOnce();
   });
@@ -716,8 +722,8 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
     type(dsl(), 'about: retrieval do: apply to: "write a scheduler" format: steps');
 
-    await vi.waitFor(() => expect(button('Query plan').disabled).toBe(false));
-    button('Query plan').click();
+    await vi.waitFor(() => expect(button('Show plan').disabled).toBe(false));
+    button('Show plan').click();
     await vi.waitFor(() => expect(root.textContent).toContain('Not used for retrieval'));
     const excluded = root.querySelector('.fm-knowledge-excluded');
     expect(excluded?.textContent).toContain('do: apply');
@@ -731,7 +737,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     root.querySelectorAll<HTMLInputElement>('.fm-knowledge-needs input')[1]?.click();
     m.redraw.sync();
 
-    button('Query plan').click();
+    button('Show plan').click();
 
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-knowledge-planned-searches')).not.toBeNull(),

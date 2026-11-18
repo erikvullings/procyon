@@ -2317,6 +2317,7 @@ export const pl = {
       'Te pola służą tylko do odpowiedzi: są przechowywane z zapytaniem, ale nigdy nie są przeszukiwane.',
     excludedField: '{field}: {value}',
     plan: 'Plan zapytania',
+    showPlan: 'Pokaż plan',
     planVersion: 'Planista {version}',
     planScope: 'Zakres: {scope}',
     planSources: 'Autoryzowane zindeksowane źródła: {count}',
@@ -2452,7 +2453,6 @@ export const pl = {
     answerCitations: 'Źródła ({count})',
     answerCitationNotDisplayed: 'nie wchodzi w skład wyświetlanych dowodów',
     openCitation: 'Otwórz {label}',
-    showAdvanced: 'Zaawansowane',
     trace: 'Dołącz ślad pobierania',
     traceHeading: 'Ślad pobierania',
     traceSummary:
@@ -2469,6 +2469,7 @@ export const pl = {
     pdfImageResult: 'Obraz osadzony w pliku PDF · Strona {page} · Obraz {image}',
     pdfPageRenderEvidence: 'Wyrenderowana strona PDF (nie osadzony obraz)',
     pdfPageRenderResult: 'Wyrenderowana strona PDF · Strona {page}',
+    tabTitle: 'Semantyczne',
     title: 'Wyszukiwanie semantyczne',
     openTitle: 'Wyszukiwanie semantyczne…',
     subjectsPlaceholder: 'Wpisz szukane terminy',

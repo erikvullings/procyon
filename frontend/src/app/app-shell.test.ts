@@ -5412,15 +5412,13 @@ describe('AppShell', () => {
     expect(root.querySelector('.fm-knowledge-search')?.textContent).not.toContain(
       'Generate answer',
     );
-    expect(root.querySelector('.fm-pane-tabs')?.textContent).toContain('Semantic Search');
+    expect(root.querySelector('.fm-pane-tabs')?.textContent).toContain('Semantic');
     expect(dispatchWorkspaceCommand).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'addTransientTab' }),
       undefined,
     );
 
-    root
-      .querySelector<HTMLButtonElement>('.fm-pane-tab-close[aria-label*="Semantic Search"]')
-      ?.click();
+    root.querySelector<HTMLButtonElement>('.fm-pane-tab-close[aria-label*="Semantic"]')?.click();
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-search')).toBeNull());
   });
 
@@ -5673,7 +5671,7 @@ describe('AppShell', () => {
     await vi.waitFor(() => expect(root.querySelector('.fm-knowledge-workspace')).not.toBeNull());
     const tabs = (): number =>
       [...root.querySelectorAll('.fm-pane-tab')].filter((tab) =>
-        tab.textContent?.includes('Semantic Search'),
+        tab.textContent?.includes('Semantic'),
       ).length;
     expect(tabs()).toBe(1);
 

@@ -3406,7 +3406,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
 }
 
 .fm-app-shell .fm-knowledge-search-submit.btn-icon,
-.fm-app-shell .fm-knowledge-search-close.btn-icon,
 .fm-app-shell .fm-knowledge-settings-trigger.btn-icon {
   display: flex;
   align-items: center;
@@ -3496,6 +3495,10 @@ input[type="text"].fm-shortcuts-help-capture-input {
   gap: 0.25rem;
 }
 
+.fm-knowledge-trace {
+  min-height: var(--fm-row-height);
+}
+
 .fm-knowledge-needs label {
   position: relative;
   cursor: pointer;
@@ -3567,22 +3570,28 @@ input[type="text"].fm-shortcuts-help-capture-input {
   opacity: 0.5;
 }
 
-.fm-knowledge-advanced > summary,
 .fm-knowledge-dsl summary,
 .fm-knowledge-plan summary,
 .fm-knowledge-result-details summary {
   cursor: pointer;
 }
 
-.fm-knowledge-advanced {
-  border-top: 1px solid var(--fm-border, rgb(0 0 0 / 15%));
-  padding-top: 0.5rem;
-}
-
 .fm-knowledge-advanced-body {
   display: grid;
   gap: 0.75rem;
-  padding-top: 0.75rem;
+}
+
+/* Query plan: the trace switch and the plan button share one row, centred on each other. */
+.fm-knowledge-plan-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: var(--fm-row-height);
+}
+
+.fm-knowledge-plan-controls > .btn-flat {
+  margin: 0;
 }
 
 .fm-knowledge-dsl textarea {
@@ -4086,9 +4095,19 @@ input[type="text"].fm-shortcuts-help-capture-input {
   box-sizing: border-box;
   height: var(--fm-row-height);
   min-height: var(--fm-row-height);
+  padding-block: 0;
   padding-inline-start: 0.5rem;
   background: var(--fm-surface-elevated);
   font-size: 0.92em;
+}
+
+/* One row high like the other pane bars: every control inside takes the row height. */
+.fm-knowledge-ask-bar > .fm-tooltip,
+.fm-knowledge-ask-bar .btn-icon,
+.fm-knowledge-ask-bar .btn-flat {
+  height: var(--fm-row-height);
+  max-height: var(--fm-row-height);
+  margin-block: 0;
 }
 
 .fm-knowledge-ask-unavailable {
@@ -4538,6 +4557,7 @@ input[type="text"].fm-shortcuts-help-capture-input {
 .fm-plugin-diagnostic,
 .fm-plugin-toggle-error {
   margin-top: 0.25rem;
+  margin-left: 8px;
   color: var(--fm-error);
 }
 
