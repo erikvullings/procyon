@@ -424,6 +424,8 @@ export const nl = {
     automaticUpdateChecks: 'Automatisch controleren op updates',
     automaticUpdateChecksHint:
       'Controleert na het opstarten. Procyon vraagt altijd toestemming voor downloaden, installeren en opnieuw starten.',
+    betaUpdateChecksLockedHint:
+      'Deze build is een voorlopige versie, dus bètaversies worden altijd gezocht.',
     betaUpdateChecks: 'Ook zoeken naar bètaversies',
     betaUpdateChecksHint:
       'Bètaversies verschijnen voordat ze voor iedereen zijn goedgekeurd en kunnen minder stabiel zijn. Zet dit aan om nieuwe versies te helpen testen.',
