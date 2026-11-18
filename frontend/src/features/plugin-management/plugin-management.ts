@@ -126,7 +126,8 @@ export const PluginManagement: FactoryComponent<PluginManagementAttrs> = () => {
                     ]),
                   ),
                 ]),
-                plugin.diagnostic === undefined
+                // The host sends `null` for a plugin without a diagnostic; only a message counts.
+                !plugin.diagnostic
                   ? undefined
                   : m(
                       '.fm-plugin-diagnostic.col.s12',
