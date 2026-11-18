@@ -337,8 +337,10 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
 
     await ready();
 
-    const include = root.querySelector<HTMLButtonElement>('.fm-knowledge-include-folder-action');
-    expect(include?.textContent).toBe('Include folder "documents" for semantic search');
+    const include = root.querySelector<HTMLInputElement>('.fm-knowledge-folder-filter input');
+    expect(root.querySelector('.fm-knowledge-folder-filter span')?.textContent).toBe(
+      'Include folder "documents" for semantic search',
+    );
     const confirm = vi.spyOn(client, 'confirmSemanticEnrolment');
     const preview = vi.spyOn(client, 'previewSemanticEnrolment');
     include?.focus();
@@ -366,10 +368,10 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     });
     mount({ client, currentFolder: () => displayedFolder });
     await ready();
-    expect(root.querySelector('.fm-knowledge-include-folder-action')).not.toBeNull();
+    expect(root.querySelector('.fm-knowledge-folder-filter input')).not.toBeNull();
     displayedFolder = { providerId: 'local', uri: 'file:///other' };
     m.redraw.sync();
-    expect(root.querySelector('.fm-knowledge-include-folder-action')).toBeNull();
+    expect(root.querySelector('.fm-knowledge-folder-filter input')).toBeNull();
   });
 
   it('does not offer folder removal when the current folder is already included', async () => {
@@ -384,8 +386,11 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
       unavailableReason: null,
     });
     mount({ client, currentFolder });
+    await ready();
 
-    expect(root.querySelector('.fm-knowledge-include-folder-action')).toBeNull();
+    expect(root.querySelector('.fm-knowledge-folder-filter span')?.textContent).not.toContain(
+      'for semantic search',
+    );
 
     expect(root.querySelector('.fm-knowledge-search-options')).toBeNull();
   });

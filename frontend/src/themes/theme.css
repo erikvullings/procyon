@@ -3318,21 +3318,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
   font-weight: 600;
 }
 
-.fm-knowledge-include-folder-action {
-  margin: 0.25rem 0.5rem;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--fm-accent);
-  cursor: pointer;
-  text-decoration: underline;
-}
-
-.fm-knowledge-include-folder-action:focus-visible {
-  outline: 2px solid var(--fm-accent);
-  outline-offset: 2px;
-}
-
 .fm-knowledge-field {
   display: grid;
   gap: 0.25rem;
@@ -4007,7 +3992,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
   flex-direction: column;
   max-height: 60%;
   min-height: 0;
-  border-top: 1px solid var(--fm-border);
 }
 
 .fm-knowledge-answer-output {
@@ -4097,16 +4081,18 @@ input[type="text"].fm-shortcuts-help-capture-input {
   min-height: var(--fm-row-height);
   padding-block: 0;
   padding-inline-start: 0.5rem;
+  /* The 1px rule is part of the row height (border-box), like the other pane bars' bottom borders. */
+  border-top: 1px solid var(--fm-border);
   background: var(--fm-surface-elevated);
   font-size: 0.92em;
 }
 
-/* One row high like the other pane bars: every control inside takes the row height. */
+/* One row high like the other pane bars: every control inside takes the row height less the rule. */
 .fm-knowledge-ask-bar > .fm-tooltip,
 .fm-knowledge-ask-bar .btn-icon,
 .fm-knowledge-ask-bar .btn-flat {
-  height: var(--fm-row-height);
-  max-height: var(--fm-row-height);
+  height: calc(var(--fm-row-height) - 1px);
+  max-height: calc(var(--fm-row-height) - 1px);
   margin-block: 0;
 }
 
@@ -4131,10 +4117,6 @@ input[type="text"].fm-shortcuts-help-capture-input {
   font: inherit;
   text-decoration: underline;
   cursor: pointer;
-}
-
-.fm-knowledge-answer-output:not(.is-empty) + .fm-knowledge-ask-bar {
-  border-top: 1px solid var(--fm-border);
 }
 
 .fm-knowledge-ask-icon,
@@ -6067,33 +6049,75 @@ button.fm-activity-count {
   flex: 0 0 auto;
 }
 
-/* One row high, like the status bar of a directory pane; the active tab takes the folder
- * header's weight and colour, the others recede. */
-.fm-themes-statusbar {
+/* Breadcrumb bar of the themes pane: the scope and counts truncate, the icons keep their size. */
+.fm-themes-crumbs {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.fm-themes-crumb {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-app-shell .fm-themes-breadcrumb .fm-themes-icon.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
+  width: var(--fm-row-height);
+  min-width: var(--fm-row-height);
   height: var(--fm-row-height);
   min-height: var(--fm-row-height);
-  padding-block: 0;
-}
-
-.fm-themes-status-tab {
-  height: var(--fm-row-height) !important;
-  min-height: 0 !important;
-  margin: 0 !important;
-  padding: 0 0.6rem !important;
+  margin: 0;
+  padding: 0;
   color: var(--fm-text-muted);
-  font: inherit;
-  font-weight: 400;
-  line-height: var(--fm-row-height) !important;
-  text-transform: none;
 }
 
-.fm-themes-status-tab[aria-pressed="true"] {
-  color: var(--fm-text);
-  font-weight: 600;
-  background: transparent;
+.modal.fm-dense-modal.fm-themes-dialog {
+  width: min(40rem, calc(100vw - 2rem)) !important;
+  max-width: min(40rem, calc(100vw - 2rem)) !important;
 }
 
+.fm-themes-dialog-body {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.fm-themes-root-list {
+  margin: 0.4rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fm-themes-root-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* Themes actions use the surface tokens in both themes; the primary one uses the accent. */
+.fm-app-shell .fm-themes-action.btn {
+  margin: 0;
+  background: var(--fm-accent);
+  color: var(--fm-surface);
+  border: 1px solid var(--fm-accent);
+  box-shadow: none;
+}
+
+.fm-app-shell .fm-themes-action.btn:disabled,
+.fm-app-shell .fm-themes-action.btn[disabled] {
+  background: var(--fm-surface-elevated) !important;
+  color: var(--fm-text-muted) !important;
+  border: 1px solid var(--fm-border);
+  opacity: 1;
+}
+
+/* One row high, like the status bar of a directory pane; the active tab takes the folder
+ * header's weight and colour, the others recede. */
 .fm-themes-content,
 .fm-themes-body {
   min-width: 0;
@@ -6108,6 +6132,14 @@ button.fm-activity-count {
   display: grid;
   gap: 0.75rem;
   color: var(--fm-text);
+}
+
+/* The themes pane is a column: the breadcrumb bar stays at the top, the content fills the rest.
+ * `.fm-themes` above is a grid for other panes; this more specific rule keeps the column. */
+.fm-themes.fm-themes-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 .fm-themes h5 {
@@ -6133,34 +6165,6 @@ button.fm-activity-count {
   border: 1px solid var(--fm-border);
   border-radius: var(--fm-radius);
   background: var(--fm-surface-muted, var(--fm-hover));
-}
-
-.fm-themes-scopes {
-  display: flex;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-}
-
-.fm-themes-scope {
-  padding: 0.25rem 0.7rem;
-  border: 1px solid var(--fm-border);
-  border-radius: var(--fm-radius-pill);
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
-.fm-themes-scope[aria-pressed="true"] {
-  border-color: var(--fm-accent);
-  background: var(--fm-selection);
-}
-
-.fm-themes-scope:focus-visible,
-.fm-themes-row:focus-visible,
-.fm-themes-source:focus-visible,
-.fm-themes-expand:focus-visible {
-  outline: 2px solid var(--fm-accent);
-  outline-offset: 2px;
 }
 
 .fm-themes-layout {
@@ -6423,30 +6427,11 @@ button.fm-activity-count {
   border-radius: var(--fm-radius);
 }
 
-.fm-themes-root-list {
-  margin: 0.4rem 0;
-  padding: 0;
-  list-style: none;
-}
-
-.fm-themes-field {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
 /*
  * Plain HTML checkboxes and radios: mm's base rule hides them (`position: absolute; opacity: 0`)
  * at 2 classes of specificity, so `.fm-app-shell` lifts these rules to win the tie, as above.
  */
 .fm-app-shell .fm-themes-field input[type="checkbox"],
-.fm-app-shell .fm-themes-field input[type="radio"] {
-  position: static;
-  opacity: 1;
-  pointer-events: auto;
-}
-
 .fm-themes-root-actions {
   display: flex;
   gap: 0.5rem;
@@ -6454,32 +6439,6 @@ button.fm-activity-count {
 }
 
 /* Disabled actions keep a readable label on the dark surface instead of mm's pale fill. */
-.fm-app-shell .fm-themes-root-actions .btn:disabled {
-  background: var(--fm-surface-elevated);
-  border: 1px solid var(--fm-border);
-  box-shadow: none;
-  color: var(--fm-text-muted);
-  opacity: 1;
-}
-
-.fm-themes-export-body {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.5rem;
-  margin-top: 0.6rem;
-}
-
-.fm-themes-field {
-  border: 0;
-  padding: 0;
-}
-
-.fm-themes-field select,
-.fm-themes-field input[type="url"] {
-  min-width: 16rem;
-}
-
 /* "Open Terminal With..." picker (task 0127). */
 .fm-terminal-picker {
   list-style: none;
@@ -6740,4 +6699,39 @@ button.fm-activity-count {
 
 .fm-toolbar-overflow-menu .fm-toolbar-overflow-item[aria-checked="true"] .fm-icon {
   color: var(--fm-accent);
+}
+
+/* Recolours mm's checkbox to theme tokens, as the other dialogs do. The focus ring follows the
+ * accent too, so the last ticked box does not keep mm's default blue marker. */
+.fm-app-shell .fm-themes-checkbox input[type="checkbox"]:not(:checked) + span:not(.lever)::before {
+  box-sizing: border-box;
+  border-color: var(--fm-border);
+  background-color: transparent;
+}
+
+.fm-app-shell .fm-themes-checkbox input[type="checkbox"]:focus-visible + span:not(.lever)::before {
+  border-color: var(--fm-accent);
+}
+
+.fm-app-shell .fm-themes-checkbox input[type="checkbox"]:checked + span:not(.lever)::before {
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  border: 2px solid var(--fm-accent);
+  background-color: var(--fm-accent);
+  transform: none;
+}
+
+.fm-app-shell .fm-themes-checkbox input[type="checkbox"]:checked + span:not(.lever)::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 6px;
+  width: 6px;
+  height: 10px;
+  border: solid var(--fm-surface);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }

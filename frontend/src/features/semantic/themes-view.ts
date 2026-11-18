@@ -1,8 +1,24 @@
 import m, { type FactoryComponent, type Vnode, type VnodeDOM } from 'mithril';
-import { InputCheckbox, Skeleton } from 'mithril-materialized';
+import {
+  Button,
+  FlatButton,
+  IconButton,
+  InputCheckbox,
+  ModalPanel,
+  RadioButtons,
+  Select,
+  Skeleton,
+  TextInput,
+} from 'mithril-materialized';
 
 import type { SemanticClient } from '../../api/client/semantic-client.ts';
-import { chevronDownIcon, chevronUpIcon } from '../../components/tabler-icons';
+import {
+  chevronDownIcon,
+  chevronUpIcon,
+  downloadIcon,
+  folderOpenIcon,
+} from '../../components/tabler-icons';
+import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type {
   CorpusThemeExportFormat,
@@ -82,8 +98,6 @@ const EXPORT_FORMATS: readonly {
 ];
 
 /** The views the status bar toggles between; the map is the reason the pane was opened. */
-type ThemesPanel = 'map' | 'folders' | 'export';
-
 const isSkos = (format: CorpusThemeExportFormat): boolean => format.startsWith('skos');
 
 /** Selection in the list or on the map; `null` is the "no theme" bucket. */
@@ -341,6 +355,10 @@ function passageRow(
   );
 }
 
+const ScopeRadios = RadioButtons<number>();
+const ExportScopeRadios = RadioButtons<'all' | 'selected'>();
+const FormatSelect = Select<CorpusThemeExportFormat>();
+
 /** Corpus themes as a full pane view (map, theme list, details), like disk usage. */
 export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
   let busy = false;
@@ -358,7 +376,7 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
   /** Roots the shown themes were computed for, and the checkboxes' not yet applied state. */
   let appliedRoots: readonly string[] = [];
   let draftRoots: readonly string[] = [];
-  let panel: ThemesPanel = 'map';
+  let dialog: 'folders' | 'export' | undefined;
   let exportFormat: CorpusThemeExportFormat = 'markdown';
   let exportOnlySelected = false;
   let includePassages = false;
@@ -369,6 +387,13 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
 
   function baseScope(): RagScope | undefined {
     return visibleScopes[Math.min(scopeIndex, visibleScopes.length - 1)];
+  }
+
+  /** A scope's name, with the folder it is about when there is one. */
+  function scopeText(scope: RagScope): string {
+    return scope.kind === 'currentFolder' && scope.folder != null
+      ? `${scope.label}: ${folderName(scope.folder.uri)}`
+      : scope.label;
   }
 
   /** The library scope narrows to the chosen roots; other scopes are used as offered. */
@@ -401,9 +426,9 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
     return root.label.length > 0 ? root.label : folderName(root.location.uri);
   }
 
-  /** Folder name and its document count. */
+  /** Folder name and the documents indexed in it. */
   function rootOption(root: KnowledgeRoot): string {
-    const count = root.confirmedCompletedSources + root.unverifiedLegacySources;
+    const count = root.indexedSources;
     return `${rootLabel(root)} · ${t('themes', 'folderDocuments', { count })}`;
   }
 
@@ -424,7 +449,7 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
     appliedRoots = chosen;
     draftRoots = chosen;
     attrs.onSelectRoots?.(chosen.length === roots.length ? [] : chosen);
-    panel = 'map';
+    dialog = undefined;
     void load(attrs);
   }
 
@@ -433,49 +458,59 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
     return roots.length >= 2 && baseScope()?.kind === 'entireLibrary';
   }
 
-  function rootsPanel(attrs: ThemesViewAttrs): Vnode | undefined {
-    if (!hasRootsPanel()) return undefined;
-    return m('section.fm-themes-roots', [
-      m('h4', t('themes', 'foldersHeading')),
-      m('p.fm-themes-muted', t('themes', 'foldersHint')),
-      m(
-        'ul.fm-themes-root-list',
-        roots.map((root) =>
-          m(
-            'li',
-            { key: root.rootId },
-            m(InputCheckbox, {
-              inputId: `themes-root-${root.rootId}`,
-              label: rootOption(root),
-              checked: draftRoots.includes(root.rootId),
-              disabled: busy,
-              onchange: (checked: boolean) => toggleRoot(root.rootId, checked),
-            }),
-          ),
-        ),
-      ),
-      m('.fm-themes-root-actions', [
-        m(
-          'button.btn',
-          {
-            type: 'button',
-            disabled: busy || draftRoots.length === 0 || !rootsChanged(),
-            onclick: () => applyRoots(attrs),
-          },
-          t('themes', 'applyFolders'),
-        ),
-        m(
-          'button.btn-flat',
-          {
-            type: 'button',
-            disabled: busy || draftRoots.length === roots.length,
-            onclick: () => {
-              draftRoots = roots.map((root) => root.rootId);
+  /** Folder dialog: the scope to analyse, then the folders a library scope narrows to. */
+  function foldersBody(attrs: ThemesViewAttrs): Vnode {
+    return m('.fm-themes-dialog-body.fm-themes-folders', [
+      visibleScopes.length > 1
+        ? m(ScopeRadios, {
+            label: t('themes', 'scopeLabel'),
+            options: visibleScopes.map((scope, index) => ({ id: index, label: scopeText(scope) })),
+            checkedId: scopeIndex,
+            disabled: busy,
+            onchange: (index: number) => {
+              if (index === scopeIndex) return;
+              scopeIndex = index;
+              void load(attrs);
             },
-          },
-          t('themes', 'selectAllFolders'),
-        ),
-      ]),
+          })
+        : undefined,
+      hasRootsPanel()
+        ? m('section.fm-themes-roots', [
+            m('p.fm-themes-muted', t('themes', 'foldersHint')),
+            m(
+              'ul.fm-themes-root-list',
+              roots.map((root) =>
+                m(
+                  'li',
+                  { key: root.rootId },
+                  m(InputCheckbox, {
+                    inputId: `themes-root-${root.rootId}`,
+                    className: 'fm-themes-checkbox',
+                    label: rootOption(root),
+                    checked: draftRoots.includes(root.rootId),
+                    disabled: busy,
+                    onchange: (checked: boolean) => toggleRoot(root.rootId, checked),
+                  }),
+                ),
+              ),
+            ),
+            m('.fm-themes-root-actions', [
+              m(Button, {
+                label: t('themes', 'applyFolders'),
+                className: 'fm-themes-action',
+                disabled: busy || draftRoots.length === 0 || !rootsChanged(),
+                onclick: () => applyRoots(attrs),
+              }),
+              m(FlatButton, {
+                label: t('themes', 'selectAllFolders'),
+                disabled: busy || draftRoots.length === roots.length,
+                onclick: () => {
+                  draftRoots = roots.map((root) => root.rootId);
+                },
+              }),
+            ]),
+          ])
+        : undefined,
     ]);
   }
 
@@ -524,107 +559,79 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
   }
 
   /** Export options. Document text and titles are opt-in; SKOS offers a base URI. */
-  function exportPanel(attrs: ThemesViewAttrs, themes: CorpusThemes): Vnode | undefined {
-    if (attrs.exportFolder === undefined) return undefined;
+  /** Export dialog: format, what to write, and the save action. */
+  function exportBody(attrs: ThemesViewAttrs, themes: CorpusThemes): Vnode {
     const singleTheme = typeof selected === 'number';
-    return m('section.fm-themes-export', [
-      m('.fm-themes-export-body', [
-        m('label.fm-themes-field', [
-          m('span', t('themes', 'exportFormat')),
-          m(
-            'select.browser-default',
-            {
-              value: exportFormat,
-              onchange: (event: Event) => {
-                exportFormat = (event.target as HTMLSelectElement).value as CorpusThemeExportFormat;
+    return m('.fm-themes-dialog-body.fm-themes-export', [
+      m(FormatSelect, {
+        id: 'fm-themes-export-format',
+        label: t('themes', 'exportFormat'),
+        options: EXPORT_FORMATS.map((entry) => ({
+          id: entry.format,
+          label: t('themes', entry.label),
+        })),
+        checkedId: exportFormat,
+        onchange: (ids: CorpusThemeExportFormat[]) => {
+          const [format] = ids;
+          if (format !== undefined) exportFormat = format;
+        },
+      }),
+      m(ExportScopeRadios, {
+        label: t('themes', 'exportWhat'),
+        options: [
+          { id: 'all', label: t('themes', 'exportAll') },
+          { id: 'selected', label: t('themes', 'exportSelected'), disabled: !singleTheme },
+        ],
+        checkedId: exportOnlySelected && singleTheme ? 'selected' : 'all',
+        onchange: (id: 'all' | 'selected') => {
+          exportOnlySelected = id === 'selected';
+        },
+      }),
+      m(InputCheckbox, {
+        inputId: 'fm-themes-export-passages',
+        className: 'fm-themes-checkbox',
+        label: t('themes', 'exportPassages'),
+        checked: includePassages,
+        onchange: (checked: boolean) => {
+          includePassages = checked;
+        },
+      }),
+      m(InputCheckbox, {
+        inputId: 'fm-themes-export-documents',
+        className: 'fm-themes-checkbox',
+        label: t('themes', 'exportDocuments'),
+        checked: includeDocuments,
+        onchange: (checked: boolean) => {
+          includeDocuments = checked;
+        },
+      }),
+      isSkos(exportFormat)
+        ? [
+            m(TextInput, {
+              id: 'fm-themes-export-base-uri',
+              label: t('themes', 'exportBaseUri'),
+              placeholder: 'https://example.org/themes/',
+              value: baseUri,
+              oninput: (value: string) => {
+                baseUri = value;
               },
-            },
-            EXPORT_FORMATS.map((entry) =>
-              m(
-                'option',
-                { value: entry.format, selected: entry.format === exportFormat },
-                t('themes', entry.label),
-              ),
-            ),
+            }),
+            m('p.fm-themes-muted', t('themes', 'exportBaseUriHint')),
+          ]
+        : undefined,
+      m(Button, {
+        label: exporting ? t('themes', 'exporting') : t('themes', 'exportRun'),
+        className: 'fm-themes-action',
+        disabled: exporting || busy,
+        onclick: () => void runExport(attrs, themes),
+      }),
+      exportResult === undefined
+        ? undefined
+        : m(
+            exportResult.ok ? 'p.fm-themes-notice' : 'p.fm-themes-error',
+            { role: exportResult.ok ? 'status' : 'alert' },
+            exportResult.text,
           ),
-        ]),
-        m('fieldset.fm-themes-field', [
-          m('legend', t('themes', 'exportWhat')),
-          m('label', [
-            m('input', {
-              type: 'radio',
-              name: 'fm-themes-export-what',
-              checked: !exportOnlySelected || !singleTheme,
-              onchange: () => {
-                exportOnlySelected = false;
-              },
-            }),
-            m('span', t('themes', 'exportAll')),
-          ]),
-          m('label', [
-            m('input', {
-              type: 'radio',
-              name: 'fm-themes-export-what',
-              checked: exportOnlySelected && singleTheme,
-              disabled: !singleTheme,
-              onchange: () => {
-                exportOnlySelected = true;
-              },
-            }),
-            m('span', t('themes', 'exportSelected')),
-          ]),
-        ]),
-        m('label.fm-themes-field', [
-          m('input', {
-            type: 'checkbox',
-            checked: includePassages,
-            onchange: (event: Event) => {
-              includePassages = (event.target as HTMLInputElement).checked;
-            },
-          }),
-          m('span', t('themes', 'exportPassages')),
-        ]),
-        m('label.fm-themes-field', [
-          m('input', {
-            type: 'checkbox',
-            checked: includeDocuments,
-            onchange: (event: Event) => {
-              includeDocuments = (event.target as HTMLInputElement).checked;
-            },
-          }),
-          m('span', t('themes', 'exportDocuments')),
-        ]),
-        isSkos(exportFormat)
-          ? m('label.fm-themes-field', [
-              m('span', t('themes', 'exportBaseUri')),
-              m('input', {
-                type: 'url',
-                placeholder: 'https://example.org/themes/',
-                value: baseUri,
-                oninput: (event: Event) => {
-                  baseUri = (event.target as HTMLInputElement).value;
-                },
-              }),
-              m('span.fm-themes-muted', t('themes', 'exportBaseUriHint')),
-            ])
-          : undefined,
-        m(
-          'button.btn',
-          {
-            type: 'button',
-            disabled: exporting || busy,
-            onclick: () => void runExport(attrs, themes),
-          },
-          exporting ? t('themes', 'exporting') : t('themes', 'exportRun'),
-        ),
-        exportResult === undefined
-          ? undefined
-          : m(
-              exportResult.ok ? 'p.fm-themes-notice' : 'p.fm-themes-error',
-              { role: exportResult.ok ? 'status' : 'alert' },
-              exportResult.text,
-            ),
-      ]),
     ]);
   }
 
@@ -895,58 +902,60 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
       const themes = response?.themes ?? undefined;
       const message = response === undefined ? undefined : outcomeMessage(response);
       const stale = themes !== undefined && themesAreStale(themes, status);
-      const available: readonly ThemesPanel[] = [
-        'map',
-        ...(hasRootsPanel() ? (['folders'] as const) : []),
-        ...(attrs.exportFolder === undefined || themes === undefined ? [] : (['export'] as const)),
-      ];
-      const shown: ThemesPanel = available.includes(panel) ? panel : 'map';
       return m('.fm-themes.fm-themes-view', [
         m('.fm-breadcrumb-row.fm-themes-breadcrumb', [
-          m(
-            'nav.fm-breadcrumb',
-            { 'aria-label': t('themes', 'title') },
+          m('nav.fm-breadcrumb.fm-themes-crumbs', { 'aria-label': t('themes', 'title') }, [
             m(
-              'span.fm-breadcrumb-segment',
-              themes === undefined
-                ? undefined
-                : t('themes', 'analysed', {
+              'span.fm-breadcrumb-segment.fm-themes-crumb',
+              activeScope() === undefined ? undefined : scopeText(activeScope() as RagScope),
+            ),
+            themes === undefined
+              ? undefined
+              : m(
+                  'span.fm-breadcrumb-segment.fm-themes-crumb',
+                  t('themes', 'analysed', {
                     documents: themes.documentCount,
                     passages: themes.chunkCount,
                     shown: themes.mapPoints.length,
                   }),
-            ),
-          ),
+                ),
+          ]),
+          hasRootsPanel()
+            ? tooltip(
+                t('themes', 'foldersTab'),
+                m(
+                  IconButton,
+                  {
+                    className: 'fm-themes-icon',
+                    'aria-label': t('themes', 'foldersTab'),
+                    onclick: () => {
+                      dialog = 'folders';
+                    },
+                  },
+                  folderOpenIcon({ size: 16 }),
+                ),
+              )
+            : undefined,
+          attrs.exportFolder === undefined || themes === undefined
+            ? undefined
+            : tooltip(
+                t('themes', 'exportTitle'),
+                m(
+                  IconButton,
+                  {
+                    className: 'fm-themes-icon',
+                    'aria-label': t('themes', 'exportTitle'),
+                    onclick: () => {
+                      dialog = 'export';
+                    },
+                  },
+                  downloadIcon({ size: 16 }),
+                ),
+              ),
           attrs.onNewTab === undefined ? undefined : newTabButton(attrs.onNewTab),
         ]),
         m('.fm-themes-scroll', [
           m('.fm-themes-content', [
-            visibleScopes.length > 1
-              ? m(
-                  '.fm-themes-scopes',
-                  { role: 'group', 'aria-label': t('themes', 'scopeLabel') },
-                  visibleScopes.map((scope, index) =>
-                    m(
-                      'button.fm-themes-scope',
-                      {
-                        type: 'button',
-                        key: scope.kind,
-                        'aria-pressed': String(index === scopeIndex),
-                        disabled: busy,
-                        onclick: () => {
-                          if (index === scopeIndex) return;
-                          scopeIndex = index;
-                          void load(attrs);
-                        },
-                      },
-                      scope.kind === 'currentFolder' && scope.folder != null
-                        ? `${scope.label}: ${folderName(scope.folder.uri)}`
-                        : scope.label,
-                    ),
-                  ),
-                )
-              : undefined,
-            shown === 'folders' ? rootsPanel(attrs) : undefined,
             busy
               ? m('.fm-themes-progress', { role: 'status', 'aria-busy': 'true' }, [
                   m('span', t('themes', 'analyzing')),
@@ -967,79 +976,69 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
                   ),
                 ])
               : undefined,
-            themes === undefined || shown === 'folders'
+            themes === undefined
               ? undefined
               : m('.fm-themes-body', [
-                  shown === 'export' ? exportPanel(attrs, themes) : undefined,
-                  shown !== 'map'
-                    ? undefined
-                    : m('.fm-themes-layout', [
-                        m('.fm-themes-map', [
-                          m('h4', t('themes', 'mapHeading')),
-                          m(Scatter, {
-                            points: themes.mapPoints,
-                            selected,
-                            hovered,
-                            onHover: (point) => {
-                              hovered = point;
+                  m('.fm-themes-layout', [
+                    m('.fm-themes-map', [
+                      m('h4', t('themes', 'mapHeading')),
+                      m(Scatter, {
+                        points: themes.mapPoints,
+                        selected,
+                        hovered,
+                        onHover: (point) => {
+                          hovered = point;
+                        },
+                        onPick: (point) => {
+                          selected = point.theme ?? null;
+                          selectedPoint = point;
+                          void Promise.resolve(attrs.onOpenPassage(point.passage)).catch(
+                            (cause: unknown) => {
+                              error = errorMessage(cause, t('themes', 'openSourceFailed'));
+                              m.redraw();
                             },
-                            onPick: (point) => {
-                              selected = point.theme ?? null;
-                              selectedPoint = point;
-                              void Promise.resolve(attrs.onOpenPassage(point.passage)).catch(
-                                (cause: unknown) => {
-                                  error = errorMessage(cause, t('themes', 'openSourceFailed'));
-                                  m.redraw();
-                                },
-                              );
-                            },
-                          }),
-                          m('p.fm-themes-muted', t('themes', 'mapLabel')),
-                        ]),
-                        m('.fm-themes-listing', [
-                          m('h4', t('themes', 'listHeading')),
-                          themeList(themes),
-                        ]),
-                      ]),
-                  shown !== 'map'
-                    ? undefined
-                    : m(
-                        'p.fm-themes-hover',
-                        { role: 'status' },
-                        hovered === undefined
-                          ? undefined
-                          : [
-                              m('strong', cleanTitle(hovered.passage.title)),
-                              ` — ${decodeEntities(hovered.passage.excerpt)}`,
-                            ],
-                      ),
-                  shown === 'map' ? themeDetails(themes, attrs) : undefined,
+                          );
+                        },
+                      }),
+                      m('p.fm-themes-muted', t('themes', 'mapLabel')),
+                    ]),
+                    m('.fm-themes-listing', [
+                      m('h4', t('themes', 'listHeading')),
+                      themeList(themes),
+                    ]),
+                  ]),
+                  m(
+                    'p.fm-themes-hover',
+                    { role: 'status' },
+                    hovered === undefined
+                      ? undefined
+                      : [
+                          m('strong', cleanTitle(hovered.passage.title)),
+                          ` — ${decodeEntities(hovered.passage.excerpt)}`,
+                        ],
+                  ),
+                  themeDetails(themes, attrs),
                 ]),
           ]),
         ]),
-        available.length < 2
+        dialog === undefined
           ? undefined
-          : m(
-              '.fm-pane-status.fm-themes-statusbar',
-              { role: 'group', 'aria-label': t('themes', 'viewsLabel') },
-              available.map((id) =>
-                m(
-                  'button.btn-flat.fm-themes-status-tab',
-                  {
-                    type: 'button',
-                    key: id,
-                    'aria-pressed': String(id === shown),
-                    onclick: () => {
-                      panel = id;
-                    },
-                  },
-                  t(
-                    'themes',
-                    id === 'map' ? 'mapHeading' : id === 'folders' ? 'foldersTab' : 'exportTab',
-                  ),
-                ),
-              ),
-            ),
+          : m(ModalPanel, {
+              className: 'fm-dense-modal fm-themes-dialog',
+              title:
+                dialog === 'folders' ? t('themes', 'foldersHeading') : t('themes', 'exportTitle'),
+              isOpen: true,
+              closeOnEsc: true,
+              onToggle: (open: boolean) => {
+                if (!open) dialog = undefined;
+              },
+              description:
+                dialog === 'folders'
+                  ? foldersBody(attrs)
+                  : themes === undefined
+                    ? undefined
+                    : exportBody(attrs, themes),
+            }),
       ]);
     },
   };

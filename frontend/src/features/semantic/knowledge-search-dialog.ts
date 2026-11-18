@@ -269,6 +269,19 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
     }
   }
 
+  /** The opening folder can be enrolled from here: the active pane shows it and it is not busy. */
+  function folderIncludable(attrs: KnowledgeSearchDialogAttrs): boolean {
+    return (
+      openingFolder !== undefined &&
+      currentFolderIncludable &&
+      // The backend only enrols the folder shown in the active pane, so a stale opening
+      // folder cannot be included from here.
+      attrs.currentFolder?.providerId === openingFolder.providerId &&
+      attrs.currentFolder.uri === openingFolder.uri &&
+      busy !== 'loading'
+    );
+  }
+
   function modeAvailable(candidate: KnowledgeRetrievalMode): boolean {
     if (capabilities === undefined) return candidate === 'hybrid';
     switch (candidate) {
@@ -1370,15 +1383,23 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
               ),
               attrs.onNewTab === undefined ? undefined : newTabButton(attrs.onNewTab),
             ]),
-            openingFolder === undefined
+            // Indexed: filter to this folder. Not yet indexed: the same row offers inclusion,
+            // which opens the consent prompt; the box stays unticked.
+            openingFolder === undefined || (!currentFolderIndexed && !folderIncludable(attrs))
               ? undefined
               : m('label.fm-knowledge-folder-filter', [
                   m('input', {
                     type: 'checkbox',
-                    checked: scopeKind === 'currentFolder',
-                    disabled: !currentFolderIndexed || busy === 'searching',
+                    checked: currentFolderIndexed && scopeKind === 'currentFolder',
+                    disabled: busy === 'searching',
                     onchange: (event: Event) => {
-                      const checked = (event.currentTarget as HTMLInputElement).checked;
+                      const input = event.currentTarget as HTMLInputElement;
+                      if (!currentFolderIndexed) {
+                        input.checked = false;
+                        enrolmentOpen = true;
+                        return;
+                      }
+                      const checked = input.checked;
                       pinnedFolder = checked ? openingFolder : undefined;
                       scopeKind = checked ? 'currentFolder' : 'enrolledRoots';
                       edited();
@@ -1387,40 +1408,13 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                   }),
                   m(
                     'span',
-                    t('knowledgeSearch', 'includeOnlyCurrentFolder', {
-                      folder: lastPathSegment(openingFolder) ?? pathFromUri(openingFolder.uri),
-                    }),
+                    t(
+                      'knowledgeSearch',
+                      currentFolderIndexed ? 'includeOnlyCurrentFolder' : 'includeFolderNamed',
+                      { folder: lastPathSegment(openingFolder) ?? pathFromUri(openingFolder.uri) },
+                    ),
                   ),
-                  currentFolderIndexed || busy === 'loading'
-                    ? undefined
-                    : m(
-                        'small.fm-knowledge-hint',
-                        t('knowledgeSearch', 'folderNotIndexedHint', {
-                          folder: lastPathSegment(openingFolder) ?? pathFromUri(openingFolder.uri),
-                        }),
-                      ),
                 ]),
-            !currentFolderIndexed &&
-            currentFolderIncludable &&
-            openingFolder !== undefined &&
-            // The backend only enrols the folder shown in the active pane, so a stale
-            // opening folder cannot be included from here.
-            attrs.currentFolder?.providerId === openingFolder.providerId &&
-            attrs.currentFolder.uri === openingFolder.uri &&
-            busy !== 'loading'
-              ? m(
-                  'button.fm-knowledge-include-folder-action',
-                  {
-                    type: 'button',
-                    onclick: () => {
-                      enrolmentOpen = true;
-                    },
-                  },
-                  t('knowledgeSearch', 'includeFolderNamed', {
-                    folder: lastPathSegment(openingFolder) ?? pathFromUri(openingFolder.uri),
-                  }),
-                )
-              : undefined,
             openingFolder === undefined
               ? undefined
               : m(ModalPanel, {

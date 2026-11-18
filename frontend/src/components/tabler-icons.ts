@@ -498,3 +498,8 @@ export const arrowsMinimizeIcon = trustedStrokeIcon(
   '<path d="M5 9l4 0l0 -4" /><path d="M3 3l6 6" /><path d="M5 15l4 0l0 4" /><path d="M3 21l6 -6" /><path d="M19 9l-4 0l0 -4" /><path d="M15 9l6 -6" /><path d="M19 15l-4 0l0 4" /><path d="M15 15l6 6" />',
   'fm-icon-arrows-minimize',
 );
+
+export const downloadIcon = trustedStrokeIcon(
+  '<path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" />',
+  'fm-icon-download',
+);
