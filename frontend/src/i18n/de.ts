@@ -2177,6 +2177,11 @@ export const de = {
   },
   documentSummary: {
     title: 'Zusammenfassung · {name}',
+    describeCode: 'Code beschreiben',
+    codeTitle: 'Beschreibung · {name}',
+    writeToFile: 'Als Kommentar in die Datei schreiben',
+    writeFailed: 'Die Datei konnte nicht geändert werden.',
+    writtenToFile: 'Als Kommentar am Anfang der Datei eingefügt.',
     copy: 'Kopieren',
     copied: 'Kopiert',
     copyAll: 'Zusammenfassung kopieren',

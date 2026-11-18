@@ -145,6 +145,7 @@ export interface AppDialogsContext {
   restartInterruptedTransfer(operationId: OperationId, resume?: boolean): void;
   discardInterruptedTransfer(operationId: OperationId): void;
   refetchAffectedPanes(): void;
+  reloadViewersOf(uri: string): void;
   redraw(): void;
 }
 
@@ -681,6 +682,10 @@ export function renderAppDialogs(
       workspaceId: ds.documentSummaryDialog?.workspaceId ?? '',
       entry: ds.documentSummaryDialog?.entry,
       client,
+      onWritten: (location) => {
+        ctx.reloadViewersOf(location.uri);
+        ctx.refetchAffectedPanes();
+      },
       onClose: () => dialogs.cancelDocumentSummaryDialog(),
     }),
     m(FinderTagsDialog, {

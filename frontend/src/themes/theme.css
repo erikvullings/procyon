@@ -6560,16 +6560,56 @@ button.fm-activity-count {
   user-select: text;
 }
 
-.fm-document-summary-result .fm-document-summary-copy {
-  -webkit-user-select: none;
-  user-select: none;
-}
-
 .fm-document-summary-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+}
+
+/* Clipboard icon buttons: a row-height square in muted text, accent on hover. */
+.fm-document-summary-copy {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: var(--fm-row-height);
+  height: var(--fm-row-height);
+  padding: 0;
+  border: 0;
+  border-radius: var(--fm-radius);
+  background: transparent;
+  color: var(--fm-text-muted);
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.fm-document-summary-copy:hover,
+.fm-document-summary-copy:focus-visible {
+  background: var(--fm-hover);
+  color: var(--fm-text);
+}
+
+.fm-document-summary-result-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.fm-document-summary-write {
+  display: grid;
+  gap: 0.375rem;
+  margin-top: 0.75rem;
+}
+
+.fm-document-summary-write-confirm {
+  display: grid;
+  gap: 0.375rem;
+}
+
+.fm-document-summary-write-confirm p,
+.fm-document-summary-write p {
+  margin: 0;
 }
 
 /* Compact toolbar: the overflow button and its menu. The menu sits inside the toolbar, whose own

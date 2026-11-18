@@ -1144,6 +1144,11 @@ export const nl = {
   },
   documentSummary: {
     title: 'Samenvatting · {name}',
+    describeCode: 'Code beschrijven',
+    codeTitle: 'Beschrijving · {name}',
+    writeToFile: 'Als commentaar aan bestand toevoegen',
+    writeFailed: 'Het bestand kon niet worden gewijzigd.',
+    writtenToFile: 'Als commentaar bovenaan het bestand toegevoegd.',
     copy: 'Kopiëren',
     copied: 'Gekopieerd',
     copyAll: 'Samenvatting kopiëren',

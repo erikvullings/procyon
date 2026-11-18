@@ -545,6 +545,8 @@ export interface FileViewerController {
   followEpubLink(href: string): void;
   goToPdfPage(pageNumber: number): void;
   goToTextOffset(offset: number, length: number): void;
+  /** Reads the file again, for when it was changed outside the viewer. */
+  reload(): void;
   dispose(): void;
 }
 
@@ -3084,6 +3086,9 @@ export function createFileViewerController(
   void load();
 
   return {
+    reload: () => {
+      void load();
+    },
     loadMore,
     loadPrevious,
     loadTextPage,

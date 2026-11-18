@@ -2166,6 +2166,11 @@ export const fr = {
   },
   documentSummary: {
     title: 'Résumé · {name}',
+    describeCode: 'Décrire le code',
+    codeTitle: 'Descriptif · {name}',
+    writeToFile: 'Ajouter en commentaire au fichier',
+    writeFailed: 'Le fichier n’a pas pu être modifié.',
+    writtenToFile: 'Ajouté en commentaire en haut du fichier.',
     copy: 'Copier',
     copied: 'Copié',
     copyAll: 'Copier le résumé',

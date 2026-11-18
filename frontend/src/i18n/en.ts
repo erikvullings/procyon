@@ -1131,6 +1131,11 @@ export const en = {
   },
   documentSummary: {
     title: 'Summary · {name}',
+    describeCode: 'Describe code',
+    codeTitle: 'Description · {name}',
+    writeToFile: 'Add as comment to file',
+    writeFailed: 'The file could not be changed.',
+    writtenToFile: 'Added as a comment at the top of the file.',
     copy: 'Copy',
     copied: 'Copied',
     copyAll: 'Copy summary',

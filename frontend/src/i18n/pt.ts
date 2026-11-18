@@ -2160,6 +2160,11 @@ export const pt = {
   },
   documentSummary: {
     title: 'Resumo · {name}',
+    describeCode: 'Descrever código',
+    codeTitle: 'Descrição · {name}',
+    writeToFile: 'Adicionar como comentário ao ficheiro',
+    writeFailed: 'Não foi possível alterar o ficheiro.',
+    writtenToFile: 'Adicionado como comentário no início do ficheiro.',
     copy: 'Copiar',
     copied: 'Copiado',
     copyAll: 'Copiar resumo',

@@ -2151,6 +2151,11 @@ export const pl = {
   },
   documentSummary: {
     title: 'Podsumowanie · {name}',
+    describeCode: 'Opisz kod',
+    codeTitle: 'Opis · {name}',
+    writeToFile: 'Dodaj jako komentarz do pliku',
+    writeFailed: 'Nie udało się zmienić pliku.',
+    writtenToFile: 'Dodano jako komentarz na początku pliku.',
     copy: 'Kopiuj',
     copied: 'Skopiowano',
     copyAll: 'Kopiuj podsumowanie',

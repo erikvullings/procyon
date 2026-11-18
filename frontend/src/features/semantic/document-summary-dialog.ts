@@ -1,6 +1,8 @@
 import m, { type FactoryComponent } from 'mithril';
 import { ModalPanel, Skeleton } from 'mithril-materialized';
 import type { SemanticClient } from '../../api/client/semantic-client.ts';
+import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
+import { checkIcon, copyIcon } from '../../components/tabler-icons';
 import { t } from '../../i18n';
 import type {
   DocumentSummary,
@@ -11,6 +13,8 @@ import type {
   SummaryAttribution,
   WorkspaceId,
 } from '../../models';
+import { documentSummaryActionKey, documentSummaryKind } from '../preview/document-summary-support';
+import { commentStyleFor, insertCommentary } from './document-commentary';
 import {
   blocksGeneration,
   checkProfileModel,
@@ -18,9 +22,14 @@ import {
   profileModelNotice,
 } from './profile-model-check';
 
+/** Largest file the dialog reads back to add commentary; larger files are left alone. */
+const MAX_COMMENTARY_FILE_BYTES = 1024 * 1024;
+
 export interface DocumentSummaryDialogAttrs {
   readonly open: boolean;
-  readonly client: SemanticClient;
+  readonly client: SemanticClient & Pick<WorkspaceClient, 'loadEditableFile' | 'saveEditableFile'>;
+  /** Called after commentary was written, so open viewers and listings show the new file. */
+  readonly onWritten?: (location: EntrySummary['location']) => void;
   readonly workspaceId: WorkspaceId | string;
   readonly entry: EntrySummary | undefined;
   readonly onClose: () => void;
@@ -152,6 +161,9 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
   let includeImages = false;
   let preview: DocumentSummaryPreview | undefined;
   let summary: DocumentSummary | null = null;
+  let writing = false;
+  let writeStatus: string | undefined;
+  let writeError: string | undefined;
 
   async function load(attrs: DocumentSummaryDialogAttrs): Promise<void> {
     const requestTarget = target(attrs);
@@ -162,14 +174,10 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
       profiles = await attrs.client.listLlmProfiles();
       selectedProfileId = profiles[0]?.id;
       const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId);
-      profileModelStatus = undefined;
-      if (selectedProfile !== undefined) {
-        void checkProfileModel(attrs.client, selectedProfile).then((status) => {
-          if (selectedProfileId === selectedProfile.id) profileModelStatus = status;
-          m.redraw();
-        });
-      }
-      const [loadedPreview, loadedSummary] = await Promise.all([
+      const [status, loadedPreview, loadedSummary] = await Promise.all([
+        selectedProfile === undefined
+          ? Promise.resolve(undefined)
+          : checkProfileModel(attrs.client, selectedProfile),
         attrs.client.previewDocumentSummary({
           target: requestTarget,
           inputTokenBudget: inputTokenBudget(selectedProfile),
@@ -178,6 +186,7 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
         }),
         attrs.client.getDocumentSummary({ target: requestTarget }),
       ]);
+      profileModelStatus = status;
       preview = validatedPreview(loadedPreview, selectedProfileId);
       summary = loadedSummary;
     } catch (cause) {
@@ -248,12 +257,77 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
     }, 1500);
   }
 
-  function copyButton(key: string, text: string): m.Vnode {
+  /** Clipboard icon button; the check mark confirms the copy for a moment. */
+  function copyButton(key: string, text: string, label: string): m.Vnode {
+    const copied = copiedKey === key;
     return m(
-      'button.btn-flat.fm-document-summary-copy',
-      { type: 'button', onclick: () => void copyText(key, text) },
-      copiedKey === key ? t('documentSummary', 'copied') : t('documentSummary', 'copy'),
+      'button.fm-document-summary-copy',
+      {
+        type: 'button',
+        title: copied ? t('documentSummary', 'copied') : label,
+        'aria-label': copied ? t('documentSummary', 'copied') : label,
+        onclick: () => void copyText(key, text),
+      },
+      copied ? checkIcon({ size: 15 }) : copyIcon({ size: 15 }),
     );
+  }
+
+  /** Code and plain or Markdown text can take a comment; other formats cannot be written back. */
+  function writable(attrs: DocumentSummaryDialogAttrs): boolean {
+    return attrs.entry !== undefined && commentStyleFor(attrs.entry) !== undefined;
+  }
+
+  function writeCommentaryControls(attrs: DocumentSummaryDialogAttrs): m.Children {
+    return m('.fm-document-summary-write', [
+      m(
+        'button.fm-document-summary-write-start',
+        {
+          type: 'button',
+          disabled: writing,
+          onclick: () => void writeCommentary(attrs),
+        },
+        t('documentSummary', 'writeToFile'),
+      ),
+      writeStatus === undefined ? undefined : m('p', { role: 'status' }, writeStatus),
+      writeError === undefined
+        ? undefined
+        : m('p.fm-document-summary-error', { role: 'alert' }, writeError),
+    ]);
+  }
+
+  async function writeCommentary(attrs: DocumentSummaryDialogAttrs): Promise<void> {
+    const entry = attrs.entry;
+    if (entry === undefined || summary === null) return;
+    const style = commentStyleFor(entry);
+    if (style === undefined) return;
+    writing = true;
+    writeError = undefined;
+    writeStatus = undefined;
+    m.redraw();
+    try {
+      const loaded = await attrs.client.loadEditableFile({ location: entry.location });
+      if (loaded.size > MAX_COMMENTARY_FILE_BYTES) {
+        throw new Error(t('documentSummary', 'writeFailed'));
+      }
+      const content = insertCommentary(
+        loaded.content,
+        summaryAsText(summary, summaryLabels()),
+        style,
+      );
+      await attrs.client.saveEditableFile({
+        location: entry.location,
+        content,
+        expectedRevision: loaded.revision,
+        overwriteConflict: false,
+      });
+      writeStatus = t('documentSummary', 'writtenToFile');
+      attrs.onWritten?.(entry.location);
+    } catch (cause) {
+      writeError = summaryErrorMessage(cause, t('documentSummary', 'writeFailed'));
+    } finally {
+      writing = false;
+      m.redraw();
+    }
   }
 
   async function generate(attrs: DocumentSummaryDialogAttrs): Promise<void> {
@@ -281,14 +355,33 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
     }
   }
 
+  /** Opening the dialog generates at once when nothing is stored yet, and the model is ready. */
+  async function openAndGenerate(attrs: DocumentSummaryDialogAttrs): Promise<void> {
+    await load(attrs);
+    if (
+      summary === null &&
+      preview !== undefined &&
+      selectedProfileId !== undefined &&
+      !blocksGeneration(profileModelStatus)
+    )
+      await generate(attrs);
+  }
+
   return {
     onupdate: ({ attrs }) => {
-      if (attrs.open && !wasOpen) void load(attrs);
+      if (attrs.open && !wasOpen) {
+        writeStatus = undefined;
+        writeError = undefined;
+        void openAndGenerate(attrs);
+      }
       wasOpen = attrs.open;
     },
-    view: ({ attrs }) =>
-      m(ModalPanel, {
-        title: t('documentSummary', 'title', { name: attrs.entry?.name ?? '' }),
+    view: ({ attrs }) => {
+      const isCode = attrs.entry !== undefined && documentSummaryKind(attrs.entry) === 'sourceCode';
+      return m(ModalPanel, {
+        title: isCode
+          ? t('documentSummary', 'codeTitle', { name: attrs.entry?.name ?? '' })
+          : t('documentSummary', 'title', { name: attrs.entry?.name ?? '' }),
         className: 'fm-dense-modal fm-document-summary-modal',
         isOpen: attrs.open,
         closeOnEsc: true,
@@ -365,45 +458,45 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
                 summary.stale
                   ? m('p.fm-document-summary-stale', t('documentSummary', 'stale'))
                   : undefined,
-                m('h4', t('documentSummary', 'extractedTitle')),
-                summary.title
-                  ? m('div', [
-                      m('p', attributionText(summary.title)),
-                      attributionQuote(summary.title),
-                    ])
-                  : m('p', t('documentSummary', 'unavailable')),
-                m('h4', t('documentSummary', 'extractedAuthors')),
-                summary.authors?.length
-                  ? m(
-                      'ul',
-                      summary.authors.map((author) =>
-                        m('li', [attributionText(author), attributionQuote(author)]),
-                      ),
-                    )
-                  : m('p', t('documentSummary', 'unavailable')),
+                m('.fm-document-summary-result-actions', [
+                  copyButton(
+                    'all',
+                    summaryAsText(summary, summaryLabels()),
+                    t('documentSummary', 'copyAll'),
+                  ),
+                ]),
+                // Code has no title or byline to extract, so only prose shows them.
+                isCode
+                  ? undefined
+                  : [
+                      m('h4', t('documentSummary', 'extractedTitle')),
+                      summary.title
+                        ? m('div', [
+                            m('p', attributionText(summary.title)),
+                            attributionQuote(summary.title),
+                          ])
+                        : m('p', t('documentSummary', 'unavailable')),
+                      m('h4', t('documentSummary', 'extractedAuthors')),
+                      summary.authors?.length
+                        ? m(
+                            'ul',
+                            summary.authors.map((author) =>
+                              m('li', [attributionText(author), attributionQuote(author)]),
+                            ),
+                          )
+                        : m('p', t('documentSummary', 'unavailable')),
+                    ],
                 m('.fm-document-summary-heading', [
                   m('h4', t('documentSummary', 'brief')),
-                  copyButton('brief', summary.brief),
+                  copyButton('brief', summary.brief, t('documentSummary', 'copy')),
                 ]),
                 m('p', summary.brief),
                 m('.fm-document-summary-heading', [
                   m('h4', t('documentSummary', 'full')),
-                  copyButton('full', summary.full),
+                  copyButton('full', summary.full, t('documentSummary', 'copy')),
                 ]),
                 m('p', summary.full),
-              ]),
-          preview === undefined
-            ? undefined
-            : m('.fm-document-summary-extracted', [
-                m('h4', t('documentSummary', 'documentText')),
-                m(
-                  'pre.fm-document-summary-text',
-                  { tabindex: 0, 'aria-label': t('documentSummary', 'documentText') },
-                  preview.textPreview,
-                ),
-                preview.textPreviewTruncated
-                  ? m('p.fm-document-summary-disclosure', t('documentSummary', 'textPreviewLimit'))
-                  : undefined,
+                writable(attrs) ? writeCommentaryControls(attrs) : undefined,
               ]),
         ]),
         buttons: [
@@ -422,19 +515,24 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
                   },
                 },
               ]),
-          ...(selectedProfileId === undefined || preview === undefined
+          // Regenerating a current summary from the same profile would only repeat it, so the
+          // action appears when the source changed or the summary came from another profile.
+          ...(selectedProfileId === undefined ||
+          preview === undefined ||
+          (summary !== null && !summary.stale && summary.profileId === selectedProfileId)
             ? []
             : [
                 {
                   label:
                     summary === null
-                      ? t('documentSummary', 'generate')
+                      ? t('documentSummary', documentSummaryActionKey(attrs.entry))
                       : t('documentSummary', 'regenerate'),
                   disabled: busy || blocksGeneration(profileModelStatus),
                   onclick: () => void generate(attrs),
                 },
               ]),
         ],
-      }),
+      });
+    },
   };
 };

@@ -2154,6 +2154,11 @@ export const it = {
   },
   documentSummary: {
     title: 'Riepilogo · {name}',
+    describeCode: 'Descrivi codice',
+    codeTitle: 'Descrizione · {name}',
+    writeToFile: 'Aggiungi come commento al file',
+    writeFailed: 'Impossibile modificare il file.',
+    writtenToFile: 'Aggiunto come commento in cima al file.',
     copy: 'Copia',
     copied: 'Copiato',
     copyAll: 'Copia riepilogo',

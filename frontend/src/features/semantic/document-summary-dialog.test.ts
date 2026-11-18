@@ -33,7 +33,7 @@ afterEach(() => {
 });
 
 describe('DocumentSummaryDialog', () => {
-  it('shows a preparation skeleton then extracted text without requiring a generation profile', async () => {
+  it('shows a preparation skeleton, then no selected text, without requiring a generation profile', async () => {
     const client = new MockFileManagerClient();
     const original = client.previewDocumentSummary.bind(client);
     let finish: (() => void) | undefined;
@@ -67,10 +67,8 @@ describe('DocumentSummaryDialog', () => {
     finish?.();
     await vi.waitFor(() => expect(root.textContent).not.toContain('Preparing document content'));
     expect(root.textContent).toContain('Configure a generation profile');
-    expect(root.querySelector('.fm-document-summary-text')?.textContent).toContain(
-      'A representative passage',
-    );
-    expect(root.querySelector('.fm-document-summary-text')?.getAttribute('tabindex')).toBe('0');
+    expect(root.querySelector('.fm-document-summary-text')).toBeNull();
+    expect(root.textContent).not.toContain('A representative passage');
     expect(root.textContent).not.toContain('Key passages');
   });
 
@@ -125,10 +123,6 @@ describe('DocumentSummaryDialog', () => {
     expect(root.querySelector('.fm-document-summary-profile')).toBeNull();
     expect(root.querySelector('.fm-document-summary-image-mode')).toBeNull();
     expect(preview).toHaveBeenLastCalledWith(expect.objectContaining({ inputTokenBudget: 6_144 }));
-    const generate = [...root.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
-      button.textContent?.includes('Generate summary'),
-    );
-    generate?.click();
     await vi.waitFor(() => expect(root.textContent).toContain('A concise document summary.'));
     expect(root.textContent).toContain('Evidence review · AI-extracted · page 2');
     expect(root.querySelector('details.fm-document-summary-source blockquote')?.textContent).toBe(
@@ -140,8 +134,9 @@ describe('DocumentSummaryDialog', () => {
     const writeText = vi.fn(async () => undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     const copyButtons = [...root.querySelectorAll<HTMLButtonElement>('.fm-document-summary-copy')];
-    expect(copyButtons).toHaveLength(2);
-    copyButtons[0]?.click();
+    // Copy all (icon above the result), then brief and full.
+    expect(copyButtons).toHaveLength(3);
+    copyButtons[1]?.click();
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('A concise document summary.'));
     const copyAll = [...root.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
       button.textContent?.includes('Copy summary'),
@@ -191,12 +186,9 @@ describe('DocumentSummaryDialog', () => {
           onClose: vi.fn(),
         }),
     });
-    await vi.waitFor(() => expect(root.textContent).toContain('A representative passage'));
-    expect(root.querySelector('.fm-document-summary-progress')).toBeNull();
-    const generate = [...root.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
-      candidate.textContent?.includes('Generate summary'),
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-document-summary-progress')).not.toBeNull(),
     );
-    generate?.click();
     m.redraw.sync();
     const progress = root.querySelector('.fm-document-summary-progress');
     expect(progress?.getAttribute('role')).toBe('status');
@@ -208,9 +200,7 @@ describe('DocumentSummaryDialog', () => {
       4,
     );
     expect(progress?.querySelector('.mm-skeleton-group')?.getAttribute('aria-hidden')).toBe('true');
-    expect(root.querySelector('.fm-document-summary-text')?.textContent).toContain(
-      'A representative passage',
-    );
+    expect(root.querySelector('.fm-document-summary-text')).toBeNull();
     finish?.();
     await vi.waitFor(() => expect(root.querySelector('.fm-document-summary-progress')).toBeNull());
     expect(root.textContent).toContain('A concise document summary.');
@@ -238,6 +228,14 @@ describe('DocumentSummaryDialog', () => {
       redactFilenames: false,
     });
     const preview = vi.spyOn(client, 'previewDocumentSummary');
+    const originalGenerate = client.generateDocumentSummary.bind(client);
+    let finish: (() => void) | undefined;
+    vi.spyOn(client, 'generateDocumentSummary').mockImplementation(async (request, signal) => {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return originalGenerate(request, signal);
+    });
     m.mount(root, {
       view: () =>
         m(DocumentSummaryDialog, {
@@ -252,18 +250,12 @@ describe('DocumentSummaryDialog', () => {
         }),
     });
 
-    await vi.waitFor(() => expect(root.textContent).toContain('A representative passage'));
-    expect(root.textContent).toContain('Showing the beginning only');
+    await vi.waitFor(() => expect(root.textContent).toContain('Summarizing in parts'));
     expect(root.textContent).not.toContain('token');
-    expect(root.textContent).not.toContain('Summarizing in parts');
+    expect(root.textContent).not.toContain('Showing the beginning only');
     expect(root.querySelector('.fm-document-summary-input-mode')).toBeNull();
     expect(preview).toHaveBeenLastCalledWith(expect.objectContaining({ inputTokenBudget: 6_144 }));
-    const generate = [...root.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
-      candidate.textContent?.includes('Generate summary'),
-    );
-    generate?.click();
-    m.redraw.sync();
-    expect(root.textContent).toContain('Summarizing in parts');
+    finish?.();
   });
 
   it('offers images only for a vision-capable document and keeps them off by default', async () => {
@@ -317,8 +309,27 @@ describe('DocumentSummaryDialog', () => {
     expect(preview).toHaveBeenLastCalledWith(expect.objectContaining({ includeImages: true }));
   });
 
-  it('loads extracted text when no persisted summary exists', async () => {
+  it('generates at once when no persisted summary exists, without showing extracted text', async () => {
     const client = new MockFileManagerClient();
+    await client.createLlmProfile({
+      name: 'Local profile',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'summary-model',
+      credential: null,
+      advanced: {
+        contextWindow: 8_192,
+        maximumAnswerTokens: 1_024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions'],
+      redactFilenames: false,
+    });
     vi.spyOn(client, 'getDocumentSummary').mockResolvedValue(null);
 
     m.mount(root, {
@@ -332,7 +343,8 @@ describe('DocumentSummaryDialog', () => {
         }),
     });
 
-    await vi.waitFor(() => expect(root.textContent).toContain('A representative passage'));
+    await vi.waitFor(() => expect(root.textContent).toContain('A concise document summary.'));
+    expect(root.textContent).not.toContain('A representative passage');
     expect(root.textContent).not.toContain('The summary could not be loaded.');
   });
 
@@ -449,21 +461,114 @@ describe('DocumentSummaryDialog', () => {
         }),
     });
 
-    await vi.waitFor(() =>
-      expect(
-        [...root.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
-          candidate.textContent?.includes('Generate summary'),
-        ),
-      ).toBeDefined(),
-    );
     expect(root.querySelector('.fm-document-summary-image-mode')).toBeNull();
-    const generate = [...root.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
-      candidate.textContent?.includes('Generate summary'),
-    );
-    generate?.click();
 
     await vi.waitFor(() =>
       expect(root.textContent).toContain('Ollama is not reachable at http://127.0.0.1:11434'),
+    );
+  });
+
+  it('describes code without a title or author section', async () => {
+    const client = new MockFileManagerClient();
+    await client.createLlmProfile({
+      name: 'Local profile',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'summary-model',
+      credential: null,
+      advanced: {
+        contextWindow: 8_192,
+        maximumAnswerTokens: 1_024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions'],
+      redactFilenames: false,
+    });
+    m.mount(root, {
+      view: () =>
+        m(DocumentSummaryDialog, {
+          open: true,
+          client,
+          workspaceId: '22222222-2222-4222-8222-222222222222',
+          entry: {
+            ...entry,
+            name: 'main.rs',
+            extension: 'rs',
+            location: { providerId: 'local', uri: 'file:///src/main.rs' },
+          },
+          onClose: vi.fn(),
+        }),
+    });
+
+    await vi.waitFor(() => expect(root.textContent).toContain('A concise document summary.'));
+    expect(root.textContent).toContain('Description · main.rs');
+    expect(root.querySelector('.fm-document-summary-result h4')?.textContent).toBe('Brief');
+    expect(root.textContent).not.toContain('Authors');
+  });
+
+  it('adds the generated text to the top of a plain text file at once', async () => {
+    const client = new MockFileManagerClient();
+    await client.createLlmProfile({
+      name: 'Local profile',
+      preset: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      deployment: null,
+      apiVersion: null,
+      model: 'summary-model',
+      credential: null,
+      advanced: {
+        contextWindow: 8_192,
+        maximumAnswerTokens: 1_024,
+        temperature: 0.2,
+        timeoutSeconds: 30,
+        tlsPolicy: 'requireValidCertificate',
+        customHeaders: {},
+      },
+      capabilities: ['chatCompletions'],
+      redactFilenames: false,
+    });
+    const load = vi
+      .spyOn(client, 'loadEditableFile')
+      .mockResolvedValue({ content: 'hello', revision: 'rev-1', size: 5 });
+    const save = vi
+      .spyOn(client, 'saveEditableFile')
+      .mockResolvedValue({ overwroteConflict: false, revision: 'rev-2', size: 9 });
+    const onWritten = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(DocumentSummaryDialog, {
+          open: true,
+          client,
+          workspaceId: '22222222-2222-4222-8222-222222222222',
+          entry,
+          onWritten,
+          onClose: vi.fn(),
+        }),
+    });
+    await vi.waitFor(() => expect(root.textContent).toContain('A concise document summary.'));
+    // Current summary from the same profile: regenerating would only repeat it.
+    expect(
+      [...root.querySelectorAll('button')].some((button) =>
+        button.textContent?.includes('Regenerate'),
+      ),
+    ).toBe(false);
+
+    root.querySelector<HTMLButtonElement>('.fm-document-summary-write-start')?.click();
+
+    await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+    expect(onWritten).toHaveBeenCalledWith(entry.location);
+    expect(load).toHaveBeenCalledWith({ location: entry.location });
+    const request = save.mock.calls[0]?.[0];
+    expect(request?.expectedRevision).toBe('rev-1');
+    expect(request?.content).toMatch(/^Brief\nA concise document summary\./);
+    expect(request?.content.endsWith('\n\nhello')).toBe(true);
+    await vi.waitFor(() =>
+      expect(root.querySelector('[role="status"]')?.textContent).toContain('Added as a comment'),
     );
   });
 });
