@@ -9,23 +9,25 @@ import {
   verifyOnnxRuntimeArchiveMembers,
 } from './onnx-runtime-qualification.mjs';
 
-test('pins the Linux x86-64 ONNX Runtime to immutable Microsoft release bytes', () => {
+test('pins the Linux x86-64 ONNX Runtime to the immutable PyPI 1.28.0 wheel bytes', () => {
   const target = onnxRuntimeTarget('linux', 'x64');
   assert.equal(ONNX_RUNTIME_VERSION, '1.28.0');
-  assert.equal(ONNX_RUNTIME_SOURCE_REVISION, 'da9b5e364c465de65c49d91e696cd6485270757f');
+  assert.equal(
+    ONNX_RUNTIME_SOURCE_REVISION,
+    'pypi-wheel-sha256-54fa221d669282bd8f582708ce4c96010a7e9fb0661f9006b37fe2fedafb73fe',
+  );
   assert.equal(target.rustTarget, 'x86_64-unknown-linux-gnu');
-  assert.equal(target.archive.assetId, 489174677);
-  assert.equal(target.archive.bytes, 9_125_960);
+  assert.equal(target.archive.bytes, 19_214_329);
   assert.equal(
     target.archive.sha256,
-    'a3e1b79d7bb1bf09696ce675f49e4064e6c81f6202b8225624fff0e93f8d6407',
+    '54fa221d669282bd8f582708ce4c96010a7e9fb0661f9006b37fe2fedafb73fe',
   );
   assert.equal(target.loader.sourceName, 'libonnxruntime.so.1.28.0');
   assert.equal(target.loader.name, 'libonnxruntime.so.1');
-  assert.equal(target.loader.bytes, 24_268_848);
+  assert.equal(target.loader.bytes, 24_272_944);
   assert.equal(
     target.loader.sha256,
-    '1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab',
+    'aa4079d18f4ea7a5f3a94d80cd4bbe0f2740436626622d64d793803a20381083',
   );
 });
 
@@ -39,14 +41,11 @@ test('rejects unsupported ONNX Runtime targets instead of using a host library',
 test('rejects incomplete and expanded ONNX Runtime native packages', () => {
   const target = onnxRuntimeTarget('linux', 'x64');
   const members = [
-    'onnxruntime-linux-x64-1.28.0/GIT_COMMIT_ID',
-    'onnxruntime-linux-x64-1.28.0/VERSION_NUMBER',
-    'onnxruntime-linux-x64-1.28.0/LICENSE',
-    'onnxruntime-linux-x64-1.28.0/ThirdPartyNotices.txt',
-    'onnxruntime-linux-x64-1.28.0/lib/libonnxruntime.so',
-    'onnxruntime-linux-x64-1.28.0/lib/libonnxruntime.so.1',
-    'onnxruntime-linux-x64-1.28.0/lib/libonnxruntime.so.1.28.0',
-    'onnxruntime-linux-x64-1.28.0/lib/libonnxruntime_providers_shared.so',
+    'onnxruntime/LICENSE',
+    'onnxruntime/ThirdPartyNotices.txt',
+    'onnxruntime/capi/libonnxruntime.so.1.28.0',
+    'onnxruntime/capi/libonnxruntime_providers_shared.so',
+    'onnxruntime/capi/onnxruntime_pybind11_state.cpython-313-x86_64-linux-gnu.so',
   ];
   verifyOnnxRuntimeArchiveMembers(members, target);
   assert.throws(
@@ -60,7 +59,7 @@ test('rejects incomplete and expanded ONNX Runtime native packages', () => {
   assert.throws(
     () =>
       verifyOnnxRuntimeArchiveMembers(
-        [...members, 'onnxruntime-linux-x64-1.28.0/lib/libonnxruntime_providers_cuda.so'],
+        [...members, 'onnxruntime/capi/libonnxruntime_providers_cuda.so'],
         target,
       ),
     /unexpected native library/u,

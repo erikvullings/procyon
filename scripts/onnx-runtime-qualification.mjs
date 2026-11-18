@@ -8,11 +8,16 @@ import { sha256Of, verifyPinnedFile } from './zvec-runtime-qualification.mjs';
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export const ONNX_RUNTIME_VERSION = '1.28.0';
-export const ONNX_RUNTIME_SOURCE_REVISION = 'da9b5e364c465de65c49d91e696cd6485270757f';
+/**
+ * Immutable identity of the pinned PyPI wheel. The wheel does not record an upstream commit, so
+ * the commit is not verified; the wheel's SHA-256 is the trust anchor.
+ */
+export const ONNX_RUNTIME_SOURCE_REVISION =
+  'pypi-wheel-sha256-54fa221d669282bd8f582708ce4c96010a7e9fb0661f9006b37fe2fedafb73fe';
 export const ONNX_RUNTIME_COMPONENT_ID = 'procyon.semantic.onnx-runtime';
 
-const releaseBase = `https://github.com/microsoft/onnxruntime/releases/download/v${ONNX_RUNTIME_VERSION}`;
-const packageRoot = `onnxruntime-linux-x64-${ONNX_RUNTIME_VERSION}`;
+const packageRoot = 'onnxruntime';
+const libraryDirectory = `${packageRoot}/capi`;
 
 const linuxX64 = {
   platform: 'linux',
@@ -22,17 +27,16 @@ const linuxX64 = {
   rustTarget: 'x86_64-unknown-linux-gnu',
   packageRoot,
   archive: {
-    assetId: 489174677,
-    name: `${packageRoot}.tgz`,
-    bytes: 9_125_960,
-    sha256: 'a3e1b79d7bb1bf09696ce675f49e4064e6c81f6202b8225624fff0e93f8d6407',
+    name: `onnxruntime-${ONNX_RUNTIME_VERSION}-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl`,
+    url: 'https://files.pythonhosted.org/packages/78/b6/8c5396e7894e77c5a7d1e026f3acb9dd39c4b5644e412e37a0055eaa3bc5/onnxruntime-1.28.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl',
+    bytes: 19_214_329,
+    sha256: '54fa221d669282bd8f582708ce4c96010a7e9fb0661f9006b37fe2fedafb73fe',
   },
   loader: {
     sourceName: `libonnxruntime.so.${ONNX_RUNTIME_VERSION}`,
-    linkName: 'libonnxruntime.so',
     name: 'libonnxruntime.so.1',
-    bytes: 24_268_848,
-    sha256: '1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab',
+    bytes: 24_272_944,
+    sha256: 'aa4079d18f4ea7a5f3a94d80cd4bbe0f2740436626622d64d793803a20381083',
     machine: 62,
   },
   providerShared: {
@@ -55,16 +59,6 @@ const linuxX64 = {
     glibcxx: '3.4.30',
     cxxabi: '1.3.13',
   },
-  sourceIdentity: {
-    name: 'GIT_COMMIT_ID',
-    bytes: 41,
-    sha256: '40f2814e70e7d02460565104d089b42cf9e1df137495a4eae35654c4425840d7',
-  },
-  versionIdentity: {
-    name: 'VERSION_NUMBER',
-    bytes: 7,
-    sha256: '229394bb3bac6e15d186324b7cbc90560803df8d7ee438a584118c4821b44e93',
-  },
   license: {
     name: 'LICENSE',
     bytes: 1_073,
@@ -76,8 +70,6 @@ const linuxX64 = {
     sha256: '0e07b95f3a8d6230037707c5c4a2b554d12c4cb67369669ac255635528ffcee2',
   },
 };
-
-linuxX64.archive.url = `${releaseBase}/${linuxX64.archive.name}`;
 
 export function onnxRuntimeTarget(platform = process.platform, processArchitecture = process.arch) {
   if (platform === linuxX64.platform && processArchitecture === linuxX64.processArchitecture) {
@@ -97,23 +89,19 @@ export function verifyOnnxRuntimeArchiveMembers(members, descriptor) {
   const actual = new Set(members.map(normalizedArchiveMember).filter(Boolean));
   const prefix = `${descriptor.packageRoot}/`;
   const required = [
-    descriptor.sourceIdentity.name,
-    descriptor.versionIdentity.name,
-    descriptor.license.name,
-    descriptor.thirdPartyNotices.name,
-    `lib/${descriptor.loader.linkName}`,
-    `lib/${descriptor.loader.name}`,
-    `lib/${descriptor.loader.sourceName}`,
-    `lib/${descriptor.providerShared.name}`,
-  ].map((member) => `${prefix}${member}`);
+    `${prefix}${descriptor.license.name}`,
+    `${prefix}${descriptor.thirdPartyNotices.name}`,
+    `${libraryDirectory}/${descriptor.loader.sourceName}`,
+    `${libraryDirectory}/${descriptor.providerShared.name}`,
+  ];
   const missing = required.filter((member) => !actual.has(member));
   if (missing.length > 0) {
     throw new Error(`ONNX Runtime native package is incomplete: missing ${missing.join(', ')}`);
   }
-  const expectedNativeLibraries = new Set(required.filter((member) => member.includes('/lib/')));
+  const expectedNativeLibraries = new Set(required.filter((member) => member.includes('/capi/')));
   const unexpected = [...actual].filter(
     (member) =>
-      member.startsWith(`${prefix}lib/libonnxruntime`) &&
+      member.startsWith(`${libraryDirectory}/libonnxruntime`) &&
       /\.so(?:\.|$)/u.test(member) &&
       !expectedNativeLibraries.has(member),
   );
@@ -234,7 +222,7 @@ export function verifyOnnxRuntimeBinary(file, descriptor, { pinned = false } = {
 }
 
 function archiveMembers(archive) {
-  return run('tar', ['-tzf', archive]).split(/\r?\n/u);
+  return run('unzip', ['-Z1', archive]).split(/\r?\n/u);
 }
 
 async function downloadPinnedFile(url, destination, descriptor) {
@@ -261,52 +249,21 @@ async function downloadPinnedFile(url, destination, descriptor) {
   }
 }
 
-function verifySymlink(file, expectedTarget) {
-  if (!fs.lstatSync(file).isSymbolicLink() || fs.readlinkSync(file) !== expectedTarget) {
-    throw new Error(
-      `ONNX Runtime loader alias ${path.basename(file)} does not target ${expectedTarget}`,
-    );
-  }
-}
-
+/** `root` is the extracted wheel's `onnxruntime/` package directory. */
 function verifyExtractedDirectory(root, descriptor) {
-  const libraryDirectory = path.join(root, 'lib');
-  const library = path.join(libraryDirectory, descriptor.loader.sourceName);
+  const directory = path.join(root, 'capi');
+  const library = path.join(directory, descriptor.loader.sourceName);
   verifyPinnedFile(library, descriptor.loader, 'pinned ONNX Runtime loader');
   verifyPinnedFile(
-    path.join(libraryDirectory, descriptor.providerShared.name),
+    path.join(directory, descriptor.providerShared.name),
     descriptor.providerShared,
     'pinned ONNX Runtime provider support library',
   );
-  for (const pinned of [
-    descriptor.sourceIdentity,
-    descriptor.versionIdentity,
-    descriptor.license,
-    descriptor.thirdPartyNotices,
-  ]) {
+  for (const pinned of [descriptor.license, descriptor.thirdPartyNotices]) {
     verifyPinnedFile(path.join(root, pinned.name), pinned, `pinned ONNX Runtime ${pinned.name}`);
   }
-  if (
-    fs.readFileSync(path.join(root, descriptor.sourceIdentity.name), 'utf8').trim() !==
-    ONNX_RUNTIME_SOURCE_REVISION
-  ) {
-    throw new Error('ONNX Runtime package source revision is not the pinned release revision');
-  }
-  if (
-    fs.readFileSync(path.join(root, descriptor.versionIdentity.name), 'utf8').trim() !==
-    ONNX_RUNTIME_VERSION
-  ) {
-    throw new Error('ONNX Runtime package version does not match the pinned release');
-  }
-  verifySymlink(path.join(libraryDirectory, descriptor.loader.linkName), descriptor.loader.name);
-  verifySymlink(path.join(libraryDirectory, descriptor.loader.name), descriptor.loader.sourceName);
   const dependencyEvidence = verifyOnnxRuntimeBinary(library, descriptor, { pinned: true });
-  return {
-    directory: libraryDirectory,
-    library,
-    linkLibrary: path.join(libraryDirectory, descriptor.loader.linkName),
-    dependencyEvidence,
-  };
+  return { directory, library, dependencyEvidence };
 }
 
 export async function preparePinnedOnnxRuntime(descriptor, cacheRoot) {
@@ -341,19 +298,11 @@ export async function preparePinnedOnnxRuntime(descriptor, cacheRoot) {
   fs.rmSync(staging, { recursive: true, force: true });
   fs.mkdirSync(staging, { recursive: true });
   try {
-    run('tar', ['-xzf', archive, '-C', staging]);
-    const verified = verifyExtractedDirectory(
-      path.join(staging, descriptor.packageRoot),
-      descriptor,
-    );
+    run('unzip', ['-q', archive, '-d', staging]);
+    verifyExtractedDirectory(path.join(staging, descriptor.packageRoot), descriptor);
     fs.mkdirSync(path.dirname(extractedRoot), { recursive: true });
     fs.renameSync(staging, extractedRoot);
-    return {
-      ...verified,
-      directory: path.join(packageDirectory, 'lib'),
-      library: path.join(packageDirectory, 'lib', descriptor.loader.sourceName),
-      linkLibrary: path.join(packageDirectory, 'lib', descriptor.loader.linkName),
-    };
+    return verifyExtractedDirectory(packageDirectory, descriptor);
   } catch (error) {
     fs.rmSync(staging, { recursive: true, force: true });
     throw error;
@@ -373,11 +322,10 @@ function catalogSha256(value) {
 
 function expectedUpstreamMetadata(descriptor) {
   return {
-    repository: 'https://github.com/microsoft/onnxruntime',
+    repository: 'https://pypi.org/project/onnxruntime/',
     revision: ONNX_RUNTIME_SOURCE_REVISION,
-    tag: `v${ONNX_RUNTIME_VERSION}`,
+    release: `onnxruntime==${ONNX_RUNTIME_VERSION}`,
     releaseAsset: {
-      assetId: descriptor.archive.assetId,
       name: descriptor.archive.name,
       url: descriptor.archive.url,
       byteLength: descriptor.archive.bytes,

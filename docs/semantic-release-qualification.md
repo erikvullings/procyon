@@ -38,7 +38,7 @@ results are not substitutes for measurements from the exact signed production ar
 | Retrieval policy | single query, absolute floor `0.84`, strongest-candidate window `0.02`, maximum 8 documents, 2 chunks per document, 8,192 context tokens |
 | Worker protocol / index schema | 1 / 2 |
 | Zvec runtime | `zvec-rust` `v0.7.0` |
-| Linux x86-64 inference runtime | Microsoft ONNX Runtime `v1.28.0` CPU shared loader |
+| Linux x86-64 inference runtime | Microsoft ONNX Runtime `1.28.0` CPU shared loader from the official PyPI wheel |
 | Optional OCR | user-installed OCRmyPDF stable `>=16.0.0,<18.0.0`, disabled by default |
 
 The exact run retained 13 artifacts containing 1,514 files and 5,289,796,435 bytes outside the
@@ -114,11 +114,11 @@ application and is not resolved from a host library.
 
 | Property | Pinned value |
 | --- | --- |
-| Release / source revision | `v1.28.0` / `da9b5e364c465de65c49d91e696cd6485270757f` |
-| Release asset | ID `489174677`, `onnxruntime-linux-x64-1.28.0.tgz` |
-| Archive bytes / SHA-256 | 9,125,960 / `a3e1b79d7bb1bf09696ce675f49e4064e6c81f6202b8225624fff0e93f8d6407` |
+| Source / revision | PyPI `onnxruntime==1.28.0` wheel, `pypi-wheel-sha256-54fa221d669282bd8f582708ce4c96010a7e9fb0661f9006b37fe2fedafb73fe`; upstream commit not recorded in the wheel (unverified) |
+| Release asset | `onnxruntime-1.28.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl` |
+| Archive bytes / SHA-256 | 19,214,329 / `54fa221d669282bd8f582708ce4c96010a7e9fb0661f9006b37fe2fedafb73fe` |
 | Loader source file | `libonnxruntime.so.1.28.0` |
-| Loader bytes / SHA-256 | 24,268,848 / `1461ef7cc3d9e49982591721683cc3e3a55580aeca9a5254e7aac47b75ee4bab` |
+| Loader bytes / SHA-256 | 24,272,944 / `aa4079d18f4ea7a5f3a94d80cd4bbe0f2740436626622d64d793803a20381083` |
 | Runtime SONAME | `libonnxruntime.so.1` |
 | Required ABI maxima | GLIBC 2.27, GLIBCXX 3.4.21, CXXABI 1.3.11 |
 | Ubuntu 22.04 rejection ceilings | GLIBC 2.35, GLIBCXX 3.4.30, CXXABI 1.3.13 |

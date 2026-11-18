@@ -51,10 +51,11 @@ const PRODUCTION_ONNX_RUNTIME_VERSION: &str = "1.28.0";
 const PRODUCTION_PDFIUM_VERSION: &str = "0.8086.0";
 const PRODUCTION_PDFIUM_SOURCE_URL: &str = "https://github.com/bblanchon/pdfium-binaries";
 const PRODUCTION_PDFIUM_SOURCE_REVISION: &str = "5325fa6d0d9379329f10f98fdc4839b4e40f2e79";
-/// Credential-free public source of the pinned ONNX Runtime release.
-const PRODUCTION_ONNX_RUNTIME_SOURCE_URL: &str = "https://github.com/microsoft/onnxruntime";
-/// Immutable source revision recorded inside the official ONNX Runtime archive.
-const PRODUCTION_ONNX_RUNTIME_SOURCE_REVISION: &str = "da9b5e364c465de65c49d91e696cd6485270757f";
+/// Credential-free public source of the pinned ONNX Runtime release (official PyPI wheel).
+const PRODUCTION_ONNX_RUNTIME_SOURCE_URL: &str = "https://pypi.org/project/onnxruntime/";
+/// Immutable identity of the pinned PyPI wheel; its upstream commit is not recorded, so unverified.
+const PRODUCTION_ONNX_RUNTIME_SOURCE_REVISION: &str =
+    "pypi-wheel-sha256-54fa221d669282bd8f582708ce4c96010a7e9fb0661f9006b37fe2fedafb73fe";
 /// Credential-free public source of the pinned multilingual-E5 model.
 const PRODUCTION_MODEL_SOURCE_URL: &str = "https://huggingface.co/intfloat/multilingual-e5-small";
 /// Upstream repository slug recorded in the packed model's provenance string.
@@ -675,9 +676,9 @@ fn build_bundle_with_optional_gemma(
                 LicenseInfo::new(
                     "MIT",
                     format!(
-                        "Microsoft ONNX Runtime CPU release {PRODUCTION_ONNX_RUNTIME_VERSION} at \
-                         pinned commit {PRODUCTION_ONNX_RUNTIME_SOURCE_REVISION}; the official \
-                         archive's ThirdPartyNotices.txt is retained in qualification evidence."
+                        "Microsoft ONNX Runtime CPU release {PRODUCTION_ONNX_RUNTIME_VERSION} \
+                         from the official PyPI wheel {PRODUCTION_ONNX_RUNTIME_SOURCE_REVISION}; \
+                         the wheel's ThirdPartyNotices.txt is retained in qualification evidence."
                     ),
                 )?,
                 *checksum,
