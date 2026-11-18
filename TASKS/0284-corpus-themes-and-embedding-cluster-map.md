@@ -1,6 +1,6 @@
 # 0284 Corpus themes and 2D embedding cluster map
 
-Status: in_progress
+Status: done
 Priority: medium
 Subsystem: backend, frontend
 Depends on: 0185, 0283
@@ -153,4 +153,19 @@ Cluster **chunk embeddings directly** for theme discovery; also keep a **documen
   hits client-side after retrieval would shrink recall. Document granularity stays. Still unverified:
   a run against a real embedding model (EmbeddingGemma) and canvas/hover/click in a real browser;
   both need a manual session (docs/try-themes-on-a-real-corpus.md).
+- 2026-11-18 claude: closed. Manual run on a real corpus with EmbeddingGemma and the browser check
+  (canvas hover, click, open at line) verified by the maintainer. Decisions: theme-filtered search stays
+  at document granularity (chunk filtering would need chunk ids through the knowledge request, retrieval
+  filters and protobuf; hits filtered client-side would lose recall); the acceptance wording "filter by
+  theme feeds search" is read as sources contributing to a theme. Done in this pass: SKOS concept chips
+  show the preferred label from device vocabularies (`semantic_vocabulary::preferred_labels`, English
+  first, else any language; `ThemeConceptDto.label`, URI kept as tooltip); folder labels decode
+  percent escapes at the source (`knowledge_service::location_label`); folder picker reads "Folders to
+  cluster", shows confirmed documents plus earlier sources not yet verified, uses the shared checkbox
+  styling and readable disabled actions; the pane tab is titled "Themes"; the stats line, new-tab button
+  and favourites button sit in a breadcrumb-style bar with the pane's own row height, and the in-pane
+  title is gone. Known limit: the favourites button in a viewer tab has no handler yet (same as before).
+  Not verified in a browser this pass: the mock runtime never reports themes as available (its
+  `workspaceHasIndexedFolder` check stays pending), so the layout changes (bar height, active tab
+  weight, checkbox row, count text) were checked by code and tests only.
 

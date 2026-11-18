@@ -2082,6 +2082,7 @@ export const it = {
     testFailed: 'Test di connessione non riuscito: {category}.',
   },
   themes: {
+    tabTitle: 'Temi',
     title: 'Temi del corpus',
     openTitle: 'Esplora i temi',
     openDescription: 'Scopri gli argomenti dei tuoi documenti indicizzati',
@@ -2126,7 +2127,7 @@ export const it = {
     viewsLabel: 'Viste',
     foldersTab: 'Cartelle',
     exportTab: 'Esporta',
-    foldersHeading: 'Cartelle da analizzare',
+    foldersHeading: 'Cartelle da raggruppare',
     foldersHint:
       'Gli argomenti di cartelle non correlate si fondono male. Scegli le cartelle che vanno insieme.',
     applyFolders: 'Mostra i temi per queste cartelle',

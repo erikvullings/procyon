@@ -1,5 +1,5 @@
 import m, { type FactoryComponent, type Vnode, type VnodeDOM } from 'mithril';
-import { Skeleton } from 'mithril-materialized';
+import { InputCheckbox, Skeleton } from 'mithril-materialized';
 
 import type { SemanticClient } from '../../api/client/semantic-client.ts';
 import { chevronDownIcon, chevronUpIcon } from '../../components/tabler-icons';
@@ -16,6 +16,7 @@ import type {
   ThemePassage,
 } from '../../models';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
+import { tabActionButtons } from '../panes/tab-strip';
 import { knowledgeProvenanceLabel } from './knowledge-evidence-view';
 import {
   cleanTitle,
@@ -60,6 +61,8 @@ export interface ThemesViewAttrs {
   readonly exportFolder?: Location;
   /** Told after a successful export, with the saved file's name. */
   readonly onExported?: (fileName: string) => void;
+  /** Opens a new tab beside this one; the breadcrumb bar offers the button when given. */
+  readonly onNewTab?: () => void;
 }
 
 const EXPORT_FORMATS: readonly {
@@ -398,6 +401,12 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
     return root.label.length > 0 ? root.label : folderName(root.location.uri);
   }
 
+  /** Folder name and its document count. */
+  function rootOption(root: KnowledgeRoot): string {
+    const count = root.confirmedCompletedSources + root.unverifiedLegacySources;
+    return `${rootLabel(root)} · ${t('themes', 'folderDocuments', { count })}`;
+  }
+
   function toggleRoot(rootId: string, checked: boolean): void {
     draftRoots = checked
       ? [...draftRoots.filter((id) => id !== rootId), rootId]
@@ -435,20 +444,13 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
           m(
             'li',
             { key: root.rootId },
-            m('label.fm-themes-root', [
-              m('input', {
-                type: 'checkbox',
-                checked: draftRoots.includes(root.rootId),
-                disabled: busy,
-                onchange: (event: Event) =>
-                  toggleRoot(root.rootId, (event.target as HTMLInputElement).checked),
-              }),
-              m('span', rootLabel(root)),
-              m(
-                'span.fm-themes-muted',
-                ` · ${t('themes', 'folderDocuments', { count: root.confirmedCompletedSources })}`,
-              ),
-            ]),
+            m(InputCheckbox, {
+              inputId: `themes-root-${root.rootId}`,
+              label: rootOption(root),
+              checked: draftRoots.includes(root.rootId),
+              disabled: busy,
+              onchange: (checked: boolean) => toggleRoot(root.rootId, checked),
+            }),
           ),
         ),
       ),
@@ -784,7 +786,7 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
                 m(
                   'li',
                   { key: concept.conceptId, title: concept.conceptId },
-                  `${conceptLabel(concept.conceptId)} (${concept.chunkCount})`,
+                  `${concept.label ?? conceptLabel(concept.conceptId)} (${concept.chunkCount})`,
                 ),
               ),
             ),
@@ -900,8 +902,30 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
       ];
       const shown: ThemesPanel = available.includes(panel) ? panel : 'map';
       return m('.fm-themes.fm-themes-view', [
+        m('.fm-breadcrumb-row.fm-themes-breadcrumb', [
+          m(
+            'nav.fm-breadcrumb',
+            { 'aria-label': t('themes', 'title') },
+            m(
+              'span.fm-breadcrumb-segment',
+              themes === undefined
+                ? undefined
+                : t('themes', 'analysed', {
+                    documents: themes.documentCount,
+                    passages: themes.chunkCount,
+                    shown: themes.mapPoints.length,
+                  }),
+            ),
+          ),
+          attrs.onNewTab === undefined
+            ? undefined
+            : tabActionButtons({
+                onNewTab: attrs.onNewTab,
+                favouritesOpen: false,
+                onToggleFavourites: () => undefined,
+              }),
+        ]),
         m('.fm-themes-scroll', [
-          m('.fm-themes-header', [m('h3', t('themes', 'title'))]),
           m('.fm-themes-content', [
             visibleScopes.length > 1
               ? m(
@@ -952,14 +976,6 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
             themes === undefined || shown === 'folders'
               ? undefined
               : m('.fm-themes-body', [
-                  m(
-                    'p.fm-themes-muted',
-                    t('themes', 'analysed', {
-                      documents: themes.documentCount,
-                      passages: themes.chunkCount,
-                      shown: themes.mapPoints.length,
-                    }),
-                  ),
                   shown === 'export' ? exportPanel(attrs, themes) : undefined,
                   shown !== 'map'
                     ? undefined

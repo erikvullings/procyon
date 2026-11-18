@@ -1071,6 +1071,7 @@ export const nl = {
     deleteSavedSearch: 'Opgeslagen zoekopdracht verwijderen',
   },
   themes: {
+    tabTitle: "Thema's",
     title: 'Thema’s in de collectie',
     openTitle: 'Thema’s verkennen',
     openDescription: 'Ontdek de onderwerpen in je geïndexeerde documenten',
@@ -1116,7 +1117,7 @@ export const nl = {
     viewsLabel: 'Weergaven',
     foldersTab: 'Mappen',
     exportTab: 'Exporteren',
-    foldersHeading: 'Te analyseren mappen',
+    foldersHeading: 'Mappen om te clusteren',
     foldersHint:
       'Onderwerpen uit niet-verwante mappen voegen slecht samen. Kies de mappen die bij elkaar horen.',
     applyFolders: 'Thema’s voor deze mappen tonen',

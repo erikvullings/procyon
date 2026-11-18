@@ -119,6 +119,9 @@ pub struct ThemeConceptDto {
     pub concept_id: String,
     /// Chunks of the theme carrying it.
     pub chunk_count: u64,
+    /// Preferred label from a device SKOS vocabulary, when one names this concept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 /// One discovered theme.

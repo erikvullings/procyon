@@ -923,12 +923,16 @@ fn scope_label(
 }
 
 fn location_label(uri: &str) -> String {
-    uri.trim_end_matches('/')
+    let segment = uri
+        .trim_end_matches('/')
         .rsplit('/')
         .next()
         .filter(|value| !value.is_empty())
-        .unwrap_or(uri)
-        .to_owned()
+        .unwrap_or(uri);
+    // The URI keeps its escapes (`Custom%20Chat`); a label names the folder as the user sees it.
+    percent_encoding::percent_decode_str(segment)
+        .decode_utf8_lossy()
+        .into_owned()
 }
 
 pub(crate) fn library_error(error: SemanticLibraryError) -> ApplicationError {
@@ -3043,5 +3047,14 @@ mod answer_flow_tests {
         assert!(matches!(error, ApplicationError::OperationCancelled));
         assert!(fixture.transport.generations().is_empty());
         assert_eq!(fixture.capability.requests().len(), 1);
+    }
+
+    #[test]
+    fn location_label_decodes_escapes_in_the_folder_name() {
+        assert_eq!(
+            super::location_label("file:///Users/me/Custom%20Chat%20Leiden/"),
+            "Custom Chat Leiden"
+        );
+        assert_eq!(super::location_label("file:///Users/me/caf%C3%A9"), "café");
     }
 }

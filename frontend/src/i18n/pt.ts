@@ -2087,6 +2087,7 @@ export const pt = {
     testFailed: 'O teste de ligação falhou: {category}.',
   },
   themes: {
+    tabTitle: 'Temas',
     title: 'Temas do corpus',
     openTitle: 'Explorar temas',
     openDescription: 'Descubra os assuntos dos seus documentos indexados',
@@ -2132,7 +2133,7 @@ export const pt = {
     viewsLabel: 'Vistas',
     foldersTab: 'Pastas',
     exportTab: 'Exportar',
-    foldersHeading: 'Pastas a analisar',
+    foldersHeading: 'Pastas a agrupar',
     foldersHint:
       'Temas de pastas não relacionadas combinam mal. Escolha as pastas que pertencem juntas.',
     applyFolders: 'Mostrar temas destas pastas',

@@ -2084,6 +2084,7 @@ export const es = {
     testFailed: 'Falló la prueba de conexión: {category}.',
   },
   themes: {
+    tabTitle: 'Temas',
     title: 'Temas del corpus',
     openTitle: 'Explorar temas',
     openDescription: 'Descubra los temas de sus documentos indexados',
@@ -2128,7 +2129,7 @@ export const es = {
     viewsLabel: 'Vistas',
     foldersTab: 'Carpetas',
     exportTab: 'Exportar',
-    foldersHeading: 'Carpetas que analizar',
+    foldersHeading: 'Carpetas para agrupar',
     foldersHint:
       'Los temas de carpetas sin relación se combinan mal. Elija las carpetas que van juntas.',
     applyFolders: 'Mostrar temas de estas carpetas',

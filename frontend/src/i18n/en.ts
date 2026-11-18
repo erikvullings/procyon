@@ -1059,6 +1059,7 @@ export const en = {
     deleteSavedSearch: 'Delete saved search',
   },
   themes: {
+    tabTitle: 'Themes',
     title: 'Corpus themes',
     openTitle: 'Explore themes',
     openDescription: 'Discover the topics across your indexed documents',
@@ -1103,7 +1104,7 @@ export const en = {
     viewsLabel: 'Views',
     foldersTab: 'Folders',
     exportTab: 'Export',
-    foldersHeading: 'Folders to analyse',
+    foldersHeading: 'Folders to cluster',
     foldersHint:
       'Topics from unrelated folders do not merge well. Choose the folders that belong together.',
     applyFolders: 'Show themes for these folders',

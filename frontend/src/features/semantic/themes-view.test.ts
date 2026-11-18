@@ -317,7 +317,7 @@ describe('ThemesView', () => {
     const ARCHIVE = 'mock-knowledge-root-archive';
 
     const checkboxes = (): HTMLInputElement[] => [
-      ...root.querySelectorAll<HTMLInputElement>('.fm-themes-root input[type="checkbox"]'),
+      ...root.querySelectorAll<HTMLInputElement>('.fm-themes-root-list input[type="checkbox"]'),
     ];
     const applyButton = (): HTMLButtonElement | undefined =>
       [...root.querySelectorAll<HTMLButtonElement>('.fm-themes-root-actions button')].find(
@@ -332,7 +332,7 @@ describe('ThemesView', () => {
       expect(analyze.mock.calls[0]?.[0].scope.kind).toBe('entireLibrary');
       await openTab('Folders');
       expect(checkboxes().map((box) => box.checked)).toEqual([true, true]);
-      expect(root.querySelector('.fm-themes-root')?.textContent).toContain(
+      expect(root.querySelector('.fm-themes-root-list')?.textContent).toContain(
         'Handbook · 3 documents',
       );
       m.mount(root, null);

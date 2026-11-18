@@ -2104,6 +2104,7 @@ export const de = {
     testFailed: 'Verbindungstest fehlgeschlagen: {category}.',
   },
   themes: {
+    tabTitle: 'Themen',
     title: 'Themen der Sammlung',
     openTitle: 'Themen erkunden',
     openDescription: 'Die Themen Ihrer indizierten Dokumente entdecken',
@@ -2149,7 +2150,7 @@ export const de = {
     viewsLabel: 'Ansichten',
     foldersTab: 'Ordner',
     exportTab: 'Exportieren',
-    foldersHeading: 'Zu analysierende Ordner',
+    foldersHeading: 'Ordner zum Gruppieren',
     foldersHint:
       'Themen aus nicht zusammengehörigen Ordnern lassen sich schlecht zusammenführen. Wählen Sie die Ordner, die zusammengehören.',
     applyFolders: 'Themen für diese Ordner anzeigen',

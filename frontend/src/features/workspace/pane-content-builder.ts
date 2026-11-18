@@ -561,7 +561,7 @@ export function createPaneContentBuilder(
         viewerTitles.set(tabId, t('knowledgeSearch', 'title'));
       }
       if (context.getThemesByTab().has(context.tabKey(paneId, tabId))) {
-        viewerTitles.set(tabId, t('themes', 'title'));
+        viewerTitles.set(tabId, t('themes', 'tabTitle'));
       }
       if (context.getAssistantByTab?.().has(context.tabKey(paneId, tabId))) {
         viewerTitles.set(tabId, t('assistant', 'title'));
@@ -1328,12 +1328,15 @@ export function createPaneContentBuilder(
                       themes !== undefined ||
                       context.getViewerByTab().has(key))
                   ? {
+                      // Themes draw their own breadcrumb bar with the new-tab button.
+                      viewerOwnsTabActions: themes !== undefined,
                       viewerContent: (() => {
                         if (themes !== undefined) {
                           const exportFolder = exportFolderOf(themes.scopes);
                           return m(ThemesView, {
                             client,
                             scopes: themes.scopes,
+                            onNewTab: () => context.openNewTab?.(paneId),
                             onOpenPassage: context.openThemePassage,
                             onSearchSources: context.searchThemeSources,
                             selectedRootIds:

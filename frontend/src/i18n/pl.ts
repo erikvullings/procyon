@@ -2078,6 +2078,7 @@ export const pl = {
     testFailed: 'Test połączenia nie powiódł się: {category}.',
   },
   themes: {
+    tabTitle: 'Tematy',
     title: 'Tematy korpusu',
     openTitle: 'Przeglądaj tematy',
     openDescription: 'Odkryj tematy w zindeksowanych dokumentach',
@@ -2123,7 +2124,7 @@ export const pl = {
     viewsLabel: 'Widoki',
     foldersTab: 'Foldery',
     exportTab: 'Eksport',
-    foldersHeading: 'Foldery do analizy',
+    foldersHeading: 'Foldery do grupowania',
     foldersHint:
       'Tematy z niepowiązanych folderów słabo się łączą. Wybierz foldery, które do siebie pasują.',
     applyFolders: 'Pokaż tematy dla tych folderów',

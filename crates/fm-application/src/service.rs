@@ -2181,6 +2181,15 @@ impl FileManagerService {
             .await
     }
 
+    /// Preferred SKOS labels by concept URI. Labels are cosmetic: an unreadable vocabulary store
+    /// leaves the concept URIs unlabelled instead of failing the analysis.
+    fn corpus_theme_concept_labels(&self) -> HashMap<String, String> {
+        crate::semantic_vocabulary::VocabularyStore::open(&self.semantic_vocabulary_path)
+            .and_then(|store| store.list())
+            .map(|vocabularies| crate::semantic_vocabulary::preferred_labels(&vocabularies))
+            .unwrap_or_default()
+    }
+
     /// Discovers labelled themes across the authorized chunks of a scope.
     pub async fn analyze_corpus_themes(
         &self,
@@ -2195,6 +2204,7 @@ impl FileManagerService {
                 scope,
                 request.max_themes,
                 &titles,
+                &self.corpus_theme_concept_labels(),
                 &tokio_util::sync::CancellationToken::new(),
             )
             .await
@@ -2219,6 +2229,7 @@ impl FileManagerService {
                 scope,
                 None,
                 &titles,
+                &self.corpus_theme_concept_labels(),
                 &tokio_util::sync::CancellationToken::new(),
             )
             .await?;

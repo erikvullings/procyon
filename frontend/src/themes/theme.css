@@ -6043,34 +6043,35 @@ button.fm-activity-count {
   align-content: start;
 }
 
-.fm-themes-statusbar {
+.fm-themes-breadcrumb {
   flex: 0 0 auto;
 }
 
+/* One row high, like the status bar of a directory pane; the active tab takes the folder
+ * header's weight and colour, the others recede. */
+.fm-themes-statusbar {
+  flex: 0 0 auto;
+  height: var(--fm-row-height);
+  min-height: var(--fm-row-height);
+  padding-block: 0;
+}
+
 .fm-themes-status-tab {
-  height: calc(var(--fm-row-height) - 2px) !important;
+  height: var(--fm-row-height) !important;
+  min-height: 0 !important;
+  margin: 0 !important;
   padding: 0 0.6rem !important;
   color: var(--fm-text-muted);
   font: inherit;
-  line-height: calc(var(--fm-row-height) - 2px) !important;
+  font-weight: 400;
+  line-height: var(--fm-row-height) !important;
   text-transform: none;
 }
 
 .fm-themes-status-tab[aria-pressed="true"] {
-  color: var(--fm-accent);
-  background: color-mix(in srgb, var(--fm-text) 10%, transparent);
-}
-
-.fm-themes-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.fm-themes-header h3 {
-  margin: 0;
-  font-size: var(--fm-type-heading);
+  color: var(--fm-text);
+  font-weight: 600;
+  background: transparent;
 }
 
 .fm-themes-content,
@@ -6408,7 +6409,6 @@ button.fm-activity-count {
   list-style: none;
 }
 
-.fm-themes-root,
 .fm-themes-field {
   display: flex;
   align-items: center;
@@ -6420,7 +6420,6 @@ button.fm-activity-count {
  * Plain HTML checkboxes and radios: mm's base rule hides them (`position: absolute; opacity: 0`)
  * at 2 classes of specificity, so `.fm-app-shell` lifts these rules to win the tie, as above.
  */
-.fm-app-shell .fm-themes-root input[type="checkbox"],
 .fm-app-shell .fm-themes-field input[type="checkbox"],
 .fm-app-shell .fm-themes-field input[type="radio"] {
   position: static;
@@ -6432,6 +6431,15 @@ button.fm-activity-count {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+/* Disabled actions keep a readable label on the dark surface instead of mm's pale fill. */
+.fm-app-shell .fm-themes-root-actions .btn:disabled {
+  background: var(--fm-surface-elevated);
+  border: 1px solid var(--fm-border);
+  box-shadow: none;
+  color: var(--fm-text-muted);
+  opacity: 1;
 }
 
 .fm-themes-export-body {

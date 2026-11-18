@@ -2092,6 +2092,7 @@ export const fr = {
     testFailed: 'Échec du test de connexion : {category}.',
   },
   themes: {
+    tabTitle: 'Thèmes',
     title: 'Thèmes du corpus',
     openTitle: 'Explorer les thèmes',
     openDescription: 'Découvrir les sujets de vos documents indexés',
@@ -2138,7 +2139,7 @@ export const fr = {
     viewsLabel: 'Vues',
     foldersTab: 'Dossiers',
     exportTab: 'Exporter',
-    foldersHeading: 'Dossiers à analyser',
+    foldersHeading: 'Dossiers à regrouper',
     foldersHint:
       'Les sujets de dossiers sans rapport se regroupent mal. Choisissez les dossiers qui vont ensemble.',
     applyFolders: 'Afficher les thèmes de ces dossiers',
