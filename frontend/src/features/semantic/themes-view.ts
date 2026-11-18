@@ -16,7 +16,7 @@ import type {
   ThemePassage,
 } from '../../models';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
-import { tabActionButtons } from '../panes/tab-strip';
+import { newTabButton } from '../panes/tab-strip';
 import { knowledgeProvenanceLabel } from './knowledge-evidence-view';
 import {
   cleanTitle,
@@ -917,13 +917,7 @@ export const ThemesView: FactoryComponent<ThemesViewAttrs> = () => {
                   }),
             ),
           ),
-          attrs.onNewTab === undefined
-            ? undefined
-            : tabActionButtons({
-                onNewTab: attrs.onNewTab,
-                favouritesOpen: false,
-                onToggleFavourites: () => undefined,
-              }),
+          attrs.onNewTab === undefined ? undefined : newTabButton(attrs.onNewTab),
         ]),
         m('.fm-themes-scroll', [
           m('.fm-themes-content', [

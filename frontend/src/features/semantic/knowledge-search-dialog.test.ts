@@ -264,6 +264,7 @@ describe('KnowledgeSearchDialog (task 0206)', () => {
     expect(root.querySelector('.fm-knowledge-search-options')).toBeNull();
     expect(root.querySelector('.fm-knowledge-composer > .fm-knowledge-advanced-body')).toBeNull();
     expect(toolbar?.querySelector('.fm-knowledge-search-close')).toBeNull();
+    expect(toolbar?.querySelector('.fm-pane-tab-favourites')).toBeNull();
 
     settings?.click();
     m.redraw.sync();

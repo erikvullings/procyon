@@ -40,7 +40,7 @@ import type {
 import { defaultKnowledgeSearchOptions } from '../../models';
 import { preferredProfile } from '../../models/llm-roles';
 import { lastPathSegment } from '../navigation/navigation';
-import { tabActionButtons } from '../panes/tab-strip';
+import { newTabButton } from '../panes/tab-strip';
 import { copyText } from '../preview/clipboard';
 import { SemanticFolderEnrolmentPrompt } from '../settings/semantic-library-management';
 import { pathFromUri } from '../workspace/workspace-layout';
@@ -1368,13 +1368,7 @@ export const KnowledgeSearchPane: FactoryComponent<KnowledgeSearchDialogAttrs> =
                   settingsIcon({ size: 16 }),
                 ),
               ),
-              attrs.onNewTab === undefined
-                ? undefined
-                : tabActionButtons({
-                    onNewTab: attrs.onNewTab,
-                    favouritesOpen: false,
-                    onToggleFavourites: () => undefined,
-                  }),
+              attrs.onNewTab === undefined ? undefined : newTabButton(attrs.onNewTab),
             ]),
             openingFolder === undefined
               ? undefined

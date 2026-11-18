@@ -132,26 +132,34 @@ export function compactConnectionName(name: string): string {
   return `${Array.from(trimmed).slice(0, 8).join('')}…`;
 }
 
-/** New-tab and favourites buttons: shared by the tab strip and viewers' breadcrumb bars. */
+/**
+ * New-tab button, shared by the tab strip and viewers' toolbars. The tab strip keys it because it
+ * sits in a list of keyed tabs; a toolbar with optional children does not.
+ */
+export function newTabButton(onNewTab: () => void, key?: string): m.Children {
+  return tooltip(
+    t('pane', 'newTab'),
+    m(
+      IconButton,
+      {
+        className: 'fm-pane-tab-new',
+        'aria-label': t('pane', 'newTab'),
+        onclick: () => onNewTab(),
+      },
+      plusIcon(),
+    ),
+    key === undefined ? undefined : { key },
+  );
+}
+
+/** New-tab and favourites buttons of the pane tab strip. Only file manager panes have favourites. */
 export function tabActionButtons(actions: {
   readonly onNewTab: () => void;
   readonly favouritesOpen: boolean;
   readonly onToggleFavourites: () => void;
 }): m.Children[] {
   return [
-    tooltip(
-      t('pane', 'newTab'),
-      m(
-        IconButton,
-        {
-          className: 'fm-pane-tab-new',
-          'aria-label': t('pane', 'newTab'),
-          onclick: () => actions.onNewTab(),
-        },
-        plusIcon(),
-      ),
-      { key: '__new-tab__' },
-    ),
+    newTabButton(actions.onNewTab, '__new-tab__'),
     tooltip(
       t('pane', 'favourites'),
       m(
