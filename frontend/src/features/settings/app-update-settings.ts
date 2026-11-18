@@ -21,6 +21,11 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : t('settings', 'updateFailed');
 }
 
+/** Mirrors the desktop host: a version with a pre-release suffix (`0.7.0-16`) follows beta. */
+export function isPrereleaseVersion(version: string | undefined): boolean {
+  return version?.includes('-') ?? false;
+}
+
 /** Desktop update preference and explicit signed-update controls. */
 export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () => {
   let currentVersion: string | undefined;
@@ -131,8 +136,9 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
         })
         .catch(() => undefined);
     },
-    view: ({ attrs }) =>
-      m('.fm-app-update-settings', [
+    view: ({ attrs }) => {
+      const prerelease = isPrereleaseVersion(currentVersion);
+      return m('.fm-app-update-settings', [
         m(Switch, {
           label: t('settings', 'automaticUpdateChecks'),
           checked: attrs.automaticChecks,
@@ -141,14 +147,21 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
           onchange: attrs.onAutomaticChecksChange,
         }),
         m('p.fm-settings-help', t('settings', 'automaticUpdateChecksHint')),
+        // A pre-release build always follows the beta channel, so the switch is shown on and locked.
         m(Switch, {
           label: t('settings', 'betaUpdateChecks'),
-          checked: attrs.includeBeta,
+          checked: prerelease || attrs.includeBeta,
+          disabled: prerelease,
           left: t('settings', 'off'),
           right: t('settings', 'on'),
           onchange: attrs.onIncludeBetaChange,
         }),
-        m('p.fm-settings-help', t('settings', 'betaUpdateChecksHint')),
+        m(
+          'p.fm-settings-help',
+          prerelease
+            ? t('settings', 'betaUpdateChecksLockedHint')
+            : t('settings', 'betaUpdateChecksHint'),
+        ),
         attrs.client.supportsAppUpdates
           ? [
               currentVersion === undefined
@@ -170,7 +183,7 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
                     type: 'button',
                     ...busyButtonAttrs(phase === 'checking'),
                     disabled: phase === 'checking' || phase === 'installing',
-                    onclick: () => void check(attrs.client, attrs.includeBeta),
+                    onclick: () => void check(attrs.client, prerelease || attrs.includeBeta),
                   },
                   phase === 'checking'
                     ? t('settings', 'checkingForUpdates')
@@ -213,6 +226,7 @@ export const AppUpdateSettings: FactoryComponent<AppUpdateSettingsAttrs> = () =>
             ]
           : m('p.fm-update-unavailable', t('settings', 'updatesDesktopOnly')),
         attrs.client.supportsAppDataRemoval ? removeDataControls(attrs.client) : undefined,
-      ]),
+      ]);
+    },
   };
 };

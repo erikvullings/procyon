@@ -422,6 +422,7 @@ export const en = {
     automaticUpdateChecks: 'Automatically check for updates',
     automaticUpdateChecksHint:
       'Checks after startup. Procyon always asks before downloading, installing, and restarting.',
+    betaUpdateChecksLockedHint: 'This build is a pre-release, so beta releases are always checked.',
     betaUpdateChecks: 'Also check for beta releases',
     betaUpdateChecksHint:
       'Beta releases arrive before they are approved for everyone and may be less stable. Turn this on to help test new versions.',

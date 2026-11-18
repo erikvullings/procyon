@@ -432,6 +432,8 @@ export const de = {
     automaticUpdateChecks: 'Automatisch nach Aktualisierungen suchen',
     automaticUpdateChecksHint:
       'Prüft nach dem Start. Procyon fragt immer vor Download, Installation und Neustart.',
+    betaUpdateChecksLockedHint:
+      'Dieser Build ist eine Vorabversion, daher werden Beta-Versionen immer geprüft.',
     betaUpdateChecks: 'Auch nach Beta-Versionen suchen',
     betaUpdateChecksHint:
       'Beta-Versionen erscheinen, bevor sie für alle freigegeben sind, und sind möglicherweise weniger stabil. Aktivieren, um neue Versionen mitzutesten.',
