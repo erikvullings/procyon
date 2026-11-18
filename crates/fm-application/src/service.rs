@@ -64,7 +64,7 @@ use crate::disk_usage_coordinator::DiskUsageCoordinator;
 use crate::document_conversion::DocumentConversionService;
 use crate::document_summary::{
     DocumentSummaryCapability, DocumentSummaryCoordinator, DocumentSummaryImages,
-    GenerateDocumentSummary, UnavailableDocumentSummaryCapability,
+    GenerateDocumentSummary, SummaryKind, UnavailableDocumentSummaryCapability,
 };
 use crate::document_summary::{preview_to_dto, summary_error_to_application, summary_to_dto};
 use crate::docx_preview::DocxPreviewService;
@@ -2370,6 +2370,7 @@ impl FileManagerService {
     ) -> Result<fm_transport_dto::DocumentSummaryDto, ApplicationError> {
         let cancellation = tokio_util::sync::CancellationToken::new();
         let target = request.target;
+        let kind = SummaryKind::for_uri(&target.location.uri);
         let image_evidence = self
             .prepare_document_summary_images(
                 &target,
@@ -2393,6 +2394,7 @@ impl FileManagerService {
                                 .clone(),
                             profile_id: request.profile_id,
                             images: image_evidence.images.clone(),
+                            kind,
                         },
                         &self.llm_profiles,
                         &cancellation,
@@ -2601,6 +2603,7 @@ impl FileManagerService {
                 "summary input token budget is outside the supported range",
             )));
         }
+        let kind = SummaryKind::for_uri(&target.location.uri);
         let outcome = self
             .document_conversion
             .convert(target.location.into(), cancellation.child_token())
@@ -2627,6 +2630,7 @@ impl FileManagerService {
         };
         self.document_summaries
             .prepare_ephemeral(&document, input_token_budget as usize, cancellation)
+            .map(|prepared| crate::document_summary::EphemeralDocumentSummary { kind, ..prepared })
             .map_err(summary_error_to_application)
     }
 
