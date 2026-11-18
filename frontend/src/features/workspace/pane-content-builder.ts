@@ -1328,8 +1328,8 @@ export function createPaneContentBuilder(
                       themes !== undefined ||
                       context.getViewerByTab().has(key))
                   ? {
-                      // Themes and search draw their own toolbar with the new-tab button.
-                      viewerOwnsTabActions: themes !== undefined || knowledgeSearch !== undefined,
+                      // Themes, search and viewers draw their own header with the new-tab button.
+                      viewerOwnsTabActions: true,
                       viewerContent: (() => {
                         if (themes !== undefined) {
                           const exportFolder = exportFolderOf(themes.scopes);
@@ -1395,6 +1395,7 @@ export function createPaneContentBuilder(
                           FileViewer,
                           fileViewerAttrs(viewer.state, viewer.controller, {
                             openExternalUrl: (url) => void client.openExternalUrl(url),
+                            onNewTab: () => context.openNewTab?.(paneId),
                             mapClient: client,
                             ...(videoPosterDataUri === undefined ? {} : { videoPosterDataUri }),
                             quickLookAvailable,

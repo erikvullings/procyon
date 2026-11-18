@@ -19,6 +19,7 @@ export type FileViewerAttrsExtras = Pick<
       | 'mapClient'
       | 'links'
       | 'gallery'
+      | 'onNewTab'
     >
   > & {
     readonly openExternalUrl: (url: string) => void;
