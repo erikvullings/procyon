@@ -162,6 +162,8 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
   let preview: DocumentSummaryPreview | undefined;
   let summary: DocumentSummary | null = null;
   let writing = false;
+  /** Set once the text is in the file, so it is not added twice until the dialog reopens. */
+  let written = false;
   let writeStatus: string | undefined;
   let writeError: string | undefined;
 
@@ -283,7 +285,7 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
         'button.fm-document-summary-write-start',
         {
           type: 'button',
-          disabled: writing,
+          disabled: writing || written,
           onclick: () => void writeCommentary(attrs),
         },
         t('documentSummary', 'writeToFile'),
@@ -320,6 +322,7 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
         expectedRevision: loaded.revision,
         overwriteConflict: false,
       });
+      written = true;
       writeStatus = t('documentSummary', 'writtenToFile');
       attrs.onWritten?.(entry.location);
     } catch (cause) {
@@ -371,6 +374,7 @@ export const DocumentSummaryDialog: FactoryComponent<DocumentSummaryDialogAttrs>
     onupdate: ({ attrs }) => {
       if (attrs.open && !wasOpen) {
         writeStatus = undefined;
+        written = false;
         writeError = undefined;
         void openAndGenerate(attrs);
       }

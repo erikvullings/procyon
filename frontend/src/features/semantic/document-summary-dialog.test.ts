@@ -570,5 +570,9 @@ describe('DocumentSummaryDialog', () => {
     await vi.waitFor(() =>
       expect(root.querySelector('[role="status"]')?.textContent).toContain('Added as a comment'),
     );
+    // Written once: the button stays disabled so the same text is not added again.
+    expect(
+      root.querySelector<HTMLButtonElement>('.fm-document-summary-write-start')?.disabled,
+    ).toBe(true);
   });
 });
