@@ -299,6 +299,26 @@ interface TypedResponse<T> extends Response {
 }
 
 
+const getHeaders = (...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]) => {
+  const seen = new Set<string>();
+  const layers: [string, string | readonly string[]][][] = [];
+  for (const source of sources.reverse()) {
+    if (!source) continue;
+    const entries = source instanceof Headers
+      ? source.entries()
+      : Symbol.iterator in source
+        ? Array.from(source as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string])
+        : Object.entries<string | readonly string[] | undefined>(source);
+    const layer: [string, string | readonly string[]][] = [];
+    for (const [name, value] of entries) {
+      if (value !== undefined && !seen.has(name.toLowerCase())) layer.push([name, value]);
+    }
+    for (const [name] of layer) seen.add(name.toLowerCase());
+    layers.push(layer);
+  }
+  return Object.fromEntries(layers.reverse().flat()) as Extract<RequestInit['headers'], Record<string, unknown>>;
+};
+
 export type listActionsResponse200 = {
   data: ActionDescriptorDto[]
   status: 200
@@ -372,25 +392,11 @@ export const getInvokeActionUrl = (actionId: string,) => {
 export const invokeAction = async (actionId: string,
     invokeActionRequestDto: InvokeActionRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<invokeActionResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<invokeActionResponse>(getInvokeActionUrl(actionId),
+  return fetchMutator<invokeActionResponse>(getInvokeActionUrl(actionId),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(invokeActionRequestDto)
   }
 );}
@@ -446,25 +452,11 @@ this call.
  */
 export const discoverApplicationUninstallCandidates = async (discoverApplicationUninstallCandidatesRequestDto: DiscoverApplicationUninstallCandidatesRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<discoverApplicationUninstallCandidatesResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<discoverApplicationUninstallCandidatesResponse>(getDiscoverApplicationUninstallCandidatesUrl(),
+  return fetchMutator<discoverApplicationUninstallCandidatesResponse>(getDiscoverApplicationUninstallCandidatesUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(discoverApplicationUninstallCandidatesRequestDto)
   }
 );}
@@ -515,25 +507,11 @@ own. Best-effort: no pinned icon is a normal `removed: false`, not an error.
  */
 export const removeApplicationDockIcon = async (removeApplicationDockIconRequestDto: RemoveApplicationDockIconRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<removeApplicationDockIconResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<removeApplicationDockIconResponse>(getRemoveApplicationDockIconUrl(),
+  return fetchMutator<removeApplicationDockIconResponse>(getRemoveApplicationDockIconUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(removeApplicationDockIconRequestDto)
   }
 );}
@@ -572,25 +550,11 @@ export const getCacheArchivePasswordUrl = () => {
  */
 export const cacheArchivePassword = async (archiveCredentialRequestDto: ArchiveCredentialRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<cacheArchivePasswordResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<cacheArchivePasswordResponse>(getCacheArchivePasswordUrl(),
+  return fetchMutator<cacheArchivePasswordResponse>(getCacheArchivePasswordUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(archiveCredentialRequestDto)
   }
 );}
@@ -665,25 +629,11 @@ export const getResolveArchiveEditUrl = () => {
  */
 export const resolveArchiveEdit = async (resolveArchiveEditRequestDto: ResolveArchiveEditRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<resolveArchiveEditResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<resolveArchiveEditResponse>(getResolveArchiveEditUrl(),
+  return fetchMutator<resolveArchiveEditResponse>(getResolveArchiveEditUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(resolveArchiveEditRequestDto)
   }
 );}
@@ -732,25 +682,11 @@ export const getArchiveSummaryUrl = () => {
  */
 export const archiveSummary = async (archiveSummaryRequestDto: ArchiveSummaryRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<archiveSummaryResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<archiveSummaryResponse>(getArchiveSummaryUrl(),
+  return fetchMutator<archiveSummaryResponse>(getArchiveSummaryUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(archiveSummaryRequestDto)
   }
 );}
@@ -794,25 +730,11 @@ export const getInspectAttributesUrl = () => {
  */
 export const inspectAttributes = async (inspectAttributesRequestDto: InspectAttributesRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<inspectAttributesResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<inspectAttributesResponse>(getInspectAttributesUrl(),
+  return fetchMutator<inspectAttributesResponse>(getInspectAttributesUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(inspectAttributesRequestDto)
   }
 );}
@@ -856,25 +778,11 @@ export const getPreviewAttributeChangeUrl = () => {
  */
 export const previewAttributeChange = async (previewAttributeChangeRequestDto: PreviewAttributeChangeRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<previewAttributeChangeResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<previewAttributeChangeResponse>(getPreviewAttributeChangeUrl(),
+  return fetchMutator<previewAttributeChangeResponse>(getPreviewAttributeChangeUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(previewAttributeChangeRequestDto)
   }
 );}
@@ -906,25 +814,11 @@ export const getCancelChatReplyUrl = () => {
  */
 export const cancelChatReply = async (cancelChatReplyRequestDto: CancelChatReplyRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<cancelChatReplyResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<cancelChatReplyResponse>(getCancelChatReplyUrl(),
+  return fetchMutator<cancelChatReplyResponse>(getCancelChatReplyUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(cancelChatReplyRequestDto)
   }
 );}
@@ -958,25 +852,11 @@ request, arrives as an event on this 200 response.
  */
 export const streamChatReply = async (chatReplyRequestDto: ChatReplyRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<streamChatReplyResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<streamChatReplyResponse>(getStreamChatReplyUrl(),
+  return fetchMutator<streamChatReplyResponse>(getStreamChatReplyUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json',Accept: 'application/x-ndjson', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json',Accept: 'application/x-ndjson' }, options?.headers),
     body: JSON.stringify(chatReplyRequestDto)
   }
 );}
@@ -1012,25 +892,11 @@ export const getStartChecksumsUrl = () => {
 
 export const startChecksums = async (startChecksumRequestDto: StartChecksumRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<startChecksumsResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<startChecksumsResponse>(getStartChecksumsUrl(),
+  return fetchMutator<startChecksumsResponse>(getStartChecksumsUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(startChecksumRequestDto)
   }
 );}
@@ -1156,25 +1022,11 @@ export const getRenderChecksumFileUrl = (jobId: string,) => {
 export const renderChecksumFile = async (jobId: string,
     renderChecksumFileRequestDto: RenderChecksumFileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<renderChecksumFileResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<renderChecksumFileResponse>(getRenderChecksumFileUrl(jobId),
+  return fetchMutator<renderChecksumFileResponse>(getRenderChecksumFileUrl(jobId),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(renderChecksumFileRequestDto)
   }
 );}
@@ -1216,25 +1068,11 @@ export const getSaveChecksumFileUrl = (jobId: string,) => {
 export const saveChecksumFile = async (jobId: string,
     saveChecksumFileRequestDto: SaveChecksumFileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<saveChecksumFileResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<saveChecksumFileResponse>(getSaveChecksumFileUrl(jobId),
+  return fetchMutator<saveChecksumFileResponse>(getSaveChecksumFileUrl(jobId),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(saveChecksumFileRequestDto)
   }
 );}
@@ -1276,25 +1114,11 @@ export const getVerifyChecksumFileUrl = (jobId: string,) => {
 export const verifyChecksumFile = async (jobId: string,
     verifyChecksumFileRequestDto: VerifyChecksumFileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<verifyChecksumFileResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<verifyChecksumFileResponse>(getVerifyChecksumFileUrl(jobId),
+  return fetchMutator<verifyChecksumFileResponse>(getVerifyChecksumFileUrl(jobId),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(verifyChecksumFileRequestDto)
   }
 );}
@@ -1330,25 +1154,11 @@ export const getStartComparisonUrl = () => {
 
 export const startComparison = async (startComparisonRequestDto: StartComparisonRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<startComparisonResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<startComparisonResponse>(getStartComparisonUrl(),
+  return fetchMutator<startComparisonResponse>(getStartComparisonUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(startComparisonRequestDto)
   }
 );}
@@ -1439,25 +1249,11 @@ export const getApplySyncPlanUrl = (comparisonId: string,) => {
 export const applySyncPlan = async (comparisonId: string,
     applySyncPlanRequestDto: ApplySyncPlanRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<applySyncPlanResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<applySyncPlanResponse>(getApplySyncPlanUrl(comparisonId),
+  return fetchMutator<applySyncPlanResponse>(getApplySyncPlanUrl(comparisonId),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(applySyncPlanRequestDto)
   }
 );}
@@ -1534,25 +1330,11 @@ export const getGenerateSyncPlanUrl = (comparisonId: string,) => {
 export const generateSyncPlan = async (comparisonId: string,
     generateSyncPlanRequestDto: GenerateSyncPlanRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<generateSyncPlanResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<generateSyncPlanResponse>(getGenerateSyncPlanUrl(comparisonId),
+  return fetchMutator<generateSyncPlanResponse>(getGenerateSyncPlanUrl(comparisonId),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(generateSyncPlanRequestDto)
   }
 );}
@@ -1627,25 +1409,11 @@ export const getCreateConnectionUrl = () => {
  */
 export const createConnection = async (createConnectionRequestDto: CreateConnectionRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<createConnectionResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<createConnectionResponse>(getCreateConnectionUrl(),
+  return fetchMutator<createConnectionResponse>(getCreateConnectionUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(createConnectionRequestDto)
   }
 );}
@@ -1733,25 +1501,11 @@ export const getUpdateConnectionUrl = (connectionId: string,) => {
 export const updateConnection = async (connectionId: string,
     updateConnectionRequestDto: UpdateConnectionRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<updateConnectionResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<updateConnectionResponse>(getUpdateConnectionUrl(connectionId),
+  return fetchMutator<updateConnectionResponse>(getUpdateConnectionUrl(connectionId),
   {
     ...options,
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(updateConnectionRequestDto)
   }
 );}
@@ -1930,25 +1684,11 @@ presenting exactly the fingerprint being accepted.
 export const acceptSshHostKey = async (connectionId: string,
     acceptSshHostKeyRequestDto: AcceptSshHostKeyRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<acceptSshHostKeyResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<acceptSshHostKeyResponse>(getAcceptSshHostKeyUrl(connectionId),
+  return fetchMutator<acceptSshHostKeyResponse>(getAcceptSshHostKeyUrl(connectionId),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(acceptSshHostKeyRequestDto)
   }
 );}
@@ -2166,25 +1906,11 @@ export const getRecordFrontendDiagnosticUrl = () => {
  */
 export const recordFrontendDiagnostic = async (diagnosticErrorDto: DiagnosticErrorDto, options?: Parameters<typeof fetchMutator>[1]): Promise<recordFrontendDiagnosticResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<recordFrontendDiagnosticResponse>(getRecordFrontendDiagnosticUrl(),
+  return fetchMutator<recordFrontendDiagnosticResponse>(getRecordFrontendDiagnosticUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(diagnosticErrorDto)
   }
 );}
@@ -2225,25 +1951,11 @@ directory watch (SFTP, FTP, ...) can poll less often while backgrounded
  */
 export const setPaneActivity = async (setPaneActivityRequest: SetPaneActivityRequest, options?: Parameters<typeof fetchMutator>[1]): Promise<setPaneActivityResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<setPaneActivityResponse>(getSetPaneActivityUrl(),
+  return fetchMutator<setPaneActivityResponse>(getSetPaneActivityUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(setPaneActivityRequest)
   }
 );}
@@ -2293,25 +2005,11 @@ export const getListDirectoryChildrenUrl = () => {
  */
 export const listDirectoryChildren = async (listDirectoryChildrenRequest: ListDirectoryChildrenRequest, options?: Parameters<typeof fetchMutator>[1]): Promise<listDirectoryChildrenResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<listDirectoryChildrenResponse>(getListDirectoryChildrenUrl(),
+  return fetchMutator<listDirectoryChildrenResponse>(getListDirectoryChildrenUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(listDirectoryChildrenRequest)
   }
 );}
@@ -2360,25 +2058,11 @@ export const getScanDiskUsageUrl = () => {
  */
 export const scanDiskUsage = async (scanDiskUsageRequestDto: ScanDiskUsageRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<scanDiskUsageResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<scanDiskUsageResponse>(getScanDiskUsageUrl(),
+  return fetchMutator<scanDiskUsageResponse>(getScanDiskUsageUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(scanDiskUsageRequestDto)
   }
 );}
@@ -2471,25 +2155,11 @@ export const getListDirectoryUrl = () => {
  */
 export const listDirectory = async (listDirectoryRequest: ListDirectoryRequest, options?: Parameters<typeof fetchMutator>[1]): Promise<listDirectoryResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<listDirectoryResponse>(getListDirectoryUrl(),
+  return fetchMutator<listDirectoryResponse>(getListDirectoryUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(listDirectoryRequest)
   }
 );}
@@ -2538,25 +2208,11 @@ export const getRefreshDirectoryUrl = () => {
  */
 export const refreshDirectory = async (listDirectoryRequest: ListDirectoryRequest, options?: Parameters<typeof fetchMutator>[1]): Promise<refreshDirectoryResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<refreshDirectoryResponse>(getRefreshDirectoryUrl(),
+  return fetchMutator<refreshDirectoryResponse>(getRefreshDirectoryUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(listDirectoryRequest)
   }
 );}
@@ -2605,25 +2261,11 @@ export const getCalculateFolderSizeUrl = () => {
  */
 export const calculateFolderSize = async (calculateFolderSizeRequestDto: CalculateFolderSizeRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<calculateFolderSizeResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<calculateFolderSizeResponse>(getCalculateFolderSizeUrl(),
+  return fetchMutator<calculateFolderSizeResponse>(getCalculateFolderSizeUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(calculateFolderSizeRequestDto)
   }
 );}
@@ -2659,25 +2301,11 @@ export const getStartDuplicateScanUrl = () => {
 
 export const startDuplicateScan = async (startDuplicateScanRequestDto: StartDuplicateScanRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<startDuplicateScanResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<startDuplicateScanResponse>(getStartDuplicateScanUrl(),
+  return fetchMutator<startDuplicateScanResponse>(getStartDuplicateScanUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(startDuplicateScanRequestDto)
   }
 );}
@@ -2815,25 +2443,11 @@ export const getGetEntryMetadataUrl = () => {
  */
 export const getEntryMetadata = async (entryMetadataRequest: EntryMetadataRequest, options?: Parameters<typeof fetchMutator>[1]): Promise<getEntryMetadataResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<getEntryMetadataResponse>(getGetEntryMetadataUrl(),
+  return fetchMutator<getEntryMetadataResponse>(getGetEntryMetadataUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(entryMetadataRequest)
   }
 );}
@@ -2901,25 +2515,11 @@ export const getCancelFileAssistantReplyUrl = () => {
  */
 export const cancelFileAssistantReply = async (cancelFileAssistantRequestDto: CancelFileAssistantRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<cancelFileAssistantReplyResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<cancelFileAssistantReplyResponse>(getCancelFileAssistantReplyUrl(),
+  return fetchMutator<cancelFileAssistantReplyResponse>(getCancelFileAssistantReplyUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(cancelFileAssistantRequestDto)
   }
 );}
@@ -2953,25 +2553,11 @@ a refused request, arrives as an event on this 200 response.
  */
 export const streamFileAssistantReply = async (fileAssistantRequestDto: FileAssistantRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<streamFileAssistantReplyResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<streamFileAssistantReplyResponse>(getStreamFileAssistantReplyUrl(),
+  return fetchMutator<streamFileAssistantReplyResponse>(getStreamFileAssistantReplyUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json',Accept: 'application/x-ndjson', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json',Accept: 'application/x-ndjson' }, options?.headers),
     body: JSON.stringify(fileAssistantRequestDto)
   }
 );}
@@ -3021,25 +2607,11 @@ export const getDiffFilesUrl = () => {
  */
 export const diffFiles = async (diffFilesRequestDto: DiffFilesRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<diffFilesResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<diffFilesResponse>(getDiffFilesUrl(),
+  return fetchMutator<diffFilesResponse>(getDiffFilesUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(diffFilesRequestDto)
   }
 );}
@@ -3114,25 +2686,11 @@ export const getCloseDocxPreviewUrl = () => {
  */
 export const closeDocxPreview = async (docxPreviewSessionRequestDto: DocxPreviewSessionRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<closeDocxPreviewResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<closeDocxPreviewResponse>(getCloseDocxPreviewUrl(),
+  return fetchMutator<closeDocxPreviewResponse>(getCloseDocxPreviewUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(docxPreviewSessionRequestDto)
   }
 );}
@@ -3181,25 +2739,11 @@ export const getOpenDocxPreviewUrl = () => {
  */
 export const openDocxPreview = async (openDocxPreviewRequestDto: OpenDocxPreviewRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<openDocxPreviewResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<openDocxPreviewResponse>(getOpenDocxPreviewUrl(),
+  return fetchMutator<openDocxPreviewResponse>(getOpenDocxPreviewUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(openDocxPreviewRequestDto)
   }
 );}
@@ -3243,25 +2787,11 @@ export const getReadDocxPreviewResourceUrl = () => {
  */
 export const readDocxPreviewResource = async (readDocxPreviewResourceRequestDto: ReadDocxPreviewResourceRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<readDocxPreviewResourceResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<readDocxPreviewResourceResponse>(getReadDocxPreviewResourceUrl(),
+  return fetchMutator<readDocxPreviewResourceResponse>(getReadDocxPreviewResourceUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(readDocxPreviewResourceRequestDto)
   }
 );}
@@ -3302,25 +2832,11 @@ export const getLoadEditableFileUrl = () => {
 
 export const loadEditableFile = async (loadEditableFileRequestDto: LoadEditableFileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<loadEditableFileResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<loadEditableFileResponse>(getLoadEditableFileUrl(),
+  return fetchMutator<loadEditableFileResponse>(getLoadEditableFileUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(loadEditableFileRequestDto)
   }
 );}
@@ -3361,25 +2877,11 @@ export const getSaveEditableFileUrl = () => {
 
 export const saveEditableFile = async (saveEditableFileRequestDto: SaveEditableFileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<saveEditableFileResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<saveEditableFileResponse>(getSaveEditableFileUrl(),
+  return fetchMutator<saveEditableFileResponse>(getSaveEditableFileUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(saveEditableFileRequestDto)
   }
 );}
@@ -3423,25 +2925,11 @@ export const getReadGeoFileUrl = () => {
  */
 export const readGeoFile = async (readGeoFileRequestDto: ReadGeoFileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<readGeoFileResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<readGeoFileResponse>(getReadGeoFileUrl(),
+  return fetchMutator<readGeoFileResponse>(getReadGeoFileUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(readGeoFileRequestDto)
   }
 );}
@@ -3482,25 +2970,11 @@ file is outside a git working tree, on a non-local provider, or not yet committe
  */
 export const getFileGitHistory = async (getFileGitHistoryRequestDto: GetFileGitHistoryRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<getFileGitHistoryResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<getFileGitHistoryResponse>(getGetFileGitHistoryUrl(),
+  return fetchMutator<getFileGitHistoryResponse>(getGetFileGitHistoryUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(getFileGitHistoryRequestDto)
   }
 );}
@@ -3544,25 +3018,11 @@ export const getReadImageGpsUrl = () => {
  */
 export const readImageGps = async (readImageGpsRequestDto: ReadImageGpsRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<readImageGpsResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<readImageGpsResponse>(getReadImageGpsUrl(),
+  return fetchMutator<readImageGpsResponse>(getReadImageGpsUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(readImageGpsRequestDto)
   }
 );}
@@ -3606,25 +3066,11 @@ export const getReadImageMetadataUrl = () => {
  */
 export const readImageMetadata = async (readImageMetadataRequestDto: ReadImageMetadataRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<readImageMetadataResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<readImageMetadataResponse>(getReadImageMetadataUrl(),
+  return fetchMutator<readImageMetadataResponse>(getReadImageMetadataUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(readImageMetadataRequestDto)
   }
 );}
@@ -3668,25 +3114,11 @@ export const getResolveMetadataTokensUrl = () => {
  */
 export const resolveMetadataTokens = async (resolveMetadataTokensRequestDto: ResolveMetadataTokensRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<resolveMetadataTokensResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<resolveMetadataTokensResponse>(getResolveMetadataTokensUrl(),
+  return fetchMutator<resolveMetadataTokensResponse>(getResolveMetadataTokensUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(resolveMetadataTokensRequestDto)
   }
 );}
@@ -3725,25 +3157,11 @@ export const getClosePptxPreviewUrl = () => {
  */
 export const closePptxPreview = async (pptxPreviewSessionRequestDto: PptxPreviewSessionRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<closePptxPreviewResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<closePptxPreviewResponse>(getClosePptxPreviewUrl(),
+  return fetchMutator<closePptxPreviewResponse>(getClosePptxPreviewUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(pptxPreviewSessionRequestDto)
   }
 );}
@@ -3792,25 +3210,11 @@ export const getOpenPptxPreviewUrl = () => {
  */
 export const openPptxPreview = async (openPptxPreviewRequestDto: OpenPptxPreviewRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<openPptxPreviewResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<openPptxPreviewResponse>(getOpenPptxPreviewUrl(),
+  return fetchMutator<openPptxPreviewResponse>(getOpenPptxPreviewUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(openPptxPreviewRequestDto)
   }
 );}
@@ -3859,25 +3263,11 @@ export const getReadPptxPreviewPdfUrl = () => {
  */
 export const readPptxPreviewPdf = async (readPptxPreviewPdfRequestDto: ReadPptxPreviewPdfRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<readPptxPreviewPdfResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<readPptxPreviewPdfResponse>(getReadPptxPreviewPdfUrl(),
+  return fetchMutator<readPptxPreviewPdfResponse>(getReadPptxPreviewPdfUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(readPptxPreviewPdfRequestDto)
   }
 );}
@@ -3926,25 +3316,11 @@ export const getReadFileRangeUrl = () => {
  */
 export const readFileRange = async (readFileRangeRequestDto: ReadFileRangeRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<readFileRangeResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<readFileRangeResponse>(getReadFileRangeUrl(),
+  return fetchMutator<readFileRangeResponse>(getReadFileRangeUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(readFileRangeRequestDto)
   }
 );}
@@ -3993,25 +3369,11 @@ export const getSearchInFileUrl = () => {
  */
 export const searchInFile = async (searchInFileRequestDto: SearchInFileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<searchInFileResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<searchInFileResponse>(getSearchInFileUrl(),
+  return fetchMutator<searchInFileResponse>(getSearchInFileUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(searchInFileRequestDto)
   }
 );}
@@ -4050,25 +3412,11 @@ export const getCloseSqliteViewUrl = () => {
  */
 export const closeSqliteView = async (sqliteViewSessionRequestDto: SqliteViewSessionRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<closeSqliteViewResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<closeSqliteViewResponse>(getCloseSqliteViewUrl(),
+  return fetchMutator<closeSqliteViewResponse>(getCloseSqliteViewUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(sqliteViewSessionRequestDto)
   }
 );}
@@ -4112,25 +3460,11 @@ export const getOpenSqliteViewUrl = () => {
  */
 export const openSqliteView = async (openSqliteViewRequestDto: OpenSqliteViewRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<openSqliteViewResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<openSqliteViewResponse>(getOpenSqliteViewUrl(),
+  return fetchMutator<openSqliteViewResponse>(getOpenSqliteViewUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(openSqliteViewRequestDto)
   }
 );}
@@ -4174,25 +3508,11 @@ export const getQuerySqliteViewUrl = () => {
  */
 export const querySqliteView = async (querySqliteViewRequestDto: QuerySqliteViewRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<querySqliteViewResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<querySqliteViewResponse>(getQuerySqliteViewUrl(),
+  return fetchMutator<querySqliteViewResponse>(getQuerySqliteViewUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(querySqliteViewRequestDto)
   }
 );}
@@ -4228,25 +3548,11 @@ export const getCloseStructuredViewUrl = () => {
 
 export const closeStructuredView = async (structuredViewSessionRequestDto: StructuredViewSessionRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<closeStructuredViewResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<closeStructuredViewResponse>(getCloseStructuredViewUrl(),
+  return fetchMutator<closeStructuredViewResponse>(getCloseStructuredViewUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(structuredViewSessionRequestDto)
   }
 );}
@@ -4287,25 +3593,11 @@ export const getReadStructuredJsonWindowUrl = () => {
 
 export const readStructuredJsonWindow = async (readStructuredJsonWindowRequestDto: ReadStructuredJsonWindowRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<readStructuredJsonWindowResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<readStructuredJsonWindowResponse>(getReadStructuredJsonWindowUrl(),
+  return fetchMutator<readStructuredJsonWindowResponse>(getReadStructuredJsonWindowUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(readStructuredJsonWindowRequestDto)
   }
 );}
@@ -4349,25 +3641,11 @@ export const getOpenStructuredViewUrl = () => {
  */
 export const openStructuredView = async (openStructuredViewRequestDto: OpenStructuredViewRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<openStructuredViewResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<openStructuredViewResponse>(getOpenStructuredViewUrl(),
+  return fetchMutator<openStructuredViewResponse>(getOpenStructuredViewUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(openStructuredViewRequestDto)
   }
 );}
@@ -4408,25 +3686,11 @@ export const getReadStructuredRowsUrl = () => {
 
 export const readStructuredRows = async (readStructuredRowsRequestDto: ReadStructuredRowsRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<readStructuredRowsResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<readStructuredRowsResponse>(getReadStructuredRowsUrl(),
+  return fetchMutator<readStructuredRowsResponse>(getReadStructuredRowsUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(readStructuredRowsRequestDto)
   }
 );}
@@ -4467,25 +3731,11 @@ export const getSearchStructuredRowsUrl = () => {
 
 export const searchStructuredRows = async (searchStructuredRowsRequestDto: SearchStructuredRowsRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<searchStructuredRowsResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<searchStructuredRowsResponse>(getSearchStructuredRowsUrl(),
+  return fetchMutator<searchStructuredRowsResponse>(getSearchStructuredRowsUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(searchStructuredRowsRequestDto)
   }
 );}
@@ -4526,25 +3776,11 @@ export const getGetStructuredViewStatusUrl = () => {
 
 export const getStructuredViewStatus = async (structuredViewSessionRequestDto: StructuredViewSessionRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<getStructuredViewStatusResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<getStructuredViewStatusResponse>(getGetStructuredViewStatusUrl(),
+  return fetchMutator<getStructuredViewStatusResponse>(getGetStructuredViewStatusUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(structuredViewSessionRequestDto)
   }
 );}
@@ -4585,25 +3821,11 @@ export const getUpdateStructuredViewUrl = () => {
 
 export const updateStructuredView = async (updateStructuredViewRequestDto: UpdateStructuredViewRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<updateStructuredViewResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<updateStructuredViewResponse>(getUpdateStructuredViewUrl(),
+  return fetchMutator<updateStructuredViewResponse>(getUpdateStructuredViewUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(updateStructuredViewRequestDto)
   }
 );}
@@ -4720,25 +3942,11 @@ export const getSetFinderTagsUrl = (params: SetFinderTagsParams,) => {
 export const setFinderTags = async (finderTagsDto: FinderTagsDto,
     params: SetFinderTagsParams, options?: Parameters<typeof fetchMutator>[1]): Promise<setFinderTagsResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<setFinderTagsResponse>(getSetFinderTagsUrl(params),
+  return fetchMutator<setFinderTagsResponse>(getSetFinderTagsUrl(params),
   {
     ...options,
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(finderTagsDto)
   }
 );}
@@ -4774,25 +3982,11 @@ export const getForgetFolderViewUrl = () => {
 
 export const forgetFolderView = async (forgetFolderViewRequestDto: ForgetFolderViewRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<forgetFolderViewResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<forgetFolderViewResponse>(getForgetFolderViewUrl(),
+  return fetchMutator<forgetFolderViewResponse>(getForgetFolderViewUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(forgetFolderViewRequestDto)
   }
 );}
@@ -4836,25 +4030,11 @@ export const getPreviewGeoConversionUrl = () => {
  */
 export const previewGeoConversion = async (previewGeoConversionRequestDto: PreviewGeoConversionRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<previewGeoConversionResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<previewGeoConversionResponse>(getPreviewGeoConversionUrl(),
+  return fetchMutator<previewGeoConversionResponse>(getPreviewGeoConversionUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(previewGeoConversionRequestDto)
   }
 );}
@@ -4893,25 +4073,11 @@ export const getConvertGeoTextUrl = () => {
  */
 export const convertGeoText = async (convertGeoTextRequestDto: ConvertGeoTextRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<convertGeoTextResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<convertGeoTextResponse>(getConvertGeoTextUrl(),
+  return fetchMutator<convertGeoTextResponse>(getConvertGeoTextUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(convertGeoTextRequestDto)
   }
 );}
@@ -4950,25 +4116,11 @@ export const getPreviewGeoMinifyUrl = () => {
  */
 export const previewGeoMinify = async (previewGeoMinifyRequestDto: PreviewGeoMinifyRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<previewGeoMinifyResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<previewGeoMinifyResponse>(getPreviewGeoMinifyUrl(),
+  return fetchMutator<previewGeoMinifyResponse>(getPreviewGeoMinifyUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(previewGeoMinifyRequestDto)
   }
 );}
@@ -5000,25 +4152,11 @@ export const getParseGeoTextUrl = () => {
  */
 export const parseGeoText = async (parseGeoTextRequestDto: ParseGeoTextRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<parseGeoTextResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<parseGeoTextResponse>(getParseGeoTextUrl(),
+  return fetchMutator<parseGeoTextResponse>(getParseGeoTextUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(parseGeoTextRequestDto)
   }
 );}
@@ -5196,25 +4334,11 @@ export const getCancelImageGenerationUrl = () => {
  */
 export const cancelImageGeneration = async (cancelImageGenerationRequestDto: CancelImageGenerationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<cancelImageGenerationResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<cancelImageGenerationResponse>(getCancelImageGenerationUrl(),
+  return fetchMutator<cancelImageGenerationResponse>(getCancelImageGenerationUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(cancelImageGenerationRequestDto)
   }
 );}
@@ -5246,25 +4370,11 @@ export const getDiscardImageBatchUrl = () => {
  */
 export const discardImageBatch = async (discardImageBatchRequestDto: DiscardImageBatchRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<discardImageBatchResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<discardImageBatchResponse>(getDiscardImageBatchUrl(),
+  return fetchMutator<discardImageBatchResponse>(getDiscardImageBatchUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(discardImageBatchRequestDto)
   }
 );}
@@ -5309,25 +4419,11 @@ held in a short-lived store until they are saved or discarded.
  */
 export const generateImages = async (generateImagesRequestDto: GenerateImagesRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<generateImagesResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<generateImagesResponse>(getGenerateImagesUrl(),
+  return fetchMutator<generateImagesResponse>(getGenerateImagesUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(generateImagesRequestDto)
   }
 );}
@@ -5451,25 +4547,11 @@ export const getSaveImagePromptUrl = () => {
  */
 export const saveImagePrompt = async (imagePromptDto: ImagePromptDto, options?: Parameters<typeof fetchMutator>[1]): Promise<saveImagePromptResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<saveImagePromptResponse>(getSaveImagePromptUrl(),
+  return fetchMutator<saveImagePromptResponse>(getSaveImagePromptUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(imagePromptDto)
   }
 );}
@@ -5562,25 +4644,11 @@ person asks for it to be replaced.
  */
 export const saveGeneratedImage = async (saveGeneratedImageRequestDto: SaveGeneratedImageRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<saveGeneratedImageResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<saveGeneratedImageResponse>(getSaveGeneratedImageUrl(),
+  return fetchMutator<saveGeneratedImageResponse>(getSaveGeneratedImageUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(saveGeneratedImageRequestDto)
   }
 );}
@@ -5621,25 +4689,11 @@ export const getFindLinkReplacementsUrl = () => {
 
 export const findLinkReplacements = async (findLinkReplacementsRequestDto: FindLinkReplacementsRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<findLinkReplacementsResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<findLinkReplacementsResponse>(getFindLinkReplacementsUrl(),
+  return fetchMutator<findLinkReplacementsResponse>(getFindLinkReplacementsUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(findLinkReplacementsRequestDto)
   }
 );}
@@ -5680,25 +4734,11 @@ export const getStartLinkDoctorScanUrl = () => {
 
 export const startLinkDoctorScan = async (startLinkDoctorScanRequestDto: StartLinkDoctorScanRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<startLinkDoctorScanResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<startLinkDoctorScanResponse>(getStartLinkDoctorScanUrl(),
+  return fetchMutator<startLinkDoctorScanResponse>(getStartLinkDoctorScanUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(startLinkDoctorScanRequestDto)
   }
 );}
@@ -5826,25 +4866,11 @@ export const getGetLinkOptionsUrl = () => {
  */
 export const getLinkOptions = async (linkOptionsRequestDto: LinkOptionsRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<getLinkOptionsResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<getLinkOptionsResponse>(getGetLinkOptionsUrl(),
+  return fetchMutator<getLinkOptionsResponse>(getGetLinkOptionsUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(linkOptionsRequestDto)
   }
 );}
@@ -5893,25 +4919,11 @@ export const getResolveLinkTargetUrl = () => {
  */
 export const resolveLinkTarget = async (resolveLinkTargetRequestDto: ResolveLinkTargetRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<resolveLinkTargetResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<resolveLinkTargetResponse>(getResolveLinkTargetUrl(),
+  return fetchMutator<resolveLinkTargetResponse>(getResolveLinkTargetUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(resolveLinkTargetRequestDto)
   }
 );}
@@ -5947,25 +4959,11 @@ export const getClassifyLlmEndpointUrl = () => {
 
 export const classifyLlmEndpoint = async (classifyLlmEndpointRequestDto: ClassifyLlmEndpointRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<classifyLlmEndpointResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<classifyLlmEndpointResponse>(getClassifyLlmEndpointUrl(),
+  return fetchMutator<classifyLlmEndpointResponse>(getClassifyLlmEndpointUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(classifyLlmEndpointRequestDto)
   }
 );}
@@ -6041,25 +5039,11 @@ export const getCreateLlmProfileUrl = () => {
 
 export const createLlmProfile = async (saveLlmProfileRequestDto: SaveLlmProfileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<createLlmProfileResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<createLlmProfileResponse>(getCreateLlmProfileUrl(),
+  return fetchMutator<createLlmProfileResponse>(getCreateLlmProfileUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(saveLlmProfileRequestDto)
   }
 );}
@@ -6100,25 +5084,11 @@ export const getDiscoverLlmProfileDraftModelLimitsUrl = () => {
 
 export const discoverLlmProfileDraftModelLimits = async (saveLlmProfileRequestDto: SaveLlmProfileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<discoverLlmProfileDraftModelLimitsResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<discoverLlmProfileDraftModelLimitsResponse>(getDiscoverLlmProfileDraftModelLimitsUrl(),
+  return fetchMutator<discoverLlmProfileDraftModelLimitsResponse>(getDiscoverLlmProfileDraftModelLimitsUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(saveLlmProfileRequestDto)
   }
 );}
@@ -6159,25 +5129,11 @@ export const getDiscoverLlmProfileDraftModelsUrl = () => {
 
 export const discoverLlmProfileDraftModels = async (saveLlmProfileRequestDto: SaveLlmProfileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<discoverLlmProfileDraftModelsResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<discoverLlmProfileDraftModelsResponse>(getDiscoverLlmProfileDraftModelsUrl(),
+  return fetchMutator<discoverLlmProfileDraftModelsResponse>(getDiscoverLlmProfileDraftModelsUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(saveLlmProfileRequestDto)
   }
 );}
@@ -6252,25 +5208,11 @@ export const getUpdateLlmProfileUrl = (profileId: string,) => {
 export const updateLlmProfile = async (profileId: string,
     saveLlmProfileRequestDto: SaveLlmProfileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<updateLlmProfileResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<updateLlmProfileResponse>(getUpdateLlmProfileUrl(profileId),
+  return fetchMutator<updateLlmProfileResponse>(getUpdateLlmProfileUrl(profileId),
   {
     ...options,
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(saveLlmProfileRequestDto)
   }
 );}
@@ -6307,25 +5249,11 @@ export const getDeleteLlmProfileUrl = (profileId: string,) => {
 export const deleteLlmProfile = async (profileId: string,
     deleteLlmProfileRequestDto: DeleteLlmProfileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<deleteLlmProfileResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<deleteLlmProfileResponse>(getDeleteLlmProfileUrl(profileId),
+  return fetchMutator<deleteLlmProfileResponse>(getDeleteLlmProfileUrl(profileId),
   {
     ...options,
     method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(deleteLlmProfileRequestDto)
   }
 );}
@@ -6367,25 +5295,11 @@ export const getActivateLlmProfileUrl = (profileId: string,) => {
 export const activateLlmProfile = async (profileId: string,
     activateLlmProfileRequestDto: ActivateLlmProfileRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<activateLlmProfileResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<activateLlmProfileResponse>(getActivateLlmProfileUrl(profileId),
+  return fetchMutator<activateLlmProfileResponse>(getActivateLlmProfileUrl(profileId),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(activateLlmProfileRequestDto)
   }
 );}
@@ -6655,25 +5569,11 @@ export const getSetLlmRoleUrl = (role: string,) => {
 export const setLlmRole = async (role: string,
     saveLlmRoleRequestDto: SaveLlmRoleRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<setLlmRoleResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<setLlmRoleResponse>(getSetLlmRoleUrl(role),
+  return fetchMutator<setLlmRoleResponse>(getSetLlmRoleUrl(role),
   {
     ...options,
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(saveLlmRoleRequestDto)
   }
 );}
@@ -6879,25 +5779,11 @@ export const getStartMusicDuplicateScanUrl = () => {
 
 export const startMusicDuplicateScan = async (startMusicDuplicateScanRequestDto: StartMusicDuplicateScanRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<startMusicDuplicateScanResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<startMusicDuplicateScanResponse>(getStartMusicDuplicateScanUrl(),
+  return fetchMutator<startMusicDuplicateScanResponse>(getStartMusicDuplicateScanUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(startMusicDuplicateScanRequestDto)
   }
 );}
@@ -7035,25 +5921,11 @@ export const getNavigatePaneUrl = () => {
  */
 export const navigatePane = async (navigateRequest: NavigateRequest, options?: Parameters<typeof fetchMutator>[1]): Promise<navigatePaneResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<navigatePaneResponse>(getNavigatePaneUrl(),
+  return fetchMutator<navigatePaneResponse>(getNavigatePaneUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(navigateRequest)
   }
 );}
@@ -7216,25 +6088,11 @@ export const getStartOperationUrl = () => {
 
 export const startOperation = async (startOperationRequestDto: StartOperationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<startOperationResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<startOperationResponse>(getStartOperationUrl(),
+  return fetchMutator<startOperationResponse>(getStartOperationUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(startOperationRequestDto)
   }
 );}
@@ -7432,25 +6290,11 @@ the confirmation can offer a conflict policy before the job starts (task 0062).
  */
 export const findTransferConflicts = async (transferConflictsRequestDto: TransferConflictsRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<findTransferConflictsResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<findTransferConflictsResponse>(getFindTransferConflictsUrl(),
+  return fetchMutator<findTransferConflictsResponse>(getFindTransferConflictsUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(transferConflictsRequestDto)
   }
 );}
@@ -7622,25 +6466,11 @@ export const getResolveOperationConflictUrl = (operationId: string,) => {
 export const resolveOperationConflict = async (operationId: string,
     resolveOperationConflictRequestDto: ResolveOperationConflictRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<resolveOperationConflictResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<resolveOperationConflictResponse>(getResolveOperationConflictUrl(operationId),
+  return fetchMutator<resolveOperationConflictResponse>(getResolveOperationConflictUrl(operationId),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(resolveOperationConflictRequestDto)
   }
 );}
@@ -7985,25 +6815,11 @@ export const getRenderPluginPreviewUrl = (pluginId: string,) => {
 export const renderPluginPreview = async (pluginId: string,
     renderPluginPreviewRequestDto: RenderPluginPreviewRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<renderPluginPreviewResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<renderPluginPreviewResponse>(getRenderPluginPreviewUrl(pluginId),
+  return fetchMutator<renderPluginPreviewResponse>(getRenderPluginPreviewUrl(pluginId),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(renderPluginPreviewRequestDto)
   }
 );}
@@ -8075,25 +6891,11 @@ export const getStartSearchUrl = () => {
 
 export const startSearch = async (startSearchRequestDto: StartSearchRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<startSearchResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<startSearchResponse>(getStartSearchUrl(),
+  return fetchMutator<startSearchResponse>(getStartSearchUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(startSearchRequestDto)
   }
 );}
@@ -8174,25 +6976,11 @@ export const getResolveRagCitationUrl = () => {
 
 export const resolveRagCitation = async (resolveRagCitationRequestDto: ResolveRagCitationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<resolveRagCitationResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<resolveRagCitationResponse>(getResolveRagCitationUrl(),
+  return fetchMutator<resolveRagCitationResponse>(getResolveRagCitationUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(resolveRagCitationRequestDto)
   }
 );}
@@ -8228,25 +7016,11 @@ export const getListSavedRagConversationsUrl = () => {
 
 export const listSavedRagConversations = async (listSavedRagConversationsRequestDto: ListSavedRagConversationsRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<listSavedRagConversationsResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<listSavedRagConversationsResponse>(getListSavedRagConversationsUrl(),
+  return fetchMutator<listSavedRagConversationsResponse>(getListSavedRagConversationsUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(listSavedRagConversationsRequestDto)
   }
 );}
@@ -8287,25 +7061,11 @@ export const getDeleteRagConversationUrl = () => {
 
 export const deleteRagConversation = async (deleteRagConversationRequestDto: DeleteRagConversationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<deleteRagConversationResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<deleteRagConversationResponse>(getDeleteRagConversationUrl(),
+  return fetchMutator<deleteRagConversationResponse>(getDeleteRagConversationUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(deleteRagConversationRequestDto)
   }
 );}
@@ -8346,25 +7106,11 @@ export const getSaveRagConversationUrl = () => {
 
 export const saveRagConversation = async (saveRagConversationRequestDto: SaveRagConversationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<saveRagConversationResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<saveRagConversationResponse>(getSaveRagConversationUrl(),
+  return fetchMutator<saveRagConversationResponse>(getSaveRagConversationUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(saveRagConversationRequestDto)
   }
 );}
@@ -8415,25 +7161,11 @@ export const getGenerateRagAnswerUrl = () => {
 
 export const generateRagAnswer = async (generateRagAnswerRequestDto: GenerateRagAnswerRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<generateRagAnswerResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<generateRagAnswerResponse>(getGenerateRagAnswerUrl(),
+  return fetchMutator<generateRagAnswerResponse>(getGenerateRagAnswerUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(generateRagAnswerRequestDto)
   }
 );}
@@ -8484,25 +7216,11 @@ export const getPreviewRagUrl = () => {
 
 export const previewRag = async (previewRagRequestDto: PreviewRagRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<previewRagResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<previewRagResponse>(getPreviewRagUrl(),
+  return fetchMutator<previewRagResponse>(getPreviewRagUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(previewRagRequestDto)
   }
 );}
@@ -8587,25 +7305,11 @@ export const getMoveSemanticComponentDataUrl = () => {
  */
 export const moveSemanticComponentData = async (moveSemanticDataRequestDto: MoveSemanticDataRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<moveSemanticComponentDataResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<moveSemanticComponentDataResponse>(getMoveSemanticComponentDataUrl(),
+  return fetchMutator<moveSemanticComponentDataResponse>(getMoveSemanticComponentDataUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(moveSemanticDataRequestDto)
   }
 );}
@@ -8654,25 +7358,11 @@ export const getCreateSemanticComponentIndexRemovalPlanUrl = () => {
  */
 export const createSemanticComponentIndexRemovalPlan = async (createSemanticIndexRemovalPlanRequestDto: CreateSemanticIndexRemovalPlanRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<createSemanticComponentIndexRemovalPlanResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<createSemanticComponentIndexRemovalPlanResponse>(getCreateSemanticComponentIndexRemovalPlanUrl(),
+  return fetchMutator<createSemanticComponentIndexRemovalPlanResponse>(getCreateSemanticComponentIndexRemovalPlanUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(createSemanticIndexRemovalPlanRequestDto)
   }
 );}
@@ -8716,25 +7406,11 @@ export const getConfirmSemanticComponentIndexRemovalUrl = () => {
  */
 export const confirmSemanticComponentIndexRemoval = async (confirmSemanticIndexRemovalRequestDto: ConfirmSemanticIndexRemovalRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<confirmSemanticComponentIndexRemovalResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<confirmSemanticComponentIndexRemovalResponse>(getConfirmSemanticComponentIndexRemovalUrl(),
+  return fetchMutator<confirmSemanticComponentIndexRemovalResponse>(getConfirmSemanticComponentIndexRemovalUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(confirmSemanticIndexRemovalRequestDto)
   }
 );}
@@ -8879,25 +7555,11 @@ export const getCreateSemanticComponentInstallationOfferUrl = () => {
  */
 export const createSemanticComponentInstallationOffer = async (createSemanticInstallationOfferRequestDto: CreateSemanticInstallationOfferRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<createSemanticComponentInstallationOfferResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<createSemanticComponentInstallationOfferResponse>(getCreateSemanticComponentInstallationOfferUrl(),
+  return fetchMutator<createSemanticComponentInstallationOfferResponse>(getCreateSemanticComponentInstallationOfferUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(createSemanticInstallationOfferRequestDto)
   }
 );}
@@ -8946,25 +7608,11 @@ export const getAcceptSemanticComponentInstallationOfferUrl = () => {
  */
 export const acceptSemanticComponentInstallationOffer = async (acceptSemanticInstallationOfferRequestDto: AcceptSemanticInstallationOfferRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<acceptSemanticComponentInstallationOfferResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<acceptSemanticComponentInstallationOfferResponse>(getAcceptSemanticComponentInstallationOfferUrl(),
+  return fetchMutator<acceptSemanticComponentInstallationOfferResponse>(getAcceptSemanticComponentInstallationOfferUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(acceptSemanticInstallationOfferRequestDto)
   }
 );}
@@ -9008,25 +7656,11 @@ export const getCheckpointSemanticComponentModelMigrationUrl = () => {
  */
 export const checkpointSemanticComponentModelMigration = async (checkpointSemanticModelMigrationRequestDto: CheckpointSemanticModelMigrationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<checkpointSemanticComponentModelMigrationResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<checkpointSemanticComponentModelMigrationResponse>(getCheckpointSemanticComponentModelMigrationUrl(),
+  return fetchMutator<checkpointSemanticComponentModelMigrationResponse>(getCheckpointSemanticComponentModelMigrationUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(checkpointSemanticModelMigrationRequestDto)
   }
 );}
@@ -9070,25 +7704,11 @@ export const getCompleteSemanticComponentModelMigrationUrl = () => {
  */
 export const completeSemanticComponentModelMigration = async (completeSemanticModelMigrationRequestDto: CompleteSemanticModelMigrationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<completeSemanticComponentModelMigrationResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<completeSemanticComponentModelMigrationResponse>(getCompleteSemanticComponentModelMigrationUrl(),
+  return fetchMutator<completeSemanticComponentModelMigrationResponse>(getCompleteSemanticComponentModelMigrationUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(completeSemanticModelMigrationRequestDto)
   }
 );}
@@ -9132,25 +7752,11 @@ export const getConfirmSemanticComponentModelMigrationUrl = () => {
  */
 export const confirmSemanticComponentModelMigration = async (confirmSemanticModelMigrationRequestDto: ConfirmSemanticModelMigrationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<confirmSemanticComponentModelMigrationResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<confirmSemanticComponentModelMigrationResponse>(getConfirmSemanticComponentModelMigrationUrl(),
+  return fetchMutator<confirmSemanticComponentModelMigrationResponse>(getConfirmSemanticComponentModelMigrationUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(confirmSemanticModelMigrationRequestDto)
   }
 );}
@@ -9199,25 +7805,11 @@ export const getPlanSemanticComponentModelMigrationUrl = () => {
  */
 export const planSemanticComponentModelMigration = async (planSemanticModelMigrationRequestDto: PlanSemanticModelMigrationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<planSemanticComponentModelMigrationResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<planSemanticComponentModelMigrationResponse>(getPlanSemanticComponentModelMigrationUrl(),
+  return fetchMutator<planSemanticComponentModelMigrationResponse>(getPlanSemanticComponentModelMigrationUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(planSemanticModelMigrationRequestDto)
   }
 );}
@@ -9266,25 +7858,11 @@ export const getImportSemanticComponentLocalModelUrl = () => {
  */
 export const importSemanticComponentLocalModel = async (importSemanticLocalModelRequestDto: ImportSemanticLocalModelRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<importSemanticComponentLocalModelResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<importSemanticComponentLocalModelResponse>(getImportSemanticComponentLocalModelUrl(),
+  return fetchMutator<importSemanticComponentLocalModelResponse>(getImportSemanticComponentLocalModelUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(importSemanticLocalModelRequestDto)
   }
 );}
@@ -9419,25 +7997,11 @@ export const getUninstallSemanticComponentsUrl = () => {
  */
 export const uninstallSemanticComponents = async (uninstallSemanticComponentsRequestDto: UninstallSemanticComponentsRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<uninstallSemanticComponentsResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<uninstallSemanticComponentsResponse>(getUninstallSemanticComponentsUrl(),
+  return fetchMutator<uninstallSemanticComponentsResponse>(getUninstallSemanticComponentsUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(uninstallSemanticComponentsRequestDto)
   }
 );}
@@ -9486,25 +8050,11 @@ export const getInstallSemanticComponentWorkerPatchUrl = () => {
  */
 export const installSemanticComponentWorkerPatch = async (installSemanticWorkerPatchRequestDto: InstallSemanticWorkerPatchRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<installSemanticComponentWorkerPatchResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<installSemanticComponentWorkerPatchResponse>(getInstallSemanticComponentWorkerPatchUrl(),
+  return fetchMutator<installSemanticComponentWorkerPatchResponse>(getInstallSemanticComponentWorkerPatchUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(installSemanticWorkerPatchRequestDto)
   }
 );}
@@ -9550,25 +8100,11 @@ export const getGetDocumentSummaryUrl = () => {
 
 export const getDocumentSummary = async (getDocumentSummaryRequestDto: GetDocumentSummaryRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<getDocumentSummaryResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<getDocumentSummaryResponse>(getGetDocumentSummaryUrl(),
+  return fetchMutator<getDocumentSummaryResponse>(getGetDocumentSummaryUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(getDocumentSummaryRequestDto)
   }
 );}
@@ -9619,25 +8155,11 @@ export const getGenerateDocumentSummaryUrl = () => {
 
 export const generateDocumentSummary = async (generateDocumentSummaryRequestDto: GenerateDocumentSummaryRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<generateDocumentSummaryResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<generateDocumentSummaryResponse>(getGenerateDocumentSummaryUrl(),
+  return fetchMutator<generateDocumentSummaryResponse>(getGenerateDocumentSummaryUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(generateDocumentSummaryRequestDto)
   }
 );}
@@ -9688,25 +8210,11 @@ export const getPreviewDocumentSummaryUrl = () => {
 
 export const previewDocumentSummary = async (previewDocumentSummaryRequestDto: PreviewDocumentSummaryRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<previewDocumentSummaryResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<previewDocumentSummaryResponse>(getPreviewDocumentSummaryUrl(),
+  return fetchMutator<previewDocumentSummaryResponse>(getPreviewDocumentSummaryUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(previewDocumentSummaryRequestDto)
   }
 );}
@@ -9762,25 +8270,11 @@ export const getGenerateKnowledgeAnswerUrl = () => {
 
 export const generateKnowledgeAnswer = async (generateKnowledgeAnswerRequestDto: GenerateKnowledgeAnswerRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<generateKnowledgeAnswerResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<generateKnowledgeAnswerResponse>(getGenerateKnowledgeAnswerUrl(),
+  return fetchMutator<generateKnowledgeAnswerResponse>(getGenerateKnowledgeAnswerUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(generateKnowledgeAnswerRequestDto)
   }
 );}
@@ -9809,25 +8303,11 @@ export const getCancelKnowledgeAnswerUrl = () => {
 
 export const cancelKnowledgeAnswer = async (cancelKnowledgeAnswerRequestDto: CancelKnowledgeAnswerRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<cancelKnowledgeAnswerResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<cancelKnowledgeAnswerResponse>(getCancelKnowledgeAnswerUrl(),
+  return fetchMutator<cancelKnowledgeAnswerResponse>(getCancelKnowledgeAnswerUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(cancelKnowledgeAnswerRequestDto)
   }
 );}
@@ -9889,25 +8369,11 @@ export const getParseKnowledgeQueryUrl = () => {
 
 export const parseKnowledgeQuery = async (parseKnowledgeQueryRequestDto: ParseKnowledgeQueryRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<parseKnowledgeQueryResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<parseKnowledgeQueryResponse>(getParseKnowledgeQueryUrl(),
+  return fetchMutator<parseKnowledgeQueryResponse>(getParseKnowledgeQueryUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(parseKnowledgeQueryRequestDto)
   }
 );}
@@ -9958,25 +8424,11 @@ export const getPlanKnowledgeSearchUrl = () => {
 
 export const planKnowledgeSearch = async (planKnowledgeSearchRequestDto: PlanKnowledgeSearchRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<planKnowledgeSearchResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<planKnowledgeSearchResponse>(getPlanKnowledgeSearchUrl(),
+  return fetchMutator<planKnowledgeSearchResponse>(getPlanKnowledgeSearchUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(planKnowledgeSearchRequestDto)
   }
 );}
@@ -10022,25 +8474,11 @@ export const getListKnowledgeRootsUrl = () => {
 
 export const listKnowledgeRoots = async (listKnowledgeRootsRequestDto: ListKnowledgeRootsRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<listKnowledgeRootsResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<listKnowledgeRootsResponse>(getListKnowledgeRootsUrl(),
+  return fetchMutator<listKnowledgeRootsResponse>(getListKnowledgeRootsUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(listKnowledgeRootsRequestDto)
   }
 );}
@@ -10091,25 +8529,11 @@ export const getExecuteKnowledgeSearchUrl = () => {
 
 export const executeKnowledgeSearch = async (executeKnowledgeSearchRequestDto: ExecuteKnowledgeSearchRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<executeKnowledgeSearchResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<executeKnowledgeSearchResponse>(getExecuteKnowledgeSearchUrl(),
+  return fetchMutator<executeKnowledgeSearchResponse>(getExecuteKnowledgeSearchUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(executeKnowledgeSearchRequestDto)
   }
 );}
@@ -10138,25 +8562,11 @@ export const getCancelKnowledgeSearchUrl = () => {
 
 export const cancelKnowledgeSearch = async (cancelKnowledgeSearchRequestDto: CancelKnowledgeSearchRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<cancelKnowledgeSearchResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<cancelKnowledgeSearchResponse>(getCancelKnowledgeSearchUrl(),
+  return fetchMutator<cancelKnowledgeSearchResponse>(getCancelKnowledgeSearchUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(cancelKnowledgeSearchRequestDto)
   }
 );}
@@ -10202,25 +8612,11 @@ export const getResolveKnowledgeSourceUrl = () => {
 
 export const resolveKnowledgeSource = async (resolveKnowledgeSourceRequestDto: ResolveKnowledgeSourceRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<resolveKnowledgeSourceResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<resolveKnowledgeSourceResponse>(getResolveKnowledgeSourceUrl(),
+  return fetchMutator<resolveKnowledgeSourceResponse>(getResolveKnowledgeSourceUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(resolveKnowledgeSourceRequestDto)
   }
 );}
@@ -10299,25 +8695,11 @@ export const getResumeSemanticCleanupUrl = () => {
 
 export const resumeSemanticCleanup = async (resumeSemanticCleanupRequestDto: ResumeSemanticCleanupRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<resumeSemanticCleanupResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<resumeSemanticCleanupResponse>(getResumeSemanticCleanupUrl(),
+  return fetchMutator<resumeSemanticCleanupResponse>(getResumeSemanticCleanupUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(resumeSemanticCleanupRequestDto)
   }
 );}
@@ -10363,25 +8745,11 @@ export const getUpdateSemanticEligibilityOverridesUrl = () => {
 
 export const updateSemanticEligibilityOverrides = async (updateSemanticEligibilityOverridesRequestDto: UpdateSemanticEligibilityOverridesRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<updateSemanticEligibilityOverridesResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<updateSemanticEligibilityOverridesResponse>(getUpdateSemanticEligibilityOverridesUrl(),
+  return fetchMutator<updateSemanticEligibilityOverridesResponse>(getUpdateSemanticEligibilityOverridesUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(updateSemanticEligibilityOverridesRequestDto)
   }
 );}
@@ -10422,25 +8790,11 @@ export const getConfirmSemanticEnrolmentUrl = () => {
 
 export const confirmSemanticEnrolment = async (confirmSemanticEnrolmentRequestDto: ConfirmSemanticEnrolmentRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<confirmSemanticEnrolmentResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<confirmSemanticEnrolmentResponse>(getConfirmSemanticEnrolmentUrl(),
+  return fetchMutator<confirmSemanticEnrolmentResponse>(getConfirmSemanticEnrolmentUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(confirmSemanticEnrolmentRequestDto)
   }
 );}
@@ -10486,25 +8840,11 @@ export const getPreviewSemanticEnrolmentUrl = () => {
 
 export const previewSemanticEnrolment = async (previewSemanticEnrolmentRequestDto: PreviewSemanticEnrolmentRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<previewSemanticEnrolmentResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<previewSemanticEnrolmentResponse>(getPreviewSemanticEnrolmentUrl(),
+  return fetchMutator<previewSemanticEnrolmentResponse>(getPreviewSemanticEnrolmentUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(previewSemanticEnrolmentRequestDto)
   }
 );}
@@ -10545,25 +8885,11 @@ export const getConfirmSemanticExclusionUrl = () => {
 
 export const confirmSemanticExclusion = async (confirmSemanticExclusionRequestDto: ConfirmSemanticExclusionRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<confirmSemanticExclusionResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<confirmSemanticExclusionResponse>(getConfirmSemanticExclusionUrl(),
+  return fetchMutator<confirmSemanticExclusionResponse>(getConfirmSemanticExclusionUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(confirmSemanticExclusionRequestDto)
   }
 );}
@@ -10609,25 +8935,11 @@ export const getPlanSemanticExclusionUrl = () => {
 
 export const planSemanticExclusion = async (planSemanticExclusionRequestDto: PlanSemanticExclusionRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<planSemanticExclusionResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<planSemanticExclusionResponse>(getPlanSemanticExclusionUrl(),
+  return fetchMutator<planSemanticExclusionResponse>(getPlanSemanticExclusionUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(planSemanticExclusionRequestDto)
   }
 );}
@@ -10673,25 +8985,11 @@ export const getGetSemanticFolderStatusUrl = () => {
 
 export const getSemanticFolderStatus = async (getSemanticFolderStatusRequestDto: GetSemanticFolderStatusRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<getSemanticFolderStatusResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<getSemanticFolderStatusResponse>(getGetSemanticFolderStatusUrl(),
+  return fetchMutator<getSemanticFolderStatusResponse>(getGetSemanticFolderStatusUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(getSemanticFolderStatusRequestDto)
   }
 );}
@@ -10737,25 +9035,11 @@ export const getUpdateGemmaMediaUrl = () => {
 
 export const updateGemmaMedia = async (updateGemmaMediaRequestDto: UpdateGemmaMediaRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<updateGemmaMediaResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<updateGemmaMediaResponse>(getUpdateGemmaMediaUrl(),
+  return fetchMutator<updateGemmaMediaResponse>(getUpdateGemmaMediaUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(updateGemmaMediaRequestDto)
   }
 );}
@@ -10796,25 +9080,11 @@ export const getPauseSemanticLibraryUrl = () => {
 
 export const pauseSemanticLibrary = async (semanticLibraryRevisionRequestDto: SemanticLibraryRevisionRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<pauseSemanticLibraryResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<pauseSemanticLibraryResponse>(getPauseSemanticLibraryUrl(),
+  return fetchMutator<pauseSemanticLibraryResponse>(getPauseSemanticLibraryUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(semanticLibraryRevisionRequestDto)
   }
 );}
@@ -10855,25 +9125,11 @@ export const getResumeSemanticLibraryUrl = () => {
 
 export const resumeSemanticLibrary = async (semanticLibraryRevisionRequestDto: SemanticLibraryRevisionRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<resumeSemanticLibraryResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<resumeSemanticLibraryResponse>(getResumeSemanticLibraryUrl(),
+  return fetchMutator<resumeSemanticLibraryResponse>(getResumeSemanticLibraryUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(semanticLibraryRevisionRequestDto)
   }
 );}
@@ -10919,25 +9175,11 @@ export const getUpdateSemanticRootWorkspacesUrl = () => {
 
 export const updateSemanticRootWorkspaces = async (updateSemanticRootWorkspacesRequestDto: UpdateSemanticRootWorkspacesRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<updateSemanticRootWorkspacesResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<updateSemanticRootWorkspacesResponse>(getUpdateSemanticRootWorkspacesUrl(),
+  return fetchMutator<updateSemanticRootWorkspacesResponse>(getUpdateSemanticRootWorkspacesUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(updateSemanticRootWorkspacesRequestDto)
   }
 );}
@@ -11028,25 +9270,11 @@ export const getAnalyzeCorpusThemesUrl = () => {
 
 export const analyzeCorpusThemes = async (analyzeCorpusThemesRequestDto: AnalyzeCorpusThemesRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<analyzeCorpusThemesResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<analyzeCorpusThemesResponse>(getAnalyzeCorpusThemesUrl(),
+  return fetchMutator<analyzeCorpusThemesResponse>(getAnalyzeCorpusThemesUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(analyzeCorpusThemesRequestDto)
   }
 );}
@@ -11092,25 +9320,11 @@ export const getExportCorpusThemesUrl = () => {
 
 export const exportCorpusThemes = async (exportCorpusThemesRequestDto: ExportCorpusThemesRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<exportCorpusThemesResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<exportCorpusThemesResponse>(getExportCorpusThemesUrl(),
+  return fetchMutator<exportCorpusThemesResponse>(getExportCorpusThemesUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(exportCorpusThemesRequestDto)
   }
 );}
@@ -11156,25 +9370,11 @@ export const getGetCorpusThemeSourcesUrl = () => {
 
 export const getCorpusThemeSources = async (getCorpusThemeSourcesRequestDto: GetCorpusThemeSourcesRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<getCorpusThemeSourcesResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<getCorpusThemeSourcesResponse>(getGetCorpusThemeSourcesUrl(),
+  return fetchMutator<getCorpusThemeSourcesResponse>(getGetCorpusThemeSourcesUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(getCorpusThemeSourcesRequestDto)
   }
 );}
@@ -11220,25 +9420,11 @@ export const getGetCorpusThemeStatusUrl = () => {
 
 export const getCorpusThemeStatus = async (getCorpusThemeStatusRequestDto: GetCorpusThemeStatusRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<getCorpusThemeStatusResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<getCorpusThemeStatusResponse>(getGetCorpusThemeStatusUrl(),
+  return fetchMutator<getCorpusThemeStatusResponse>(getGetCorpusThemeStatusUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(getCorpusThemeStatusRequestDto)
   }
 );}
@@ -11319,25 +9505,11 @@ export const getAttachSemanticVocabularyUrl = () => {
 
 export const attachSemanticVocabulary = async (attachSemanticVocabularyRequestDto: AttachSemanticVocabularyRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<attachSemanticVocabularyResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<attachSemanticVocabularyResponse>(getAttachSemanticVocabularyUrl(),
+  return fetchMutator<attachSemanticVocabularyResponse>(getAttachSemanticVocabularyUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(attachSemanticVocabularyRequestDto)
   }
 );}
@@ -11378,25 +9550,11 @@ export const getDeleteSemanticVocabularyUrl = () => {
 
 export const deleteSemanticVocabulary = async (deleteSemanticVocabularyRequestDto: DeleteSemanticVocabularyRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<deleteSemanticVocabularyResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<deleteSemanticVocabularyResponse>(getDeleteSemanticVocabularyUrl(),
+  return fetchMutator<deleteSemanticVocabularyResponse>(getDeleteSemanticVocabularyUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(deleteSemanticVocabularyRequestDto)
   }
 );}
@@ -11432,25 +9590,11 @@ export const getExportSemanticVocabularyUrl = () => {
 
 export const exportSemanticVocabulary = async (vocabularyIdRequestDto: VocabularyIdRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<exportSemanticVocabularyResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<exportSemanticVocabularyResponse>(getExportSemanticVocabularyUrl(),
+  return fetchMutator<exportSemanticVocabularyResponse>(getExportSemanticVocabularyUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(vocabularyIdRequestDto)
   }
 );}
@@ -11491,25 +9635,11 @@ export const getImportSemanticVocabularyUrl = () => {
 
 export const importSemanticVocabulary = async (importSemanticVocabularyRequestDto: ImportSemanticVocabularyRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<importSemanticVocabularyResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<importSemanticVocabularyResponse>(getImportSemanticVocabularyUrl(),
+  return fetchMutator<importSemanticVocabularyResponse>(getImportSemanticVocabularyUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(importSemanticVocabularyRequestDto)
   }
 );}
@@ -11550,25 +9680,11 @@ export const getReviewSemanticConceptCandidateUrl = () => {
 
 export const reviewSemanticConceptCandidate = async (reviewConceptCandidateRequestDto: ReviewConceptCandidateRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<reviewSemanticConceptCandidateResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<reviewSemanticConceptCandidateResponse>(getReviewSemanticConceptCandidateUrl(),
+  return fetchMutator<reviewSemanticConceptCandidateResponse>(getReviewSemanticConceptCandidateUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(reviewConceptCandidateRequestDto)
   }
 );}
@@ -11643,25 +9759,11 @@ export const getUpdateSettingsUrl = () => {
  */
 export const updateSettings = async (settingsDto: SettingsDto, options?: Parameters<typeof fetchMutator>[1]): Promise<updateSettingsResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<updateSettingsResponse>(getUpdateSettingsUrl(),
+  return fetchMutator<updateSettingsResponse>(getUpdateSettingsUrl(),
   {
     ...options,
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(settingsDto)
   }
 );}
@@ -11697,25 +9799,11 @@ export const getStartSnapshotJobUrl = () => {
 
 export const startSnapshotJob = async (startSnapshotJobRequestDto: StartSnapshotJobRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<startSnapshotJobResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<startSnapshotJobResponse>(getStartSnapshotJobUrl(),
+  return fetchMutator<startSnapshotJobResponse>(getStartSnapshotJobUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(startSnapshotJobRequestDto)
   }
 );}
@@ -11848,25 +9936,11 @@ export const getInspectSplitSetUrl = () => {
  */
 export const inspectSplitSet = async (inspectSplitSetRequestDto: InspectSplitSetRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<inspectSplitSetResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<inspectSplitSetResponse>(getInspectSplitSetUrl(),
+  return fetchMutator<inspectSplitSetResponse>(getInspectSplitSetUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(inspectSplitSetRequestDto)
   }
 );}
@@ -11983,25 +10057,11 @@ export const getSetSpotlightCommentUrl = (params: SetSpotlightCommentParams,) =>
 export const setSpotlightComment = async (spotlightCommentDto: SpotlightCommentDto,
     params: SetSpotlightCommentParams, options?: Parameters<typeof fetchMutator>[1]): Promise<setSpotlightCommentResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<setSpotlightCommentResponse>(getSetSpotlightCommentUrl(params),
+  return fetchMutator<setSpotlightCommentResponse>(getSetSpotlightCommentUrl(params),
   {
     ...options,
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(spotlightCommentDto)
   }
 );}
@@ -12218,25 +10278,11 @@ export const getCreateWorkspaceUrl = () => {
  */
 export const createWorkspace = async (createWorkspaceRequestDto: CreateWorkspaceRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<createWorkspaceResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<createWorkspaceResponse>(getCreateWorkspaceUrl(),
+  return fetchMutator<createWorkspaceResponse>(getCreateWorkspaceUrl(),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(createWorkspaceRequestDto)
   }
 );}
@@ -12584,25 +10630,11 @@ export const renameChatConversation = async (workspaceId: string,
     conversationId: string,
     renameChatConversationRequestDto: RenameChatConversationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<renameChatConversationResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<renameChatConversationResponse>(getRenameChatConversationUrl(workspaceId,conversationId),
+  return fetchMutator<renameChatConversationResponse>(getRenameChatConversationUrl(workspaceId,conversationId),
   {
     ...options,
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(renameChatConversationRequestDto)
   }
 );}
@@ -12653,25 +10685,11 @@ export const getApplyWorkspaceCommandUrl = (workspaceId: string,) => {
 export const applyWorkspaceCommand = async (workspaceId: string,
     workspaceCommandDto: WorkspaceCommandDto, options?: Parameters<typeof fetchMutator>[1]): Promise<applyWorkspaceCommandResponse> => {
 
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return fetchMutator<applyWorkspaceCommandResponse>(getApplyWorkspaceCommandUrl(workspaceId),
+  return fetchMutator<applyWorkspaceCommandResponse>(getApplyWorkspaceCommandUrl(workspaceId),
   {
     ...options,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(workspaceCommandDto)
   }
 );}

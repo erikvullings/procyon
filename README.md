@@ -161,7 +161,7 @@ space for the catalog and installed copies; the UI discloses an 8 GiB RAM
 estimate. The model download may require access to Google's gated Hugging Face
 repository. To build the bundle without launching Tauri, run
 `pnpm semantic:bundle:dev --gemma`.
-On macOS arm64, `pnpm dev:tauri:semantic:gemma:metal` instead compiles the
+On macOS arm64, `pnpm dev:tauri:semantic:gemma` (Metal is always on) compiles the
 experimental image-only Metal path; the worker selects Metal automatically
 when a device is available and falls back to CPU for unavailable devices or
 mixed image/audio/video libraries. Audio and video are CPU-only.
