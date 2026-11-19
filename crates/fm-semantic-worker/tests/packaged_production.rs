@@ -590,10 +590,28 @@ async fn packaged_gemma_worker_ingests_multimodal_sources_offline() {
     let files = GemmaNativeFiles::from_original_files(&original_files).unwrap();
     let runtime = tempfile::tempdir().unwrap();
     let data = tempfile::tempdir().unwrap();
+    let worker_path = required_path("PROCYON_SEMANTIC_PRODUCTION_WORKER");
+    let native_directory = required_path("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY");
+    eprintln!(
+        "gemma test diagnostics: worker={} exists={} native={} exists={} runtime={} data={}",
+        worker_path.display(),
+        worker_path.is_file(),
+        native_directory.display(),
+        native_directory.is_dir(),
+        runtime.path().display(),
+        data.path().display(),
+    );
+    for (name, path) in &original_files {
+        eprintln!(
+            "gemma test diagnostics: original {name}={} exists={}",
+            path.display(),
+            path.exists()
+        );
+    }
     let launch = ManagedWorkerLaunch::new_gemma(
-        required_path("PROCYON_SEMANTIC_PRODUCTION_WORKER"),
+        worker_path,
         data.path().to_owned(),
-        required_path("PROCYON_SEMANTIC_PRODUCTION_NATIVE_DIRECTORY"),
+        native_directory,
         files,
         dimensions,
         GemmaMedia {

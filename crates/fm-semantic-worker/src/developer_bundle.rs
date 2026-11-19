@@ -1303,20 +1303,51 @@ pub async fn run_managed_worker(
                 .expect("fixed PDF ceiling is valid"),
         );
         #[cfg(feature = "gemma-native")]
+        if let ManagedModel::Gemma { files, .. } = model {
+            for (label, path) in [
+                ("weights", &files.weights),
+                ("tokenizer", &files.tokenizer),
+                ("config", &files.config),
+                ("visual-processor", &files.visual_processor),
+                ("audio-processor", &files.audio_processor),
+            ] {
+                eprintln!(
+                    "procyon gemma diagnostics: {label}={} exists={}",
+                    path.display(),
+                    path.exists()
+                );
+            }
+            eprintln!(
+                "procyon gemma diagnostics: runtime={} exists={} data={} exists={}",
+                runtime_directory.display(),
+                runtime_directory.exists(),
+                data_directory.display(),
+                data_directory.exists()
+            );
+        }
+        #[cfg(feature = "gemma-native")]
         let status = runtime_directory.join("gemma-backend");
         #[cfg(feature = "gemma-native")]
         match std::fs::remove_file(&status) {
             Ok(()) => {}
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => return Err(ServerError::Io(error)),
+            Err(error) => {
+                eprintln!("procyon gemma diagnostics: remove status failed: {error:?}");
+                return Err(ServerError::Io(error));
+            }
         }
+        eprintln!("procyon gemma diagnostics: opening managed worker");
         let worker = DeveloperWorker::open_managed(
             data_directory,
             model,
             ocrmypdf_executable,
             gemma_backend,
         )
-        .map_err(|error| ServerError::Io(io::Error::other(error)))?;
+        .map_err(|error| {
+            eprintln!("procyon gemma diagnostics: open_managed failed: {error:?}");
+            ServerError::Io(io::Error::other(error))
+        })?;
+        eprintln!("procyon gemma diagnostics: managed worker opened");
         #[cfg(feature = "gemma-native")]
         if matches!(model, ManagedModel::Gemma { .. }) {
             let temporary = runtime_directory.join(format!(
