@@ -128,39 +128,6 @@
   -webkit-user-select: text;
 }
 
-/* A plain text file's details as one status row, the height and type of the pane's status bar. */
-.fm-file-viewer-info-panel.is-status {
-  display: flex;
-  align-items: center;
-  height: var(--fm-row-height);
-  min-height: var(--fm-row-height);
-  max-height: var(--fm-row-height);
-  padding: 0 0.5rem;
-  overflow: hidden;
-  white-space: nowrap;
-  color: var(--fm-text-muted);
-  font-size: 0.9em;
-  font-variant-numeric: tabular-nums;
-}
-
-.fm-file-viewer-info-panel.is-status .fm-file-viewer-metadata,
-.fm-file-viewer-info-panel.is-status .fm-file-viewer-metadata dl {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  margin: 0;
-}
-
-.fm-file-viewer-info-panel.is-status .fm-file-viewer-metadata-row {
-  flex-wrap: nowrap;
-  row-gap: 0;
-  margin: 0;
-}
-
-.fm-file-viewer-info-panel.is-status .fm-file-viewer-metadata-field dt {
-  margin-bottom: 0;
-}
-
 .fm-file-viewer-metadata + .fm-file-viewer-git-history {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
@@ -197,6 +164,35 @@
   gap: 0.35rem;
   margin: 0;
   word-break: break-word;
+}
+
+/* A plain text file's details as one status row, the height and type of the pane's status bar. */
+.fm-file-viewer-info-panel.is-status {
+  display: flex;
+  align-items: center;
+  height: var(--fm-row-height);
+  min-height: var(--fm-row-height);
+  max-height: var(--fm-row-height);
+  padding: 0 0.5rem;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--fm-text-muted);
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+}
+
+.fm-file-viewer-info-panel.is-status .fm-file-viewer-metadata,
+.fm-file-viewer-info-panel.is-status .fm-file-viewer-metadata dl {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+}
+
+.fm-file-viewer-info-panel.is-status .fm-file-viewer-metadata-row {
+  flex-wrap: nowrap;
+  row-gap: 0;
+  margin: 0;
 }
 
 .fm-image-metadata-tag {
