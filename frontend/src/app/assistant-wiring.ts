@@ -10,7 +10,7 @@ import { dispatchWorkspaceCommand } from '../features/workspace/dispatch-workspa
 import { t } from '../i18n';
 import type { LlmProfile, LlmRoles, PaneId, WorkspaceProjection } from '../models';
 import { preferredProfile } from '../models/llm-roles';
-import { tabKey } from './shell-helpers';
+import { activeEditorOf, tabKey } from './shell-helpers';
 import type { ShellState } from './shell-state';
 
 export interface AssistantCore {
@@ -22,7 +22,7 @@ export function createAssistantWiring(shellState: ShellState, core: AssistantCor
   /** Opens a chat in the pane opposite the editor at `sourcePaneId`. */
   async function openAssistant(sourcePaneId: PaneId): Promise<void> {
     const workspace = shellState.workspace;
-    const editor = shellState.editorByPane.get(sourcePaneId);
+    const editor = activeEditorOf(workspace, shellState.editorByTab, sourcePaneId);
     if (workspace === undefined || editor === undefined || shellState.assistantOpening) return;
     const targetPaneId = oppositePaneId(workspace.paneOrder, sourcePaneId);
     if (targetPaneId === undefined) {
@@ -160,7 +160,7 @@ export function createAssistantWiring(shellState: ShellState, core: AssistantCor
     const entry: AssistantTabEntry | undefined = shellState.assistantByTab.get(key);
     const message = entry?.messages[index];
     if (entry === undefined || message === undefined || message.role !== 'assistant') return;
-    const editor = shellState.editorByPane.get(entry.sourcePaneId);
+    const editor = activeEditorOf(shellState.workspace, shellState.editorByTab, entry.sourcePaneId);
     if (editor === undefined) {
       toast({ html: t('assistant', 'sourceClosed') });
       return;

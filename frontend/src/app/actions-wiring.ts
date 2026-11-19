@@ -25,6 +25,7 @@ import { actionTitle, t } from '../i18n';
 import type { ActionDescriptor } from '../models';
 
 /** Sets up the actionsWiring feature wiring and returns its functions. */
+import { activeEditorOf } from './shell-helpers';
 import type { ShellState } from './shell-state';
 
 export function createActionsWiring(shellState: ShellState) {
@@ -135,7 +136,11 @@ export function createActionsWiring(shellState: ShellState) {
     const hasQueue = (shellState.appState?.player.queue.length ?? 0) > 0;
     const editorOpen =
       shellState.workspace !== undefined &&
-      shellState.editorByPane.has(shellState.workspace.activePaneId);
+      activeEditorOf(
+        shellState.workspace,
+        shellState.editorByTab,
+        shellState.workspace.activePaneId,
+      ) !== undefined;
     return [
       ...(editorOpen
         ? [

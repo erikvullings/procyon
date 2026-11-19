@@ -7,6 +7,10 @@
 import m from 'mithril';
 import type { Theme } from 'mithril-materialized';
 import { formatBindingShortcut } from '../features/commands/shortcut-label';
+import type {
+  FileEditorController,
+  FileEditorState,
+} from '../features/editor/file-editor-controller';
 import type { PaneDirectoryView } from '../features/navigation/navigation';
 import type { SelectionPlatform } from '../features/selection/keybindings';
 import type { SortColumn, SortModel } from '../features/sorting/sorting';
@@ -160,6 +164,26 @@ export function windowControlIcon(path: string): m.Vnode {
 /** Composes the per-tab cache key every per-tab runtime cache is keyed by (spec §37). */
 export function tabKey(paneId: PaneId, tabId: TabId): string {
   return `${paneId}:${tabId}`;
+}
+
+/** An open file editor, owned by the editor tab it was opened in. */
+export interface EditorTab {
+  readonly paneId: PaneId;
+  readonly tabId: TabId;
+  readonly controller: FileEditorController;
+  state: FileEditorState;
+}
+
+/** The editor of a pane's active tab, when that tab is an editor tab. */
+export function activeEditorOf(
+  workspace:
+    | { readonly panesById: Readonly<Record<string, { readonly activeTabId: TabId } | undefined>> }
+    | undefined,
+  editors: ReadonlyMap<string, EditorTab>,
+  paneId: PaneId,
+): EditorTab | undefined {
+  const tabId = workspace?.panesById[paneId]?.activeTabId;
+  return tabId === undefined ? undefined : editors.get(tabKey(paneId, tabId));
 }
 
 /** The sort a pane uses when its tab persists none. */

@@ -371,9 +371,15 @@ export function createShellState(client: FileManagerClient) {
     /** Whether that answer has been read from the backend yet. */
     imageGenerationChecked: false,
     knowledgeSearchOpening: false,
-    editorByPane: new Map<
-      PaneId,
-      { readonly controller: FileEditorController; state: FileEditorState }
+    /** Open file editors, one per editor tab (keyed by `tabKey`). */
+    editorByTab: new Map<
+      string,
+      {
+        readonly paneId: PaneId;
+        readonly tabId: TabId;
+        readonly controller: FileEditorController;
+        state: FileEditorState;
+      }
     >(),
     pluginByPane: new Map<PaneId, PluginPaneState>(),
     openingPluginPanes: new Set<PaneId>(),

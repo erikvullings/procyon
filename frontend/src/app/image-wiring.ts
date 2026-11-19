@@ -20,7 +20,7 @@ import { dispatchWorkspaceCommand } from '../features/workspace/dispatch-workspa
 import { t } from '../i18n';
 import type { GeneratedImage, ImagePrompt, Location, PaneId } from '../models';
 import { qualityIdOf } from '../models';
-import { tabKey } from './shell-helpers';
+import { activeEditorOf, tabKey } from './shell-helpers';
 import type { ShellState } from './shell-state';
 
 export interface ImageWiringCore {
@@ -80,7 +80,7 @@ export function createImageWiring(shellState: ShellState, core: ImageWiringCore)
     const targetPaneId = imagePlacementPaneId(
       workspace.paneOrder,
       workspace.activePaneId,
-      shellState.editorByPane.has(workspace.activePaneId),
+      activeEditorOf(workspace, shellState.editorByTab, workspace.activePaneId) !== undefined,
     );
     const targetPane = workspace.panesById[targetPaneId];
     const activeTab =

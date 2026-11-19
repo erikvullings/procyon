@@ -590,11 +590,14 @@ describe('FileViewer', () => {
         { onLoadTextPage },
       ),
     );
-    const pagination = root.querySelector('.fm-file-viewer-text-pagination');
-    expect(pagination?.textContent).toContain('Page 2 of 3');
-    expect(pagination?.textContent).not.toContain('bytes');
-    pagination?.querySelectorAll<HTMLButtonElement>('.pagination-controls button')[2]?.click();
+    // Text windows page in the breadcrumb bar, like PDF and PPTX pages, not under the text.
+    expect(root.querySelector('.fm-file-viewer-text-pagination')).toBeNull();
+    const controls = root.querySelector('.fm-file-viewer-page-controls');
+    expect(controls?.textContent).toContain('2 / 3');
+    controls?.querySelectorAll<HTMLButtonElement>('button')[1]?.click();
     expect(onLoadTextPage).toHaveBeenCalledWith(2);
+    controls?.querySelectorAll<HTMLButtonElement>('button')[0]?.click();
+    expect(onLoadTextPage).toHaveBeenLastCalledWith(0);
   });
 
   it('renders a binary window as a hex dump with absolute offsets and pagination', () => {
@@ -821,7 +824,7 @@ describe('FileViewer', () => {
     expect(root.querySelector<HTMLInputElement>('.fm-file-viewer-page-input')?.value).toBe('3');
     pageInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     expect(onSelectPdfPage).toHaveBeenCalledWith(3);
-    expect(root.querySelector('.fm-file-viewer-zoom-level')?.textContent).toBe('Fit');
+    expect(root.querySelector('.fm-file-viewer-zoom-level')?.textContent).toBe('100%');
   });
 
   it('fits PDF pages inside the padded preview content box', () => {

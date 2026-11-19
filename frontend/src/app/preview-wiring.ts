@@ -1,7 +1,10 @@
 import m from 'mithril';
 import { toast } from 'mithril-materialized';
 import type { FileManagerClient } from '../api/client/file-manager-client';
-import { createFileEditorController } from '../features/editor/file-editor-controller';
+import {
+  createFileEditorController,
+  type FileEditorController,
+} from '../features/editor/file-editor-controller';
 import type { EditorLinkHandlers } from '../features/editor/link-actions';
 import { isSafeExternalUrl, resolveDetectedLink } from '../features/editor/link-actions';
 import { parentLocation } from '../features/navigation/navigation';
@@ -22,7 +25,7 @@ import type {
   TabProjection,
   WorkspaceProjection,
 } from '../models';
-import { tabKey, workspaceErrorMessage } from './shell-helpers';
+import { activeEditorOf, type EditorTab, tabKey, workspaceErrorMessage } from './shell-helpers';
 import type { ShellState } from './shell-state';
 
 /** The narrow cross-cutting surface preview/editor wiring needs from the shell. */
@@ -271,6 +274,7 @@ export function createPreviewWiring(shellState: ShellState, core: PreviewCore) {
     shellState.tabController.performCloseTab(paneId, resolvedTabId);
   }
 
+  /** Opens the file in a new editor tab of `paneId`; other tabs, editors included, stay open. */
   function openEditor(
     client: FileManagerClient,
     paneId: PaneId,
@@ -278,31 +282,66 @@ export function createPreviewWiring(shellState: ShellState, core: PreviewCore) {
     initialLine?: number,
   ): void {
     shellState.pluginByPane.delete(paneId);
-    closeViewer(paneId);
-    shellState.editorByPane.get(paneId)?.controller.dispose();
-    const controller = createFileEditorController({
+    const currentWorkspace = shellState.workspace;
+    const pane = currentWorkspace?.panesById[paneId];
+    const activeTab = pane?.tabsById[pane.activeTabId];
+    if (currentWorkspace === undefined || activeTab === undefined) return;
+    void dispatchWorkspaceCommand(
       client,
-      entry,
-      ...(initialLine === undefined ? {} : { initialLine }),
-      update: (state) => {
-        const existing = shellState.editorByPane.get(paneId);
-        if (existing === undefined) return;
-        if (state.status === 'error') {
-          existing.controller.dispose();
-          shellState.editorByPane.delete(paneId);
-          toast({ html: state.message });
-        } else {
-          existing.state = state;
-        }
+      {
+        type: 'addTab',
+        workspaceId: currentWorkspace.id,
+        paneId,
+        location: activeTab.location,
+        expectedRevision: currentWorkspace.revision,
+      },
+      (next) => {
+        core.replaceWorkspace(next);
+        const tabId = next.panesById[paneId]?.activeTabId;
+        if (tabId === undefined) return;
+        const key = tabKey(paneId, tabId);
+        // Looked up by controller, not key: the tab may move to another pane meanwhile. The first
+        // state is published before `createFileEditorController` returns, hence the reference.
+        let ownController: FileEditorController | undefined;
+        const controller = createFileEditorController({
+          client,
+          entry,
+          ...(initialLine === undefined ? {} : { initialLine }),
+          update: (state) => {
+            const existing = [...shellState.editorByTab.values()].find(
+              (candidate) => candidate.controller === ownController,
+            );
+            if (existing === undefined) return;
+            if (state.status === 'error') {
+              // A file that cannot be edited never gets a tab.
+              toast({ html: state.message });
+              closeEditorTab(existing.paneId, existing.tabId);
+              return;
+            }
+            existing.state = state;
+            m.redraw();
+          },
+        });
+        ownController = controller;
+        shellState.editorByTab.set(key, {
+          paneId,
+          tabId,
+          controller,
+          state: { status: 'loading', entry },
+        });
         m.redraw();
       },
+    ).catch((error: unknown) => {
+      toast({ html: errorText(error) });
     });
-    shellState.editorByPane.set(paneId, { controller, state: { status: 'loading', entry } });
-    m.redraw();
+  }
+
+  function activeEditor(paneId: PaneId): EditorTab | undefined {
+    return activeEditorOf(shellState.workspace, shellState.editorByTab, paneId);
   }
 
   function editorIsDirty(paneId: PaneId): boolean {
-    const state = shellState.editorByPane.get(paneId)?.state;
+    const state = activeEditor(paneId)?.state;
     return state?.status === 'ready' && state.dirty;
   }
 
@@ -352,10 +391,6 @@ export function createPreviewWiring(shellState: ShellState, core: PreviewCore) {
           });
       },
       editAt: (link) => {
-        if (editorIsDirty(paneId)) {
-          toast({ html: t('editorLinks', 'saveFirst') });
-          return;
-        }
         openEditor(shellState.client, paneId, link.entry, link.line);
       },
     };
@@ -363,7 +398,7 @@ export function createPreviewWiring(shellState: ShellState, core: PreviewCore) {
 
   function actOnLinkAtCursor(mode: 'open' | 'reveal'): void {
     const paneId = shellState.workspace?.activePaneId;
-    const editor = paneId === undefined ? undefined : shellState.editorByPane.get(paneId);
+    const editor = paneId === undefined ? undefined : activeEditor(paneId);
     const link = editor?.controller.linkAtCursor();
     if (paneId === undefined || editor === undefined || link === undefined) {
       toast({ html: t('editorLinks', 'nothingAtCursor') });
@@ -384,10 +419,26 @@ export function createPreviewWiring(shellState: ShellState, core: PreviewCore) {
     });
   }
 
+  /** Closes an editor tab. Its editor is disposed when the tab's state is cleared. */
+  function closeEditorTab(paneId: PaneId, tabId: TabId): void {
+    shellState.tabController.performCloseTab(paneId, tabId);
+  }
+
+  /** Closes the active editor tab of `paneId`, if it has one, without a dirty check. */
   function closeEditor(paneId: PaneId): void {
-    shellState.editorByPane.get(paneId)?.controller.dispose();
-    shellState.editorByPane.delete(paneId);
-    m.redraw();
+    const editor = activeEditor(paneId);
+    if (editor !== undefined) closeEditorTab(paneId, editor.tabId);
+  }
+
+  /**
+   * A close request for an editor tab asks about unsaved changes first. Returns false for other
+   * tabs, which then close as usual.
+   */
+  function requestCloseEditorTab(paneId: PaneId, tabId: TabId): boolean {
+    const editor = shellState.editorByTab.get(tabKey(paneId, tabId));
+    if (editor === undefined) return false;
+    if (editor.controller.requestClose()) closeEditorTab(paneId, tabId);
+    return true;
   }
 
   function openPluginPane(
@@ -415,10 +466,6 @@ export function createPreviewWiring(shellState: ShellState, core: PreviewCore) {
         shellState.tabController.activateTab(target, existing.tabId);
       }
       return 'opened';
-    }
-    if (shellState.editorByPane.has(target)) {
-      requestCloseEditor(target);
-      if (shellState.editorByPane.has(target)) return 'blocked';
     }
     const current = shellState.workspace;
     const activeTab = current?.panesById[target]?.tabsById[current.panesById[target].activeTabId];
@@ -490,13 +537,6 @@ export function createPreviewWiring(shellState: ShellState, core: PreviewCore) {
     return 'opened';
   }
 
-  function requestCloseEditor(paneId: PaneId): boolean {
-    const editor = shellState.editorByPane.get(paneId);
-    if (editor === undefined) return false;
-    if (editor.controller.requestClose()) closeEditor(paneId);
-    return true;
-  }
-
   return {
     openViewer,
     openViewerInPane,
@@ -509,6 +549,7 @@ export function createPreviewWiring(shellState: ShellState, core: PreviewCore) {
     actOnLinkAtCursor,
     closeEditor,
     openPluginPane,
-    requestCloseEditor,
+    closeEditorTab,
+    requestCloseEditorTab,
   };
 }

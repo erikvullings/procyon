@@ -26,10 +26,13 @@ function fakeShell(
     client: client as FileManagerClient,
     assistantByTab: new Map([[entry.key, entry]]),
     assistantOpening: false,
-    editorByPane: new Map([
+    workspace: { panesById: { left: { activeTabId: 'tab-1' } } },
+    editorByTab: new Map([
       [
-        'left',
+        'left:tab-1',
         {
+          paneId: 'left',
+          tabId: 'tab-1',
           controller: { setContent: sourceControllerSetContent },
           state: { status: 'loaded', entry: { name: 'script.sh' } },
         },

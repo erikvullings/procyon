@@ -25,7 +25,7 @@ import {
 import { dispatchWorkspaceCommand } from '../features/workspace/dispatch-workspace-command';
 import { t } from '../i18n';
 import type { ChatFailure, PaneId, WorkspaceProjection } from '../models';
-import { tabKey } from './shell-helpers';
+import { activeEditorOf, tabKey } from './shell-helpers';
 import type { ShellState } from './shell-state';
 
 export interface ChatCore {
@@ -45,7 +45,7 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
     const targetPaneId = chatPlacementPaneId(
       workspace.paneOrder,
       workspace.activePaneId,
-      shellState.editorByPane.has(workspace.activePaneId),
+      activeEditorOf(workspace, shellState.editorByTab, workspace.activePaneId) !== undefined,
     );
     const targetPane = workspace.panesById[targetPaneId];
     const activeTab =

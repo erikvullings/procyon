@@ -1,12 +1,13 @@
 import { linter } from '@codemirror/lint';
 import m, { type Component, type FactoryComponent } from 'mithril';
 import { FlatButton, IconButton, ModalPanel } from 'mithril-materialized';
-import { closeIcon, sparklesIcon } from '../../components/tabler-icons';
+import { sparklesIcon } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { PaneId } from '../../models';
 import { looksLikeGeoJson } from '../geo/geo-document';
 import { GeoMapEditor, type GeoMapEditorAttrs } from '../geo-editor/geo-map-editor';
+import { newTabButton } from '../panes/tab-strip';
 import { jsonParseLinter, languageExtension } from './editor-language';
 import type { FileEditorController, FileEditorState } from './file-editor-controller';
 import type { EditorLinkHandlers } from './link-actions';
@@ -18,6 +19,8 @@ export interface FileEditorAttrs {
   readonly controller: FileEditorController;
   readonly paneId?: PaneId;
   readonly onClose: () => void;
+  /** Opens a new tab beside this one; the header shows it in place of the close button when set. */
+  readonly onNewTab?: () => void;
   /** Actions for paths and URLs in the text (task 0271); absent where none are available. */
   readonly links?: EditorLinkHandlers;
   /** Client for the GeoJSON map editor (task 0278); the map toggle is hidden without it. */
@@ -200,18 +203,8 @@ export const FileEditor: Component<FileEditorAttrs> = {
             disabled: !state.dirty || state.saving,
             onclick: () => void controller.save(),
           }),
-          tooltip(
-            t('editor', 'closeEditor'),
-            m(
-              IconButton,
-              {
-                className: 'fm-file-editor-close',
-                'aria-label': t('editor', 'closeEditor'),
-                onclick: requestClose,
-              },
-              closeIcon({ size: 13 }),
-            ),
-          ),
+          // The editor is its own tab, which carries the close button, like every other tab.
+          attrs.onNewTab === undefined ? undefined : newTabButton(attrs.onNewTab),
         ]),
         state.error ? m('.fm-file-editor-error', { role: 'alert' }, state.error) : undefined,
         state.conflict

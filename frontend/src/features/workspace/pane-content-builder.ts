@@ -191,9 +191,15 @@ export interface PaneContentContext {
       state: FileViewerState;
     }
   >;
-  getEditorByPane(): Map<
-    PaneId,
-    { readonly controller: FileEditorController; state: FileEditorState }
+  /** Open editors, keyed by the `tabKey` of the editor tab that holds them. */
+  getEditorByTab(): Map<
+    string,
+    {
+      readonly paneId: PaneId;
+      readonly tabId: TabId;
+      readonly controller: FileEditorController;
+      state: FileEditorState;
+    }
   >;
   getPluginByPane(): Map<PaneId, PluginPaneState>;
   getDiskUsageByTab(): Map<string, { state: DiskUsageViewState }>;
@@ -365,7 +371,7 @@ export interface PaneContentContext {
   searchThemeSources(sourceIds: readonly string[], subject: string): void;
   openKnowledgeSource(paneId: PaneId, evidence: KnowledgeEvidence): Promise<void>;
   isKnowledgeSourceOpen(evidence: KnowledgeEvidence): boolean;
-  closeEditor(paneId: PaneId): void;
+  closeEditorTab(paneId: PaneId, tabId: TabId): void;
   /** Actions for paths and URLs in the file edited in `paneId` (task 0271). */
   getEditorLinkHandlers(paneId: PaneId, base: Location): EditorLinkHandlers;
   updateLocationSettings(
@@ -549,7 +555,10 @@ export function createPaneContentBuilder(
     const image = key === undefined ? undefined : context.getImageByTab?.().get(key);
     const viewerTitles = new Map(
       (pane?.tabOrder ?? []).flatMap((tabId) => {
-        const title = context.getViewerByTab().get(context.tabKey(paneId, tabId))?.state.entry.name;
+        const viewerOrEditorKey = context.tabKey(paneId, tabId);
+        const title =
+          context.getViewerByTab().get(viewerOrEditorKey)?.state.entry.name ??
+          context.getEditorByTab().get(viewerOrEditorKey)?.state.entry.name;
         return title === undefined ? [] : [[tabId, title] as const];
       }),
     );
@@ -1261,7 +1270,9 @@ export function createPaneContentBuilder(
             ? {
                 viewerContent: m(AssistantTab, {
                   entry: assistant,
-                  sourceOpen: context.getEditorByPane().has(assistant.sourcePaneId),
+                  sourceOpen: [...context.getEditorByTab().values()].some(
+                    (editor) => editor.paneId === assistant.sourcePaneId,
+                  ),
                   onSend: (draft: string) => context.assistantActions?.send(assistant.key, draft),
                   onStop: () => context.assistantActions?.stop(assistant.key),
                   onProfile: (profileId: string) =>
@@ -1271,18 +1282,23 @@ export function createPaneContentBuilder(
                   onOpenSettings: () => context.openKnowledgeAnswerSettings?.(),
                 }),
               }
-            : pluginPanel?.tabId === tab?.id || context.getEditorByPane().has(paneId)
+            : pluginPanel?.tabId === tab?.id ||
+                (key !== undefined && context.getEditorByTab().has(key))
               ? {
+                  // The editor draws its own header with the new-tab button, like the viewers.
+                  ...(pluginPanel?.tabId === tab?.id ? {} : { viewerOwnsTabActions: true }),
                   viewerContent: (() => {
                     if (pluginPanel?.tabId === tab?.id) return m('.fm-plugin-panel-placeholder');
-                    const editor = context.getEditorByPane().get(paneId);
+                    const editor =
+                      key === undefined ? undefined : context.getEditorByTab().get(key);
                     return editor === undefined
                       ? undefined
                       : m(FileEditor, {
                           state: editor.state,
                           controller: editor.controller,
                           paneId,
-                          onClose: () => context.closeEditor(paneId),
+                          onClose: () => context.closeEditorTab(paneId, editor.tabId),
+                          onNewTab: () => context.openNewTab?.(paneId),
                           mapClient: client,
                           onExportGeo: (name, content) =>
                             context

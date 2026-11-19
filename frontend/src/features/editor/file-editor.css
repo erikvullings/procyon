@@ -50,6 +50,23 @@
   line-height: 1;
 }
 
+/* The new-tab button matches the viewer header's: row-height, 16px glyph, at the right edge. */
+.fm-file-editor-header .fm-pane-tab-new {
+  width: var(--fm-row-height) !important;
+  height: var(--fm-row-height) !important;
+  min-width: var(--fm-row-height) !important;
+  min-height: var(--fm-row-height) !important;
+  padding: 0 !important;
+  line-height: 1;
+}
+
+.fm-file-editor-header .fm-pane-tab-new .fm-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  transform: none;
+}
+
 .fm-file-editor-spacer {
   flex: 1;
 }

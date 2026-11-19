@@ -544,16 +544,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     activePaneId: () => activeDirectory()?.paneId,
     openNewTab: (paneId) => shellState.tabController.openTab(paneId),
     closeActiveTab: (paneId) => {
+      // A focused editor closes its own tab, which asks about unsaved changes first.
       const focusedEditorPaneId = (
         document.activeElement?.closest('.fm-file-editor') as HTMLElement | null
       )?.dataset.editorPaneId as PaneId | undefined;
-      if (
-        focusedEditorPaneId !== undefined &&
-        previewWiring.requestCloseEditor(focusedEditorPaneId)
-      )
-        return;
-      const activeTabId = shellState.workspace?.panesById[paneId]?.activeTabId;
-      if (activeTabId !== undefined) shellState.tabController.requestCloseTab(paneId, activeTabId);
+      const targetPaneId = focusedEditorPaneId ?? paneId;
+      const activeTabId = shellState.workspace?.panesById[targetPaneId]?.activeTabId;
+      if (activeTabId !== undefined)
+        shellState.tabController.requestCloseTab(targetPaneId, activeTabId);
     },
     setSort: (paneId, sort) => globalKeydownHandlerContext.setSort(paneId, sort),
     invokeAction: (action) => {
@@ -1062,6 +1060,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     const key = tabKey(paneId, tabId);
     shellState.viewerByTab.get(key)?.controller.dispose();
     shellState.viewerByTab.delete(key);
+    shellState.editorByTab.get(key)?.controller.dispose();
+    shellState.editorByTab.delete(key);
     const diskUsage = shellState.diskUsageByTab.get(key);
     if (diskUsage !== undefined && !diskUsage.progressComplete) {
       diskUsage.abort.abort();
@@ -1119,6 +1119,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     if (viewer !== undefined) {
       shellState.viewerByTab.delete(sourceKey);
       shellState.viewerByTab.set(targetKey, { ...viewer, paneId: targetPaneId });
+    }
+    const editor = shellState.editorByTab.get(sourceKey);
+    if (editor !== undefined) {
+      shellState.editorByTab.delete(sourceKey);
+      shellState.editorByTab.set(targetKey, { ...editor, paneId: targetPaneId });
     }
     const diskUsage = shellState.diskUsageByTab.get(sourceKey);
     if (diskUsage !== undefined) {
@@ -1184,8 +1189,6 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       for (const tabId of outgoing.panesById[paneId]?.tabOrder ?? []) {
         clearTabState(paneId, tabId);
       }
-      shellState.editorByPane.get(paneId)?.controller.dispose();
-      shellState.editorByPane.delete(paneId);
     }
   }
 
@@ -1808,6 +1811,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
   };
 
   const tabControllerContext: TabControllerContext = {
+    requestCloseEditorTab: (paneId, tabId) => previewWiring.requestCloseEditorTab(paneId, tabId),
     getWorkspace: () => shellState.workspace,
     setWorkspace: (ws) => {
       shellState.workspace = ws;
@@ -2541,7 +2545,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     getSortRequests: () => shellState.sortRequests,
     getCursorLoadTokens: () => shellState.cursorLoadTokens,
     getViewerByTab: () => shellState.viewerByTab,
-    getEditorByPane: () => shellState.editorByPane,
+    getEditorByTab: () => shellState.editorByTab,
     getEditorLinkHandlers: previewWiring.editorLinkHandlers,
     getPluginByPane: () => shellState.pluginByPane,
     getDiskUsageByTab: () => shellState.diskUsageByTab,
@@ -2723,7 +2727,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
           viewer.knowledgeSourceId === evidence.sourceId &&
           shellState.workspace?.panesById[viewer.paneId]?.activeTabId === viewer.tabId,
       ),
-    closeEditor: previewWiring.closeEditor,
+    closeEditorTab: previewWiring.closeEditorTab,
     updateLocationSettings,
     invokeActionById: (actionId, parameters, context) =>
       shellState.actionCommandController.invokeActionById(actionId, parameters, context),

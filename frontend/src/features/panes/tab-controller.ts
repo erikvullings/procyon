@@ -11,6 +11,8 @@ import { dispatchWorkspaceCommand } from '../workspace/dispatch-workspace-comman
 import { cycledTabIndex, tabIdForJump } from './tab-navigation';
 
 export interface TabControllerContext {
+  /** Handles a close request for an editor tab (unsaved changes first). False for other tabs. */
+  requestCloseEditorTab?(paneId: PaneId, tabId: TabId): boolean;
   getWorkspace(): WorkspaceProjection | undefined;
   setWorkspace(ws: WorkspaceProjection): void;
   getAppState(): AppState | undefined;
@@ -193,6 +195,7 @@ export function createTabController(
     },
 
     requestCloseTab(paneId: PaneId, tabId: TabId): void {
+      if (context.requestCloseEditorTab?.(paneId, tabId)) return;
       const workspace = context.getWorkspace();
       const pane = workspace?.panesById[paneId];
       if (pane === undefined) return;

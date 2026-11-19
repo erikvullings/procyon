@@ -200,7 +200,17 @@ const MarkdownPreview: FactoryComponent<MarkdownPreviewAttrs> = () => {
  * for the shared page-controls header UI. */
 function pagedContentInfo(
   content: Extract<FileViewerState, { status: 'ready' }>['content'],
+  entrySize?: number,
 ): { readonly current: number; readonly total: number } | undefined {
+  // Text is read in fixed byte windows; a window is a page, so long files get page controls too.
+  if (content.kind === 'text') {
+    if (content.atStart && content.atEnd) return undefined;
+    const totalBytes = Math.max(entrySize ?? content.windowEnd, content.windowEnd);
+    return {
+      current: Math.floor(content.windowOffset / TEXT_WINDOW_BYTES) + 1,
+      total: Math.ceil(totalBytes / TEXT_WINDOW_BYTES),
+    };
+  }
   if (content.kind === 'pdf')
     // A PowerPoint preview reports the deck size up front (only the first page is loaded at first),
     // so prefer that over the 1-page first-slide document until the full PDF finishes converting.
@@ -643,11 +653,7 @@ function renderTextBody(
   const content = state.content;
   if (content.kind !== 'text') return undefined;
   const editableLanguage = editableLanguageForExtension(state.entry.extension, state.entry.name);
-  const paginated = !content.atStart || !content.atEnd;
-  const knownOrMinimumBytes =
-    state.entry.size ?? content.windowEnd + (content.atEnd ? 0 : TEXT_WINDOW_BYTES);
-  const totalBytes = Math.max(knownOrMinimumBytes, content.windowEnd);
-  const currentPage = Math.floor(content.windowOffset / TEXT_WINDOW_BYTES);
+  // Paging is in the breadcrumb bar (see `pagedContentInfo`), not under the text.
   return m('.fm-file-viewer-body.fm-file-viewer-body-text', {}, [
     m(TextContent, {
       viewerAttrs: attrs,
@@ -660,19 +666,6 @@ function renderTextBody(
       onFindShortcut,
     }),
     content.loadingMore ? m('.fm-file-viewer-loading-more', t('viewer', 'loadingMore')) : undefined,
-    paginated
-      ? m(
-          '.fm-file-viewer-text-pagination',
-          m(PaginationControls, {
-            pagination: {
-              page: currentPage,
-              pageSize: TEXT_WINDOW_BYTES,
-              total: totalBytes,
-            },
-            onPaginationChange: ({ page }) => attrs.onLoadTextPage(page),
-          }),
-        )
-      : undefined,
   ]);
 }
 
@@ -1913,8 +1906,7 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                             editingZoom = true;
                           },
                         },
-                        (state.content.kind === 'image' && state.content.fitToContainer) ||
-                          (state.content.kind === 'pdf' && state.content.zoom === 1)
+                        state.content.kind === 'image' && state.content.fitToContainer
                           ? t('viewer', 'fit')
                           : `${Math.round(state.content.zoom * 100)}%`,
                       ),
@@ -1928,10 +1920,17 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                   ),
                 ])
               : undefined,
-            state.status === 'ready' && pagedContentInfo(state.content) !== undefined
+            state.status === 'ready' &&
+            pagedContentInfo(state.content, state.entry.size) !== undefined
               ? (() => {
-                  const pageInfo = pagedContentInfo(state.content);
+                  const pageInfo = pagedContentInfo(state.content, state.entry.size);
                   if (pageInfo === undefined) return undefined;
+                  const stepPage = (delta: -1 | 1) => {
+                    if (state.content.kind === 'text')
+                      attrs.onLoadTextPage(pageInfo.current - 1 + delta);
+                    else if (delta < 0) attrs.onPreviousPage();
+                    else attrs.onNextPage();
+                  };
                   return m('.fm-file-viewer-page-controls', [
                     tooltip(
                       t('viewer', 'previousPage'),
@@ -1941,7 +1940,7 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                           type: 'button',
                           'aria-label': t('viewer', 'previousPage'),
                           disabled: pageInfo.current <= 1,
-                          onclick: attrs.onPreviousPage,
+                          onclick: () => stepPage(-1),
                         },
                         '◀',
                       ),
@@ -2015,7 +2014,7 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                           disabled:
                             pageInfo.current >= pageInfo.total ||
                             (state.content.kind === 'pdf' && state.content.slidesConverting),
-                          onclick: attrs.onNextPage,
+                          onclick: () => stepPage(1),
                         },
                         '▶',
                       ),
