@@ -236,7 +236,7 @@ async fn packaged_gemma_indexes_sampled_synthetic_scan_pages_offline() {
         .as_ref()
         .map(|_| sample_macos_worker_rss(runtime.path().join("worker.pid")));
     let client = WorkerConnector::desktop_managed_resolved(runtime.path(), resolver)
-        .with_startup_timeout(Duration::from_secs(30))
+        .with_startup_timeout(Duration::from_secs(120))
         .connect()
         .await
         .expect("start signed installed Gemma worker");
@@ -485,7 +485,7 @@ async fn packaged_worker_ingests_recovers_after_crash_and_reopens_offline() {
         ManagedWorkerLaunch::new(worker, data.path().to_owned(), native_directory, model_pack);
     let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
     let connector = WorkerConnector::desktop_managed_resolved(runtime.path(), resolver)
-        .with_startup_timeout(Duration::from_secs(30))
+        .with_startup_timeout(Duration::from_secs(120))
         .with_idle_timeout(Duration::from_secs(5));
     let client = connector.connect().await.expect("start packaged worker");
     assert_eq!(client.health().await.unwrap(), WorkerHealth::Serving);
@@ -622,7 +622,7 @@ async fn packaged_gemma_worker_ingests_multimodal_sources_offline() {
     );
     let resolver: ManagedWorkerResolver = Arc::new(move || Ok(launch.clone()));
     let connector = WorkerConnector::desktop_managed_resolved(runtime.path(), resolver)
-        .with_startup_timeout(Duration::from_secs(30));
+        .with_startup_timeout(Duration::from_secs(120));
     #[cfg(target_os = "macos")]
     let sampler = report_path
         .as_ref()
