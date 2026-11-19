@@ -281,12 +281,12 @@ Desktop releases refuse a risk-accepted Gemma manifest whose `sourceRevision` pr
 to the worker build inputs (`verifySemanticWorkerSource`).
 
 **One command:** on a clean, pushed `main`, run
-`node scripts/resign-gemma-candidate.mjs --approve-risk-accepted`. It does steps 2–5 below:
+`node scripts/resign-gemma-candidate.mjs`. It does steps 2–5 below:
 qualifies the candidate on HEAD, re-runs only flaky failed jobs (bounded), builds and commits the
 manifest, pushes, and publishes the already-qualified run under the same immutable tag. It exits
-early, changing nothing, when the worker build inputs are unchanged. The flag is required because
-the manifest records the release owner's risk acceptance (`approvedBy` carries over from the
-current manifest). `--tag` overrides the next `semantic-v*` tag; `--qualification-run <id>`
+early, changing nothing, when the worker build inputs are unchanged. It never renews the risk
+acceptance: `approvedBy` and `approvedAt` carry over from the current manifest, and a model change
+goes through `prepare-risk-accepted-gemma-manifest.mjs` instead. `--tag` overrides the next `semantic-v*` tag; `--qualification-run <id>`
 resumes from a qualification run that already succeeded, including the one a push to `main`
 starts automatically when worker build inputs change (its `semantic-v*-auto.N` tag is taken from
 the candidate, and the candidate may predate HEAD as long as no worker input changed since).

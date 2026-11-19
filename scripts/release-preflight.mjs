@@ -95,7 +95,7 @@ export function classifyQualificationRuns(runs, revision, { isAncestor, changesB
 }
 
 function resignCommand(runId) {
-  const base = 'node scripts/resign-gemma-candidate.mjs --approve-risk-accepted';
+  const base = 'node scripts/resign-gemma-candidate.mjs';
   return runId === undefined ? base : `${base} --qualification-run ${runId}`;
 }
 

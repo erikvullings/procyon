@@ -18,11 +18,12 @@ export { nextSemanticTag };
  * One-command version of "Re-signing the risk-accepted Gemma worker candidate"
  * (docs/semantic-operations.md). Every step of that procedure is kept; only the manual hand-offs go.
  *
- *   node scripts/resign-gemma-candidate.mjs --approve-risk-accepted
+ *   node scripts/resign-gemma-candidate.mjs
  *
  * It exits early (changing nothing) when the worker build inputs are unchanged since the signed
- * candidate, because then the desktop gate already passes. The risk acceptance stays an explicit
- * flag: the release owner who runs this, or tells an agent to, is the one accepting it.
+ * candidate, because then the desktop gate already passes. It never renews the risk acceptance:
+ * the model revision, `approvedBy` and `approvedAt` carry over from the current manifest. A model
+ * change is a new acceptance and goes through prepare-risk-accepted-gemma-manifest.mjs instead.
  */
 
 const WORKFLOW = 'release-semantic-components.yml';
@@ -74,19 +75,12 @@ function sleep(ms) {
 }
 
 function parseArguments(argv) {
-  const options = { approve: false, tag: undefined, qualificationRun: undefined };
+  const options = { tag: undefined, qualificationRun: undefined };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === '--approve-risk-accepted') options.approve = true;
-    else if (argument === '--tag') options.tag = argv[++index];
+    if (argument === '--tag') options.tag = argv[++index];
     else if (argument === '--qualification-run') options.qualificationRun = argv[++index];
     else throw new Error(`unknown argument: ${argument}`);
-  }
-  if (!options.approve) {
-    throw new Error(
-      'refusing to run without --approve-risk-accepted: this records the release owner’s ' +
-        'risk acceptance of the unqualified Gemma worker in docs/evaluations',
-    );
   }
   return options;
 }
@@ -243,7 +237,7 @@ async function main() {
   const manifest = prepareRiskAcceptedGemmaManifest(candidateBytes, {
     modelRevision: current.riskAcceptedGemma.modelRevision,
     approvedBy: current.riskAcceptedGemma.approvedBy,
-    approvedAt: new Date().toISOString().replace(/\.\d+Z$/u, 'Z'),
+    approvedAt: current.riskAcceptedGemma.approvedAt,
   });
   // The desktop gate's own condition: the candidate must be an ancestor of HEAD with no worker
   // build input changed since. HEAD itself may be newer (main moved, or the run was automatic).

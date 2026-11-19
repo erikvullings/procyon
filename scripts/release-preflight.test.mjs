@@ -124,7 +124,7 @@ test('names the changed worker input and the one-command fix when the candidate 
   assert.deepEqual(failing(report), ['gemma-risk-accepted']);
   const text = formatReport(report);
   assert.match(text, /crates\/fm-semantic-worker\/src\/lib\.rs/u);
-  assert.match(text, /fix: node scripts\/resign-gemma-candidate\.mjs --approve-risk-accepted /u);
+  assert.match(text, /fix: node scripts\/resign-gemma-candidate\.mjs /u);
   assert.match(text, /Preflight failed/u);
 });
 

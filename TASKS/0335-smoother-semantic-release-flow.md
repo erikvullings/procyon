@@ -98,7 +98,7 @@ approval step is mechanical bookkeeping.
 
   **Flow now.** worker change merges to main -> automatic four-target qualification (needs the
   `desktop-release` environment approval like any qualification run) -> `pnpm release:preflight`
-  -> if it says so, `node scripts/resign-gemma-candidate.mjs --approve-risk-accepted
+  -> if it says so, `node scripts/resign-gemma-candidate.mjs
   --qualification-run <id>` (commits manifest, pushes main, publishes the tag) -> bump, tag desktop.
 
   **Changed.** `scripts/release-preflight.mjs` (+ `pnpm release:preflight`; runs the workflow's own

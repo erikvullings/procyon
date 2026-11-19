@@ -213,7 +213,7 @@ candidate. That candidate is refreshed like this: a push to `main` that changes 
 `release-semantic-components.yml` automatically (qualification only, never publishes; tag
 `semantic-vX.Y.Z-auto.N`; the `plan` job skips it when the gate already passes). Once it is green,
 preflight prints
-`node scripts/resign-gemma-candidate.mjs --approve-risk-accepted --qualification-run <id>`, which
+`node scripts/resign-gemma-candidate.mjs --qualification-run <id>`, which
 commits the manifest, pushes `main` and publishes the tag (without `--qualification-run` it
 dispatches its own run). Only the risk-accepted mode has this mechanical path; experimental and
 five-gate manifests need reviewed evidence (docs/semantic-operations.md).
