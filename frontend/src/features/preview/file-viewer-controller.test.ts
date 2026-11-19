@@ -627,6 +627,46 @@ describe('file viewer controller', () => {
     });
   });
 
+  it('ends a text page at a paragraph break and numbers the pages as they move', async () => {
+    const context = setup();
+    const head = `${'a'.repeat(40_000)}\n\n${'b'.repeat(TEXT_WINDOW_BYTES - 40_002)}`;
+    const headBytes = Array.from(new TextEncoder().encode(head));
+    vi.mocked(context.client.readFileRange)
+      .mockResolvedValueOnce({
+        data: headBytes,
+        offset: 0,
+        length: headBytes.length,
+        eof: false,
+        probablyBinary: false,
+      })
+      .mockResolvedValueOnce({
+        data: Array.from(new TextEncoder().encode('c'.repeat(10))),
+        offset: 40_002,
+        length: 10,
+        eof: true,
+        probablyBinary: false,
+      });
+    const controller = createFileViewerController({
+      client: context.client,
+      entry: entry({ size: TEXT_WINDOW_BYTES + 10 }),
+      update: (state) => context.states.push(state),
+    });
+    await vi.waitFor(() => expect(context.states.at(-1)?.status).toBe('ready'));
+    expect(context.states.at(-1)).toMatchObject({
+      content: { kind: 'text', page: 1, windowOffset: 0, windowEnd: 40_002, atEnd: false },
+    });
+
+    await controller.loadMore();
+
+    expect(context.client.readFileRange).toHaveBeenLastCalledWith(
+      { location: expect.anything(), offset: 40_002, length: TEXT_WINDOW_BYTES },
+      expect.anything(),
+    );
+    expect(context.states.at(-1)).toMatchObject({
+      content: { kind: 'text', page: 2, windowOffset: 40_002, windowEnd: 40_012, atEnd: true },
+    });
+  });
+
   describe('sqlite databases', () => {
     const database = () => entry({ name: 'shop.sqlite', extension: 'sqlite' });
     const opened = {

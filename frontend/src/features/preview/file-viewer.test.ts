@@ -323,11 +323,10 @@ describe('FileViewer', () => {
     };
   }
 
-  function clickMode(label: string): void {
-    const button = [
-      ...root.querySelectorAll<HTMLButtonElement>('.fm-file-viewer-text-mode-button'),
-    ].find((candidate) => candidate.textContent === label);
-    if (button === undefined) throw new Error(`no ${label} button`);
+  // The header's eye toggle: on shows the rendered preview, off shows the source.
+  function togglePreview(): void {
+    const button = root.querySelector<HTMLButtonElement>('.fm-file-viewer-preview-toggle');
+    if (button === null) throw new Error('no preview toggle');
     button.click();
     m.redraw.sync();
   }
@@ -342,12 +341,12 @@ describe('FileViewer', () => {
     expect(frame?.getAttribute('srcdoc')).toContain("default-src 'none'");
     expect(root.querySelector('.cm-editor')).toBeNull();
 
-    clickMode('Source');
+    togglePreview();
     expect(root.querySelector('.fm-file-viewer-html')).toBeNull();
     expect(root.querySelector('.cm-editor')).not.toBeNull();
     expect(root.querySelector('.cm-lineWrapping')).not.toBeNull();
 
-    clickMode('Preview');
+    togglePreview();
     expect(root.querySelector('.fm-file-viewer-html')).not.toBeNull();
   });
 
@@ -355,17 +354,17 @@ describe('FileViewer', () => {
     mount(baseAttrs(textState('README.md', 'md', '# Title')));
     expect(root.querySelector('.fm-file-viewer-markdown h1')?.textContent).toBe('Title');
 
-    clickMode('Source');
+    togglePreview();
     expect(root.querySelector('.fm-file-viewer-markdown')).toBeNull();
     expect(root.querySelector('.cm-content')?.textContent).toContain('# Title');
 
-    clickMode('Preview');
+    togglePreview();
     expect(root.querySelector('.fm-file-viewer-markdown h1')).not.toBeNull();
   });
 
   it('offers no preview toggle for other text files, which wrap long lines', () => {
     mount(baseAttrs(textState('notes.txt', 'txt', 'plain')));
-    expect(root.querySelector('.fm-file-viewer-text-mode')).toBeNull();
+    expect(root.querySelector('.fm-file-viewer-preview-toggle')).toBeNull();
     expect(root.querySelector('.cm-lineWrapping')).not.toBeNull();
   });
 

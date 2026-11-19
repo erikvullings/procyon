@@ -6053,6 +6053,7 @@ button.fm-activity-count {
 .fm-themes-crumbs {
   flex: 1 1 auto;
   min-width: 0;
+  padding-inline-start: var(--fm-breadcrumb-inset);
 }
 
 .fm-themes-crumb {

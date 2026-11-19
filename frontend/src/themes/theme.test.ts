@@ -486,7 +486,8 @@ describe('theme stylesheet', () => {
     expect(paneCss).toMatch(
       /\.fm-breadcrumb-row\s+:is\([^)]*\.fm-pane-view-mode[^)]*\)\s+\.fm-icon\s*\{[^}]*width:\s*16px[^}]*height:\s*16px[^}]*transform:\s*none/s,
     );
-    expect(paneCss).toMatch(
+    // The row centres its children; a per-segment nudge would offset the text from the buttons.
+    expect(paneCss).not.toMatch(
       /\.fm-breadcrumb-segment,\s*\.fm-breadcrumb-scheme,\s*\.fm-path-input\s*\{[^}]*transform:\s*translateY\(-2px\)/s,
     );
     expect(paneCss).toMatch(/\.fm-breadcrumb-row\s*\{[^}]*padding-inline-end:\s*0\.25rem/s);

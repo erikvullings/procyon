@@ -79,6 +79,7 @@ import {
   type SqliteResultState,
   type SqliteSort,
 } from './sqlite-browser';
+import { windowEndAtBreak, windowStartAtBreak } from './text-windows';
 
 /** Client surface required to drive a Lister-style large-file viewer. `listDirectory` is only
  * used for comic (.cbz/.cbr) page listing. */
@@ -131,6 +132,11 @@ export interface FileViewerTextContent {
   readonly kind: 'text';
   readonly windowOffset: number;
   readonly windowEnd: number;
+  /**
+   * The 1-based page this window shows. Windows end at breaks, so their size varies and the page
+   * number cannot be derived from the offset; it is counted as the viewer moves between pages.
+   */
+  readonly page?: number;
   readonly text: string;
   readonly atStart: boolean;
   readonly atEnd: boolean;
@@ -707,6 +713,11 @@ export function createFileViewerController(
   const sqliteAborts: Partial<Record<'data' | 'sqlRun', AbortController>> = {};
   let docxSessionId: string | undefined;
   let pptxSessionId: string | undefined;
+  /** The 1-based page a text window shows; a window without a page number falls back to its offset. */
+  function pageOf(content: FileViewerTextContent): number {
+    return content.page ?? Math.floor(content.windowOffset / TEXT_WINDOW_BYTES) + 1;
+  }
+
   const textWindowCache = new Map<number, FileViewerTextContent>();
 
   function rememberTextWindow(content: FileViewerTextContent): void {
@@ -751,11 +762,14 @@ export function createFileViewerController(
       });
       return;
     }
+    const bytes = new Uint8Array(chunk.data);
+    const end = chunk.eof ? bytes.length : windowEndAtBreak(bytes, bytes.length >> 1, bytes.length);
     const content: FileViewerTextContent = {
       kind: 'text',
+      page: 1,
       windowOffset: 0,
-      windowEnd: chunk.length,
-      text: new TextDecoder().decode(new Uint8Array(chunk.data)),
+      windowEnd: end,
+      text: new TextDecoder().decode(bytes.subarray(0, end)),
       atStart: true,
       atEnd: chunk.eof,
       loadingMore: false,
@@ -1676,11 +1690,17 @@ export function createFileViewerController(
             )
           : undefined;
       if (!isCurrent(controller)) return;
+      const bytes = chunk === undefined ? new Uint8Array() : new Uint8Array(chunk.data);
+      const end =
+        chunk?.eof === false
+          ? windowEndAtBreak(bytes, bytes.length >> 1, bytes.length)
+          : bytes.length;
       const next: FileViewerTextContent = cached ?? {
         kind: 'text',
+        page: pageOf(content) + 1,
         windowOffset: nextOffset,
-        windowEnd: nextOffset + (chunk?.length ?? 0),
-        text: new TextDecoder().decode(new Uint8Array(chunk?.data ?? [])),
+        windowEnd: nextOffset + end,
+        text: new TextDecoder().decode(bytes.subarray(0, end)),
         atStart: nextOffset === 0,
         atEnd: chunk?.eof ?? true,
         loadingMore: false,
@@ -1698,8 +1718,9 @@ export function createFileViewerController(
     const content = textContent();
     if (content === undefined || content.atStart || content.loadingMore) return;
     const offset = Math.max(0, content.windowOffset - TEXT_WINDOW_BYTES);
+    // A cached window only counts when it ends where the current one starts.
     const cached = textWindowCache.get(offset);
-    if (cached !== undefined) {
+    if (cached !== undefined && cached.windowEnd === content.windowOffset) {
       publish({ ...(current as Extract<FileViewerState, { status: 'ready' }>), content: cached });
       return;
     }
@@ -1713,12 +1734,17 @@ export function createFileViewerController(
         controller.signal,
       );
       if (!isCurrent(controller)) return;
+      const bytes = new Uint8Array(chunk.data);
+      // Starts at a break, so the page does not begin mid-word; the window still ends where the
+      // current one begins.
+      const start = offset === 0 ? 0 : windowStartAtBreak(bytes, bytes.length >> 1);
       const previous: FileViewerTextContent = {
         kind: 'text',
-        windowOffset: offset,
-        windowEnd: offset + chunk.length,
-        text: new TextDecoder().decode(new Uint8Array(chunk.data)),
-        atStart: offset === 0,
+        page: pageOf(content) - 1,
+        windowOffset: offset + start,
+        windowEnd: content.windowOffset,
+        text: new TextDecoder().decode(bytes.subarray(start)),
+        atStart: offset + start === 0,
         atEnd: false,
         loadingMore: false,
       };
@@ -1775,6 +1801,10 @@ export function createFileViewerController(
     }
     const content = textContent();
     if (content === undefined || content.loadingMore) return;
+    // Neighbouring pages step from the current window, since page sizes vary with the breaks.
+    const currentPage = pageOf(content);
+    if (Math.floor(pageIndex) === currentPage && !content.atEnd) return loadMore();
+    if (Math.floor(pageIndex) === currentPage - 2 && !content.atStart) return loadPrevious();
     const offset = Math.max(0, Math.floor(pageIndex)) * TEXT_WINDOW_BYTES;
     if (offset === content.windowOffset || (entry.size !== undefined && offset >= entry.size))
       return;
@@ -1792,12 +1822,19 @@ export function createFileViewerController(
         controller.signal,
       );
       if (!isCurrent(controller)) return;
+      const bytes = new Uint8Array(chunk.data);
+      // A jump lands on a page that starts and ends at breaks, like the sequential pages do.
+      const start = offset === 0 ? 0 : windowStartAtBreak(bytes, bytes.length >> 1);
+      const end = chunk.eof
+        ? bytes.length
+        : windowEndAtBreak(bytes, start + ((bytes.length - start) >> 1), bytes.length);
       const page: FileViewerTextContent = {
         kind: 'text',
-        windowOffset: offset,
-        windowEnd: offset + chunk.length,
-        text: new TextDecoder().decode(new Uint8Array(chunk.data)),
-        atStart: offset === 0,
+        page: Math.floor(pageIndex) + 1,
+        windowOffset: offset + start,
+        windowEnd: offset + end,
+        text: new TextDecoder().decode(bytes.subarray(start, end)),
+        atStart: offset + start === 0,
         atEnd: chunk.eof,
         loadingMore: false,
       };
@@ -2233,22 +2270,28 @@ export function createFileViewerController(
       );
       if (!isCurrent(controller)) return;
       const bytes = new Uint8Array(chunk.data);
+      // The window starts and ends at breaks, but still holds the whole match.
+      const matchStartInChunk = match.offset - windowOffset;
+      const matchEndInChunk = matchStartInChunk + match.length;
+      const start = windowOffset === 0 ? 0 : windowStartAtBreak(bytes, matchStartInChunk);
+      const end = chunk.eof ? bytes.length : windowEndAtBreak(bytes, matchEndInChunk, bytes.length);
       // Convert the match's byte offset/length (relative to this window) into character offsets by
       // decoding only the bytes before/within the match - see `FileViewerTextContent`'s doc comment.
-      const matchStartInChunk = match.offset - windowOffset;
-      const highlightOffset = new TextDecoder().decode(bytes.subarray(0, matchStartInChunk)).length;
+      const highlightOffset = new TextDecoder().decode(
+        bytes.subarray(start, matchStartInChunk),
+      ).length;
       const highlightLength = new TextDecoder().decode(
-        bytes.subarray(matchStartInChunk, matchStartInChunk + match.length),
+        bytes.subarray(matchStartInChunk, matchEndInChunk),
       ).length;
       publish({
         status: 'ready',
         entry,
         content: {
           kind: 'text',
-          windowOffset,
-          windowEnd: windowOffset + chunk.length,
-          text: new TextDecoder().decode(bytes),
-          atStart: windowOffset === 0,
+          windowOffset: windowOffset + start,
+          windowEnd: windowOffset + end,
+          text: new TextDecoder().decode(bytes.subarray(start, end)),
+          atStart: windowOffset + start === 0,
           atEnd: chunk.eof,
           loadingMore: false,
           highlightOffset,

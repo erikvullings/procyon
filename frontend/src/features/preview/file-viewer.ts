@@ -4,13 +4,14 @@ import { FlatButton, ModalPanel, PaginationControls, Select, Skeleton } from 'mi
 import {
   closeIcon,
   copyIcon,
+  eyeIcon,
   infoCircleIcon,
   menuIcon,
   searchIcon,
 } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
-import type { CsvGeoOptions, GitLogEntry, GpsPosition } from '../../models';
+import type { CsvGeoOptions, EntrySummary, GitLogEntry, GpsPosition } from '../../models';
 import { calculateVisibleWindow } from '../directory-table/windowing';
 import {
   type EditableLanguage,
@@ -566,24 +567,29 @@ interface TextContentAttrs {
   readonly language: EditableLanguage;
   /** The entry is an HTML page, which has a rendered preview (the language is plain XML). */
   readonly isHtml: boolean;
+  /** Shows the raw source instead of the rendered preview (the header's eye toggle). */
+  readonly showSource: boolean;
   readonly text: string;
   readonly highlightOffset: number | undefined;
   readonly highlightLength: number | undefined;
   readonly onFindShortcut: () => void;
 }
 
+/** Whether a text file opens rendered (Markdown or HTML) and so has the header's preview toggle. */
+function hasRenderedPreview(entry: EntrySummary): boolean {
+  return (
+    editableLanguageForExtension(entry.extension, entry.name) === 'markdown' ||
+    isHtmlPreviewExtension(previewExtension(entry))
+  );
+}
+
 /** Markdown and HTML open rendered, with a toggle to the raw text (syntax highlighted and
  * word-wrapped, read-only CodeMirror). Every other text file is the raw source only. The mode
  * is per opened file: it resets when the viewer moves to another entry. */
 const TextContent: FactoryComponent<TextContentAttrs> = () => {
-  let showSource = false;
-  let shownUri: string | undefined;
   return {
     view: ({ attrs }) => {
-      if (shownUri !== attrs.entryUri) {
-        shownUri = attrs.entryUri;
-        showSource = false;
-      }
+      const showSource = attrs.showSource;
       const rendered =
         attrs.language === 'markdown' ? 'markdown' : attrs.isHtml ? 'html' : undefined;
       const source = () =>
@@ -608,39 +614,18 @@ const TextContent: FactoryComponent<TextContentAttrs> = () => {
                 },
               }),
         });
-      if (rendered === undefined) return source();
-      return [
-        m(
-          '.fm-file-viewer-text-mode',
-          { role: 'group', 'aria-label': t('viewer', 'textModeLabel') },
-          (['preview', 'source'] as const).map((mode) =>
-            m(
-              'button.fm-file-viewer-text-mode-button',
-              {
-                type: 'button',
-                'aria-pressed': String((mode === 'source') === showSource),
-                onclick: () => {
-                  showSource = mode === 'source';
-                },
-              },
-              t('viewer', mode === 'preview' ? 'textModePreview' : 'textModeSource'),
-            ),
-          ),
-        ),
-        showSource
-          ? source()
-          : rendered === 'markdown'
-            ? m(MarkdownPreview, {
-                text: attrs.text,
-                highlightOffset: attrs.highlightOffset,
-                highlightLength: attrs.highlightLength,
-              })
-            : m('iframe.fm-file-viewer-html', {
-                sandbox: '',
-                title: t('viewer', 'htmlPreviewTitle'),
-                srcdoc: sandboxedHtmlDocument(attrs.text),
-              }),
-      ];
+      if (rendered === undefined || showSource) return source();
+      return rendered === 'markdown'
+        ? m(MarkdownPreview, {
+            text: attrs.text,
+            highlightOffset: attrs.highlightOffset,
+            highlightLength: attrs.highlightLength,
+          })
+        : m('iframe.fm-file-viewer-html', {
+            sandbox: '',
+            title: t('viewer', 'htmlPreviewTitle'),
+            srcdoc: sandboxedHtmlDocument(attrs.text),
+          });
     },
   };
 };
@@ -649,6 +634,7 @@ function renderTextBody(
   attrs: FileViewerAttrs,
   state: Extract<FileViewerState, { status: 'ready' }>,
   onFindShortcut: () => void,
+  showSource: boolean,
 ): m.Children {
   const content = state.content;
   if (content.kind !== 'text') return undefined;
@@ -660,6 +646,7 @@ function renderTextBody(
       entryUri: state.entry.location.uri,
       language: editableLanguage,
       isHtml: isHtmlPreviewExtension(previewExtension(state.entry)),
+      showSource,
       text: content.text,
       highlightOffset: content.highlightOffset,
       highlightLength: content.highlightLength,
@@ -1729,6 +1716,8 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
   let searchOpen = false;
   let initialSearchVisibilitySet = false;
   let outlineOpen = false;
+  /** The file whose rendered Markdown/HTML is switched to its source; others open rendered. */
+  let markdownSourceUri: string | undefined;
   let pendingExternalLink: string | undefined;
   let viewerElement: HTMLElement | undefined;
   let currentAttrs: FileViewerAttrs | undefined;
@@ -2048,6 +2037,32 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                   ),
                 )
               : undefined,
+            // Rendered Markdown/HTML: eye on shows the preview, off shows the source.
+            state.status === 'ready' &&
+            state.content.kind === 'text' &&
+            hasRenderedPreview(state.entry)
+              ? (() => {
+                  const showingSource = markdownSourceUri === state.entry.location.uri;
+                  return tooltip(
+                    t('viewer', 'textModeLabel'),
+                    m(
+                      'button.fm-file-viewer-preview-toggle',
+                      {
+                        type: 'button',
+                        'aria-label': t(
+                          'viewer',
+                          showingSource ? 'textModeSource' : 'textModePreview',
+                        ),
+                        'aria-pressed': showingSource ? 'false' : 'true',
+                        onclick: () => {
+                          markdownSourceUri = showingSource ? undefined : state.entry.location.uri;
+                        },
+                      },
+                      eyeIcon({ size: 15 }),
+                    ),
+                  );
+                })()
+              : undefined,
             state.status === 'ready' &&
             (state.content.kind === 'text' || state.content.kind === 'image')
               ? tooltip(
@@ -2247,7 +2262,12 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
               : state.status === 'error'
                 ? renderExternalFallback(attrs, state.message)
                 : state.content.kind === 'text'
-                  ? renderTextBody(attrs, state, () => searchInput?.focus())
+                  ? renderTextBody(
+                      attrs,
+                      state,
+                      () => searchInput?.focus(),
+                      markdownSourceUri === state.entry.location.uri,
+                    )
                   : state.content.kind === 'hex'
                     ? renderHexBody(attrs, state)
                     : state.content.kind === 'pluginPreview'
@@ -2303,18 +2323,28 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                                                     })
                                                   : renderImageBody(attrs, state),
           state.status === 'ready' && state.metadataPanelOpen === true
-            ? m('.fm-file-viewer-info-panel', [
-                renderMetadataPanel(state.metadata),
-                state.fullMetadata === undefined
-                  ? undefined
-                  : m(ImageMetadataView, {
-                      metadata: state.fullMetadata,
-                      ...(attrs.onOpenOnMap === undefined
-                        ? {}
-                        : { onOpenOnMap: attrs.onOpenOnMap }),
-                    }),
-                renderGitHistorySection(state.gitHistory),
-              ])
+            ? m(
+                // A plain text file's details fit one line: shown as a status bar, like the pane's.
+                typeof state.metadata === 'object' &&
+                  state.metadata.kind !== 'image' &&
+                  state.fullMetadata === undefined &&
+                  (state.gitHistory === undefined ||
+                    (Array.isArray(state.gitHistory) && state.gitHistory.length === 0))
+                  ? '.fm-file-viewer-info-panel.is-status'
+                  : '.fm-file-viewer-info-panel',
+                [
+                  renderMetadataPanel(state.metadata),
+                  state.fullMetadata === undefined
+                    ? undefined
+                    : m(ImageMetadataView, {
+                        metadata: state.fullMetadata,
+                        ...(attrs.onOpenOnMap === undefined
+                          ? {}
+                          : { onOpenOnMap: attrs.onOpenOnMap }),
+                      }),
+                  renderGitHistorySection(state.gitHistory),
+                ],
+              )
             : undefined,
           m(ModalPanel, {
             title: t('viewer', 'openExternalLinkTitle'),

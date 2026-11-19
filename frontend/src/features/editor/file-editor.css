@@ -12,8 +12,8 @@
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  height: var(--fm-row-height);
-  min-height: var(--fm-row-height);
+  height: var(--fm-header-height);
+  min-height: var(--fm-header-height);
   padding: 0 0.25rem 0 0.5rem;
   border-bottom: 1px solid var(--fm-border);
   background: var(--fm-surface-elevated);
@@ -24,9 +24,9 @@
 
 .fm-file-editor-header .btn-flat,
 .fm-file-editor-header .fm-file-editor-close {
-  height: calc(var(--fm-row-height) - 2px);
+  height: calc(var(--fm-header-height) - 2px);
   min-height: 0;
-  line-height: calc(var(--fm-row-height) - 2px);
+  line-height: calc(var(--fm-header-height) - 2px);
   padding-top: 0;
   padding-bottom: 0;
   font-family: inherit;
@@ -43,8 +43,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: calc(var(--fm-row-height) - 2px);
-  min-width: calc(var(--fm-row-height) - 2px);
+  width: calc(var(--fm-header-height) - 2px);
+  min-width: calc(var(--fm-header-height) - 2px);
   padding-left: 0;
   padding-right: 0;
   line-height: 1;
@@ -64,6 +64,21 @@
   display: block;
   width: 16px;
   height: 16px;
+  transform: none;
+}
+
+/* Sized and centred like the new-tab button beside it, so the two icons share one centre line. */
+.fm-file-editor-header .fm-file-editor-assistant {
+  width: var(--fm-row-height) !important;
+  height: var(--fm-row-height) !important;
+  min-width: var(--fm-row-height) !important;
+  min-height: var(--fm-row-height) !important;
+  padding: 0 !important;
+  line-height: 1;
+}
+
+.fm-file-editor-header .fm-file-editor-assistant .fm-icon {
+  display: block;
   transform: none;
 }
 

@@ -1921,7 +1921,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                             : (remoteScheme !== undefined && attrs.path !== '/'
                                 ? breadcrumbSegments(attrs.path).slice(1)
                                 : breadcrumbSegments(attrs.path)
-                              ).map((segment) =>
+                              ).map((segment, index, segments) =>
                                 m.fragment({ key: segment.path }, [
                                   m(
                                     'button.fm-breadcrumb-segment',
@@ -1931,24 +1931,29 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                                     },
                                     segment.label,
                                   ),
-                                  m(
-                                    'button.fm-breadcrumb-separator',
-                                    {
-                                      type: 'button',
-                                      'aria-label': t('pane', 'subfolders', {
-                                        name: segment.label,
-                                      }),
-                                      'aria-haspopup': 'menu',
-                                      'aria-expanded': String(subfolderMenu?.path === segment.path),
-                                      onclick: (event: MouseEvent) =>
-                                        void openSubfolderMenu(
-                                          segment,
-                                          event.currentTarget as HTMLElement,
-                                          attrs,
-                                        ),
-                                    },
-                                    '›',
-                                  ),
+                                  // The last folder has no separator: nothing follows it to open.
+                                  index === segments.length - 1
+                                    ? undefined
+                                    : m(
+                                        'button.fm-breadcrumb-separator',
+                                        {
+                                          type: 'button',
+                                          'aria-label': t('pane', 'subfolders', {
+                                            name: segment.label,
+                                          }),
+                                          'aria-haspopup': 'menu',
+                                          'aria-expanded': String(
+                                            subfolderMenu?.path === segment.path,
+                                          ),
+                                          onclick: (event: MouseEvent) =>
+                                            void openSubfolderMenu(
+                                              segment,
+                                              event.currentTarget as HTMLElement,
+                                              attrs,
+                                            ),
+                                        },
+                                        '›',
+                                      ),
                                 ]),
                               ),
                         ),

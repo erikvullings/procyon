@@ -1,6 +1,4 @@
 .fm-file-viewer {
-  /* The viewer header lines up with the breadcrumb row of a directory pane. */
-  --fm-header-height: var(--fm-row-height);
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -128,6 +126,39 @@
   font-size: 0.92em;
   user-select: text;
   -webkit-user-select: text;
+}
+
+/* A plain text file's details as one status row, the height and type of the pane's status bar. */
+.fm-file-viewer-info-panel.is-status {
+  display: flex;
+  align-items: center;
+  height: var(--fm-row-height);
+  min-height: var(--fm-row-height);
+  max-height: var(--fm-row-height);
+  padding: 0 0.5rem;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--fm-text-muted);
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+}
+
+.fm-file-viewer-info-panel.is-status .fm-file-viewer-metadata,
+.fm-file-viewer-info-panel.is-status .fm-file-viewer-metadata dl {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+}
+
+.fm-file-viewer-info-panel.is-status .fm-file-viewer-metadata-row {
+  flex-wrap: nowrap;
+  row-gap: 0;
+  margin: 0;
+}
+
+.fm-file-viewer-info-panel.is-status .fm-file-viewer-metadata-field dt {
+  margin-bottom: 0;
 }
 
 .fm-file-viewer-metadata + .fm-file-viewer-git-history {
@@ -683,6 +714,25 @@
 }
 
 .fm-file-viewer-metadata-toggle[aria-pressed="true"] {
+  color: var(--fm-accent);
+}
+
+/* Beside the info toggle, so it takes no auto margin of its own. */
+.fm-file-viewer-preview-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--fm-header-height);
+  height: var(--fm-header-height);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.fm-file-viewer-preview-toggle[aria-pressed="true"] {
   color: var(--fm-accent);
 }
 
@@ -1964,29 +2014,6 @@ textarea.fm-sqlite-sql.browser-default {
   color: var(--fm-accent);
 }
 
-/* Rendered/source toggle for markdown and HTML (the viewer's text body). */
-.fm-file-viewer-text-mode {
-  display: flex;
-  gap: 4px;
-  padding: 4px 8px;
-  flex: 0 0 auto;
-}
-
-.fm-file-viewer-text-mode-button {
-  padding: 2px 10px;
-  border: 1px solid var(--fm-border, currentColor);
-  border-radius: var(--fm-radius);
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
-.fm-file-viewer-text-mode-button[aria-pressed="true"] {
-  background: color-mix(in srgb, currentColor 15%, transparent);
-  font-weight: 600;
-}
-
-/* Sandboxed HTML preview: a page of its own, so it keeps a light canvas in dark themes. */
 .fm-file-viewer-html {
   flex: 1 1 auto;
   width: 100%;
