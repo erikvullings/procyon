@@ -34,6 +34,7 @@ const linuxX64 = {
   },
   loader: {
     sourceName: `libonnxruntime.so.${ONNX_RUNTIME_VERSION}`,
+    linkName: 'libonnxruntime.so',
     name: 'libonnxruntime.so.1',
     bytes: 24_272_944,
     sha256: 'aa4079d18f4ea7a5f3a94d80cd4bbe0f2740436626622d64d793803a20381083',
@@ -262,8 +263,27 @@ function verifyExtractedDirectory(root, descriptor) {
   for (const pinned of [descriptor.license, descriptor.thirdPartyNotices]) {
     verifyPinnedFile(path.join(root, pinned.name), pinned, `pinned ONNX Runtime ${pinned.name}`);
   }
+  verifySymlink(path.join(directory, descriptor.loader.name), descriptor.loader.sourceName);
+  verifySymlink(path.join(directory, descriptor.loader.linkName), descriptor.loader.name);
   const dependencyEvidence = verifyOnnxRuntimeBinary(library, descriptor, { pinned: true });
   return { directory, library, dependencyEvidence };
+}
+
+/**
+ * The wheel ships only the versioned loader. The linker and loader need the SONAME and the
+ * unversioned names, so they are added as relative symlinks inside the staged directory.
+ */
+function createLoaderAliases(directory, descriptor) {
+  fs.symlinkSync(descriptor.loader.sourceName, path.join(directory, descriptor.loader.name));
+  fs.symlinkSync(descriptor.loader.name, path.join(directory, descriptor.loader.linkName));
+}
+
+function verifySymlink(file, expectedTarget) {
+  if (!fs.lstatSync(file).isSymbolicLink() || fs.readlinkSync(file) !== expectedTarget) {
+    throw new Error(
+      `ONNX Runtime loader alias ${path.basename(file)} does not target ${expectedTarget}`,
+    );
+  }
 }
 
 export async function preparePinnedOnnxRuntime(descriptor, cacheRoot) {
@@ -299,7 +319,9 @@ export async function preparePinnedOnnxRuntime(descriptor, cacheRoot) {
   fs.mkdirSync(staging, { recursive: true });
   try {
     run('unzip', ['-q', archive, '-d', staging]);
-    verifyExtractedDirectory(path.join(staging, descriptor.packageRoot), descriptor);
+    const stagedPackage = path.join(staging, descriptor.packageRoot);
+    createLoaderAliases(path.join(stagedPackage, 'capi'), descriptor);
+    verifyExtractedDirectory(stagedPackage, descriptor);
     fs.mkdirSync(path.dirname(extractedRoot), { recursive: true });
     fs.renameSync(staging, extractedRoot);
     return verifyExtractedDirectory(packageDirectory, descriptor);
