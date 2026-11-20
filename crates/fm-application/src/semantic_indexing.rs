@@ -304,7 +304,8 @@ impl SemanticIndexingService {
         self.publish_progress(
             &job_id,
             match &result {
-                Ok(report) if !report.failed_sources.is_empty() => "failed",
+                // Per-file failures are reported in the folder's details, not as a running
+                // activity: the pass itself finished.
                 Ok(_) => "complete",
                 Err(SemanticIndexingError::Cancelled) => "cancelled",
                 Err(_) => "failed",

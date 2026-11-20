@@ -2175,7 +2175,8 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
             };
             if let BackendEventPayload::SemanticIngestionProgress { stage, errors, .. } =
                 envelope.payload
-                && stage == "failed"
+                && stage == "complete"
+                && errors > 0
             {
                 break errors;
             }
