@@ -24,6 +24,7 @@ import {
   commandFromAnswer,
   contextChips,
   EXPLAIN_REQUEST,
+  effectiveRemoved,
   FIX_REQUEST,
   parseMentions,
   type RemovableChipId,
@@ -123,6 +124,13 @@ type LiveTerminal = {
   requestId: number;
   /** A half-typed command set aside while the assistant answers, put back afterwards. */
   restoreLine: TypedInput | undefined;
+  /** Pills the person has switched themselves, so the large-folder default no longer applies. */
+  readonly touchedChips: Set<RemovableChipId>;
+  /** Whether the shell is ready for input. Keys typed earlier wait, or they would be echoed twice. */
+  ready: boolean;
+  /** Keys typed before the shell was ready. */
+  pendingInput: string[];
+  readyTimer: ReturnType<typeof setTimeout> | undefined;
 };
 
 export interface TerminalKeyHandlers {
@@ -290,6 +298,75 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   let editing: string | undefined;
   /** Whether the assistant help dialog is open. */
   let helpOpen = false;
+  /** The tooltip being shown, and the timer that will show it. Drawn by the drawer itself: the
+   * webview shows no native tooltip for these buttons. */
+  let tip:
+    | { readonly text: string; readonly x: number; readonly y: number; readonly place: TipPlace }
+    | undefined;
+  let tipTimer: ReturnType<typeof setTimeout> | undefined;
+
+  type TipPlace = 'above-left' | 'below-right';
+
+  function hideTip(): void {
+    clearTimeout(tipTimer);
+    tipTimer = undefined;
+    if (tip !== undefined) {
+      tip = undefined;
+      m.redraw();
+    }
+  }
+
+  /** Mouse and keyboard-focus handlers that show `text()` near the element after a short delay. */
+  function tooltipEvents(text: () => string, place: TipPlace) {
+    const show = (event: Event) => {
+      const element = event.currentTarget as HTMLElement;
+      clearTimeout(tipTimer);
+      tipTimer = setTimeout(() => {
+        const box = element.getBoundingClientRect();
+        tip = {
+          text: text(),
+          x: place === 'above-left' ? box.left : box.right,
+          y: place === 'above-left' ? box.top : box.bottom,
+          place,
+        };
+        m.redraw();
+      }, 500);
+    };
+    return {
+      onmouseenter: show,
+      onfocus: show,
+      onmouseleave: hideTip,
+      onblur: hideTip,
+      onmousedown: hideTip,
+    };
+  }
+
+  /** The parts left out of the next question: removed pills and, for a large folder, the listing. */
+  const removedFor = (live: LiveTerminal, source: TerminalAssistSource) =>
+    effectiveRemoved(source, live.removedChips, live.touchedChips);
+
+  /**
+   * The shell can take input. Keys typed before that wait: the terminal would echo them once
+   * before the shell starts and the shell would show them again at its prompt.
+   */
+  function markReady(live: LiveTerminal): void {
+    if (live.ready) return;
+    clearTimeout(live.readyTimer);
+    if (live.sessionId === undefined) {
+      live.readyTimer = setTimeout(() => markReady(live), 50);
+      return;
+    }
+    live.ready = true;
+    live.readyTimer = undefined;
+    for (const data of live.pendingInput.splice(0)) onTypedData(live, data);
+  }
+
+  /** Waits `delay` ms for the shell's prompt mark, then treats the shell as ready regardless. */
+  function armReady(live: LiveTerminal, delay: number): void {
+    if (live.ready) return;
+    clearTimeout(live.readyTimer);
+    live.readyTimer = setTimeout(() => markReady(live), delay);
+  }
 
   const isBusy = (live: LiveTerminal): boolean =>
     panel?.status === 'busy' && panel.tabKey === live.key;
@@ -349,7 +426,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       question,
       context: assistContext(
         assistSource(live, options.upTo, options.scrollback),
-        live.removedChips,
+        removedFor(live, assistSource(live, options.upTo, options.scrollback)),
         parseMentions(question),
       ),
     });
@@ -551,6 +628,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     const mark = parseShellMark(payload);
     if (mark === undefined) return;
     live.markSeen = true;
+    markReady(live);
     if (mark.kind === 'prompt') live.atPrompt = true;
     if (mark.kind === 'output') live.atPrompt = false;
     const block = live.blocks.apply(
@@ -839,6 +917,10 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         held: [],
         requestId: 0,
         restoreLine: undefined,
+        touchedChips: new Set(),
+        ready: false,
+        pendingInput: [],
+        readyTimer: undefined,
       };
       terminals.set(key, live);
       const current = live;
@@ -860,7 +942,8 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         }),
       );
       terminal.onData((data) => {
-        if (current.sessionId !== undefined) onTypedData(current, data);
+        if (!current.ready) current.pendingInput.push(data);
+        else if (current.sessionId !== undefined) onTypedData(current, data);
       });
       showTerminalSurface(element, surface);
       terminal.open(surface);
@@ -872,6 +955,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     if (session.sessionId === undefined && session.opening === undefined) {
       const token = {};
       session.openToken = token;
+      session.ready = false;
       session.opening = attrs.client
         .open(
           location,
@@ -879,8 +963,12 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           session.terminal.rows,
           (event) => {
             if (session.openToken !== token) return;
-            if (event.type === 'output') session.terminal.write(new Uint8Array(event.data));
-            else if (event.type === 'exited') {
+            if (event.type === 'output') {
+              session.terminal.write(new Uint8Array(event.data));
+              // Ready after the output goes quiet; a shell with marks says so earlier, and one
+              // that should send marks gets longer before it is trusted without them.
+              armReady(session, attrs.shellIntegration === 'enabled' ? 1500 : 250);
+            } else if (event.type === 'exited') {
               session.terminal.write(`\r\n\x1b[90m[${t('terminal', 'sessionEnded')}]\x1b[0m\r\n`);
               // Clear the dead session id so the next toggle/reopen redials
               // instead of silently reusing a session the backend already
@@ -898,6 +986,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
             return;
           }
           session.sessionId = id;
+          if (session.readyTimer === undefined) armReady(session, 400);
         })
         .catch(() => {
           session.opening = undefined;
@@ -976,7 +1065,9 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
    * on; `@dir`, `@output` and `@path` in the question put parts back or add files.
    */
   function contextRow(live: LiveTerminal, questionText: string): m.Children {
-    const chips = contextChips(assistSource(live), live.removedChips, parseMentions(questionText));
+    const source = assistSource(live);
+    const removed = removedFor(live, source);
+    const chips = contextChips(source, removed, parseMentions(questionText));
     return m(
       '.fm-terminal-context',
       { role: 'group', 'aria-label': t('terminal', 'contextLabel') },
@@ -988,11 +1079,12 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
             class: chip.removed ? 'fm-terminal-chip--off' : undefined,
             disabled: chip.id === 'file',
             'aria-pressed': chip.id === 'file' ? undefined : String(!chip.removed),
-            'data-tooltip': chipTooltip(chip),
             'aria-label': `${chipLabel(chip)}. ${chipTooltip(chip)}`,
+            ...tooltipEvents(() => chipTooltip(chip), 'above-left'),
             onclick: () => {
               if (chip.id === 'file') return;
-              if (live.removedChips.has(chip.id)) live.removedChips.delete(chip.id);
+              live.touchedChips.add(chip.id);
+              if (removed.has(chip.id)) live.removedChips.delete(chip.id);
               else live.removedChips.add(chip.id);
               m.redraw();
             },
@@ -1189,6 +1281,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     const id = live.sessionId;
     live.sessionId = undefined;
     live.openToken = undefined;
+    live.ready = false;
     live.suggestion = undefined;
     live.typed = EMPTY_INPUT;
     live.terminal.reset();
@@ -1300,8 +1393,8 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
             'button.fm-terminal-help',
             {
               type: 'button',
-              'data-tooltip': t('terminal', 'help'),
               'aria-label': t('terminal', 'help'),
+              ...tooltipEvents(() => t('terminal', 'help'), 'below-right'),
               'aria-haspopup': 'dialog',
               onclick: () => {
                 helpOpen = true;
@@ -1310,6 +1403,17 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
             helpIcon({ size: 14 }),
           ),
           helpOpen ? helpDialog() : undefined,
+          tip === undefined
+            ? undefined
+            : m(
+                '.fm-terminal-tooltip',
+                {
+                  role: 'tooltip',
+                  class: `fm-terminal-tooltip--${tip.place}`,
+                  style: { left: `${tip.x}px`, top: `${tip.y}px` },
+                },
+                tip.text,
+              ),
           attrs.location === undefined
             ? m('.fm-terminal-unavailable', t('terminal', 'selectDirectory'))
             : m('.fm-terminal-host', {

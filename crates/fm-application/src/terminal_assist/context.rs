@@ -10,7 +10,7 @@ use super::newest_bytes;
 use super::redact::redact_secrets;
 
 /// Most folder names listed.
-const MAX_LISTED_NAMES: usize = 100;
+const MAX_LISTED_NAMES: usize = 1000;
 /// Most selected names listed.
 const MAX_SELECTED_NAMES: usize = 50;
 /// Most output bytes kept for one command.
@@ -32,8 +32,22 @@ pub(super) fn path_from_location(uri: &str) -> Option<PathBuf> {
     url::Url::parse(uri).ok()?.to_file_path().ok()
 }
 
-/// The request's context as prompt text. The operating system is given only for a local shell.
+/// The request's whole context as prompt text: the state, then the activity. Used by the one-shot
+/// kinds; a session sends the two separately.
 pub(super) fn render_context(request: &TerminalAssistRequestDto, files: &[AttachedFile]) -> String {
+    let state = render_state(request);
+    let activity = render_activity(&request.context.blocks, files);
+    if activity.is_empty() {
+        state
+    } else {
+        format!("{state}\n{activity}")
+    }
+}
+
+/// What describes the terminal now: the system (local shells only), shell, folder, branch, the
+/// other pane, the selection and the folder listing. A session shows this once, and replaces it
+/// when it changes.
+pub(super) fn render_state(request: &TerminalAssistRequestDto) -> String {
     let context = &request.context;
     let folder = path_from_location(&request.working_directory);
     let shown_path = folder.clone();
@@ -86,7 +100,13 @@ pub(super) fn render_context(request: &TerminalAssistRequestDto, files: &[Attach
             );
         }
     }
-    let blocks = render_blocks(&context.blocks);
+    text.trim_end().to_owned()
+}
+
+/// What happened since: recent commands with their output, and the files named with `@path`.
+pub(super) fn render_activity(blocks: &[TerminalBlockDto], files: &[AttachedFile]) -> String {
+    let mut text = String::new();
+    let blocks = render_blocks(blocks);
     if !blocks.is_empty() {
         let _ = write!(text, "Recent commands, oldest first:\n{blocks}");
     }

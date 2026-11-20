@@ -23,7 +23,7 @@ use crate::chat::ChatGenerator;
 use crate::file_assistant::truncate_to_bytes;
 use crate::llm_profiles::{LlmChatGeneration, LlmProfileError, LlmRole};
 
-use self::context::{AttachedFile, render_context};
+use self::context::{AttachedFile, render_activity, render_context, render_state};
 use self::protocol::{ToolCall, parse_tool_call};
 use self::redact::redact_secrets;
 use self::tools::{ToolHost, ToolOutput};
@@ -172,7 +172,11 @@ async fn ask(
             .filter(|text| !text.is_empty() && text.chars().count() <= MAX_REQUEST_CHARS)
             .ok_or(ChatFailureDto::InvalidRequest)?;
         let files = attached_files(host.as_ref(), &request.context.files).await;
-        sessions.push_person(&id, question, &render_context(&request, &files));
+        // The state is shown once at the top and replaced when it changes; commands already sent
+        // in an earlier turn are not sent again.
+        let blocks = sessions.unsent_blocks(&id, &request.context.blocks);
+        sessions.push_person(&id, question, &render_activity(&blocks, &files));
+        sessions.set_state(&id, &render_state(&request));
     }
 
     loop {
@@ -762,5 +766,30 @@ mod tests {
             Err(ChatFailureDto::InvalidRequest)
         );
         assert!(fake.seen.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_follow_up_repeats_neither_the_state_nor_commands_already_sent() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&["first", "second"]);
+        let sessions = Sessions::default();
+        let block = fm_transport_dto::TerminalBlockDto {
+            command: "make".into(),
+            exit_code: 2,
+            output: "UNIQUE-OUTPUT".into(),
+        };
+        let mut one = ask_request("t1", "why?", dir.path());
+        one.context.blocks = vec![block.clone()];
+        ask_in(&fake, &sessions, one).await.unwrap();
+        let mut two = ask_request("t1", "and now?", dir.path());
+        two.context.blocks = vec![block];
+        ask_in(&fake, &sessions, two).await.unwrap();
+
+        let prompt = fake.seen.lock().unwrap()[1].1.user_prompt.clone();
+        assert_eq!(prompt.matches("UNIQUE-OUTPUT").count(), 1);
+        assert_eq!(prompt.matches("Working directory").count(), 1);
+        assert!(prompt.starts_with("Current state of the terminal:\n"));
+        assert!(prompt.contains("Person: why?"));
+        assert!(prompt.ends_with("Person: and now?\n\n"));
     }
 }

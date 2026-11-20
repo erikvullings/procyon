@@ -121,3 +121,19 @@ Phase 4 — `run_command` with approval, exit code and output returned to the lo
   question is the follow-up. Enter inserts or runs the offered command only while the prompt line
   is empty. `@dir` and `@output` were dropped (the pills already cover them); `@file` stays.
   Not verified in the Tauri app: the prompt return and held-key flow need a real zsh/bash/fish.
+- 2026-11-20 Claude: fixes after the inline-conversation rework.
+  - Tool calls: the parser now accepts the first JSON object anywhere in a reply that names a known
+    tool (also inside `<tool_call>` tags, code fences, or as `{"name","arguments"}`); a model that
+    answered with XML-wrapped JSON used to show it as text.
+  - Context: the prompt shows the terminal's current state (system, folder, selection, listing)
+    once at the top and replaces it when it changes; command blocks already sent are not sent
+    again, and each question keeps the activity it came with. (The chat API is stateless, so the
+    request still carries all of it; the saving is no repeats, not no resend.)
+  - Folder listing: left out by default above 64 names until the pill is switched on; the backend
+    lists up to 1000 names. The pane may hold only the first 256 of a huge folder; `list_dir` (200)
+    can look further.
+  - Typing before the shell is ready is held and replayed (it was echoed once by the tty and again
+    by the shell), ready = first prompt mark, or output quiet for 250 ms (1.5 s when marks are
+    expected), or 400 ms after open.
+  - Tooltips are drawn by the drawer after 500 ms (CSS `:hover` and native `title` did not show);
+    pill tooltips read "Included. Click to exclude." / "Not included. Click to include.".

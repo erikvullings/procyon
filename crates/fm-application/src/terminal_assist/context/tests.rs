@@ -2,7 +2,7 @@ use fm_transport_dto::{
     TerminalAssistKindDto, TerminalAssistRequestDto, TerminalBlockDto, TerminalContextDto,
 };
 
-use super::{AttachedFile, path_from_location, render_context};
+use super::{AttachedFile, path_from_location, render_activity, render_context, render_state};
 
 fn request(context: TerminalContextDto) -> TerminalAssistRequestDto {
     TerminalAssistRequestDto {
@@ -54,7 +54,7 @@ fn a_remote_shell_or_an_omitted_chip_hides_the_system() {
 
 #[test]
 fn listing_and_selection_are_bounded_and_empty_parts_are_left_out() {
-    let names: Vec<String> = (0..130).map(|index| format!("file{index}")).collect();
+    let names: Vec<String> = (0..1100).map(|index| format!("file{index}")).collect();
     let text = render_context(
         &request(TerminalContextDto {
             listing: names,
@@ -63,10 +63,10 @@ fn listing_and_selection_are_bounded_and_empty_parts_are_left_out() {
         }),
         &[],
     );
-    assert!(text.contains("Folder listing (130 names):"));
-    assert!(text.contains("- file99\n"));
-    assert!(!text.contains("- file100\n"));
-    assert!(text.contains("and 30 more"));
+    assert!(text.contains("Folder listing (1100 names):"));
+    assert!(text.contains("- file999\n"));
+    assert!(!text.contains("- file1000\n"));
+    assert!(text.contains("and 100 more"));
     assert!(text.contains("Selected in the folder: file1, file2"));
 
     let bare = render_context(&request(TerminalContextDto::default()), &[]);
@@ -140,4 +140,23 @@ fn a_huge_selection_is_capped() {
     );
     assert!(text.contains("n49"));
     assert!(!text.contains("n50,") && !text.ends_with("n499"));
+}
+
+#[test]
+fn state_and_activity_are_rendered_apart_and_together() {
+    let asked = request(TerminalContextDto {
+        blocks: vec![TerminalBlockDto {
+            command: "ls".into(),
+            exit_code: 0,
+            output: "a".into(),
+        }],
+        ..TerminalContextDto::default()
+    });
+    let state = render_state(&asked);
+    let activity = render_activity(&asked.context.blocks, &[]);
+    assert!(state.contains("Working directory: /tmp/my dir"));
+    assert!(!state.contains("Recent commands"));
+    assert!(activity.starts_with("Recent commands, oldest first:\n$ ls (exit 0)"));
+    assert_eq!(render_context(&asked, &[]), format!("{state}\n{activity}"));
+    assert_eq!(render_activity(&[], &[]), "");
 }

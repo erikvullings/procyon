@@ -2,7 +2,10 @@
 //! lasts until its tab closes or the application exits.
 
 use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash as _, Hasher as _};
 use std::sync::{Mutex, MutexGuard};
+
+use fm_transport_dto::TerminalBlockDto;
 
 use crate::file_assistant::truncate_to_bytes;
 
@@ -12,6 +15,8 @@ pub(super) const MAX_SESSIONS: usize = 32;
 pub(super) const MAX_RENDERED_BYTES: usize = 24 * 1024;
 /// Most turns stored per session; older ones are dropped.
 const MAX_TURNS: usize = 40;
+/// Most command blocks remembered as already sent, per session.
+const MAX_SENT_BLOCKS: usize = 200;
 /// Longest stored turn, in bytes.
 const MAX_TURN_BYTES: usize = 12 * 1024;
 
@@ -26,6 +31,10 @@ enum Turn {
 struct Session {
     turns: Vec<Turn>,
     steps: u32,
+    /// What describes the terminal now; shown once at the top of the prompt.
+    state: String,
+    /// Fingerprints of the command blocks already sent, oldest first.
+    sent_blocks: Vec<u64>,
 }
 
 #[derive(Debug, Default)]
@@ -70,6 +79,36 @@ impl Sessions {
             .sessions
             .get(id)
             .map_or(0, |session| session.turns.len())
+    }
+
+    /// Replaces what describes the terminal now (system, folder, selection, listing).
+    pub(super) fn set_state(&self, id: &str, state: &str) {
+        self.with(id, |session| state.clone_into(&mut session.state));
+    }
+
+    /// The command blocks not sent in an earlier turn of this session; they count as sent now.
+    pub(super) fn unsent_blocks(
+        &self,
+        id: &str,
+        blocks: &[TerminalBlockDto],
+    ) -> Vec<TerminalBlockDto> {
+        let mut unsent = Vec::new();
+        self.with(id, |session| {
+            for block in blocks {
+                let mut hasher = DefaultHasher::new();
+                (&block.command, block.exit_code, &block.output).hash(&mut hasher);
+                let fingerprint = hasher.finish();
+                if !session.sent_blocks.contains(&fingerprint) {
+                    session.sent_blocks.push(fingerprint);
+                    unsent.push(block.clone());
+                }
+            }
+            if session.sent_blocks.len() > MAX_SENT_BLOCKS {
+                let excess = session.sent_blocks.len() - MAX_SENT_BLOCKS;
+                session.sent_blocks.drain(..excess);
+            }
+        });
+        unsent
     }
 
     /// Starts a new person turn; resets the tool-step counter.
@@ -117,17 +156,12 @@ impl Sessions {
         let Some(session) = state.sessions.get(id) else {
             return String::new();
         };
-        let latest_person = session
-            .turns
-            .iter()
-            .rposition(|turn| matches!(turn, Turn::Person { .. }));
         let rendered: Vec<String> = session
             .turns
             .iter()
-            .enumerate()
-            .map(|(index, turn)| match turn {
+            .map(|turn| match turn {
                 Turn::Person { question, context } => {
-                    if Some(index) == latest_person && !context.is_empty() {
+                    if !context.is_empty() {
                         format!(
                             "Context attached by the person:\n{context}\n\nPerson: {question}\n\n"
                         )
@@ -150,7 +184,15 @@ impl Sessions {
             total += size;
             start -= 1;
         }
-        rendered[start..].concat()
+        let turns = rendered[start..].concat();
+        if session.state.is_empty() {
+            turns
+        } else {
+            format!(
+                "Current state of the terminal:\n{}\n\n{turns}",
+                session.state
+            )
+        }
     }
 
     /// Forgets a session.

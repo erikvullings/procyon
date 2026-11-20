@@ -2722,11 +2722,6 @@ export const it = {
       "L'assistente può elencare cartelle e leggere file nella cartella di lavoro, anche via SSH (la ricerca solo in locale). Se vuole eseguire un comando lo approvi prima: Invio lo esegue, Ctrl+C lo rifiuta.",
     helpSafety:
       "Viene usato solo l'endpoint di chat configurato. Chiavi, token e password vengono rimossi da ciò che si invia. Nulla viene eseguito senza la tua approvazione.",
-    contextLabel: "Contesto inviato all'assistente",
-    contextRestore: 'Includi di nuovo',
-    contextRemove: 'Escludi',
-    followUpPlaceholder: 'Fai una domanda di approfondimento…',
-    assistRunning: 'In esecuzione nel terminale…',
     contextListing: '{count} nomi',
     contextSelection: '{count} selezionati',
     contextOtherFolder: 'Altro pannello',
@@ -2737,6 +2732,11 @@ export const it = {
       'Eseguire comandi richiede i blocchi di comandi. Inseriscilo invece nel prompt.',
     assistRun: 'Esegui',
     assistDecline: 'Rifiuta',
+    contextLabel: "Contesto inviato all'assistente",
+    contextRestore: 'Non incluso. Fai clic per includere.',
+    contextRemove: 'Incluso. Fai clic per escludere.',
+    followUpPlaceholder: 'Fai una domanda di approfondimento…',
+    assistRunning: 'In esecuzione nel terminale…',
     assistStop: 'Ferma',
   },
   contextMenu: {

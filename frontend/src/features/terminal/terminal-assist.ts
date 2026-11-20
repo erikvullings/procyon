@@ -97,6 +97,9 @@ export const EXPLAIN_REQUEST =
 export const FIX_REQUEST =
   'My last command failed. Explain the most likely cause, then suggest one corrected command.';
 
+/** A folder with more names than this has its listing left out until the person switches it on. */
+export const LARGE_LISTING_NAMES = 64;
+
 /** Most recent command blocks sent with a question. */
 export const MAX_CONTEXT_BLOCKS = 5;
 
@@ -160,6 +163,19 @@ export function assistContext(
 function namesDetail(names: readonly string[], shown = 30): string {
   const head = names.slice(0, shown).join(', ');
   return names.length > shown ? `${head}, … (+${names.length - shown})` : head;
+}
+
+/**
+ * The parts that are left out: the ones the person removed, plus the folder listing of a large
+ * folder unless the person has switched that pill themselves (`touched`).
+ */
+export function effectiveRemoved(
+  source: TerminalAssistSource,
+  removed: ReadonlySet<RemovableChipId>,
+  touched: ReadonlySet<RemovableChipId>,
+): ReadonlySet<RemovableChipId> {
+  if (source.listing.length <= LARGE_LISTING_NAMES || touched.has('listing')) return removed;
+  return new Set([...removed, 'listing']);
 }
 
 /** One chip in the context row. A removed chip stays visible so it can be put back. */

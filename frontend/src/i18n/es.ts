@@ -2729,11 +2729,6 @@ export const es = {
       'El asistente puede listar carpetas y leer archivos de la carpeta de trabajo, también por SSH (la búsqueda solo en local). Si quiere ejecutar un comando, lo apruebas antes: Intro lo ejecuta, Ctrl+C lo rechaza.',
     helpSafety:
       'Solo se usa tu endpoint de chat configurado. Las claves, tokens y contraseñas se eliminan de lo que se envía. Nada se ejecuta sin tu aprobación.',
-    contextLabel: 'Contexto enviado al asistente',
-    contextRestore: 'Incluir de nuevo',
-    contextRemove: 'Omitir',
-    followUpPlaceholder: 'Haz una pregunta de seguimiento…',
-    assistRunning: 'Ejecutándose en la terminal…',
     contextListing: '{count} nombres',
     contextSelection: '{count} seleccionados',
     contextOtherFolder: 'Otro panel',
@@ -2744,6 +2739,11 @@ export const es = {
     assistRun: 'Ejecutar',
     assistDecline: 'Rechazar',
     assistStop: 'Detener',
+    contextLabel: 'Contexto enviado al asistente',
+    contextRestore: 'No incluido. Haz clic para incluir.',
+    contextRemove: 'Incluido. Haz clic para excluir.',
+    followUpPlaceholder: 'Haz una pregunta de seguimiento…',
+    assistRunning: 'Ejecutándose en la terminal…',
   },
   contextMenu: {
     directoryActions: 'Acciones de directorio',

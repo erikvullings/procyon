@@ -2736,11 +2736,6 @@ export const pt = {
       'O assistente pode listar pastas e ler ficheiros da pasta de trabalho, também por SSH (a pesquisa só localmente). Se quiser executar um comando, aprova-o primeiro: Enter executa, Ctrl+C recusa.',
     helpSafety:
       'Só é usado o endpoint de chat configurado. Chaves, tokens e palavras-passe são removidos do que é enviado. Nada é executado sem a sua aprovação.',
-    contextLabel: 'Contexto enviado ao assistente',
-    contextRestore: 'Incluir novamente',
-    contextRemove: 'Omitir',
-    followUpPlaceholder: 'Faça uma pergunta de seguimento…',
-    assistRunning: 'A executar no terminal…',
     contextListing: '{count} nomes',
     contextSelection: '{count} selecionados',
     contextOtherFolder: 'Outro painel',
@@ -2751,6 +2746,11 @@ export const pt = {
     assistRun: 'Executar',
     assistDecline: 'Recusar',
     assistStop: 'Parar',
+    contextLabel: 'Contexto enviado ao assistente',
+    contextRestore: 'Não incluído. Clique para incluir.',
+    contextRemove: 'Incluído. Clique para excluir.',
+    followUpPlaceholder: 'Faça uma pergunta de seguimento…',
+    assistRunning: 'A executar no terminal…',
   },
   contextMenu: {
     directoryActions: 'Ações de pasta',

@@ -816,6 +816,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
   let assistClose: ReturnType<typeof vi.fn<TerminalClient['assistClose']>>;
   let echo: ((event: { type: 'output'; data: number[] }) => void) | undefined;
   let disposeTab: ((tabKey: string) => void) | undefined;
+  let paneListing: string[] = ['a.txt', 'src/'];
 
   const bytes = (text: string) => [...new TextEncoder().encode(text)];
   const textarea = () => {
@@ -867,7 +868,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
           onToggle: vi.fn(),
           shellIntegration: 'disabled',
           paneContext: () => ({
-            listing: ['a.txt', 'src/'],
+            listing: paneListing,
             selected: ['a.txt'],
             otherFolder: 'file:///other',
           }),
@@ -890,6 +891,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     document.body.append(root);
     echo = undefined;
     disposeTab = undefined;
+    paneListing = ['a.txt', 'src/'];
     write = vi.fn<TerminalClient['write']>(async () => undefined);
     assist = vi.fn<TerminalClient['assist']>(async () => ({
       text: 'Fine.\nCommand: ls',
@@ -950,7 +952,13 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     ask('# first');
     await vi.waitFor(() => expect(button('Other pane')).toBeDefined());
     expect(button('Other pane')?.getAttribute('aria-pressed')).toBe('false');
-    expect(button('2 names')?.getAttribute('data-tooltip')).toContain('a.txt, src/');
+    button('2 names')?.dispatchEvent(new MouseEvent('mouseenter'));
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-terminal-tooltip')?.textContent).toContain('a.txt, src/'),
+    );
+    expect(root.querySelector('.fm-terminal-tooltip')?.textContent).toContain('Click to exclude');
+    button('2 names')?.dispatchEvent(new MouseEvent('mouseleave'));
+    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-tooltip')).toBeNull());
 
     button('Other pane')?.click();
     await vi.waitFor(() => expect(button('Other pane')?.getAttribute('aria-pressed')).toBe('true'));
@@ -994,6 +1002,35 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     answer?.({ text: 'Done.' });
     await vi.waitFor(() => expect(sentNow()).toContain('ls'));
     expect(sentNow().indexOf('\r')).toBeLessThan(sentNow().indexOf('ls'));
+  });
+
+  it('leaves a large folder listing out by default and sends it once its pill is switched on', async () => {
+    paneListing = Array.from({ length: 65 }, (_, index) => `f${index}`);
+    await mount();
+    ask('# first');
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledOnce());
+    expect(sentAt(0)?.context?.listing).toBeUndefined();
+    await vi.waitFor(() => expect(button('65 names')).toBeDefined());
+    expect(button('65 names')?.getAttribute('aria-pressed')).toBe('false');
+
+    button('65 names')?.click();
+    await vi.waitFor(() => expect(button('65 names')?.getAttribute('aria-pressed')).toBe('true'));
+    ask('# second');
+
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
+    expect(sentAt(1)?.context?.listing).toHaveLength(65);
+  });
+
+  it('holds keys typed before the shell is ready, so they are not echoed twice', async () => {
+    await mount();
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', { value: { getData: () => 'ls' } });
+    textarea().dispatchEvent(paste);
+    const sentNow = () => write.mock.calls.map(([, data]) => new TextDecoder().decode(data));
+    expect(sentNow()).toEqual([]);
+
+    echo?.({ type: 'output', data: bytes('\x1b]133;A\x07user % ') });
+    await vi.waitFor(() => expect(sentNow()).toEqual(['ls']));
   });
 
   it('inserts the suggested command with Enter after a second question', async () => {

@@ -5,7 +5,9 @@ import {
   commandFromAnswer,
   contextChips,
   EXPLAIN_REQUEST,
+  effectiveRemoved,
   FIX_REQUEST,
+  LARGE_LISTING_NAMES,
   MAX_CONTEXT_BLOCKS,
   MAX_TRANSCRIPT_LINES,
   parseMentions,
@@ -181,5 +183,24 @@ describe('ask requests and answers', () => {
   it('takes the last Command: line of an ask answer', () => {
     expect(commandFromAnswer('ask', 'Try this.\nCommand: ls -la')).toBe('ls -la');
     expect(commandFromAnswer('ask', 'No command here.')).toBeUndefined();
+  });
+});
+
+describe('effectiveRemoved', () => {
+  const names = (count: number) => Array.from({ length: count }, (_, index) => `f${index}`);
+
+  it('leaves a large folder listing out until the person switches it on', () => {
+    const large = source({ listing: names(LARGE_LISTING_NAMES + 1) });
+    expect(effectiveRemoved(large, new Set(), new Set()).has('listing')).toBe(true);
+    expect(effectiveRemoved(large, new Set(), new Set(['listing'])).has('listing')).toBe(false);
+    expect(effectiveRemoved(large, new Set(['listing']), new Set(['listing'])).has('listing')).toBe(
+      true,
+    );
+  });
+
+  it('keeps a small listing on, and what the person removed removed', () => {
+    const small = source({ listing: names(LARGE_LISTING_NAMES) });
+    expect(effectiveRemoved(small, new Set(), new Set()).has('listing')).toBe(false);
+    expect(effectiveRemoved(small, new Set(['blocks']), new Set()).has('blocks')).toBe(true);
   });
 });

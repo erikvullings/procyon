@@ -2722,11 +2722,6 @@ export const pl = {
       'Asystent może wyświetlać foldery i czytać pliki w folderze roboczym, także przez SSH (wyszukiwanie tylko lokalnie). Gdy chce uruchomić polecenie, najpierw je zatwierdzasz: Enter uruchamia, Ctrl+C odrzuca.',
     helpSafety:
       'Używany jest tylko skonfigurowany endpoint czatu. Klucze, tokeny i hasła są usuwane z wysyłanych danych. Nic nie jest uruchamiane bez Twojej zgody.',
-    contextLabel: 'Kontekst wysyłany do asystenta',
-    contextRestore: 'Dołącz ponownie',
-    contextRemove: 'Pomiń',
-    followUpPlaceholder: 'Zadaj pytanie uzupełniające…',
-    assistRunning: 'Działa w terminalu…',
     contextListing: '{count} nazw',
     contextSelection: 'Zaznaczone: {count}',
     contextOtherFolder: 'Drugi panel',
@@ -2737,6 +2732,11 @@ export const pl = {
       'Uruchamianie poleceń wymaga bloków poleceń. Wstaw je zamiast tego w wierszu poleceń.',
     assistRun: 'Uruchom',
     assistDecline: 'Odrzuć',
+    contextLabel: 'Kontekst wysyłany do asystenta',
+    contextRestore: 'Niedołączone. Kliknij, aby dołączyć.',
+    contextRemove: 'Dołączone. Kliknij, aby pominąć.',
+    followUpPlaceholder: 'Zadaj pytanie uzupełniające…',
+    assistRunning: 'Działa w terminalu…',
     assistStop: 'Zatrzymaj',
   },
   contextMenu: {

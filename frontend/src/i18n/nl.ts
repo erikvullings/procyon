@@ -2720,11 +2720,6 @@ export const nl = {
       'De assistent kan mappen tonen en bestanden in de werkmap lezen, ook via SSH (zoeken alleen lokaal). Wil hij een commando uitvoeren, dan keurt u dat eerst goed: Enter voert uit, Ctrl+C weigert.',
     helpSafety:
       'Alleen uw ingestelde chat-eindpunt wordt gebruikt. Sleutels, tokens en wachtwoorden worden uit het verstuurde gehaald. Zonder uw goedkeuring wordt niets uitgevoerd.',
-    contextLabel: 'Context die naar de assistent gaat',
-    contextRestore: 'Weer opnemen',
-    contextRemove: 'Weglaten',
-    followUpPlaceholder: 'Stel een vervolgvraag…',
-    assistRunning: 'Draait in de terminal…',
     contextListing: '{count} namen',
     contextSelection: '{count} geselecteerd',
     contextOtherFolder: 'Ander paneel',
@@ -2735,6 +2730,11 @@ export const nl = {
       'Commando’s uitvoeren vereist commandoblokken. Voeg het in plaats daarvan in bij de prompt.',
     assistRun: 'Uitvoeren',
     assistDecline: 'Weigeren',
+    contextLabel: 'Context die naar de assistent gaat',
+    contextRestore: 'Niet opgenomen. Klik om op te nemen.',
+    contextRemove: 'Opgenomen. Klik om weg te laten.',
+    followUpPlaceholder: 'Stel een vervolgvraag…',
+    assistRunning: 'Draait in de terminal…',
     assistStop: 'Stoppen',
   },
   contextMenu: {

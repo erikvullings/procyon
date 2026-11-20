@@ -1,3 +1,5 @@
+use fm_transport_dto::TerminalBlockDto;
+
 use super::{MAX_RENDERED_BYTES, MAX_SESSIONS, MAX_TURNS, Sessions};
 
 #[test]
@@ -14,15 +16,48 @@ fn a_follow_up_sees_the_earlier_turns() {
 }
 
 #[test]
-fn only_the_latest_person_turn_carries_its_context() {
+fn each_person_turn_keeps_the_activity_it_came_with() {
     let sessions = Sessions::default();
-    sessions.push_person("t1", "first", "OLD-CONTEXT");
+    sessions.push_person("t1", "first", "OUTPUT-ONE");
     sessions.push_assistant("t1", "ok");
-    sessions.push_person("t1", "second", "NEW-CONTEXT");
+    sessions.push_person("t1", "second", "OUTPUT-TWO");
 
     let prompt = sessions.render("t1");
-    assert!(!prompt.contains("OLD-CONTEXT"));
-    assert!(prompt.contains("Context attached by the person:\nNEW-CONTEXT\n\nPerson: second"));
+    assert!(prompt.contains("Context attached by the person:\nOUTPUT-ONE\n\nPerson: first"));
+    assert!(prompt.contains("Context attached by the person:\nOUTPUT-TWO\n\nPerson: second"));
+}
+
+#[test]
+fn the_current_state_is_shown_once_at_the_top_and_replaced_when_it_changes() {
+    let sessions = Sessions::default();
+    sessions.push_person("t1", "first", "");
+    sessions.set_state("t1", "Working directory: /a");
+    sessions.push_assistant("t1", "ok");
+    sessions.push_person("t1", "second", "");
+    sessions.set_state("t1", "Working directory: /b");
+
+    let prompt = sessions.render("t1");
+    assert!(prompt.starts_with("Current state of the terminal:\nWorking directory: /b\n\n"));
+    assert!(!prompt.contains("/a"));
+    assert_eq!(prompt.matches("Working directory").count(), 1);
+}
+
+#[test]
+fn only_commands_not_sent_before_are_offered_again() {
+    let sessions = Sessions::default();
+    let block = |command: &str, output: &str| TerminalBlockDto {
+        command: command.into(),
+        exit_code: 0,
+        output: output.into(),
+    };
+    let first = sessions.unsent_blocks("t1", &[block("ls", "a"), block("pwd", "/")]);
+    assert_eq!(first.len(), 2);
+    let second = sessions.unsent_blocks(
+        "t1",
+        &[block("ls", "a"), block("pwd", "/"), block("make", "ok")],
+    );
+    assert_eq!(second, vec![block("make", "ok")]);
+    assert_eq!(sessions.unsent_blocks("t2", &[block("ls", "a")]).len(), 1);
 }
 
 #[test]

@@ -2744,11 +2744,6 @@ export const fr = {
       "L'assistant peut lister des dossiers et lire des fichiers du dossier de travail, y compris via SSH (la recherche seulement en local). S'il veut exécuter une commande, vous l'approuvez d'abord : Entrée l'exécute, Ctrl+C la refuse.",
     helpSafety:
       "Seul votre point de terminaison de chat configuré est utilisé. Les clés, jetons et mots de passe sont retirés de ce qui est envoyé. Rien ne s'exécute sans votre accord.",
-    contextLabel: "Contexte envoyé à l'assistant",
-    contextRestore: 'Inclure à nouveau',
-    contextRemove: 'Exclure',
-    followUpPlaceholder: 'Poser une question de suivi…',
-    assistRunning: 'En cours dans le terminal…',
     contextListing: '{count} noms',
     contextSelection: '{count} sélectionnés',
     contextOtherFolder: 'Autre volet',
@@ -2759,6 +2754,11 @@ export const fr = {
       "L'exécution de commandes nécessite les blocs de commandes. Insérez-la plutôt dans l'invite.",
     assistRun: 'Exécuter',
     assistDecline: 'Refuser',
+    contextLabel: "Contexte envoyé à l'assistant",
+    contextRestore: 'Non inclus. Cliquez pour inclure.',
+    contextRemove: 'Inclus. Cliquez pour exclure.',
+    followUpPlaceholder: 'Poser une question de suivi…',
+    assistRunning: 'En cours dans le terminal…',
     assistStop: 'Arrêter',
   },
   contextMenu: {

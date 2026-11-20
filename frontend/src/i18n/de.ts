@@ -2750,11 +2750,6 @@ export const de = {
       'Der Assistent kann Ordner auflisten und Dateien im Arbeitsordner lesen, auch über SSH (die Suche nur lokal). Will er einen Befehl ausführen, bestätigen Sie zuerst: Enter führt aus, Strg+C lehnt ab.',
     helpSafety:
       'Es wird nur Ihr konfigurierter Chat-Endpunkt verwendet. Schlüssel, Tokens und Passwörter werden vor dem Senden entfernt. Ohne Ihre Zustimmung wird nichts ausgeführt.',
-    contextLabel: 'An den Assistenten gesendeter Kontext',
-    contextRestore: 'Wieder einbeziehen',
-    contextRemove: 'Weglassen',
-    followUpPlaceholder: 'Rückfrage stellen…',
-    assistRunning: 'Läuft im Terminal…',
     contextListing: '{count} Namen',
     contextSelection: '{count} ausgewählt',
     contextOtherFolder: 'Anderes Fenster',
@@ -2765,6 +2760,11 @@ export const de = {
       'Zum Ausführen von Befehlen sind Befehlsblöcke nötig. Fügen Sie ihn stattdessen am Prompt ein.',
     assistRun: 'Ausführen',
     assistDecline: 'Ablehnen',
+    contextLabel: 'An den Assistenten gesendeter Kontext',
+    contextRestore: 'Nicht enthalten. Klicken zum Einschließen.',
+    contextRemove: 'Enthalten. Klicken zum Ausschließen.',
+    followUpPlaceholder: 'Rückfrage stellen…',
+    assistRunning: 'Läuft im Terminal…',
     assistStop: 'Stopp',
   },
   contextMenu: {

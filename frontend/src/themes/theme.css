@@ -632,14 +632,10 @@ main.fm-workspace {
   color: var(--fm-text);
 }
 
-/* A tooltip that appears after a short hover delay. The webview shows no native `title` tooltip
-   for these, so the text lives in `data-tooltip` and is drawn here. */
-.fm-terminal-chip[data-tooltip]::after,
-.fm-terminal-help[data-tooltip]::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  z-index: 10;
-  width: max-content;
+/* A tooltip the drawer draws after a short hover delay; the webview shows no native one. */
+.fm-terminal-tooltip {
+  position: fixed;
+  z-index: 20;
   max-width: 360px;
   padding: 4px 8px;
   border: 1px solid var(--fm-border);
@@ -647,32 +643,17 @@ main.fm-workspace {
   background: var(--fm-surface);
   color: var(--fm-text);
   font-size: 11px;
-  font-weight: 400;
   line-height: 1.4;
-  text-align: left;
   white-space: pre-line;
   pointer-events: none;
-  visibility: hidden;
-  opacity: 0;
 }
 
-.fm-terminal-chip[data-tooltip]::after {
-  bottom: calc(100% + 6px);
-  left: 0;
+.fm-terminal-tooltip--above-left {
+  transform: translateY(calc(-100% - 6px));
 }
 
-.fm-terminal-help[data-tooltip]::after {
-  top: calc(100% + 4px);
-  right: 0;
-}
-
-.fm-terminal-chip[data-tooltip]:hover::after,
-.fm-terminal-help[data-tooltip]:hover::after {
-  visibility: visible;
-  opacity: 1;
-  transition:
-    opacity 0.1s linear 0.6s,
-    visibility 0s linear 0.6s;
+.fm-terminal-tooltip--below-right {
+  transform: translate(-100%, 6px);
 }
 
 .fm-terminal-help-backdrop {

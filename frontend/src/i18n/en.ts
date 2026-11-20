@@ -2671,11 +2671,6 @@ export const en = {
       'The assistant can list folders and read files in the working folder, also over SSH (searching works locally only). When it wants to run a command you approve it first: Enter runs it, Ctrl+C declines.',
     helpSafety:
       'Only your configured chat endpoint is used. Keys, tokens and passwords are removed from what is sent. Nothing runs without your approval.',
-    contextLabel: 'Context sent to the assistant',
-    contextRestore: 'Include again',
-    contextRemove: 'Leave out',
-    followUpPlaceholder: 'Ask a follow-up…',
-    assistRunning: 'Running in the terminal…',
     contextListing: '{count} names',
     contextSelection: '{count} selected',
     contextOtherFolder: 'Other pane',
@@ -2686,6 +2681,11 @@ export const en = {
     assistRun: 'Run',
     assistDecline: 'Decline',
     assistStop: 'Stop',
+    contextLabel: 'Context sent to the assistant',
+    contextRestore: 'Not included. Click to include.',
+    contextRemove: 'Included. Click to exclude.',
+    followUpPlaceholder: 'Ask a follow-up…',
+    assistRunning: 'Running in the terminal…',
   },
   contextMenu: {
     directoryActions: 'Directory actions',
