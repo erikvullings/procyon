@@ -2738,6 +2738,24 @@ export const de = {
     contextOtherFolder: 'Anderes Fenster',
     contextBlocks: 'Letzte {count} Befehle',
     contextFile: 'Datei {name}',
+    contextEnvironmentDetail: 'Betriebssystem, Architektur und Shell',
+    help: 'Hilfe zum Assistenten',
+    helpTitle: 'Terminal-Assistent',
+    helpClose: 'Schließen',
+    helpAsk:
+      'Geben Sie am Prompt # und eine Frage ein und drücken Sie Enter. Die Frage wird nie als Befehl ausgeführt.',
+    helpContext:
+      'Chips unter der Frage zeigen, was gesendet wird: System, Ordnerinhalt, Auswahl, anderes Fenster und letzte Befehle. Ein Klick auf einen Chip lässt ihn weg oder nimmt ihn wieder auf; der Tooltip zeigt Details.',
+    helpMentions:
+      'In einer Frage fügt @dir den Ordnerinhalt hinzu, @output die letzte Ausgabe und @datei.txt hängt diese Datei an.',
+    helpExplainFix:
+      'Strg+Umschalt+E erklärt die letzte Ausgabe, Strg+Umschalt+F schlägt eine Korrektur vor. Befehlsblöcke bieten dasselbe für jeden beendeten Befehl.',
+    helpFollowUp:
+      'Stellen Sie unter einer Antwort Rückfragen. Das Gespräch bleibt pro Terminal-Tab erhalten, bis der Tab geschlossen wird.',
+    helpRun:
+      'Der Assistent kann Ordner auflisten und Dateien im Arbeitsordner lesen, auch über SSH (die Suche nur lokal). Will er einen Befehl ausführen, bestätigen Sie zuerst: Enter führt aus, Strg+C lehnt ab.',
+    helpSafety:
+      'Es wird nur Ihr konfigurierter Chat-Endpunkt verwendet. Schlüssel, Tokens und Passwörter werden vor dem Senden entfernt. Ohne Ihre Zustimmung wird nichts ausgeführt.',
     contextLabel: 'An den Assistenten gesendeter Kontext',
     contextRestore: 'Wieder einbeziehen',
     contextRemove: 'Weglassen',

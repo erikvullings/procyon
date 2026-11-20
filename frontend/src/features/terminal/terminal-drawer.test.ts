@@ -899,8 +899,9 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
       kind: 'ask',
       request: 'what is here?',
       workingDirectory: 'file:///home',
-      context: { listing: ['a.txt', 'src/'], selected: ['a.txt'], otherFolder: 'file:///other' },
+      context: { listing: ['a.txt', 'src/'], selected: ['a.txt'] },
     });
+    expect(sentAt(0)?.context?.otherFolder).toBeUndefined();
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-terminal-assist-steps')?.textContent).toBe('Read a.txt'),
     );
@@ -936,6 +937,44 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     expect(sentAt(1)?.context?.selected).toEqual(['a.txt']);
   });
 
+  it('includes the other pane only after its chip is switched on, and explains chips in a tooltip', async () => {
+    await mount();
+    ask('# first');
+    await vi.waitFor(() => expect(button('Other pane')).toBeDefined());
+    expect(button('Other pane')?.getAttribute('aria-pressed')).toBe('false');
+    expect(button('2 names')?.title).toContain('a.txt, src/');
+
+    button('Other pane')?.click();
+    await vi.waitFor(() => expect(button('Other pane')?.getAttribute('aria-pressed')).toBe('true'));
+    const followUp = root.querySelector<HTMLInputElement>('.fm-terminal-assist-followup');
+    if (followUp === null) throw new Error('follow-up field missing');
+    followUp.value = 'second';
+    followUp.dispatchEvent(new Event('input'));
+    followUp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
+    expect(sentAt(1)?.context?.otherFolder).toBe('file:///other');
+  });
+
+  it('shows a markdown answer as formatted text, not raw markup', async () => {
+    assist.mockResolvedValueOnce({
+      text: 'You have:\n- **keys** and `a.pem`\n- *old* ones\nCommand: ls',
+    });
+    await mount();
+    ask('# what');
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-terminal-assist-text ul')).not.toBeNull(),
+    );
+    const text = root.querySelector('.fm-terminal-assist-text');
+    expect(text?.querySelectorAll('li')).toHaveLength(2);
+    expect(text?.querySelector('strong')?.textContent).toBe('keys');
+    expect(text?.querySelector('code')?.textContent).toBe('a.pem');
+    expect(text?.querySelector('em')?.textContent).toBe('old');
+    expect(text?.textContent).not.toContain('**');
+    expect(text?.querySelector('.fm-shell-command-line')?.textContent).toContain('ls');
+  });
+
   it('runs an approved command and sends its exit status and output back', async () => {
     assist.mockResolvedValueOnce({ text: '', runCommand: 'cargo test' });
     await mount();
@@ -967,6 +1006,29 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
     expect(sentAt(1)?.toolResult).toEqual({ command: 'rm -rf build', declined: true });
     await vi.waitFor(() => expect(root.querySelector('.fm-terminal-assist-panel')).toBeNull());
+  });
+
+  it('opens a help dialog from the question mark and closes it with Escape', async () => {
+    await mount();
+    expect(root.querySelector('.fm-terminal-help-dialog')).toBeNull();
+
+    root.querySelector<HTMLButtonElement>('.fm-terminal-help')?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-help-dialog')).not.toBeNull());
+    const dialog = root.querySelector('.fm-terminal-help-dialog');
+    expect(dialog?.getAttribute('role')).toBe('dialog');
+    expect(dialog?.getAttribute('aria-modal')).toBe('true');
+    expect(dialog?.textContent).toContain('@dir');
+    expect(dialog?.textContent).toContain('Ctrl+Shift+E');
+
+    dialog?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-help-dialog')).toBeNull());
+
+    root.querySelector<HTMLButtonElement>('.fm-terminal-help')?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-help-dialog')).not.toBeNull());
+    root
+      .querySelector<HTMLButtonElement>('.fm-terminal-help-dialog .fm-terminal-help-close')
+      ?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-help-dialog')).toBeNull());
   });
 
   it('forgets the conversation when the tab closes', async () => {

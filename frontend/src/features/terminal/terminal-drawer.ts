@@ -3,11 +3,18 @@ import '@xterm/xterm/css/xterm.css';
 import { FitAddon } from '@xterm/addon-fit';
 import { type IDecoration, type IMarker, Terminal } from '@xterm/xterm';
 import m, { type FactoryComponent } from 'mithril';
-import { copyIcon, refreshIcon, sparklesIcon, wrenchIcon } from '../../components/tabler-icons';
+import {
+  copyIcon,
+  helpIcon,
+  refreshIcon,
+  sparklesIcon,
+  wrenchIcon,
+} from '../../components/tabler-icons';
 import { t } from '../../i18n';
 import type { Location } from '../../models';
 import type { TerminalShellIntegration } from '../../models/settings';
 import { type BlockTracker, type CommandBlock, createBlockTracker } from './block-tracker';
+import { type Block, type Inline, parseMarkdown } from './markdown';
 import { highlightShell } from './shell-highlight';
 import { parseShellMark } from './shell-integration';
 import {
@@ -239,15 +246,58 @@ function highlightedShell(text: string): m.Children {
   );
 }
 
-/** An answer's text; the command of a `Command:` line is highlighted as shell. */
+function inlineNodes(parts: readonly Inline[]): m.Children {
+  return parts.map((part) => {
+    if (part.kind === 'text') return part.text;
+    if (part.kind === 'code') return m('code', part.text);
+    return part.kind === 'bold' ? m('strong', part.text) : m('em', part.text);
+  });
+}
+
+function blockNodes(block: Block): m.Children {
+  switch (block.kind) {
+    case 'paragraph':
+      return m('p', inlineNodes(block.inline));
+    case 'heading':
+      return m('p.fm-terminal-assist-heading', m('strong', inlineNodes(block.inline)));
+    case 'list':
+      return m(
+        block.ordered ? 'ol' : 'ul',
+        block.items.map((item) => m('li', inlineNodes(item))),
+      );
+    case 'code':
+      return m('pre.fm-terminal-assist-codeblock', m('code', block.text));
+  }
+}
+
+/**
+ * An answer's text as formatted elements (paragraphs, lists, code, bold, italic). A `Command:`
+ * line is shown as its own highlighted shell line. The model's text is never inserted as HTML.
+ */
 function answerNodes(kind: TerminalAssistKind, text: string): m.Children {
   if (kind === 'command') return highlightedShell(text);
-  return text.split('\n').map((line) => {
-    const match = /^(\s*Command:\s*)(.+)$/i.exec(line);
-    return match
-      ? [match[1], m('span.fm-shell-command-line', highlightedShell(match[2] ?? ''))]
-      : line;
-  });
+  const nodes: m.Children[] = [];
+  let buffer: string[] = [];
+  const flush = () => {
+    nodes.push(...parseMarkdown(buffer.join('\n')).map(blockNodes));
+    buffer = [];
+  };
+  for (const line of text.split('\n')) {
+    const match = /^\s*Command:\s*(.+)$/i.exec(line);
+    if (match === null) {
+      buffer.push(line);
+      continue;
+    }
+    flush();
+    nodes.push(
+      m('p.fm-terminal-assist-command', [
+        'Command: ',
+        m('span.fm-shell-command-line', highlightedShell(match[1] ?? '')),
+      ]),
+    );
+  }
+  flush();
+  return nodes;
 }
 
 /** Maps a failure from the desktop host to the message the person sees. */
@@ -309,6 +359,8 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   let editing: string | undefined;
   /** The follow-up question being typed under an answer. */
   let followUp = '';
+  /** Whether the assistant help dialog is open. */
+  let helpOpen = false;
 
   /** Asks the chat endpoint about text from one terminal. Nothing is run; the answer is shown. */
   function runAssist(
@@ -806,7 +858,8 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         markSeen: false,
         suggestion: undefined,
         assistSession: crypto.randomUUID(),
-        removedChips: new Set(),
+        // The other pane is rarely needed; the person can switch it on with its chip.
+        removedChips: new Set<RemovableChipId>(['otherFolder']),
         awaiting: undefined,
       };
       terminals.set(key, live);
@@ -946,6 +999,15 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     }
   }
 
+  /** What a chip contains, and what clicking it does. The browser shows it after a short delay. */
+  function chipTooltip(chip: ContextChip): string {
+    const contents =
+      chip.id === 'environment' ? t('terminal', 'contextEnvironmentDetail') : (chip.detail ?? '');
+    if (chip.id === 'file') return contents;
+    const action = chip.removed ? t('terminal', 'contextRestore') : t('terminal', 'contextRemove');
+    return contents === '' ? action : `${contents}\n\n${action}`;
+  }
+
   /**
    * What would be sent with the next question, one chip per part. A chip toggles its part off and
    * on; `@dir`, `@output` and `@path` in the question put parts back or add files.
@@ -963,7 +1025,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
             class: chip.removed ? 'fm-terminal-chip--off' : undefined,
             disabled: chip.id === 'file',
             'aria-pressed': chip.id === 'file' ? undefined : String(!chip.removed),
-            title: chip.removed ? t('terminal', 'contextRestore') : t('terminal', 'contextRemove'),
+            title: chipTooltip(chip),
             onclick: () => {
               if (chip.id === 'file') return;
               if (live.removedChips.has(chip.id)) live.removedChips.delete(chip.id);
@@ -973,6 +1035,63 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           },
           chipLabel(chip),
         ),
+      ),
+    );
+  }
+
+  /** The help dialog for the terminal assistant: what to type, what is sent, what runs. */
+  function helpDialog(): m.Children {
+    const close = () => {
+      helpOpen = false;
+      currentAttrs?.tabKey === undefined
+        ? undefined
+        : terminals.get(currentAttrs.tabKey)?.terminal.focus();
+      m.redraw();
+    };
+    const items = [
+      'helpAsk',
+      'helpContext',
+      'helpMentions',
+      'helpExplainFix',
+      'helpFollowUp',
+      'helpRun',
+      'helpSafety',
+    ] as const;
+    return m(
+      '.fm-terminal-help-backdrop',
+      {
+        onclick: (event: MouseEvent) => {
+          if (event.target === event.currentTarget) close();
+        },
+      },
+      m(
+        '.fm-terminal-help-dialog',
+        {
+          role: 'dialog',
+          'aria-modal': 'true',
+          'aria-labelledby': 'fm-terminal-help-title',
+          tabindex: -1,
+          oncreate: ({ dom }: m.VnodeDOM) => (dom as HTMLElement).focus(),
+          onkeydown: (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              event.stopPropagation();
+              close();
+            }
+          },
+        },
+        [
+          m('h2#fm-terminal-help-title', t('terminal', 'helpTitle')),
+          m(
+            'ul',
+            items.map((item) => m('li', t('terminal', item))),
+          ),
+          m(
+            'button.fm-terminal-help-close',
+            { type: 'button', onclick: close },
+            t('terminal', 'helpClose'),
+          ),
+        ],
       ),
     );
   }
@@ -1018,16 +1137,23 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
                   }
                 },
               })
-            : m('pre.fm-terminal-assist-text', answerNodes(shown.kind, shown.text));
+            : m(
+                shown.kind === 'command'
+                  ? '.fm-terminal-assist-text.fm-terminal-assist-text--mono'
+                  : '.fm-terminal-assist-text',
+                answerNodes(shown.kind, shown.text),
+              );
     const done = shown.status === 'done' ? shown : undefined;
-    // The body scrolls; the buttons stay in a footer that is always in reach.
+    // Only the body scrolls; the context, follow-up and buttons stay in reach below it.
     return m('.fm-terminal-assist-panel', { role: 'status' }, [
       m('.fm-terminal-assist-body', [
         done === undefined ? undefined : stepsView(done.steps),
         answer,
-        done !== undefined && done.command === undefined
+        done !== undefined && done.command === undefined && done.kind === 'fix'
           ? m('p.fm-terminal-assist-status', t('terminal', 'assistNoCommand'))
           : undefined,
+      ]),
+      m('.fm-terminal-assist-footer', [
         live === undefined ? undefined : contextRow(live, followUp),
         done !== undefined && live !== undefined
           ? m('input.fm-terminal-assist-followup', {
@@ -1232,6 +1358,20 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
             },
             '×',
           ),
+          m(
+            'button.fm-terminal-help',
+            {
+              type: 'button',
+              title: t('terminal', 'help'),
+              'aria-label': t('terminal', 'help'),
+              'aria-haspopup': 'dialog',
+              onclick: () => {
+                helpOpen = true;
+              },
+            },
+            helpIcon({ size: 14 }),
+          ),
+          helpOpen ? helpDialog() : undefined,
           attrs.location === undefined
             ? m('.fm-terminal-unavailable', t('terminal', 'selectDirectory'))
             : m('.fm-terminal-host', {

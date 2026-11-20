@@ -2708,6 +2708,24 @@ export const nl = {
     contextOtherFolder: 'Ander paneel',
     contextBlocks: 'Laatste {count} commando’s',
     contextFile: 'Bestand {name}',
+    contextEnvironmentDetail: 'Besturingssysteem, architectuur en shell',
+    help: 'Hulp bij de assistent',
+    helpTitle: 'Terminalassistent',
+    helpClose: 'Sluiten',
+    helpAsk:
+      'Typ # gevolgd door een vraag bij de prompt en druk op Enter. De vraag wordt nooit als commando uitgevoerd.',
+    helpContext:
+      'Chips onder de vraag tonen wat er wordt verstuurd: systeem, maplijst, selectie, ander paneel en recente commando’s. Klik op een chip om hem weg te laten of weer op te nemen; de tooltip toont details.',
+    helpMentions:
+      'In een vraag voegt @dir de maplijst toe, @output de recente uitvoer en @bestand.txt voegt dat bestand bij.',
+    helpExplainFix:
+      'Ctrl+Shift+E legt de laatste uitvoer uit en Ctrl+Shift+F stelt een oplossing voor. Commandoblokken bieden hetzelfde bij elk afgerond commando.',
+    helpFollowUp:
+      'Stel vervolgvragen onder een antwoord. Het gesprek blijft per terminaltabblad bewaard tot het tabblad sluit.',
+    helpRun:
+      'De assistent kan mappen tonen en bestanden in de werkmap lezen, ook via SSH (zoeken alleen lokaal). Wil hij een commando uitvoeren, dan keurt u dat eerst goed: Enter voert uit, Ctrl+C weigert.',
+    helpSafety:
+      'Alleen uw ingestelde chat-eindpunt wordt gebruikt. Sleutels, tokens en wachtwoorden worden uit het verstuurde gehaald. Zonder uw goedkeuring wordt niets uitgevoerd.',
     contextLabel: 'Context die naar de assistent gaat',
     contextRestore: 'Weer opnemen',
     contextRemove: 'Weglaten',

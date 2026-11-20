@@ -3485,7 +3485,13 @@ impl FileManagerService {
         &self,
         request: fm_transport_dto::TerminalAssistRequestDto,
     ) -> Result<fm_transport_dto::TerminalAssistReplyDto, fm_transport_dto::ChatFailureDto> {
-        crate::terminal_assist::reply(&self.llm_profiles, &self.terminal_sessions, request).await
+        crate::terminal_assist::reply(
+            &self.llm_profiles,
+            &self.providers,
+            &self.terminal_sessions,
+            request,
+        )
+        .await
     }
 
     /// Forgets one terminal tab's assistant session, when the tab closes.

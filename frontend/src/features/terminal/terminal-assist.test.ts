@@ -140,10 +140,10 @@ describe('contextChips', () => {
   it('shows one chip per part that has content, with counts', () => {
     expect(contextChips(source(), new Set(), parseMentions('hi'))).toEqual([
       { id: 'environment', removed: false },
-      { id: 'listing', removed: false, count: 2 },
-      { id: 'selection', removed: false, count: 1 },
-      { id: 'otherFolder', removed: false },
-      { id: 'blocks', removed: false, count: 1 },
+      { id: 'listing', removed: false, count: 2, detail: 'a.txt, src/' },
+      { id: 'selection', removed: false, count: 1, detail: 'a.txt' },
+      { id: 'otherFolder', removed: false, detail: 'file:///other' },
+      { id: 'blocks', removed: false, count: 1, detail: 'make' },
     ]);
   });
 
@@ -153,10 +153,34 @@ describe('contextChips', () => {
       new Set(['listing']),
       parseMentions('@a.txt'),
     );
-    expect(chips).toContainEqual({ id: 'listing', removed: true, count: 2 });
+    expect(chips).toContainEqual({ id: 'listing', removed: true, count: 2, detail: 'a.txt, src/' });
     expect(chips).toContainEqual({ id: 'file', removed: false, name: 'a.txt' });
     expect(chips.map((chip) => chip.id)).not.toContain('selection');
     expect(chips.map((chip) => chip.id)).not.toContain('blocks');
+  });
+});
+
+describe('context chip details', () => {
+  it('describes what each chip contains, for its tooltip', () => {
+    const chips = contextChips(
+      source({ blocks: [{ command: 'make', exitCode: 2, output: 'boom' }] }),
+      new Set(),
+    );
+    const detail = (id: string) => chips.find((chip) => chip.id === id)?.detail;
+    expect(detail('listing')).toBe('a.txt, src/');
+    expect(detail('selection')).toBe('a.txt');
+    expect(detail('otherFolder')).toBe('file:///other');
+    expect(detail('blocks')).toBe('make');
+    expect(detail('environment')).toBeUndefined();
+  });
+
+  it('shortens a long listing', () => {
+    const listing = Array.from({ length: 40 }, (_, index) => `f${index}`);
+    const detail = contextChips(source({ listing }), new Set()).find(
+      (chip) => chip.id === 'listing',
+    )?.detail;
+    expect(detail).toMatch(/^f0, f1,/);
+    expect(detail).toMatch(/f29, … \(\+10\)$/);
   });
 });
 

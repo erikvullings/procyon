@@ -2659,6 +2659,24 @@ export const en = {
     contextOtherFolder: 'Other pane',
     contextBlocks: 'Last {count} commands',
     contextFile: 'File {name}',
+    contextEnvironmentDetail: 'Operating system, architecture and shell',
+    help: 'Assistant help',
+    helpTitle: 'Terminal assistant',
+    helpClose: 'Close',
+    helpAsk:
+      'Type # followed by a question at the prompt and press Enter. The question is never run as a command.',
+    helpContext:
+      'Chips under the question show what is sent: system, folder listing, selection, other pane and recent commands. Click a chip to leave it out or include it again, and hover for details.',
+    helpMentions:
+      'In a question, @dir adds the folder listing, @output adds recent output, and @file.txt attaches that file.',
+    helpExplainFix:
+      'Ctrl+Shift+E explains the last output and Ctrl+Shift+F suggests a fix. Command blocks add the same actions to every finished command.',
+    helpFollowUp:
+      'Ask follow-up questions under an answer. The conversation is kept per terminal tab until the tab closes.',
+    helpRun:
+      'The assistant can list folders and read files in the working folder, also over SSH (searching works locally only). When it wants to run a command you approve it first: Enter runs it, Ctrl+C declines.',
+    helpSafety:
+      'Only your configured chat endpoint is used. Keys, tokens and passwords are removed from what is sent. Nothing runs without your approval.',
     contextLabel: 'Context sent to the assistant',
     contextRestore: 'Include again',
     contextRemove: 'Leave out',

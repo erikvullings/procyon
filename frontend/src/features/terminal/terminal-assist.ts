@@ -164,12 +164,20 @@ export function assistContext(
   };
 }
 
+/** Names shown in a tooltip: the first few, then how many more there are. */
+function namesDetail(names: readonly string[], shown = 30): string {
+  const head = names.slice(0, shown).join(', ');
+  return names.length > shown ? `${head}, … (+${names.length - shown})` : head;
+}
+
 /** One chip in the context row. A removed chip stays visible so it can be put back. */
 export interface ContextChip {
   readonly id: RemovableChipId | 'file';
   readonly removed: boolean;
   readonly count?: number;
   readonly name?: string;
+  /** What the chip contains, for its tooltip. */
+  readonly detail?: string;
 }
 
 /** The chips for what could be sent: one per part that has content, plus mentioned files. */
@@ -180,7 +188,7 @@ export function contextChips(
 ): ContextChip[] {
   const chip = (
     id: RemovableChipId,
-    extra: { count?: number; name?: string } = {},
+    extra: { count?: number; name?: string; detail?: string } = {},
   ): ContextChip => ({
     id,
     removed: removed.has(id),
@@ -188,11 +196,23 @@ export function contextChips(
   });
   return [
     chip('environment'),
-    ...(source.listing.length > 0 ? [chip('listing', { count: source.listing.length })] : []),
-    ...(source.selected.length > 0 ? [chip('selection', { count: source.selected.length })] : []),
-    ...(source.otherFolder ? [chip('otherFolder')] : []),
+    ...(source.listing.length > 0
+      ? [chip('listing', { count: source.listing.length, detail: namesDetail(source.listing) })]
+      : []),
+    ...(source.selected.length > 0
+      ? [chip('selection', { count: source.selected.length, detail: namesDetail(source.selected) })]
+      : []),
+    ...(source.otherFolder ? [chip('otherFolder', { detail: source.otherFolder })] : []),
     ...(source.blocks.length > 0
-      ? [chip('blocks', { count: Math.min(source.blocks.length, MAX_CONTEXT_BLOCKS) })]
+      ? [
+          chip('blocks', {
+            count: Math.min(source.blocks.length, MAX_CONTEXT_BLOCKS),
+            detail: source.blocks
+              .slice(-MAX_CONTEXT_BLOCKS)
+              .map((block) => block.command)
+              .join(', '),
+          }),
+        ]
       : []),
     ...mentions.files.map((name): ContextChip => ({ id: 'file', removed: false, name })),
   ];

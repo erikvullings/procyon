@@ -5,15 +5,18 @@ use std::fs;
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
+use fm_vfs::ProviderRegistry;
 use thiserror::Error;
 
+use super::context::path_from_location;
 use super::protocol::ToolCall;
 use super::redact::redact_secrets;
+use super::remote::RemoteSandbox;
 
 /// Most bytes of one file returned.
-const MAX_READ_BYTES: usize = 16 * 1024;
+pub(super) const MAX_READ_BYTES: usize = 16 * 1024;
 /// Most folder entries listed.
-const MAX_LISTED: usize = 200;
+pub(super) const MAX_LISTED: usize = 200;
 /// Most matching lines returned.
 const MAX_MATCHES: usize = 50;
 /// Most files a search looks into.
@@ -28,7 +31,7 @@ const SKIPPED_FOLDERS: &[&str] = &[".git", "node_modules", "target", ".venv", "d
 /// Why a tool could not do what the model asked. Shown to the model as `Error: ...`; a missing
 /// path and one outside the folder read the same, so the model learns nothing about other paths.
 #[derive(Debug, Error)]
-enum ToolError {
+pub(super) enum ToolError {
     #[error("{0} is not available.")]
     NotAvailable(String),
     #[error("{0} is not a folder.")]
@@ -41,9 +44,13 @@ enum ToolError {
     Unreadable(String),
     #[error("run_command needs the person's approval.")]
     NeedsApproval,
+    #[error(
+        "grep is not available for remote folders. Use read_file, or ask to run grep with run_command."
+    )]
+    RemoteGrep,
 }
 
-fn error_text(error: &ToolError) -> String {
+pub(super) fn error_text(error: &ToolError) -> String {
     format!("Error: {error}")
 }
 
@@ -230,7 +237,7 @@ impl Sandbox {
 }
 
 /// Names that usually hold secrets; never read.
-fn is_secret_name(name: &str) -> bool {
+pub(super) fn is_secret_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     const EXACT: &[&str] = &[
         ".env",
@@ -258,7 +265,7 @@ fn is_secret_name(name: &str) -> bool {
 }
 
 /// Folders that hold credentials; nothing under them is read or searched.
-fn is_credential_folder(name: &str) -> bool {
+pub(super) fn is_credential_folder(name: &str) -> bool {
     matches!(
         name,
         ".ssh" | ".aws" | ".kube" | ".gnupg" | ".docker" | ".azure"
@@ -284,8 +291,14 @@ fn read_text_file(path: &Path) -> Result<String, ToolError> {
     file.take(MAX_READ_BYTES as u64 + 1)
         .read_to_end(&mut buffer)
         .map_err(|_| ToolError::Unreadable(name.clone()))?;
+    text_from_bytes(buffer, &name)
+}
+
+/// The text of at most `MAX_READ_BYTES + 1` bytes read from a file: binary content is refused and
+/// anything past the limit is cut with a marker.
+pub(super) fn text_from_bytes(mut buffer: Vec<u8>, name: &str) -> Result<String, ToolError> {
     if buffer.contains(&0) {
-        return Err(ToolError::NotText(name));
+        return Err(ToolError::NotText(name.to_owned()));
     }
     let truncated = buffer.len() > MAX_READ_BYTES;
     buffer.truncate(MAX_READ_BYTES);
@@ -294,6 +307,54 @@ fn read_text_file(path: &Path) -> Result<String, ToolError> {
         text.push_str("\n[truncated]");
     }
     Ok(text)
+}
+
+/// Where the tools look: a local folder, or one on another machine through its provider.
+#[derive(Clone)]
+pub(super) enum ToolHost {
+    Local(Sandbox),
+    Remote(RemoteSandbox),
+}
+
+impl ToolHost {
+    /// `None` when the working folder cannot be reached.
+    pub(super) fn open(providers: &ProviderRegistry, working_directory: &str) -> Option<Self> {
+        match path_from_location(working_directory) {
+            Some(path) => Sandbox::new(&path).map(Self::Local),
+            None => RemoteSandbox::new(providers, working_directory).map(Self::Remote),
+        }
+    }
+
+    /// Runs one read-only tool.
+    pub(super) async fn run(&self, call: ToolCall) -> ToolOutput {
+        match self {
+            Self::Local(sandbox) => {
+                let sandbox = sandbox.clone();
+                tokio::task::spawn_blocking(move || sandbox.run(&call))
+                    .await
+                    .unwrap_or_else(|_| ToolOutput {
+                        step: "Tool".to_owned(),
+                        text: "Error: the tool failed.".to_owned(),
+                    })
+            }
+            Self::Remote(remote) => remote.run(&call).await,
+        }
+    }
+
+    /// The text of a file inside the working folder, for `@path` mentions.
+    pub(super) async fn read_text(&self, relative: &str) -> Option<String> {
+        match self {
+            Self::Local(sandbox) => {
+                let sandbox = sandbox.clone();
+                let relative = relative.to_owned();
+                tokio::task::spawn_blocking(move || sandbox.read_text(&relative))
+                    .await
+                    .ok()
+                    .flatten()
+            }
+            Self::Remote(remote) => remote.read_text(relative).await,
+        }
+    }
 }
 
 #[cfg(test)]

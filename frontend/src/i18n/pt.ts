@@ -2724,6 +2724,24 @@ export const pt = {
     contextOtherFolder: 'Outro painel',
     contextBlocks: 'Últimos {count} comandos',
     contextFile: 'Ficheiro {name}',
+    contextEnvironmentDetail: 'Sistema operativo, arquitetura e shell',
+    help: 'Ajuda do assistente',
+    helpTitle: 'Assistente do terminal',
+    helpClose: 'Fechar',
+    helpAsk:
+      'Escreva # e uma pergunta no prompt e prima Enter. A pergunta nunca é executada como comando.',
+    helpContext:
+      'Os chips sob a pergunta mostram o que é enviado: sistema, listagem da pasta, seleção, outro painel e comandos recentes. Clique num chip para o omitir ou incluir de novo; a dica mostra detalhes.',
+    helpMentions:
+      'Numa pergunta, @dir acrescenta a listagem da pasta, @output a saída recente e @ficheiro.txt anexa esse ficheiro.',
+    helpExplainFix:
+      'Ctrl+Shift+E explica a última saída e Ctrl+Shift+F sugere uma correção. Os blocos de comandos oferecem o mesmo em cada comando terminado.',
+    helpFollowUp:
+      'Faça perguntas de seguimento sob uma resposta. A conversa mantém-se por separador do terminal até este fechar.',
+    helpRun:
+      'O assistente pode listar pastas e ler ficheiros da pasta de trabalho, também por SSH (a pesquisa só localmente). Se quiser executar um comando, aprova-o primeiro: Enter executa, Ctrl+C recusa.',
+    helpSafety:
+      'Só é usado o endpoint de chat configurado. Chaves, tokens e palavras-passe são removidos do que é enviado. Nada é executado sem a sua aprovação.',
     contextLabel: 'Contexto enviado ao assistente',
     contextRestore: 'Incluir novamente',
     contextRemove: 'Omitir',

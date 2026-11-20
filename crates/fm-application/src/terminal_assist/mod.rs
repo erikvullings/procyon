@@ -6,6 +6,7 @@
 mod context;
 mod protocol;
 mod redact;
+mod remote;
 mod session;
 mod tools;
 
@@ -15,16 +16,17 @@ use fm_transport_dto::{
     ChatFailureDto, TerminalAssistKindDto, TerminalAssistReplyDto, TerminalAssistRequestDto,
     TerminalToolResultDto,
 };
+use fm_vfs::ProviderRegistry;
 use tokio_util::sync::CancellationToken;
 
 use crate::chat::ChatGenerator;
 use crate::file_assistant::truncate_to_bytes;
 use crate::llm_profiles::{LlmChatGeneration, LlmProfileError, LlmRole};
 
-use self::context::{AttachedFile, path_from_location, render_context};
+use self::context::{AttachedFile, render_context};
 use self::protocol::{ToolCall, parse_tool_call};
 use self::redact::redact_secrets;
-use self::tools::{Sandbox, ToolOutput};
+use self::tools::{ToolHost, ToolOutput};
 
 /// Longest natural-language request, in characters.
 const MAX_REQUEST_CHARS: usize = 2 * 1024;
@@ -73,11 +75,12 @@ const FIX_PROMPT: &str = "The recent terminal output ends with a failed command.
 /// Answers one terminal assistance request through the chat role.
 pub(crate) async fn reply(
     generator: &impl ChatGenerator,
+    providers: &ProviderRegistry,
     sessions: &Sessions,
     request: TerminalAssistRequestDto,
 ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
     if request.kind == TerminalAssistKindDto::Ask {
-        return ask(generator, sessions, request).await;
+        return ask(generator, providers, sessions, request).await;
     }
     let (system_prompt, user_prompt) = prompts(&request)?;
     let raw = generate(generator, system_prompt, user_prompt).await?;
@@ -124,6 +127,7 @@ async fn generate(
 /// command that needs the person's approval.
 async fn ask(
     generator: &impl ChatGenerator,
+    providers: &ProviderRegistry,
     sessions: &Sessions,
     request: TerminalAssistRequestDto,
 ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
@@ -139,8 +143,7 @@ async fn ask(
         })
         .ok_or(ChatFailureDto::InvalidRequest)?
         .to_owned();
-    let sandbox =
-        path_from_location(&request.working_directory).and_then(|path| Sandbox::new(&path));
+    let host = ToolHost::open(providers, &request.working_directory);
     let mut steps = Vec::new();
 
     if let Some(result) = &request.tool_result {
@@ -168,7 +171,7 @@ async fn ask(
             .map(str::trim)
             .filter(|text| !text.is_empty() && text.chars().count() <= MAX_REQUEST_CHARS)
             .ok_or(ChatFailureDto::InvalidRequest)?;
-        let files = attached_files(sandbox.as_ref(), &request.context.files);
+        let files = attached_files(host.as_ref(), &request.context.files).await;
         sessions.push_person(&id, question, &render_context(&request, &files));
     }
 
@@ -193,10 +196,8 @@ async fn ask(
                 if sessions.next_step(&id) > MAX_STEPS {
                     return Ok(stopped(step_limit_text(), steps));
                 }
-                let output = match sandbox.clone() {
-                    Some(sandbox) => tokio::task::spawn_blocking(move || sandbox.run(&call))
-                        .await
-                        .map_err(|_| ChatFailureDto::Unavailable)?,
+                let output = match &host {
+                    Some(host) => host.run(call).await,
                     None => ToolOutput {
                         step: "Looked up a file".to_owned(),
                         text: "Error: file tools are not available for this location.".to_owned(),
@@ -236,20 +237,20 @@ fn command_result_text(result: &TerminalToolResultDto) -> String {
 }
 
 /// The files the person named with `@path`, read inside the working folder.
-fn attached_files(sandbox: Option<&Sandbox>, names: &[String]) -> Vec<AttachedFile> {
-    let Some(sandbox) = sandbox else {
+async fn attached_files(host: Option<&ToolHost>, names: &[String]) -> Vec<AttachedFile> {
+    let Some(host) = host else {
         return Vec::new();
     };
-    names
-        .iter()
-        .take(MAX_ATTACHED_FILES)
-        .filter_map(|name| {
-            sandbox.read_text(name).map(|text| AttachedFile {
+    let mut files = Vec::new();
+    for name in names.iter().take(MAX_ATTACHED_FILES) {
+        if let Some(text) = host.read_text(name).await {
+            files.push(AttachedFile {
                 name: name.clone(),
                 text,
-            })
-        })
-        .collect()
+            });
+        }
+    }
+    files
 }
 
 fn prompts(request: &TerminalAssistRequestDto) -> Result<(String, String), ChatFailureDto> {
@@ -392,7 +393,7 @@ mod tests {
     ) -> impl std::future::Future<Output = Result<TerminalAssistReplyDto, ChatFailureDto>> + '_
     {
         let sessions = Sessions::default();
-        async move { super::reply(fake, &sessions, request).await }
+        async move { super::reply(fake, &ProviderRegistry::new(), &sessions, request).await }
     }
 
     fn command(request: &str) -> TerminalAssistRequestDto {
@@ -550,7 +551,7 @@ mod tests {
         sessions: &Sessions,
         request: TerminalAssistRequestDto,
     ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
-        super::reply(fake, sessions, request).await
+        super::reply(fake, &ProviderRegistry::new(), sessions, request).await
     }
 
     #[tokio::test]

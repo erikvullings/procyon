@@ -2710,6 +2710,24 @@ export const it = {
     contextOtherFolder: 'Altro pannello',
     contextBlocks: 'Ultimi {count} comandi',
     contextFile: 'Contenuto di {name}',
+    contextEnvironmentDetail: 'Sistema operativo, architettura e shell',
+    help: "Guida dell'assistente",
+    helpTitle: 'Assistente del terminale',
+    helpClose: 'Chiudi',
+    helpAsk:
+      'Digita # seguito da una domanda al prompt e premi Invio. La domanda non viene mai eseguita come comando.',
+    helpContext:
+      'I chip sotto la domanda mostrano cosa viene inviato: sistema, elenco della cartella, selezione, altro pannello e comandi recenti. Fai clic su un chip per escluderlo o reincluderlo; il tooltip mostra i dettagli.',
+    helpMentions:
+      "In una domanda, @dir aggiunge l'elenco della cartella, @output l'output recente e @file.txt allega quel file.",
+    helpExplainFix:
+      "Ctrl+Maiusc+E spiega l'ultimo output e Ctrl+Maiusc+F suggerisce una correzione. I blocchi di comandi offrono lo stesso per ogni comando terminato.",
+    helpFollowUp:
+      'Fai domande di approfondimento sotto una risposta. La conversazione resta per scheda del terminale finché non la chiudi.',
+    helpRun:
+      "L'assistente può elencare cartelle e leggere file nella cartella di lavoro, anche via SSH (la ricerca solo in locale). Se vuole eseguire un comando lo approvi prima: Invio lo esegue, Ctrl+C lo rifiuta.",
+    helpSafety:
+      "Viene usato solo l'endpoint di chat configurato. Chiavi, token e password vengono rimossi da ciò che si invia. Nulla viene eseguito senza la tua approvazione.",
     contextLabel: "Contesto inviato all'assistente",
     contextRestore: 'Includi di nuovo',
     contextRemove: 'Escludi',
