@@ -8,13 +8,14 @@ mod protocol;
 mod redact;
 mod remote;
 mod session;
+mod stream;
 mod tools;
 
 pub(crate) use session::Sessions;
 
 use fm_transport_dto::{
-    ChatFailureDto, TerminalAssistKindDto, TerminalAssistReplyDto, TerminalAssistRequestDto,
-    TerminalToolResultDto,
+    ChatFailureDto, TerminalAssistEventDto, TerminalAssistKindDto, TerminalAssistReplyDto,
+    TerminalAssistRequestDto, TerminalToolResultDto,
 };
 use fm_vfs::ProviderRegistry;
 use tokio_util::sync::CancellationToken;
@@ -23,9 +24,10 @@ use crate::chat::ChatGenerator;
 use crate::file_assistant::truncate_to_bytes;
 use crate::llm_profiles::{LlmChatGeneration, LlmProfileError, LlmRole};
 
-use self::context::{AttachedFile, render_activity, render_context, render_state};
+use self::context::{AttachedFile, render_activity, render_context, state_sections};
 use self::protocol::{ToolCall, parse_tool_call};
 use self::redact::redact_secrets;
+use self::stream::LineStreamer;
 use self::tools::{ToolHost, ToolOutput};
 
 /// Longest natural-language request, in characters.
@@ -79,11 +81,23 @@ pub(crate) async fn reply(
     sessions: &Sessions,
     request: TerminalAssistRequestDto,
 ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
+    reply_streaming(generator, providers, sessions, request, &mut |_| {}).await
+}
+
+/// Like [`reply`], and for an `ask` also reports each finished line of the answer, and each step,
+/// to `on_event` while the model is still writing.
+pub(crate) async fn reply_streaming(
+    generator: &impl ChatGenerator,
+    providers: &ProviderRegistry,
+    sessions: &Sessions,
+    request: TerminalAssistRequestDto,
+    on_event: &mut (dyn FnMut(TerminalAssistEventDto) + Send),
+) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
     if request.kind == TerminalAssistKindDto::Ask {
-        return ask(generator, providers, sessions, request).await;
+        return ask(generator, providers, sessions, request, on_event).await;
     }
     let (system_prompt, user_prompt) = prompts(&request)?;
-    let raw = generate(generator, system_prompt, user_prompt).await?;
+    let raw = generate(generator, system_prompt, user_prompt, &mut |_: &str| {}).await?;
     let text = match request.kind {
         TerminalAssistKindDto::Command => first_command_line(&raw),
         _ => {
@@ -103,6 +117,7 @@ async fn generate(
     generator: &impl ChatGenerator,
     system_prompt: String,
     user_prompt: String,
+    on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
 ) -> Result<String, ChatFailureDto> {
     let cancellation = CancellationToken::new();
     generator
@@ -117,7 +132,7 @@ async fn generate(
                 temperature: None,
             },
             &cancellation,
-            &mut |_: &str| {},
+            on_delta,
         )
         .await
         .map_err(failure)
@@ -130,6 +145,7 @@ async fn ask(
     providers: &ProviderRegistry,
     sessions: &Sessions,
     request: TerminalAssistRequestDto,
+    on_event: &mut (dyn FnMut(TerminalAssistEventDto) + Send),
 ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
     let id = request
         .session_id
@@ -172,15 +188,51 @@ async fn ask(
             .filter(|text| !text.is_empty() && text.chars().count() <= MAX_REQUEST_CHARS)
             .ok_or(ChatFailureDto::InvalidRequest)?;
         let files = attached_files(host.as_ref(), &request.context.files).await;
-        // The state is shown once at the top and replaced when it changes; commands already sent
-        // in an earlier turn are not sent again.
+        // The state goes in with the first question, and later only the parts that changed are
+        // added: what was sent stays as it was, so a cached prompt prefix still matches and an
+        // old command is never taken to have run in the new folder. Commands already sent in an
+        // earlier turn are not sent again.
         let blocks = sessions.unsent_blocks(&id, &request.context.blocks);
-        sessions.push_person(&id, question, &render_activity(&blocks, &files));
-        sessions.set_state(&id, &render_state(&request));
+        let state = sessions.state_update(&id, &state_sections(&request));
+        let activity = render_activity(&blocks, &files);
+        let context = [state, activity]
+            .into_iter()
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        sessions.push_person(&id, question, &context);
     }
 
     loop {
-        let raw = generate(generator, ASK_PROMPT.to_owned(), sessions.render(&id)).await?;
+        let mut streamer = LineStreamer::new();
+        let raw = generate(
+            generator,
+            ASK_PROMPT.to_owned(),
+            sessions.render(&id),
+            &mut |delta: &str| {
+                streamer.push(delta, &mut |text| {
+                    on_event(TerminalAssistEventDto::Line {
+                        text: text.to_owned(),
+                    });
+                });
+            },
+        )
+        .await?;
+        streamer.finish(&mut |text| {
+            on_event(TerminalAssistEventDto::Line {
+                text: text.to_owned(),
+            });
+        });
+        // A reply that looked like a tool call but was not one is shown after all.
+        if parse_tool_call(&raw).is_some() {
+            streamer.discard_held();
+        } else {
+            streamer.release_held(&mut |text| {
+                on_event(TerminalAssistEventDto::Line {
+                    text: text.to_owned(),
+                });
+            });
+        }
         let trimmed = raw.trim();
         if trimmed.is_empty() {
             return Err(ChatFailureDto::Empty);
@@ -207,6 +259,9 @@ async fn ask(
                         text: "Error: file tools are not available for this location.".to_owned(),
                     },
                 };
+                on_event(TerminalAssistEventDto::Step {
+                    text: output.step.clone(),
+                });
                 steps.push(output.step);
                 sessions.push_tool(&id, &output.text);
             }
@@ -361,10 +416,20 @@ mod tests {
             role: LlmRole,
             generation: LlmChatGeneration,
             _cancellation: &CancellationToken,
-            _on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
+            on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
         ) -> Result<String, LlmProfileError> {
             self.seen.lock().unwrap().push((role, generation));
             if let Some(text) = self.script.lock().unwrap().pop_front() {
+                // Hand the text over in small pieces, as a streaming endpoint does.
+                let mut rest = text;
+                while !rest.is_empty() {
+                    let mut end = rest.len().min(5);
+                    while !rest.is_char_boundary(end) {
+                        end += 1;
+                    }
+                    on_delta(&rest[..end]);
+                    rest = &rest[end..];
+                }
                 return Ok(text.to_owned());
             }
             match self.outcome {
@@ -788,8 +853,96 @@ mod tests {
         let prompt = fake.seen.lock().unwrap()[1].1.user_prompt.clone();
         assert_eq!(prompt.matches("UNIQUE-OUTPUT").count(), 1);
         assert_eq!(prompt.matches("Working directory").count(), 1);
-        assert!(prompt.starts_with("Current state of the terminal:\n"));
+        assert!(prompt.starts_with("Context attached by the person:\nTerminal state:\n"));
         assert!(prompt.contains("Person: why?"));
         assert!(prompt.ends_with("Person: and now?\n\n"));
+    }
+
+    #[tokio::test]
+    async fn a_new_folder_adds_its_state_and_keeps_the_old_one_in_place() {
+        let first_dir = tempfile::tempdir().unwrap();
+        let second_dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&["first", "second"]);
+        let sessions = Sessions::default();
+        let mut one = ask_request("t1", "here?", first_dir.path());
+        one.context.listing = vec!["old.txt".into()];
+        ask_in(&fake, &sessions, one).await.unwrap();
+        let mut two = ask_request("t1", "now?", second_dir.path());
+        two.context.listing = vec!["new.txt".into()];
+        ask_in(&fake, &sessions, two).await.unwrap();
+
+        let seen = fake.seen.lock().unwrap();
+        let first_prompt = &seen[0].1.user_prompt;
+        let second_prompt = &seen[1].1.user_prompt;
+        // What was sent before stays exactly as it was, so a cached prompt prefix still matches.
+        assert!(second_prompt.starts_with(first_prompt.as_str()));
+        assert!(second_prompt.contains("- old.txt"));
+        assert!(second_prompt.contains("Terminal state changed:\n"));
+        assert!(second_prompt.contains("- new.txt"));
+        assert_eq!(second_prompt.matches("Working directory").count(), 2);
+    }
+
+    #[tokio::test]
+    async fn the_answer_streams_line_by_line_with_steps_and_without_tool_calls() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&[
+            "Looking.\nTOOL {\"tool\":\"list_dir\",\"path\":\".\"}",
+            "Done.\n- a\n- b",
+        ]);
+        let sessions = Sessions::default();
+        let mut events = Vec::new();
+
+        let reply = super::reply_streaming(
+            &fake,
+            &ProviderRegistry::new(),
+            &sessions,
+            ask_request("t1", "what is here?", dir.path()),
+            &mut |event| events.push(event),
+        )
+        .await
+        .unwrap();
+
+        let line = |text: &str| TerminalAssistEventDto::Line { text: text.into() };
+        assert_eq!(
+            events,
+            [
+                line("Looking."),
+                TerminalAssistEventDto::Step {
+                    text: "Listed .".into()
+                },
+                line("Done."),
+                line("- a"),
+                line("- b"),
+            ]
+        );
+        assert_eq!(reply.text, "Done.\n- a\n- b");
+    }
+
+    #[tokio::test]
+    async fn a_held_line_that_was_not_a_tool_call_is_shown_at_the_end() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&["Config:\n{\"name\": \"x\"}\nthat is all"]);
+        let sessions = Sessions::default();
+        let mut events = Vec::new();
+
+        super::reply_streaming(
+            &fake,
+            &ProviderRegistry::new(),
+            &sessions,
+            ask_request("t1", "show", dir.path()),
+            &mut |event| events.push(event),
+        )
+        .await
+        .unwrap();
+
+        let texts: Vec<String> = events
+            .into_iter()
+            .map(|event| match event {
+                TerminalAssistEventDto::Line { text } | TerminalAssistEventDto::Step { text } => {
+                    text
+                }
+            })
+            .collect();
+        assert_eq!(texts, ["Config:", "{\"name\": \"x\"}", "that is all"]);
     }
 }

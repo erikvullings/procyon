@@ -4,7 +4,7 @@
  * The model's text is cleaned of control characters first: it can style its answer through
  * Markdown only, never send the terminal an escape sequence.
  */
-import { type Block, type Inline, parseMarkdown } from './markdown';
+import { type Block, type Inline, parseInline, parseMarkdown } from './markdown';
 
 const RESET = '\x1b[0m';
 const BOLD = ['\x1b[1m', '\x1b[22m'] as const;
@@ -135,6 +135,77 @@ export function renderAnswerAnsi(text: string, width: number): string {
     .filter((lines) => lines.length > 0)
     .map((lines) => lines.join(NEWLINE) + NEWLINE)
     .join(NEWLINE);
+}
+
+const HEADING_LINE = /^\s{0,3}#{1,6}\s+(.*)$/;
+const BULLET_LINE = /^\s*[-*+]\s+(.*)$/;
+const NUMBERED_LINE = /^\s*(\d+)[.)]\s+(.*)$/;
+
+/** Renders an answer one finished line at a time, as it streams in. */
+export interface AnswerStream {
+  /** The terminal text for one more line of the answer (without its line break). */
+  line(text: string): string;
+}
+
+/**
+ * Like {@link renderAnswerAnsi}, but for an answer that arrives line by line: each line is
+ * rendered on its own, the kind of block it belongs to is tracked, and a blank line is put
+ * between different kinds of block. A hard-wrapped paragraph therefore stays on separate lines.
+ */
+export function createAnswerStream(width: number): AnswerStream {
+  type Kind = 'blank' | 'paragraph' | 'list' | 'code' | 'heading' | 'command';
+  let kind: Kind | undefined;
+  let inFence = false;
+  /** A blank line when a different kind of block starts after one that has begun. */
+  const start = (next: Exclude<Kind, 'blank'>): string => {
+    const gap = kind !== undefined && kind !== 'blank' && kind !== next ? NEWLINE : '';
+    kind = next;
+    return gap;
+  };
+  const rows = (lines: readonly string[]) => lines.join(NEWLINE) + NEWLINE;
+  return {
+    line(raw) {
+      const text = clean(raw).replace(/\n/g, ' ');
+      if (FENCE.test(text)) {
+        inFence = !inFence;
+        return inFence ? start('code') : '';
+      }
+      if (inFence) {
+        return text === '' ? NEWLINE : rows([`${INDENT}${INDENT}${CODE[0]}${text}${CODE[1]}`]);
+      }
+      if (text.trim() === '') {
+        if (kind === undefined || kind === 'blank') return '';
+        kind = 'blank';
+        return NEWLINE;
+      }
+      const command = COMMAND_LINE.exec(text);
+      if (command !== null) {
+        return (
+          start('command') +
+          rows([
+            `${INDENT}${BOLD[0]}Command:${BOLD[1]} ${COMMAND[0]}${(command[1] ?? '').trim()}${COMMAND[1]}`,
+          ])
+        );
+      }
+      const heading = HEADING_LINE.exec(text);
+      if (heading !== null) {
+        return (
+          start('heading') + rows([`${INDENT}\x1b[1;4m${(heading[1] ?? '').trim()}\x1b[22;24m`])
+        );
+      }
+      const bullet = BULLET_LINE.exec(text);
+      const numbered = bullet === null ? NUMBERED_LINE.exec(text) : null;
+      if (bullet !== null || numbered !== null) {
+        const marker = numbered === null ? '• ' : `${numbered[1]}. `;
+        const body = ((bullet ?? numbered)?.[numbered === null ? 1 : 2] ?? '').trim();
+        return (
+          start('list') +
+          rows(wrap(parseInline(body), width, INDENT + marker, INDENT + ' '.repeat(marker.length)))
+        );
+      }
+      return start('paragraph') + rows(wrap(parseInline(text.trim()), width, INDENT, INDENT));
+    },
+  };
 }
 
 /** The person's question as a line in the terminal. */

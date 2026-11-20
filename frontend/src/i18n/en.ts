@@ -392,6 +392,7 @@ export const en = {
     defaultStartLocations: 'Default start locations (comma-separated)',
     terminal: 'Terminal',
     terminalCommand: 'Terminal command',
+    terminalAssistant: 'Terminal assistant (# questions, Explain and Fix)',
     terminalApps: 'External terminals',
     terminalAppsHelp:
       'One per line: Name = command (an application name on macOS, an executable on Windows). Offered by “Open Terminal With…”.',
@@ -2655,6 +2656,7 @@ export const en = {
     assistEdit: 'Edit',
     contextEnvironment: 'System',
     contextEnvironmentDetail: 'Operating system, architecture and shell',
+    contextToggle: 'Context ({count})',
     help: 'Assistant help',
     helpTitle: 'Terminal assistant',
     helpClose: 'Close',

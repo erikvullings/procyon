@@ -2911,6 +2911,23 @@ pub(crate) async fn terminal_assist(
     state.service.terminal_assist(request).await
 }
 
+/// Like `terminal_assist`, and the finished lines of the answer and the steps are sent on `events`
+/// while the model is still writing (task 0336).
+#[tauri::command]
+pub(crate) async fn terminal_assist_stream(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::TerminalAssistRequestDto,
+    events: Channel<fm_transport_dto::TerminalAssistEventDto>,
+) -> Result<fm_transport_dto::TerminalAssistReplyDto, fm_transport_dto::ChatFailureDto> {
+    state
+        .service
+        .terminal_assist_streaming(request, &mut |event| {
+            // A closed channel means the window is gone; there is no one left to tell.
+            let _ = events.send(event);
+        })
+        .await
+}
+
 /// Forgets a terminal tab's assistant session when the tab closes (task 0336).
 #[tauri::command]
 pub(crate) fn terminal_assist_close(state: State<'_, AppState>, session_id: String) {

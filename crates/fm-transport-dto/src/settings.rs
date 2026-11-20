@@ -116,6 +116,10 @@ pub enum TerminalShellIntegrationDto {
     Disabled,
 }
 
+const fn terminal_assistant_default() -> bool {
+    true
+}
+
 fn terminal_shell_integration_default() -> TerminalShellIntegrationDto {
     TerminalShellIntegrationDto::Unset
 }
@@ -478,6 +482,9 @@ pub struct SettingsDto {
     /// Command-block shell integration for new terminals (task 0333).
     #[serde(default = "terminal_shell_integration_default")]
     pub terminal_shell_integration: TerminalShellIntegrationDto,
+    /// Whether the terminal assistant (`#` questions, Explain and Fix) is on (task 0336).
+    #[serde(default = "terminal_assistant_default")]
+    pub terminal_assistant: bool,
 }
 
 const fn default_semantic_max_source_mib() -> u32 {

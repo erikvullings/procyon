@@ -3494,6 +3494,23 @@ impl FileManagerService {
         .await
     }
 
+    /// Like [`terminal_assist`](Self::terminal_assist), and for an `ask` reports each finished line
+    /// of the answer, and each step, to `on_event` as it happens (task 0336).
+    pub async fn terminal_assist_streaming(
+        &self,
+        request: fm_transport_dto::TerminalAssistRequestDto,
+        on_event: &mut (dyn FnMut(fm_transport_dto::TerminalAssistEventDto) + Send),
+    ) -> Result<fm_transport_dto::TerminalAssistReplyDto, fm_transport_dto::ChatFailureDto> {
+        crate::terminal_assist::reply_streaming(
+            &self.llm_profiles,
+            &self.providers,
+            &self.terminal_sessions,
+            request,
+            on_event,
+        )
+        .await
+    }
+
     /// Forgets one terminal tab's assistant session, when the tab closes.
     pub fn terminal_assist_close(&self, session_id: &str) {
         self.terminal_sessions.close(session_id);

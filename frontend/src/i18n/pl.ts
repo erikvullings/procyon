@@ -397,6 +397,7 @@ export const pl = {
     defaultStartLocations: 'Domyślne lokalizacje początkowe (oddzielone przecinkami)',
     terminal: 'Terminal',
     terminalCommand: 'Polecenie terminala',
+    terminalAssistant: 'Asystent terminala (pytania z #, Wyjaśnij i Napraw)',
     terminalApps: 'Zewnętrzne terminale',
     terminalAppsHelp:
       'Po jednym w wierszu: Nazwa = polecenie (nazwa aplikacji w macOS, plik wykonywalny w Windows). Oferowane przez „Otwórz terminal za pomocą…”.',
@@ -2706,6 +2707,7 @@ export const pl = {
     assistEdit: 'Edytuj',
     contextEnvironment: 'Środowisko',
     contextEnvironmentDetail: 'System operacyjny, architektura i powłoka',
+    contextToggle: 'Kontekst ({count})',
     help: 'Pomoc asystenta',
     helpTitle: 'Asystent terminala',
     helpClose: 'Zamknij',

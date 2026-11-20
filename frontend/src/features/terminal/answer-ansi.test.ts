@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { noticeAnsi, questionAnsi, renderAnswerAnsi, stepsAnsi } from './answer-ansi';
+import {
+  createAnswerStream,
+  noticeAnsi,
+  questionAnsi,
+  renderAnswerAnsi,
+  stepsAnsi,
+} from './answer-ansi';
 
 const BOLD = (text: string) => `\x1b[1m${text}\x1b[22m`;
 
@@ -63,5 +69,40 @@ describe('questionAnsi and stepsAnsi', () => {
   it('lists the steps dimmed, or nothing', () => {
     expect(stepsAnsi([])).toBe('');
     expect(stepsAnsi(['Read a.txt'])).toBe('\x1b[2m  ↳ Read a.txt\x1b[22m\r\n');
+  });
+});
+
+describe('createAnswerStream', () => {
+  const feed = (lines: string[], width = 80) => {
+    const stream = createAnswerStream(width);
+    return lines.map((line) => stream.line(line)).join('');
+  };
+
+  it('renders lines one at a time with a blank line between kinds of block', () => {
+    expect(feed(['Intro **now**', '- a', '- b', '', 'Next'])).toBe(
+      `  Intro ${BOLD('now')}\r\n\r\n  • a\r\n  • b\r\n\r\n  Next\r\n`,
+    );
+  });
+
+  it('keeps the numbers of a numbered list and wraps with a hanging indent', () => {
+    expect(feed(['1. aaa bbb ccc ddd', '2. eee'], 12)).toBe(
+      '  1. aaa bbb\r\n     ccc ddd\r\n  2. eee\r\n',
+    );
+  });
+
+  it('indents code between fences and separates it from the text around it', () => {
+    expect(feed(['Run:', '```sh', 'ls -la', '', 'echo hi', '```', 'Done'])).toBe(
+      '  Run:\r\n\r\n    \x1b[36mls -la\x1b[39m\r\n\r\n    \x1b[36mecho hi\x1b[39m\r\n\r\n  Done\r\n',
+    );
+  });
+
+  it('shows headings and a Command: line apart from the text', () => {
+    expect(feed(['## Title', 'Try:', 'Command: ls -la'])).toBe(
+      `  \x1b[1;4mTitle\x1b[22;24m\r\n\r\n  Try:\r\n\r\n  ${BOLD('Command:')} \x1b[32mls -la\x1b[39m\r\n`,
+    );
+  });
+
+  it('collapses repeated blank lines and strips control characters', () => {
+    expect(feed(['a', '', '', 'b\x1b[2J'])).toBe('  a\r\n\r\n  b[2J\r\n');
   });
 });

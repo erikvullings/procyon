@@ -189,6 +189,8 @@ export interface Settings {
   readonly quickFilterMatchMode: QuickFilterMatchMode;
   /** Command-block shell integration for new terminal sessions (task 0333). */
   readonly terminalShellIntegration: TerminalShellIntegration;
+  /** Whether the terminal assistant (`#` questions, Explain and Fix) is on (task 0336). */
+  readonly terminalAssistant: boolean;
   /** Remembers and restores the view (sort, columns, mode) chosen for each folder (task 0270). */
   readonly rememberFolderViews: boolean;
   /** Basemap of the shared map component (task 0275). */

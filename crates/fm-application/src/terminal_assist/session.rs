@@ -31,8 +31,10 @@ enum Turn {
 struct Session {
     turns: Vec<Turn>,
     steps: u32,
-    /// What describes the terminal now; shown once at the top of the prompt.
-    state: String,
+    /// The state parts sent so far, as they were last sent.
+    state: HashMap<String, String>,
+    /// Whether any state was sent yet, which decides how an update is introduced.
+    state_sent: bool,
     /// Fingerprints of the command blocks already sent, oldest first.
     sent_blocks: Vec<u64>,
 }
@@ -81,9 +83,33 @@ impl Sessions {
             .map_or(0, |session| session.turns.len())
     }
 
-    /// Replaces what describes the terminal now (system, folder, selection, listing).
-    pub(super) fn set_state(&self, id: &str, state: &str) {
-        self.with(id, |session| state.clone_into(&mut session.state));
+    /// The state parts to send with the next question: all of them the first time, afterwards
+    /// only those that differ from what was last sent. A part that is no longer given is
+    /// forgotten, so it is sent again if it returns. Nothing already sent is ever altered.
+    pub(super) fn state_update(&self, id: &str, sections: &[(&'static str, String)]) -> String {
+        let mut update = String::new();
+        self.with(id, |session| {
+            let first = !session.state_sent;
+            let changed: Vec<&str> = sections
+                .iter()
+                .filter(|(key, text)| session.state.get(*key) != Some(text))
+                .map(|(_, text)| text.as_str())
+                .collect();
+            if !changed.is_empty() {
+                let label = if first {
+                    "Terminal state:"
+                } else {
+                    "Terminal state changed:"
+                };
+                update = format!("{label}\n{}", changed.join("\n"));
+                session.state_sent = true;
+            }
+            session.state = sections
+                .iter()
+                .map(|(key, text)| ((*key).to_owned(), text.clone()))
+                .collect();
+        });
+        update
     }
 
     /// The command blocks not sent in an earlier turn of this session; they count as sent now.
@@ -184,15 +210,7 @@ impl Sessions {
             total += size;
             start -= 1;
         }
-        let turns = rendered[start..].concat();
-        if session.state.is_empty() {
-            turns
-        } else {
-            format!(
-                "Current state of the terminal:\n{}\n\n{turns}",
-                session.state
-            )
-        }
+        rendered[start..].concat()
     }
 
     /// Forgets a session.

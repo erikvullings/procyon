@@ -4794,6 +4794,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 client: tauriTerminalClient,
                 shellIntegration: shellState.currentSettings?.terminalShellIntegration ?? 'unset',
                 paneContext: terminalPaneContext,
+                assistantEnabled: shellState.currentSettings?.terminalAssistant ?? true,
                 registerInsert: (insert) => {
                   shellState.insertIntoTerminal = insert;
                 },

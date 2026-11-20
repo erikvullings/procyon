@@ -395,6 +395,7 @@ export const es = {
     defaultStartLocations: 'Ubicaciones de inicio predeterminadas (separadas por comas)',
     terminal: 'Terminal',
     terminalCommand: 'Comando de terminal',
+    terminalAssistant: 'Asistente de terminal (preguntas con #, Explicar y Corregir)',
     terminalApps: 'Terminales externas',
     terminalAppsHelp:
       'Una por línea: Nombre = comando (un nombre de aplicación en macOS, un ejecutable en Windows). Se ofrecen en «Abrir terminal con…».',
@@ -2713,6 +2714,7 @@ export const es = {
     assistEdit: 'Editar',
     contextEnvironment: 'Sistema',
     contextEnvironmentDetail: 'Sistema operativo, arquitectura y shell',
+    contextToggle: 'Contexto ({count})',
     help: 'Ayuda del asistente',
     helpTitle: 'Asistente de terminal',
     helpClose: 'Cerrar',

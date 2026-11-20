@@ -1,6 +1,10 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import type { Location } from '../../models';
-import type { TerminalAssistReply, TerminalAssistRequest } from './terminal-assist';
+import type {
+  TerminalAssistEvent,
+  TerminalAssistReply,
+  TerminalAssistRequest,
+} from './terminal-assist';
 
 export type TerminalEvent =
   | { readonly type: 'output'; readonly data: number[] }
@@ -20,8 +24,15 @@ export interface TerminalClient {
   close(sessionId: string): Promise<boolean>;
   write(sessionId: string, data: Uint8Array): Promise<void>;
   resize(sessionId: string, columns: number, rows: number): Promise<void>;
-  /** Asks the configured chat endpoint about the terminal (task 0333). Nothing is run. */
-  assist(request: TerminalAssistRequest): Promise<TerminalAssistReply>;
+  /**
+   * Asks the configured chat endpoint about the terminal (task 0333). Nothing is run. With
+   * `onEvent`, each finished line of the answer and each step is reported while the model is
+   * still writing, and the reply still carries the whole text.
+   */
+  assist(
+    request: TerminalAssistRequest,
+    onEvent?: (event: TerminalAssistEvent) => void,
+  ): Promise<TerminalAssistReply>;
   /** Forgets one tab's assistant conversation when the tab closes (task 0336). */
   assistClose(sessionId: string): Promise<void>;
 }
@@ -43,6 +54,11 @@ export const tauriTerminalClient: TerminalClient = {
   write: (sessionId, data) => invoke('write_embedded_terminal', { sessionId, data: [...data] }),
   resize: (sessionId, columns, rows) =>
     invoke('resize_embedded_terminal', { sessionId, columns, rows }),
-  assist: (request) => invoke<TerminalAssistReply>('terminal_assist', { request }),
+  assist: (request, onEvent) => {
+    if (onEvent === undefined) return invoke<TerminalAssistReply>('terminal_assist', { request });
+    const events = new Channel<TerminalAssistEvent>();
+    events.onmessage = onEvent;
+    return invoke<TerminalAssistReply>('terminal_assist_stream', { request, events });
+  },
   assistClose: (sessionId) => invoke<void>('terminal_assist_close', { sessionId }),
 };

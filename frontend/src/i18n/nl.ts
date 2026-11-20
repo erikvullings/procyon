@@ -394,6 +394,7 @@ export const nl = {
     defaultStartLocations: 'Standaard startlocaties (komma-gescheiden)',
     terminal: 'Terminal',
     terminalCommand: 'Terminalcommando',
+    terminalAssistant: 'Terminalassistent (#-vragen, Uitleggen en Oplossen)',
     terminalApps: 'Externe terminals',
     terminalAppsHelp:
       'Eén per regel: Naam = commando (een toepassingsnaam op macOS, een uitvoerbaar bestand op Windows). Aangeboden door “Terminal openen met…”.',
@@ -2704,6 +2705,7 @@ export const nl = {
     assistEdit: 'Bewerken',
     contextEnvironment: 'Systeem',
     contextEnvironmentDetail: 'Besturingssysteem, architectuur en shell',
+    contextToggle: 'Meesturen ({count})',
     help: 'Hulp bij de assistent',
     helpTitle: 'Terminalassistent',
     helpClose: 'Sluiten',

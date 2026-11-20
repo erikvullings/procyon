@@ -137,3 +137,18 @@ Phase 4 — `run_command` with approval, exit code and output returned to the lo
     expected), or 400 ms after open.
   - Tooltips are drawn by the drawer after 500 ms (CSS `:hover` and native `title` did not show);
     pill tooltips read "Included. Click to exclude." / "Not included. Click to include.".
+- 2026-11-20 Claude: streaming, folding pills, settings, append-only context.
+  - Context is append-only: the state (system, folder, other pane, selection, listing) goes in
+    with the first question, afterwards only the parts that changed are added ("Terminal state
+    changed:"), and nothing already sent is altered, so a cached prompt prefix still matches and an
+    old command is never taken to have run in the new folder.
+  - Streaming: `ask` reports each finished line and each step on a Tauri channel
+    (`terminal_assist_stream`, `TerminalAssistEventDto`); the terminal writes them as they arrive
+    (`createAnswerStream` renders line by line). Granularity is a line, not a token: a long
+    paragraph still appears when its line is complete. Lines that look like a tool call are held
+    back, and shown at the end only if the reply turns out not to be one.
+  - The pills fold into one "Context (n)" button when the bar is under 640 px (CSS container
+    query); the button opens them.
+  - Setting `terminalAssistant` (default on; Settings → Terminal): off leaves `#` to the shell and
+    hides the bar, help, block Explain/Fix and the shortcuts.
+  - Not verified in the Tauri app: streaming over a real channel, the container query, the layout.

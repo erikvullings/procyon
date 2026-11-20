@@ -24,6 +24,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     semanticThemeRootIds: [],
     quickFilterMatchMode: 'fuzzy',
     terminalShellIntegration: 'unset',
+    terminalAssistant: true,
     schemaVersion: 2,
     theme: 'auto',
     language: 'en',

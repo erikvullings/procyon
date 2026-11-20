@@ -404,6 +404,7 @@ export const de = {
     defaultStartLocations: 'Standard-Startorte (kommagetrennt)',
     terminal: 'Terminal',
     terminalCommand: 'Terminalbefehl',
+    terminalAssistant: 'Terminal-Assistent (#-Fragen, Erklären und Korrigieren)',
     terminalApps: 'Externe Terminals',
     terminalAppsHelp:
       'Eine pro Zeile: Name = Befehl (unter macOS ein Anwendungsname, unter Windows eine ausführbare Datei). Angeboten von „Terminal öffnen mit…“.',
@@ -2734,6 +2735,7 @@ export const de = {
     assistEdit: 'Bearbeiten',
     contextEnvironment: 'Betriebssystem',
     contextEnvironmentDetail: 'Betriebssystem, Architektur und Shell',
+    contextToggle: 'Kontext ({count})',
     help: 'Hilfe zum Assistenten',
     helpTitle: 'Terminal-Assistent',
     helpClose: 'Schließen',

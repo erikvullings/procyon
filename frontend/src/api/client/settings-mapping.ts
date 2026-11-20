@@ -53,6 +53,7 @@ export function settingsFromDto(settings: SettingsDto): Settings {
     checkForBetaUpdates: settings.checkForBetaUpdates ?? false,
     quickFilterMatchMode: settings.quickFilterMatchMode ?? DEFAULT_QUICK_FILTER_MATCH_MODE,
     terminalShellIntegration: settings.terminalShellIntegration ?? 'unset',
+    terminalAssistant: settings.terminalAssistant ?? true,
     map: settings.map ?? DEFAULT_MAP_SETTINGS,
   };
 }

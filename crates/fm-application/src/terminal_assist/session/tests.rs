@@ -28,20 +28,38 @@ fn each_person_turn_keeps_the_activity_it_came_with() {
 }
 
 #[test]
-fn the_current_state_is_shown_once_at_the_top_and_replaced_when_it_changes() {
+fn state_is_sent_with_the_first_question_and_afterwards_only_what_changed() {
     let sessions = Sessions::default();
-    sessions.push_person("t1", "first", "");
-    sessions.set_state("t1", "Working directory: /a");
-    sessions.push_assistant("t1", "ok");
-    sessions.push_person("t1", "second", "");
-    sessions.set_state("t1", "Working directory: /b");
+    let sections = |dir: &str, listing: &str| {
+        vec![
+            ("header", format!("Working directory: {dir}")),
+            ("listing", listing.to_owned()),
+        ]
+    };
+    let first = sessions.state_update("t1", &sections("/a", "- a.txt"));
+    assert_eq!(first, "Terminal state:\nWorking directory: /a\n- a.txt");
+    assert_eq!(sessions.state_update("t1", &sections("/a", "- a.txt")), "");
 
-    let prompt = sessions.render("t1");
-    assert!(prompt.starts_with("Current state of the terminal:\nWorking directory: /b\n\n"));
-    assert!(!prompt.contains("/a"));
-    assert_eq!(prompt.matches("Working directory").count(), 1);
+    let moved = sessions.state_update("t1", &sections("/b", "- b.txt"));
+    assert_eq!(
+        moved,
+        "Terminal state changed:\nWorking directory: /b\n- b.txt"
+    );
+    let listing_only = sessions.state_update("t1", &sections("/b", "- b.txt\n- c.txt"));
+    assert_eq!(listing_only, "Terminal state changed:\n- b.txt\n- c.txt");
 }
 
+#[test]
+fn a_part_that_was_left_out_and_comes_back_is_sent_again() {
+    let sessions = Sessions::default();
+    let with = vec![("listing", "- a".to_owned())];
+    sessions.state_update("t1", &with);
+    assert_eq!(sessions.state_update("t1", &[]), "");
+    assert_eq!(
+        sessions.state_update("t1", &with),
+        "Terminal state changed:\n- a"
+    );
+}
 #[test]
 fn only_commands_not_sent_before_are_offered_again() {
     let sessions = Sessions::default();

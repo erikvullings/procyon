@@ -126,6 +126,8 @@ export interface SettingsDto {
   templateFolder?: string | null;
   /** External terminals offered by "Open Terminal With...". */
   terminalApps?: TerminalAppDto[];
+  /** Whether the terminal assistant (`#` questions, Explain and Fix) is on (task 0336). */
+  terminalAssistant?: boolean;
   /**
      * Optional terminal command.
      * @nullable

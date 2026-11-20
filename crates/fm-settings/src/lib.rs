@@ -703,6 +703,8 @@ pub struct Settings {
     pub quick_filter_match_mode: QuickFilterMatchMode,
     /// Command-block shell integration for new terminals (task 0333).
     pub terminal_shell_integration: TerminalShellIntegration,
+    /// Whether the terminal assistant (`#` questions, Explain and Fix) is on (task 0336).
+    pub terminal_assistant: bool,
 }
 
 impl Settings {
@@ -799,6 +801,7 @@ impl Default for Settings {
             semantic_theme_root_ids: Vec::new(),
             quick_filter_match_mode: QuickFilterMatchMode::default(),
             terminal_shell_integration: TerminalShellIntegration::default(),
+            terminal_assistant: true,
         }
     }
 }

@@ -562,6 +562,18 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                     ]),
 
                     m('.row', [
+                      m(Switch, {
+                        className: 'col s12 m6',
+                        label: t('settings', 'terminalAssistant'),
+                        checked: activeDraft.terminalAssistant,
+                        left: t('settings', 'off'),
+                        right: t('settings', 'on'),
+                        onchange: (checked: boolean) =>
+                          update(current, { terminalAssistant: checked }),
+                      }),
+                    ]),
+
+                    m('.row', [
                       m('.col.s12.fm-settings-terminal-apps', [
                         m(
                           'label',

@@ -44,24 +44,33 @@ pub(super) fn render_context(request: &TerminalAssistRequestDto, files: &[Attach
     }
 }
 
-/// What describes the terminal now: the system (local shells only), shell, folder, branch, the
-/// other pane, the selection and the folder listing. A session shows this once, and replaces it
-/// when it changes.
+/// What describes the terminal now, as one text.
 pub(super) fn render_state(request: &TerminalAssistRequestDto) -> String {
+    state_sections(request)
+        .into_iter()
+        .map(|(_, text)| text)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// What describes the terminal now, in parts that change independently: `header` (system, shell,
+/// folder, branch), `otherPane`, `selection` and `listing`. A session sends a part with the first
+/// question and again only when it changes.
+pub(super) fn state_sections(request: &TerminalAssistRequestDto) -> Vec<(&'static str, String)> {
     let context = &request.context;
     let folder = path_from_location(&request.working_directory);
     let shown_path = folder.clone();
-    let mut text = String::new();
+    let mut header = String::new();
     if folder.is_some() && !context.omit_environment {
         let _ = writeln!(
-            text,
+            header,
             "Operating system: {} ({})",
             std::env::consts::OS,
             std::env::consts::ARCH
         );
     }
     let _ = writeln!(
-        text,
+        header,
         "Shell: {}",
         line(request.shell.as_deref().unwrap_or("unknown"))
     );
@@ -69,14 +78,15 @@ pub(super) fn render_state(request: &TerminalAssistRequestDto) -> String {
         || line(&request.working_directory),
         |path| line(&path.to_string_lossy()),
     );
-    let _ = writeln!(text, "Working directory: {shown_folder}");
+    let _ = writeln!(header, "Working directory: {shown_folder}");
     if let Some(branch) = shown_path.as_deref().and_then(git_branch) {
-        let _ = writeln!(text, "Git branch: {}", line(&branch));
+        let _ = writeln!(header, "Git branch: {}", line(&branch));
     }
+    let mut sections = vec![("header", header.trim_end().to_owned())];
     if let Some(other) = context.other_folder.as_deref() {
         let other = path_from_location(other)
             .map_or_else(|| line(other), |path| line(&path.to_string_lossy()));
-        let _ = writeln!(text, "Other pane folder: {other}");
+        sections.push(("otherPane", format!("Other pane folder: {other}")));
     }
     if !context.selected.is_empty() {
         let names: Vec<String> = context
@@ -85,22 +95,26 @@ pub(super) fn render_state(request: &TerminalAssistRequestDto) -> String {
             .take(MAX_SELECTED_NAMES)
             .map(|name| line(name))
             .collect();
-        let _ = writeln!(text, "Selected in the folder: {}", names.join(", "));
+        sections.push((
+            "selection",
+            format!("Selected in the folder: {}", names.join(", ")),
+        ));
     }
     if !context.listing.is_empty() {
-        let _ = writeln!(text, "Folder listing ({} names):", context.listing.len());
+        let mut listing = format!("Folder listing ({} names):", context.listing.len());
         for name in context.listing.iter().take(MAX_LISTED_NAMES) {
-            let _ = writeln!(text, "- {}", line(name));
+            let _ = write!(listing, "\n- {}", line(name));
         }
         if context.listing.len() > MAX_LISTED_NAMES {
-            let _ = writeln!(
-                text,
-                "- and {} more",
+            let _ = write!(
+                listing,
+                "\n- and {} more",
                 context.listing.len() - MAX_LISTED_NAMES
             );
         }
+        sections.push(("listing", listing));
     }
-    text.trim_end().to_owned()
+    sections
 }
 
 /// What happened since: recent commands with their output, and the files named with `@path`.

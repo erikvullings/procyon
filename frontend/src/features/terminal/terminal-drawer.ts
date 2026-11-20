@@ -13,7 +13,13 @@ import {
 import { t } from '../../i18n';
 import type { Location } from '../../models';
 import type { TerminalShellIntegration } from '../../models/settings';
-import { noticeAnsi, questionAnsi, renderAnswerAnsi, stepsAnsi } from './answer-ansi';
+import {
+  createAnswerStream,
+  noticeAnsi,
+  questionAnsi,
+  renderAnswerAnsi,
+  stepsAnsi,
+} from './answer-ansi';
 import { type BlockTracker, type CommandBlock, createBlockTracker } from './block-tracker';
 import { highlightShell } from './shell-highlight';
 import { parseShellMark } from './shell-integration';
@@ -29,6 +35,7 @@ import {
   parseMentions,
   type RemovableChipId,
   type TerminalAssistContext,
+  type TerminalAssistEvent,
   type TerminalAssistReply,
   type TerminalAssistSource,
   type TerminalToolResult,
@@ -64,6 +71,8 @@ export interface TerminalDrawerAttrs {
   readonly registerDisposeTab?: (dispose: (tabKey: string) => void) => void;
   /** The active pane's listing and selection, read when the person asks the assistant (0336). */
   readonly paneContext?: () => TerminalPaneContext;
+  /** Whether the assistant is on (the Terminal setting); off leaves `#` to the shell (0336). */
+  readonly assistantEnabled?: boolean;
   /** The person's choice for command-block shell integration (task 0333). */
   readonly shellIntegration?: TerminalShellIntegration;
   /** Hands the owner a way to type text at this drawer's active prompt (task 0333). */
@@ -298,6 +307,8 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   let editing: string | undefined;
   /** Whether the assistant help dialog is open. */
   let helpOpen = false;
+  /** Whether the pills are unfolded while the bar is too narrow to show them in a row. */
+  let contextOpen = false;
   /** The tooltip being shown, and the timer that will show it. Drawn by the drawer itself: the
    * webview shows no native tooltip for these buttons. */
   let tip:
@@ -367,6 +378,8 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     clearTimeout(live.readyTimer);
     live.readyTimer = setTimeout(() => markReady(live), delay);
   }
+
+  const assistantOn = (): boolean => currentAttrs?.assistantEnabled !== false;
 
   const isBusy = (live: LiveTerminal): boolean =>
     panel?.status === 'busy' && panel.tabKey === live.key;
@@ -448,17 +461,30 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     panel = { status: 'busy', tabKey: live.key };
     editing = undefined;
     m.redraw();
+    // Lines and steps are written as they arrive; the reply then only says what to offer next.
+    const answer = createAnswerStream(live.terminal.cols);
+    let streamed = false;
+    const onEvent = (event: TerminalAssistEvent): void => {
+      if (token !== live.requestId) return;
+      streamed = true;
+      live.terminal.write(
+        event.kind === 'step' ? stepsAnsi([event.text]) : answer.line(event.text),
+      );
+    };
     attrs.client
-      .assist({
-        kind: 'ask',
-        transcript: '',
-        workingDirectory: attrs.location.uri,
-        sessionId: live.assistSession,
-        ...(input.question === undefined ? {} : { request: input.question }),
-        ...(input.context === undefined ? {} : { context: input.context }),
-        ...(input.toolResult === undefined ? {} : { toolResult: input.toolResult }),
-      })
-      .then((reply) => presentReply(live, token, reply))
+      .assist(
+        {
+          kind: 'ask',
+          transcript: '',
+          workingDirectory: attrs.location.uri,
+          sessionId: live.assistSession,
+          ...(input.question === undefined ? {} : { request: input.question }),
+          ...(input.context === undefined ? {} : { context: input.context }),
+          ...(input.toolResult === undefined ? {} : { toolResult: input.toolResult }),
+        },
+        onEvent,
+      )
+      .then((reply) => presentReply(live, token, reply, streamed))
       .catch((error: unknown) =>
         present(live, token, noticeAnsi(assistFailureText(String(error))), undefined),
       )
@@ -466,13 +492,19 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   }
 
   /** Writes a reply into the terminal; a command in it goes to the bar for the person to act on. */
-  function presentReply(live: LiveTerminal, token: number, reply: TerminalAssistReply): void {
-    let text = stepsAnsi(reply.steps ?? []);
+  function presentReply(
+    live: LiveTerminal,
+    token: number,
+    reply: TerminalAssistReply,
+    streamed: boolean,
+  ): void {
+    // A streamed answer is already in the terminal; only a host that cannot stream gets it now.
+    let text = streamed ? '' : stepsAnsi(reply.steps ?? []);
     let next: AssistPanel | undefined;
     if (reply.runCommand !== undefined) {
       next = { status: 'approve', tabKey: live.key, command: cleanCommand(reply.runCommand) };
     } else {
-      text += renderAnswerAnsi(reply.text, live.terminal.cols);
+      if (!streamed) text += renderAnswerAnsi(reply.text, live.terminal.cols);
       const command = commandFromAnswer('ask', reply.text);
       if (command !== undefined) {
         next = { status: 'suggest', tabKey: live.key, command: cleanCommand(command) };
@@ -680,10 +712,12 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         class: failed ? 'fm-terminal-block-status--failed' : 'fm-terminal-block-status--ok',
         title: failed ? t('terminal', 'blockFailed') : t('terminal', 'blockSucceeded'),
       }),
-      action(t('terminal', 'blockExplain'), 'Ctrl+Shift+E', sparklesIcon({ size: 14 }), () =>
-        explain(live, block),
-      ),
-      failed
+      assistantOn()
+        ? action(t('terminal', 'blockExplain'), 'Ctrl+Shift+E', sparklesIcon({ size: 14 }), () =>
+            explain(live, block),
+          )
+        : undefined,
+      assistantOn() && failed
         ? action(t('terminal', 'blockFix'), 'Ctrl+Shift+F', wrenchIcon({ size: 14 }), () =>
             fix(live, block),
           )
@@ -774,6 +808,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     }
 
     if (live === undefined || !ctrlShift) return false;
+    if (!assistantOn() && (name === 'e' || name === 'f')) return false;
     if (name === 'e') {
       explain(live);
       return true;
@@ -819,7 +854,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     }
     const atPrompt = live.atPrompt || !live.markSeen;
     const question =
-      data === '\r' && atPrompt
+      data === '\r' && atPrompt && assistantOn()
         ? questionAtPrompt(live.typed, cursorLine(live.terminal))
         : undefined;
     if (question !== undefined) {
@@ -1062,15 +1097,20 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
 
   /**
    * What would be sent with the next question, one chip per part. A chip toggles its part off and
-   * on; `@dir`, `@output` and `@path` in the question put parts back or add files.
+   * on; `@path` in the question adds that file. On a narrow bar the pills fold into one button.
    */
   function contextRow(live: LiveTerminal, questionText: string): m.Children {
     const source = assistSource(live);
     const removed = removedFor(live, source);
     const chips = contextChips(source, removed, parseMentions(questionText));
-    return m(
+    const included = chips.filter((chip) => !chip.removed).length;
+    const pills = m(
       '.fm-terminal-context',
-      { role: 'group', 'aria-label': t('terminal', 'contextLabel') },
+      {
+        class: contextOpen ? 'fm-terminal-context--open' : undefined,
+        role: 'group',
+        'aria-label': t('terminal', 'contextLabel'),
+      },
       chips.map((chip) =>
         m(
           'button.fm-terminal-chip',
@@ -1093,6 +1133,21 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         ),
       ),
     );
+    return m('.fm-terminal-context-wrap', [
+      m(
+        'button.fm-terminal-context-toggle',
+        {
+          type: 'button',
+          'aria-expanded': String(contextOpen),
+          onclick: () => {
+            contextOpen = !contextOpen;
+            m.redraw();
+          },
+        },
+        t('terminal', 'contextToggle', { count: String(included) }),
+      ),
+      pills,
+    ]);
   }
 
   /** The help dialog for the terminal assistant: what to type, what is sent, what runs. */
@@ -1243,6 +1298,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
    * and Explain / Fix. It shows while a `#` question is typed, so the pills can be trimmed first.
    */
   function assistBar(live: LiveTerminal, shown: AssistPanel | undefined): m.Children {
+    if (!assistantOn()) return undefined;
     const typing = live.typed.text.startsWith('#');
     if (!live.assistActive && !typing && shown === undefined) return undefined;
     const busy = shown?.status === 'busy';
@@ -1389,20 +1445,22 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
             },
             '×',
           ),
-          m(
-            'button.fm-terminal-help',
-            {
-              type: 'button',
-              'aria-label': t('terminal', 'help'),
-              ...tooltipEvents(() => t('terminal', 'help'), 'below-right'),
-              'aria-haspopup': 'dialog',
-              onclick: () => {
-                helpOpen = true;
-              },
-            },
-            helpIcon({ size: 14 }),
-          ),
-          helpOpen ? helpDialog() : undefined,
+          assistantOn()
+            ? m(
+                'button.fm-terminal-help',
+                {
+                  type: 'button',
+                  'aria-label': t('terminal', 'help'),
+                  ...tooltipEvents(() => t('terminal', 'help'), 'below-right'),
+                  'aria-haspopup': 'dialog',
+                  onclick: () => {
+                    helpOpen = true;
+                  },
+                },
+                helpIcon({ size: 14 }),
+              )
+            : undefined,
+          helpOpen && assistantOn() ? helpDialog() : undefined,
           tip === undefined
             ? undefined
             : m(

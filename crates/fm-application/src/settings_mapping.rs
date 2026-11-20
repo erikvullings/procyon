@@ -194,6 +194,7 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
             TerminalShellIntegration::Enabled => TerminalShellIntegrationDto::Enabled,
             TerminalShellIntegration::Disabled => TerminalShellIntegrationDto::Disabled,
         },
+        terminal_assistant: settings.terminal_assistant,
     }
 }
 
@@ -371,6 +372,7 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
             TerminalShellIntegrationDto::Enabled => TerminalShellIntegration::Enabled,
             TerminalShellIntegrationDto::Disabled => TerminalShellIntegration::Disabled,
         },
+        terminal_assistant: settings.terminal_assistant,
     }
 }
 

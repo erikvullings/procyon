@@ -116,3 +116,19 @@ pub struct TerminalAssistReplyDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_command: Option<String>,
 }
+
+/// Something shown while an `ask` is answered, so the terminal can write it as it happens.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum TerminalAssistEventDto {
+    /// One finished line of the answer, without its line break.
+    Line {
+        /// The line's text, Markdown as the model wrote it.
+        text: String,
+    },
+    /// Something the assistant looked at, for example `Read Cargo.toml`.
+    Step {
+        /// The one-line description.
+        text: String,
+    },
+}

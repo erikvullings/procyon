@@ -2,7 +2,9 @@ use fm_transport_dto::{
     TerminalAssistKindDto, TerminalAssistRequestDto, TerminalBlockDto, TerminalContextDto,
 };
 
-use super::{AttachedFile, path_from_location, render_activity, render_context, render_state};
+use super::{
+    AttachedFile, path_from_location, render_activity, render_context, render_state, state_sections,
+};
 
 fn request(context: TerminalContextDto) -> TerminalAssistRequestDto {
     TerminalAssistRequestDto {
@@ -159,4 +161,24 @@ fn state_and_activity_are_rendered_apart_and_together() {
     assert!(activity.starts_with("Recent commands, oldest first:\n$ ls (exit 0)"));
     assert_eq!(render_context(&asked, &[]), format!("{state}\n{activity}"));
     assert_eq!(render_activity(&[], &[]), "");
+}
+
+#[test]
+fn the_state_comes_in_parts_that_change_independently() {
+    let asked = request(TerminalContextDto {
+        selected: vec!["a.txt".into()],
+        listing: vec!["a.txt".into(), "b.txt".into()],
+        other_folder: Some("file:///other".into()),
+        ..TerminalContextDto::default()
+    });
+    let sections = state_sections(&asked);
+    let keys: Vec<&str> = sections.iter().map(|(key, _)| *key).collect();
+    assert_eq!(keys, ["header", "otherPane", "selection", "listing"]);
+    assert!(sections[0].1.contains("Working directory: /tmp/my dir"));
+    assert_eq!(sections[1].1, "Other pane folder: /other");
+    assert_eq!(sections[2].1, "Selected in the folder: a.txt");
+    assert_eq!(sections[3].1, "Folder listing (2 names):\n- a.txt\n- b.txt");
+
+    let bare = state_sections(&request(TerminalContextDto::default()));
+    assert_eq!(bare.len(), 1);
 }

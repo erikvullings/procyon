@@ -278,8 +278,8 @@ pub use sqlite::{
 };
 pub use system_location::{SystemLocationDto, SystemLocationKindDto, VolumeDto};
 pub use terminal_assist::{
-    TerminalAssistKindDto, TerminalAssistReplyDto, TerminalAssistRequestDto, TerminalBlockDto,
-    TerminalContextDto, TerminalToolResultDto,
+    TerminalAssistEventDto, TerminalAssistKindDto, TerminalAssistReplyDto,
+    TerminalAssistRequestDto, TerminalBlockDto, TerminalContextDto, TerminalToolResultDto,
 };
 pub use transfer_recovery::{
     InterruptedTransferDto, InterruptedTransfersDto, TransferRecoveryClassDto,

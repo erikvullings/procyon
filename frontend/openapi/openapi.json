@@ -27465,6 +27465,10 @@
             },
             "description": "External terminals offered by \"Open Terminal With...\"."
           },
+          "terminalAssistant": {
+            "type": "boolean",
+            "description": "Whether the terminal assistant (`#` questions, Explain and Fix) is on (task 0336)."
+          },
           "terminalCommand": {
             "type": [
               "string",

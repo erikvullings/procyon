@@ -51,6 +51,11 @@ export interface TerminalAssistReply {
   readonly runCommand?: string;
 }
 
+/** Something shown while an answer is written: a finished line of it, or a step taken. */
+export type TerminalAssistEvent =
+  | { readonly kind: 'line'; readonly text: string }
+  | { readonly kind: 'step'; readonly text: string };
+
 /** Most terminal lines sent with one request; the newest lines are kept. */
 export const MAX_TRANSCRIPT_LINES = 200;
 

@@ -412,6 +412,7 @@ describe('TerminalDrawer questions with #', () => {
         request: 'list files',
         workingDirectory: 'file:///home',
       }),
+      expect.any(Function),
     );
     const sent = write.mock.calls.map(([, data]) => new TextDecoder().decode(data));
     expect(sent).toContain('\x15');
@@ -671,6 +672,7 @@ describe('TerminalDrawer # after editing keys', () => {
           kind: 'ask',
           request: 'How to list all files sorted by size',
         }),
+        expect.any(Function),
       ),
     );
     // The Enter that follows only brings the prompt back, after the clear and the answer.
@@ -817,6 +819,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
   let echo: ((event: { type: 'output'; data: number[] }) => void) | undefined;
   let disposeTab: ((tabKey: string) => void) | undefined;
   let paneListing: string[] = ['a.txt', 'src/'];
+  let assistantEnabled = true;
 
   const bytes = (text: string) => [...new TextEncoder().encode(text)];
   const textarea = () => {
@@ -867,6 +870,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
           },
           onToggle: vi.fn(),
           shellIntegration: 'disabled',
+          assistantEnabled,
           paneContext: () => ({
             listing: paneListing,
             selected: ['a.txt'],
@@ -892,6 +896,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     echo = undefined;
     disposeTab = undefined;
     paneListing = ['a.txt', 'src/'];
+    assistantEnabled = true;
     write = vi.fn<TerminalClient['write']>(async () => undefined);
     assist = vi.fn<TerminalClient['assist']>(async () => ({
       text: 'Fine.\nCommand: ls',
@@ -1033,6 +1038,52 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     await vi.waitFor(() => expect(sentNow()).toEqual(['ls']));
   });
 
+  it('writes streamed lines and steps as they arrive, without writing the answer twice', async () => {
+    assist.mockImplementationOnce(async (_request, onEvent) => {
+      onEvent?.({ kind: 'step', text: 'Read a.txt' });
+      onEvent?.({ kind: 'line', text: 'Streamed **line**' });
+      onEvent?.({ kind: 'line', text: 'Command: ls' });
+      return { text: 'Streamed **line**\nCommand: ls', steps: ['Read a.txt'] };
+    });
+    await mount();
+    ask('# stream');
+
+    await vi.waitFor(() => expect(root.textContent).toContain('Streamed line'));
+    const text = root.textContent ?? '';
+    expect(text.split('Streamed line')).toHaveLength(2);
+    expect(text.split('Read a.txt')).toHaveLength(2);
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-terminal-assist-command')?.textContent).toContain('ls'),
+    );
+  });
+
+  it('folds the pills into one button that opens them', async () => {
+    await mount();
+    ask('# first');
+    await vi.waitFor(() => expect(button('Context (3)')).toBeDefined());
+    const toggle = button('Context (3)');
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(root.querySelector('.fm-terminal-context--open')).toBeNull();
+
+    toggle?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-context--open')).not.toBeNull());
+    expect(button('Context (3)')?.getAttribute('aria-expanded')).toBe('true');
+
+    button('Context (3)')?.click();
+    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-context--open')).toBeNull());
+  });
+
+  it('leaves # to the shell and shows no assistant when the setting is off', async () => {
+    assistantEnabled = false;
+    await mount();
+    ask('# not a question');
+
+    await vi.waitFor(() => expect(write.mock.calls.map(([, data]) => data[0])).toContain(13));
+    expect(assist).not.toHaveBeenCalled();
+    expect(root.querySelector('.fm-terminal-assist-bar')).toBeNull();
+    expect(root.querySelector('.fm-terminal-help')).toBeNull();
+  });
+
   it('inserts the suggested command with Enter after a second question', async () => {
     await mount();
     ask('# first');
@@ -1136,7 +1187,10 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     textarea().dispatchEvent(shortcut);
 
     await vi.waitFor(() =>
-      expect(assist).toHaveBeenCalledWith(expect.objectContaining({ kind: 'ask' })),
+      expect(assist).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'ask' }),
+        expect.any(Function),
+      ),
     );
     expect(assist.mock.calls.at(-1)?.[0].context?.blocks?.[0]?.output).toContain('boom');
   });
