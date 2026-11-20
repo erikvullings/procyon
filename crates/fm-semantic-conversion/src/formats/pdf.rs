@@ -24,8 +24,8 @@ use crate::budget::Stop;
 use crate::builder::{DocumentBuilder, UnitDraft, VisualDraft};
 use crate::converter::PdfPageWindow;
 use crate::model::{
-    ComponentVersion, ConvertedDocument, FormatKind, MAX_VISUAL_ATTACHMENTS, MAX_VISUAL_BYTES,
-    Omission, Provenance, TopLevelBoundary, UnitKind, VisualProvenance,
+    ComponentVersion, ConvertedDocument, FormatKind, MAX_VISUAL_SOURCE_BYTES, Omission, Provenance,
+    TopLevelBoundary, UnitKind, VisualProvenance,
 };
 use crate::pdf_toc::{clean_pdf_toc_text, repair_spaced_elsevier_doi};
 
@@ -516,13 +516,13 @@ fn extract_page_images(
             _ => None,
         };
         let (media_type, data) = match filter {
-            Some(b"DCTDecode") if image.content.len() <= MAX_VISUAL_BYTES => {
+            Some(b"DCTDecode") if image.content.len() <= MAX_VISUAL_SOURCE_BYTES => {
                 ("image/jpeg", image.content.clone())
             }
             Some(b"DCTDecode") => {
                 builder.omit_visual(
                     Some(provenance),
-                    format!("PDF image exceeds {MAX_VISUAL_BYTES} retained bytes"),
+                    format!("PDF image exceeds {MAX_VISUAL_SOURCE_BYTES} source bytes"),
                 );
                 continue;
             }
@@ -541,18 +541,6 @@ fn extract_page_images(
                 continue;
             }
         };
-        if builder.visual_count_exhausted() {
-            return Err(PdfError::Malformed(format!(
-                "page {page_number} image {} exceeds the {MAX_VISUAL_ATTACHMENTS}-attachment PDF limit; no partial generation published",
-                image_index + 1
-            )));
-        }
-        if data.len() > builder.remaining_visual_bytes() {
-            return Err(PdfError::Malformed(format!(
-                "page {page_number} image {} exceeds the remaining PDF visual byte budget; no partial generation published",
-                image_index + 1
-            )));
-        }
         retained |= builder
             .push_visual(VisualDraft {
                 media_type,
@@ -569,7 +557,7 @@ struct BoundedPngWriter(Vec<u8>);
 
 impl Write for BoundedPngWriter {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        if bytes.len() > MAX_VISUAL_BYTES.saturating_sub(self.0.len()) {
+        if bytes.len() > MAX_VISUAL_SOURCE_BYTES.saturating_sub(self.0.len()) {
             return Err(io::Error::other(
                 "encoded PDF image exceeds visual byte limit",
             ));
@@ -1534,28 +1522,50 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn scan_pages_past_attachment_capacity_fail_without_partial_generation() {
-        let page_count = crate::model::MAX_VISUAL_ATTACHMENTS + 1;
+    fn distinct_images_on_every_page_are_retained_without_a_document_cap() {
+        let page_count = 33;
         let empty_page: &[&str] = &[];
         let pages = vec![empty_page; page_count];
         let bytes = text_pdf(&pages);
         let mut document = Document::load_mem(&bytes).expect("load fixture");
-        let jpeg = vec![
-            0xff, 0xd8, 0xff, 0xc0, 0, 17, 8, 0, 1, 0, 2, 3, 1, 0x11, 0, 2, 0x11, 0, 3, 0x11, 0,
-            0xff, 0xd9,
-        ];
-        let image_id = document.add_object(Stream::new(
-            dictionary! {
-                "Type" => "XObject",
-                "Subtype" => "Image",
-                "Width" => 2,
-                "Height" => 1,
-                "ColorSpace" => "DeviceRGB",
-                "BitsPerComponent" => 8,
-                "Filter" => "DCTDecode",
-            },
-            jpeg,
-        ));
+        let page_ids: Vec<_> = document.get_pages().values().copied().collect();
+        for (index, page_id) in page_ids.iter().copied().enumerate() {
+            // Trailing bytes after the end-of-image marker make each picture distinct.
+            let mut jpeg = minimal_jpeg();
+            jpeg.push(u8::try_from(index).expect("page index fits a byte"));
+            let image_id = document.add_object(Stream::new(image_dictionary(), jpeg));
+            let content_id = document.get_page_contents(page_id)[0];
+            document
+                .get_object_mut(content_id)
+                .unwrap()
+                .as_stream_mut()
+                .unwrap()
+                .set_plain_content(b"q /Im1 Do Q\n".to_vec());
+            document.get_dictionary_mut(page_id).expect("page").set(
+                "Resources",
+                dictionary! { "XObject" => dictionary! { "Im1" => image_id } },
+            );
+        }
+        let mut bytes = Vec::new();
+        document.save_to(&mut bytes).expect("save fixture");
+
+        let converted = convert_pdf_with_visuals(&bytes, true).expect("conversion");
+
+        assert_eq!(converted.visuals().len(), page_count);
+        assert!(converted.visual_omissions().is_empty());
+        assert!(
+            !converted.is_partial(),
+            "retained images do not make text partial"
+        );
+    }
+
+    #[test]
+    fn identical_images_are_stored_once() {
+        let page_count = 3;
+        let empty_page: &[&str] = &[];
+        let bytes = text_pdf(&vec![empty_page; page_count]);
+        let mut document = Document::load_mem(&bytes).expect("load fixture");
+        let image_id = document.add_object(Stream::new(image_dictionary(), minimal_jpeg()));
         for page_id in document.get_pages().values().copied().collect::<Vec<_>>() {
             let content_id = document.get_page_contents(page_id)[0];
             document
@@ -1564,80 +1574,37 @@ pub(crate) mod tests {
                 .as_stream_mut()
                 .unwrap()
                 .set_plain_content(b"q /Im1 Do Q\n".to_vec());
+            document.get_dictionary_mut(page_id).expect("page").set(
+                "Resources",
+                dictionary! { "XObject" => dictionary! { "Im1" => image_id } },
+            );
         }
-        let resources_id = document
-            .get_page_resources(document.get_pages()[&1])
-            .unwrap()
-            .1[0];
-        document
-            .get_dictionary_mut(resources_id)
-            .unwrap()
-            .set("XObject", dictionary! { "Im1" => image_id });
         let mut bytes = Vec::new();
         document.save_to(&mut bytes).expect("save fixture");
 
-        assert!(
-            matches!(convert_pdf_with_visuals(&bytes, true), Err(PdfError::Malformed(detail))
-                if detail.contains(&format!("page {page_count} image 1"))
-                    && detail.contains("no partial generation published"))
-        );
-        for (start, end, expected_count) in [
-            (1, MAX_VISUAL_ATTACHMENTS as u32, MAX_VISUAL_ATTACHMENTS),
-            (page_count as u32, page_count as u32, 1),
-        ] {
-            let budgets = ConversionBudgets::default();
-            let cancellation = Cancellation::none();
-            let clock = ManualClock::new();
-            let mut tracker = BudgetTracker::new(&budgets, &cancellation, &clock);
-            let mut builder = DocumentBuilder::new(
-                ComponentVersion::new("baseline", 1),
-                FormatKind::Pdf,
-                &mut tracker,
-            );
-            builder.set_visuals_enabled(true);
-            convert(
-                &mut builder,
-                &bytes,
-                Some(PdfPageWindow::new(start, end).unwrap()),
-            )
-            .expect("window conversion");
-            let window = builder.finish();
-            assert_eq!(window.visuals().len(), expected_count);
-            assert!(window.is_partial(), "a window is not a publishable PDF");
-        }
+        let converted = convert_pdf_with_visuals(&bytes, true).expect("conversion");
 
-        let mut document = Document::load_mem(&bytes).expect("load fixture");
-        let last_page = document.get_pages()[&(page_count as u32)];
-        let unsupported = document.add_object(Stream::new(
-            dictionary! {
-                "Type" => "XObject", "Subtype" => "Image", "Width" => 2,
-                "Height" => 1, "Filter" => "JPXDecode",
-            },
-            vec![1, 2, 3],
-        ));
-        document
-            .get_dictionary_mut(last_page)
-            .expect("last page")
-            .set(
-                "Resources",
-                dictionary! {
-                    "XObject" => dictionary! { "Im1" => unsupported }
-                },
-            );
-        let mut bytes = Vec::new();
-        document
-            .save_to(&mut bytes)
-            .expect("save unsupported fixture");
-        let converted = convert_pdf_with_visuals(&bytes, true).expect("unsupported omission");
-        assert_eq!(converted.visuals().len(), MAX_VISUAL_ATTACHMENTS);
-        assert!(converted.visual_omissions().iter().any(|omission| {
-            omission.provenance
-                == Some(VisualProvenance::PdfImage {
-                    page_number: page_count as u32,
-                    image_index: 0,
-                })
-                && omission.detail.contains("encoding")
-        }));
+        assert_eq!(converted.visuals().len(), 1);
+        assert!(converted.visual_omissions().is_empty());
+    }
+
+    fn minimal_jpeg() -> Vec<u8> {
+        vec![
+            0xff, 0xd8, 0xff, 0xc0, 0, 17, 8, 0, 1, 0, 2, 3, 1, 0x11, 0, 2, 0x11, 0, 3, 0x11, 0,
+            0xff, 0xd9,
+        ]
+    }
+
+    fn image_dictionary() -> Dictionary {
+        dictionary! {
+            "Type" => "XObject",
+            "Subtype" => "Image",
+            "Width" => 2,
+            "Height" => 1,
+            "ColorSpace" => "DeviceRGB",
+            "BitsPerComponent" => 8,
+            "Filter" => "DCTDecode",
+        }
     }
 
     #[test]

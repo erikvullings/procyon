@@ -7,10 +7,11 @@
 use crate::budget::{BudgetTracker, Stop};
 use crate::model::{
     ComponentVersion, ConversionWarning, ConvertedDocument, FormatKind, MAX_TOTAL_VISUAL_BYTES,
-    MAX_VISUAL_ATTACHMENTS, MAX_VISUAL_BYTES, MAX_VISUAL_PIXELS, MediaType, Omission, Provenance,
-    StructuralUnit, TopLevelBoundary, UnitKind, VisualAttachment, VisualOmission, VisualProvenance,
+    MAX_VISUAL_BYTES, MAX_VISUAL_PIXELS, MediaType, Omission, Provenance, StructuralUnit,
+    TopLevelBoundary, UnitKind, VisualAttachment, VisualOmission, VisualProvenance,
 };
 use crate::text::{SourceMap, instruction_like_excerpt, sanitize};
+use crate::visual_fit::shrink_visual;
 
 /// A unit a converter wants to emit, before sanitization and budgeting.
 pub(crate) struct UnitDraft {
@@ -87,14 +88,6 @@ impl<'a, 'b> DocumentBuilder<'a, 'b> {
         !self.visuals.is_empty()
     }
 
-    pub(crate) fn visual_count_exhausted(&self) -> bool {
-        self.visuals.len() >= MAX_VISUAL_ATTACHMENTS
-    }
-
-    pub(crate) fn remaining_visual_bytes(&self) -> usize {
-        MAX_TOTAL_VISUAL_BYTES.saturating_sub(self.visual_bytes)
-    }
-
     pub(crate) fn checkpoint(&self) -> Result<(), Stop> {
         self.tracker.checkpoint()
     }
@@ -125,52 +118,37 @@ impl<'a, 'b> DocumentBuilder<'a, 'b> {
         }
     }
 
-    pub(crate) fn omit_if_visual_capacity_exhausted(
-        &mut self,
-        provenance: VisualProvenance,
-    ) -> bool {
-        let reason = if self.visuals.len() >= MAX_VISUAL_ATTACHMENTS {
-            Some(format!(
-                "visual attachment count exceeds {MAX_VISUAL_ATTACHMENTS}"
-            ))
-        } else if self.visual_bytes >= MAX_TOTAL_VISUAL_BYTES {
-            Some(format!(
-                "visual attachments exceed {MAX_TOTAL_VISUAL_BYTES} bytes"
-            ))
-        } else {
-            None
-        };
-        if let Some(reason) = reason {
-            self.omit_visual(Some(provenance), reason);
-            return true;
-        }
-        false
-    }
-
     /// Validates and retains one supported raster attachment.
+    ///
+    /// Oversized rasters are re-encoded smaller, and an image identical to one already kept is
+    /// not stored twice. Only the document's total byte budget omits an image.
     pub(crate) fn push_visual(&mut self, draft: VisualDraft) -> Result<bool, Stop> {
         self.checkpoint()?;
         if !self.visuals_enabled {
             return Ok(false);
         }
-        if self.omit_if_visual_capacity_exhausted(draft.provenance.clone()) {
-            return Ok(false);
-        }
-        if draft.data.len() > MAX_VISUAL_BYTES {
-            self.omit_visual(
-                Some(draft.provenance),
-                format!("visual attachment exceeds {MAX_VISUAL_BYTES} bytes"),
-            );
-            return Ok(false);
-        }
-        if self.visual_bytes.saturating_add(draft.data.len()) > MAX_TOTAL_VISUAL_BYTES {
+        let (media_type, data) = if draft.data.len() > MAX_VISUAL_BYTES {
+            match shrink_visual(&draft.data) {
+                Ok(smaller) => ("image/jpeg", smaller),
+                Err(reason) => {
+                    self.omit_visual(
+                        Some(draft.provenance),
+                        format!("visual exceeds {MAX_VISUAL_BYTES} bytes and {reason}"),
+                    );
+                    return Ok(false);
+                }
+            }
+        } else {
+            (draft.media_type, draft.data)
+        };
+        if self.visual_bytes.saturating_add(data.len()) > MAX_TOTAL_VISUAL_BYTES {
             self.omit_visual(
                 Some(draft.provenance),
                 format!("visual attachments exceed {MAX_TOTAL_VISUAL_BYTES} bytes"),
             );
             return Ok(false);
         }
-        let (width, height) = match image_dimensions(&draft.data, draft.media_type) {
+        let (width, height) = match image_dimensions(&data, media_type) {
             Some(dimensions) => dimensions,
             None => {
                 self.omit_visual(
@@ -187,17 +165,21 @@ impl<'a, 'b> DocumentBuilder<'a, 'b> {
             );
             return Ok(false);
         }
+        let id = blake3::hash(&data).to_hex().to_string();
+        if self.visuals.iter().any(|visual| visual.id == id) {
+            // The same picture is already retained, possibly on another page.
+            return Ok(true);
+        }
         let caption = draft.caption.and_then(|caption| {
             let sanitized = sanitize(&caption, 0).text;
             let trimmed = sanitized.trim();
             (!trimmed.is_empty()).then(|| trimmed.chars().take(2_048).collect())
         });
-        let id = blake3::hash(&draft.data).to_hex().to_string();
-        self.visual_bytes = self.visual_bytes.saturating_add(draft.data.len());
+        self.visual_bytes = self.visual_bytes.saturating_add(data.len());
         self.visuals.push(VisualAttachment {
             id,
-            media_type: MediaType::parse(draft.media_type),
-            data: draft.data,
+            media_type: MediaType::parse(media_type),
+            data,
             width,
             height,
             provenance: draft.provenance,

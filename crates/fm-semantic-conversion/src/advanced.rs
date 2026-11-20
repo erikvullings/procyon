@@ -8,7 +8,7 @@ use std::sync::Arc;
 use crate::{
     BudgetKind, ComponentVersion, ConversionContext, ConversionError, ConversionOutcome,
     ConvertedDocument, DocumentConverter, DocumentMetadata, MAX_TOTAL_VISUAL_BYTES,
-    MAX_VISUAL_ATTACHMENTS, MAX_VISUAL_BYTES, MAX_VISUAL_PIXELS, SourceContent,
+    MAX_VISUAL_BYTES, MAX_VISUAL_PIXELS, SourceContent,
 };
 
 /// Independently disclosed capability supplied by an advanced converter pack.
@@ -365,9 +365,6 @@ fn valid_document(document: &ConvertedDocument, context: &ConversionContext) -> 
     }
     if !context.visual_evidence() {
         return document.visuals().is_empty();
-    }
-    if document.visuals().len() > MAX_VISUAL_ATTACHMENTS {
-        return false;
     }
     let mut visual_bytes = 0_usize;
     for visual in document.visuals() {

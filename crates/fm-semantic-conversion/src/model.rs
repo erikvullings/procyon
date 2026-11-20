@@ -9,11 +9,13 @@ use crate::budget::BudgetKind;
 use crate::text::SourceMap;
 use serde::{Deserialize, Serialize};
 
-/// Maximum visual attachments retained by one conversion.
-pub const MAX_VISUAL_ATTACHMENTS: usize = 32;
-/// Maximum encoded bytes retained for one visual attachment.
+/// Maximum visual records one PDF page may hand from the conversion child to its parent.
+pub const MAX_VISUAL_RECORDS_PER_PAGE: usize = 512;
+/// Encoded bytes retained for one visual attachment. Larger source images are re-encoded smaller.
 pub const MAX_VISUAL_BYTES: usize = 4 * 1024 * 1024;
-/// Maximum encoded bytes retained across all visual attachments.
+/// Largest source image body that is decoded and re-encoded to fit `MAX_VISUAL_BYTES`.
+pub const MAX_VISUAL_SOURCE_BYTES: usize = 64 * 1024 * 1024;
+/// Maximum encoded bytes retained across all visual attachments of one document.
 pub const MAX_TOTAL_VISUAL_BYTES: usize = 32 * 1024 * 1024;
 /// Maximum decoded pixels accepted for one visual attachment.
 pub const MAX_VISUAL_PIXELS: u64 = 40_000_000;

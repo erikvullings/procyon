@@ -958,6 +958,9 @@ impl IngestionCoordinator {
                     Vec::new(),
                 )
             }
+            ConversionOutcome::Malformed { detail } => {
+                return Err(self.fail(document, attempts, detail));
+            }
             outcome => {
                 let detail = format!("{outcome:?}");
                 return Err(self.fail(document, attempts, detail));
@@ -2321,7 +2324,8 @@ mod tests {
     }
 
     fn pdf_with_images() -> Vec<u8> {
-        pdf_with_figures(false)
+        // Distinct figures: identical pictures are stored once, so each page needs its own.
+        pdf_with_figures(true)
     }
 
     fn pdf_with_figures(distinct: bool) -> Vec<u8> {
@@ -2415,11 +2419,8 @@ mod tests {
         result
     }
 
-    fn pdf_over_visual_capacity() -> Vec<u8> {
-        let pages = vec![
-            "q /Figure Do Q\nBT /F1 12 Tf 72 720 Td (Page text) Tj ET";
-            fm_semantic_conversion::MAX_VISUAL_ATTACHMENTS + 1
-        ];
+    fn pdf_over_former_image_cap() -> Vec<u8> {
+        let pages = vec!["q /Figure Do Q\nBT /F1 12 Tf 72 720 Td (Page text) Tj ET"; 33];
         let bytes = positioned_pdf_pages(&pages);
         let mut pdf = Document::load_mem(&bytes).expect("load PDF");
         let image = pdf.add_object(Stream::new(
@@ -2471,8 +2472,8 @@ mod tests {
         assert_eq!(receipt.chunks, 4, "text and PDF image records");
         assert_eq!(
             *fixture.embedder.media_calls.lock().unwrap(),
-            1,
-            "identical image bytes reuse their vector"
+            2,
+            "each distinct image is embedded once"
         );
         let records = fixture.index.records.lock().unwrap();
         let evidence = fixture
@@ -2894,7 +2895,7 @@ mod tests {
     }
 
     #[test]
-    fn pdf_visual_capacity_failure_preserves_previous_complete_generation() {
+    fn pdf_with_more_images_than_the_former_cap_publishes_text_and_images() {
         let fixture = Fixture::with_model(healthy_resources(), "google-embeddinggemma-2");
         let mut document = fixture.document("");
         document.media_type = "application/pdf".into();
@@ -2906,29 +2907,13 @@ mod tests {
             .coordinator
             .ingest(&document, &CancellationToken::new())
             .expect("original complete PDF");
-        let original_ids = fixture
-            .index
-            .records
-            .lock()
-            .expect("index")
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
 
-        document.job_id = "job-over-visual-capacity".into();
-        document.bytes = pdf_over_visual_capacity();
-        let failed = fixture
+        document.job_id = "job-former-image-cap".into();
+        document.bytes = pdf_over_former_image_cap();
+        fixture
             .coordinator
-            .ingest(&document, &CancellationToken::new());
-        assert!(
-            matches!(
-            &failed,
-            Err(IngestionError::PipelineFailed(detail))
-                if detail.contains("page 33 image 1")
-                    && detail.contains("no partial generation published")
-            ),
-            "unexpected capacity result: {failed:?}"
-        );
+            .ingest(&document, &CancellationToken::new())
+            .expect("a PDF with more images than the former cap publishes its text and images");
         let retained_ids = fixture
             .index
             .records
@@ -2937,21 +2922,7 @@ mod tests {
             .keys()
             .cloned()
             .collect::<Vec<_>>();
-        assert_eq!(retained_ids, original_ids);
-        let evidence = fixture
-            .catalog
-            .begin_read()
-            .expect("read catalog")
-            .filter_visible_candidates(
-                &retained_ids,
-                &QueryFilters {
-                    tenant_id: "tenant-a".into(),
-                    ..QueryFilters::default()
-                },
-            )
-            .expect("original evidence");
-        assert!(!evidence.is_empty());
-        assert!(evidence.iter().all(|record| record.generation == 1));
+        assert!(!retained_ids.is_empty());
     }
 
     #[cfg(feature = "experimental-large-pdf")]

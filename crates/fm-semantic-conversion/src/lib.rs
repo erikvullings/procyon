@@ -44,6 +44,7 @@ mod pdf_toc;
 mod sniff;
 mod text;
 mod tokens;
+mod visual_fit;
 
 /// Maximum eager decompression of one PDF object or xref stream while loading.
 /// This is not a limit on total parser memory or a substitute for isolation.
@@ -112,10 +113,10 @@ pub use jsonl_window::{
 };
 pub use model::{
     Completeness, ComponentVersion, ConversionOutcome, ConversionWarning, ConvertedDocument,
-    DocumentMetadata, FormatKind, JsonlOrigin, MAX_TOTAL_VISUAL_BYTES, MAX_VISUAL_ATTACHMENTS,
-    MAX_VISUAL_BYTES, MAX_VISUAL_PIXELS, MediaType, Omission, Provenance, SkipReason,
-    SkippedRecordReason, StructuralUnit, TopLevelBoundary, UnitKind, VisualAttachment,
-    VisualOmission, VisualProvenance,
+    DocumentMetadata, FormatKind, JsonlOrigin, MAX_TOTAL_VISUAL_BYTES, MAX_VISUAL_BYTES,
+    MAX_VISUAL_PIXELS, MAX_VISUAL_RECORDS_PER_PAGE, MAX_VISUAL_SOURCE_BYTES, MediaType, Omission,
+    Provenance, SkipReason, SkippedRecordReason, StructuralUnit, TopLevelBoundary, UnitKind,
+    VisualAttachment, VisualOmission, VisualProvenance,
 };
 pub use pdf_report::{InvalidPdfTextReport, PdfTextReport};
 pub use pdf_toc::{

@@ -10,9 +10,9 @@ use std::time::{Duration, Instant};
 
 use fm_semantic_conversion::{
     BaselineConverter, ConversionBudgets, ConversionContext, ConversionOutcome, DocumentConverter,
-    DocumentMetadata, MAX_TOTAL_VISUAL_BYTES, MAX_VISUAL_ATTACHMENTS, MAX_VISUAL_BYTES,
-    MAX_VISUAL_PIXELS, MediaType, PdfPageWindow, PdfTextReport, SourceContent, VisualAttachment,
-    VisualProvenance, merge_pdf_text_windows,
+    DocumentMetadata, MAX_TOTAL_VISUAL_BYTES, MAX_VISUAL_BYTES, MAX_VISUAL_PIXELS,
+    MAX_VISUAL_RECORDS_PER_PAGE, MediaType, PdfPageWindow, PdfTextReport, SourceContent,
+    VisualAttachment, VisualProvenance, merge_pdf_text_windows,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -242,7 +242,7 @@ impl StagedPdfVisualPages {
         let mut count = [0_u8; 4];
         self.file.read_exact(&mut count)?;
         let count = u32::from_be_bytes(count) as usize;
-        if count > MAX_VISUAL_ATTACHMENTS {
+        if count > MAX_VISUAL_RECORDS_PER_PAGE {
             return Err(io::Error::other("PDF page exceeds image count limit"));
         }
         let mut images = Vec::with_capacity(count);
@@ -986,7 +986,7 @@ mod tests {
                 "synthetic source",
                 &[vec![
                     image;
-                    fm_semantic_conversion::MAX_VISUAL_ATTACHMENTS + 1
+                    fm_semantic_conversion::MAX_VISUAL_RECORDS_PER_PAGE + 1
                 ]]
             )
             .expect_err("too many page images")
