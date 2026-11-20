@@ -2911,6 +2911,12 @@ pub(crate) async fn terminal_assist(
     state.service.terminal_assist(request).await
 }
 
+/// Forgets a terminal tab's assistant session when the tab closes (task 0336).
+#[tauri::command]
+pub(crate) fn terminal_assist_close(state: State<'_, AppState>, session_id: String) {
+    state.service.terminal_assist_close(&session_id);
+}
+
 /// Streams the next chat reply (task 0324): fragments, then one final event on `events`. Every
 /// outcome arrives as an event, so the command itself succeeds.
 #[tauri::command]

@@ -675,6 +675,57 @@ main.fm-workspace {
   color: var(--fm-text);
 }
 
+/* What would be sent to the assistant, one toggle chip per part (task 0336). */
+.fm-terminal-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 6px;
+}
+
+.fm-terminal-chip {
+  padding: 1px 8px;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius-control);
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.fm-terminal-chip:hover:not(:disabled) {
+  background: var(--fm-hover);
+}
+
+.fm-terminal-chip--off {
+  color: var(--fm-text-muted);
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.fm-terminal-chip:disabled {
+  cursor: default;
+}
+
+.fm-terminal-assist-followup {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 6px;
+  padding: 3px 6px;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  font-size: 12px;
+}
+
+.fm-terminal-assist-steps {
+  margin: 0 0 6px;
+  padding-left: 16px;
+  color: var(--fm-text-muted);
+  font-size: 11px;
+}
+
 .fm-terminal-assist-action:hover:not(:disabled) {
   background: var(--fm-hover);
 }

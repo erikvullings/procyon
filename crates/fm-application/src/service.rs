@@ -233,6 +233,7 @@ pub struct FileManagerService {
     llm_profiles: LlmProfileService,
     file_assistant: crate::file_assistant::FileAssistantService,
     chat: crate::chat::ChatService,
+    terminal_sessions: crate::terminal_assist::Sessions,
     chat_conversations: crate::chat_conversations::ChatConversationService,
     image_prompts: crate::image_prompts::ImagePromptService,
     image_generation: crate::image_generation::ImageGenerationService,
@@ -654,6 +655,7 @@ impl FileManagerService {
             llm_profiles,
             file_assistant: crate::file_assistant::FileAssistantService::default(),
             chat: crate::chat::ChatService::default(),
+            terminal_sessions: crate::terminal_assist::Sessions::default(),
             chat_conversations,
             image_prompts,
             image_generation: crate::image_generation::ImageGenerationService::new(),
@@ -3477,13 +3479,18 @@ impl FileManagerService {
             .delete(workspace_id, conversation_id)?)
     }
 
-    /// Answers one terminal assistance question through the chat role (task 0333, phase 1). Nothing
-    /// is saved; the answer is text the person may choose to run, and nothing is run here.
+    /// Answers one terminal assistance request through the chat role (tasks 0333, 0336). Nothing
+    /// is saved to disk and nothing is run here: a command is returned for the person to approve.
     pub async fn terminal_assist(
         &self,
         request: fm_transport_dto::TerminalAssistRequestDto,
     ) -> Result<fm_transport_dto::TerminalAssistReplyDto, fm_transport_dto::ChatFailureDto> {
-        crate::terminal_assist::reply(&self.llm_profiles, request).await
+        crate::terminal_assist::reply(&self.llm_profiles, &self.terminal_sessions, request).await
+    }
+
+    /// Forgets one terminal tab's assistant session, when the tab closes.
+    pub fn terminal_assist_close(&self, session_id: &str) {
+        self.terminal_sessions.close(session_id);
     }
 
     /// Streams the next reply in a saved conversation through the chat role (task 0324): fragments

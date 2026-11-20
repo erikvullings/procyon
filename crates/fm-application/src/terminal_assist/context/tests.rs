@@ -1,0 +1,143 @@
+use fm_transport_dto::{
+    TerminalAssistKindDto, TerminalAssistRequestDto, TerminalBlockDto, TerminalContextDto,
+};
+
+use super::{AttachedFile, path_from_location, render_context};
+
+fn request(context: TerminalContextDto) -> TerminalAssistRequestDto {
+    TerminalAssistRequestDto {
+        kind: TerminalAssistKindDto::Ask,
+        transcript: String::new(),
+        request: Some("q".into()),
+        working_directory: "file:///tmp/my%20dir".into(),
+        shell: Some("zsh".into()),
+        session_id: Some("t1".into()),
+        context,
+        tool_result: None,
+    }
+}
+
+#[test]
+fn a_file_location_becomes_a_path_and_others_do_not() {
+    assert_eq!(
+        path_from_location("file:///tmp/my%20dir"),
+        Some("/tmp/my dir".into())
+    );
+    assert_eq!(path_from_location("sftp://conn/home/me"), None);
+    assert_eq!(path_from_location("not a uri"), None);
+}
+
+#[test]
+fn a_local_shell_reports_system_shell_and_folder() {
+    let text = render_context(&request(TerminalContextDto::default()), &[]);
+    assert!(text.contains(&format!(
+        "Operating system: {} ({})",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    )));
+    assert!(text.contains("Shell: zsh"));
+    assert!(text.contains("Working directory: /tmp/my dir"));
+}
+
+#[test]
+fn a_remote_shell_or_an_omitted_chip_hides_the_system() {
+    let mut remote = request(TerminalContextDto::default());
+    remote.working_directory = "sftp://conn/home/me".into();
+    assert!(!render_context(&remote, &[]).contains("Operating system"));
+
+    let omitted = request(TerminalContextDto {
+        omit_environment: true,
+        ..TerminalContextDto::default()
+    });
+    assert!(!render_context(&omitted, &[]).contains("Operating system"));
+}
+
+#[test]
+fn listing_and_selection_are_bounded_and_empty_parts_are_left_out() {
+    let names: Vec<String> = (0..130).map(|index| format!("file{index}")).collect();
+    let text = render_context(
+        &request(TerminalContextDto {
+            listing: names,
+            selected: vec!["file1".into(), "file2".into()],
+            ..TerminalContextDto::default()
+        }),
+        &[],
+    );
+    assert!(text.contains("Folder listing (130 names):"));
+    assert!(text.contains("- file99\n"));
+    assert!(!text.contains("- file100\n"));
+    assert!(text.contains("and 30 more"));
+    assert!(text.contains("Selected in the folder: file1, file2"));
+
+    let bare = render_context(&request(TerminalContextDto::default()), &[]);
+    assert!(!bare.contains("Folder listing"));
+    assert!(!bare.contains("Recent commands"));
+    assert!(!bare.contains("Git branch"));
+}
+
+#[test]
+fn a_folder_inside_a_git_checkout_reports_its_branch() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".git")).unwrap();
+    std::fs::write(dir.path().join(".git/HEAD"), "ref: refs/heads/feature/x\n").unwrap();
+    std::fs::create_dir(dir.path().join("sub")).unwrap();
+    let mut asked = request(TerminalContextDto::default());
+    asked.working_directory = url::Url::from_directory_path(dir.path().join("sub"))
+        .unwrap()
+        .to_string();
+    assert!(render_context(&asked, &[]).contains("Git branch: feature/x"));
+    assert!(!render_context(&request(TerminalContextDto::default()), &[]).contains("Git branch"));
+}
+
+#[test]
+fn recent_commands_keep_the_newest_output_and_lose_secrets() {
+    let long = format!("{}TAIL", "a".repeat(10_000));
+    let text = render_context(
+        &request(TerminalContextDto {
+            blocks: vec![
+                TerminalBlockDto {
+                    command: "echo hi".into(),
+                    exit_code: 0,
+                    output: "API_KEY=abc123".into(),
+                },
+                TerminalBlockDto {
+                    command: "make".into(),
+                    exit_code: 2,
+                    output: long,
+                },
+            ],
+            ..TerminalContextDto::default()
+        }),
+        &[],
+    );
+    assert!(text.contains("$ echo hi (exit 0)\nAPI_KEY=[redacted]"));
+    assert!(text.contains("$ make (exit 2)"));
+    assert!(text.contains("TAIL"));
+    assert!(text.len() < 12 * 1024);
+}
+
+#[test]
+fn attached_files_are_shown_by_name() {
+    let text = render_context(
+        &request(TerminalContextDto::default()),
+        &[AttachedFile {
+            name: "Cargo.toml".into(),
+            text: "[package]".into(),
+        }],
+    );
+    assert!(text.contains("File Cargo.toml:\n[package]"));
+}
+
+#[test]
+fn a_huge_selection_is_capped() {
+    let selected: Vec<String> = (0..500).map(|index| format!("n{index}")).collect();
+    let text = render_context(
+        &request(TerminalContextDto {
+            selected,
+            ..TerminalContextDto::default()
+        }),
+        &[],
+    );
+    assert!(text.contains("n49"));
+    assert!(!text.contains("n50,") && !text.ends_with("n499"));
+}

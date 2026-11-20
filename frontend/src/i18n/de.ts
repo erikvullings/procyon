@@ -2711,7 +2711,7 @@ export const de = {
     assistInsert: 'Am Prompt einfügen',
     assistDismiss: 'Verwerfen',
     assistSendsNote:
-      'Sendet die letzte Ausgabe dieses Terminals an den Chat-Endpunkt. Es wird nichts ausgeführt.',
+      'Sendet den oben gezeigten Kontext an den Chat-Endpunkt. Ohne Ihre Zustimmung wird nichts ausgeführt.',
     assistNoCommand: 'Die Antwort enthält keinen Befehl.',
     assistNoOutput: 'Es gibt noch keine Terminalausgabe.',
     assistRoleNotAssigned:
@@ -2732,6 +2732,23 @@ export const de = {
     consentEnable: 'Aktivieren',
     consentDecline: 'Nicht jetzt',
     assistEdit: 'Bearbeiten',
+    contextEnvironment: 'Betriebssystem',
+    contextListing: '{count} Namen',
+    contextSelection: '{count} ausgewählt',
+    contextOtherFolder: 'Anderes Fenster',
+    contextBlocks: 'Letzte {count} Befehle',
+    contextFile: 'Datei {name}',
+    contextLabel: 'An den Assistenten gesendeter Kontext',
+    contextRestore: 'Wieder einbeziehen',
+    contextRemove: 'Weglassen',
+    followUpPlaceholder: 'Rückfrage stellen…',
+    assistRunning: 'Läuft im Terminal…',
+    assistApproveNote: 'Der Assistent möchte diesen Befehl in Ihrem Terminal ausführen.',
+    assistNeedsBlocks:
+      'Zum Ausführen von Befehlen sind Befehlsblöcke nötig. Fügen Sie ihn stattdessen am Prompt ein.',
+    assistRun: 'Ausführen',
+    assistDecline: 'Ablehnen',
+    assistStop: 'Stopp',
   },
   contextMenu: {
     directoryActions: 'Verzeichnisaktionen',

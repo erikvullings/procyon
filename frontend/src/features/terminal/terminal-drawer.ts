@@ -11,13 +11,34 @@ import { type BlockTracker, type CommandBlock, createBlockTracker } from './bloc
 import { highlightShell } from './shell-highlight';
 import { parseShellMark } from './shell-integration';
 import {
+  assistContext,
+  type ContextChip,
   cleanCommand,
   commandFromAnswer,
+  contextChips,
+  EXPLAIN_REQUEST,
+  FIX_REQUEST,
+  parseMentions,
+  type RemovableChipId,
+  type TerminalAssistContext,
   type TerminalAssistKind,
+  type TerminalAssistReply,
+  type TerminalAssistSource,
+  type TerminalToolResult,
   transcriptTail,
 } from './terminal-assist';
 import type { TerminalClient } from './terminal-client';
 import { applyTypedInput, EMPTY_INPUT, suggestionRemainder, type TypedInput } from './typed-input';
+
+/** What the file manager shows beside the terminal; the assistant may be told about it. */
+export interface TerminalPaneContext {
+  /** Names in the active pane's folder; folders end in `/`. */
+  readonly listing: readonly string[];
+  /** Names selected in the active pane. */
+  readonly selected: readonly string[];
+  /** The other pane's folder, as a location URI. */
+  readonly otherFolder?: string | undefined;
+}
 
 export interface TerminalDrawerAttrs {
   readonly open: boolean;
@@ -34,6 +55,8 @@ export interface TerminalDrawerAttrs {
   readonly registerFocus?: (focus: () => boolean) => void;
   /** Lets the owner tear down a specific tab's terminal when that tab closes. */
   readonly registerDisposeTab?: (dispose: (tabKey: string) => void) => void;
+  /** The active pane's listing and selection, read when the person asks the assistant (0336). */
+  readonly paneContext?: () => TerminalPaneContext;
   /** The person's choice for command-block shell integration (task 0333). */
   readonly shellIntegration?: TerminalShellIntegration;
   /** Hands the owner a way to type text at this drawer's active prompt (task 0333). */
@@ -80,6 +103,12 @@ type LiveTerminal = {
   markSeen: boolean;
   /** The rest of the suggested command, when one matches what is typed. */
   suggestion: string | undefined;
+  /** Identifies this tab's assistant conversation in the host (task 0336). */
+  readonly assistSession: string;
+  /** Context parts the person removed with a chip; they stay removed for this tab. */
+  readonly removedChips: Set<RemovableChipId>;
+  /** Called with the block of the command the assistant started once it finishes. */
+  awaiting: ((block: CommandBlock<IMarker>) => void) | undefined;
 };
 
 export interface TerminalKeyHandlers {
@@ -180,12 +209,9 @@ function linesText(terminal: Terminal, first: number, end: number): string[] {
   return lines;
 }
 
-/** A finished block as text for the assistant: its command, then its output. */
-function blockTranscript(live: LiveTerminal, block: CommandBlock<IMarker>): string {
-  const head = `$ ${block.command}`;
-  const { outputMark, endMark } = block;
-  if (outputMark.line < 0 || endMark.line < outputMark.line) return head;
-  return transcriptTail([head, ...linesText(live.terminal, outputMark.line, endMark.line)]);
+/** The newest visible output of a terminal, for when the shell reports no command blocks. */
+function scrollbackTranscript(live: LiveTerminal): string {
+  return transcriptTail(linesText(live.terminal, 0, live.terminal.buffer.active.length));
 }
 
 /** The text of the terminal's cursor line (the line being edited), without its prompt-free trailing blanks. */
@@ -249,6 +275,22 @@ type AssistPanel =
       readonly kind: TerminalAssistKind;
       readonly text: string;
       readonly command: string | undefined;
+      readonly steps: readonly string[];
+    }
+  | {
+      /** The assistant asks to run a command; nothing runs until the person approves. */
+      readonly status: 'approve';
+      readonly tabKey: string;
+      readonly kind: TerminalAssistKind;
+      readonly command: string;
+      readonly steps: readonly string[];
+    }
+  | {
+      /** An approved command is running in the terminal; its result goes back when it ends. */
+      readonly status: 'running';
+      readonly tabKey: string;
+      readonly kind: TerminalAssistKind;
+      readonly command: string;
     }
   | {
       readonly status: 'failed';
@@ -265,6 +307,8 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   let panel: AssistPanel | undefined;
   /** The command being edited with Ctrl+E before it is inserted; `undefined` when not editing. */
   let editing: string | undefined;
+  /** The follow-up question being typed under an answer. */
+  let followUp = '';
 
   /** Asks the chat endpoint about text from one terminal. Nothing is run; the answer is shown. */
   function runAssist(
@@ -297,12 +341,160 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           kind,
           text,
           command: command === undefined ? undefined : cleanCommand(command),
+          steps: [],
         };
       })
       .catch((error: unknown) => {
         panel = { status: 'failed', tabKey: live.key, kind, reason: String(error) };
       })
       .finally(() => m.redraw());
+  }
+
+  /** What the assistant could be told about this tab, up to a block when asked about an old one. */
+  function assistSource(live: LiveTerminal, upTo?: CommandBlock<IMarker>): TerminalAssistSource {
+    const pane = currentAttrs?.paneContext?.();
+    const finished = live.blocks.blocks;
+    const included = upTo === undefined ? finished : finished.slice(0, finished.indexOf(upTo) + 1);
+    return {
+      listing: pane?.listing ?? [],
+      selected: pane?.selected ?? [],
+      otherFolder: pane?.otherFolder,
+      blocks: included.map((block) => ({
+        command: block.command,
+        exitCode: block.exitCode,
+        output: blockOutput(live, block),
+      })),
+    };
+  }
+
+  /** Asks the session a question with the context the person has left on. */
+  function askAssistant(live: LiveTerminal, question: string, upTo?: CommandBlock<IMarker>): void {
+    sendToSession(live, {
+      question,
+      context: assistContext(assistSource(live, upTo), live.removedChips, parseMentions(question)),
+    });
+  }
+
+  /** Sends a question or the result of an approved command to this tab's session. */
+  function sendToSession(
+    live: LiveTerminal,
+    input: {
+      readonly question?: string;
+      readonly context?: TerminalAssistContext;
+      readonly toolResult?: TerminalToolResult;
+    },
+  ): void {
+    const attrs = currentAttrs;
+    if (attrs?.location === undefined) return;
+    panel = { status: 'busy', tabKey: live.key, kind: 'ask' };
+    followUp = '';
+    m.redraw();
+    attrs.client
+      .assist({
+        kind: 'ask',
+        transcript: '',
+        workingDirectory: attrs.location.uri,
+        sessionId: live.assistSession,
+        ...(input.question === undefined ? {} : { request: input.question }),
+        ...(input.context === undefined ? {} : { context: input.context }),
+        ...(input.toolResult === undefined ? {} : { toolResult: input.toolResult }),
+      })
+      .then((reply) => showReply(live, reply))
+      .catch((error: unknown) => {
+        panel = { status: 'failed', tabKey: live.key, kind: 'ask', reason: String(error) };
+      })
+      .finally(() => m.redraw());
+  }
+
+  /** Shows a reply: an answer, a command waiting for approval, or nothing after a decline. */
+  function showReply(live: LiveTerminal, reply: TerminalAssistReply): void {
+    const steps = reply.steps ?? [];
+    if (reply.runCommand !== undefined) {
+      panel = {
+        status: 'approve',
+        tabKey: live.key,
+        kind: 'ask',
+        command: cleanCommand(reply.runCommand),
+        steps,
+      };
+      return;
+    }
+    if (reply.text.trim() === '') {
+      panel = undefined;
+      return;
+    }
+    const command = commandFromAnswer('ask', reply.text);
+    panel = {
+      status: 'done',
+      tabKey: live.key,
+      kind: 'ask',
+      text: reply.text,
+      command: command === undefined ? undefined : cleanCommand(command),
+      steps,
+    };
+  }
+
+  /** Runs the approved command in the terminal; its block goes back to the assistant. */
+  function runApproved(live: LiveTerminal, command: string): void {
+    // One approval runs one line; a newline or control byte would run more.
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control bytes is the point
+    if (live.sessionId === undefined || /[\u0000-\u001f\u007f]/.test(command)) return;
+    panel = { status: 'running', tabKey: live.key, kind: 'ask', command };
+    const waitForResult = (block: CommandBlock<IMarker>): void => {
+      // The next finished block may be something the person typed meanwhile; keep waiting.
+      if (block.command !== command) {
+        live.awaiting = waitForResult;
+        return;
+      }
+      sendToSession(live, {
+        toolResult: {
+          command,
+          exitCode: block.exitCode,
+          output: transcriptTail(blockOutput(live, block).split('\n')),
+        },
+      });
+    };
+    live.awaiting = waitForResult;
+    live.pendingCommand = command;
+    live.history.push(command);
+    writeToShell(live, `${command}\r`);
+    m.redraw();
+  }
+
+  /** Tells the session the person declined; the assistant stops. */
+  function declineApproved(live: LiveTerminal, command: string): void {
+    panel = undefined;
+    void currentAttrs?.client
+      .assist({
+        kind: 'ask',
+        transcript: '',
+        workingDirectory: currentAttrs.location?.uri ?? '',
+        sessionId: live.assistSession,
+        toolResult: { command, declined: true },
+      })
+      .catch(() => undefined);
+    m.redraw();
+  }
+
+  /** Explains a block, or the last one. Without command blocks it reads the visible output. */
+  function explain(live: LiveTerminal, block?: CommandBlock<IMarker>): void {
+    const target = block ?? live.blocks.blocks.at(-1);
+    if (target !== undefined) askAssistant(live, EXPLAIN_REQUEST, target);
+    else runAssist(live, 'explain', scrollbackTranscript(live));
+  }
+
+  /** Asks for a fix to a block, or the last one. Without command blocks it reads the visible output. */
+  function fix(live: LiveTerminal, block?: CommandBlock<IMarker>): void {
+    const target = block ?? live.blocks.blocks.at(-1);
+    if (target !== undefined) askAssistant(live, FIX_REQUEST, target);
+    else runAssist(live, 'fix', scrollbackTranscript(live));
+  }
+
+  /** Ends a tab's terminal and forgets its assistant conversation. */
+  function disposeLive(live: LiveTerminal): void {
+    live.terminal.dispose();
+    live.awaiting = undefined;
+    void currentAttrs?.client.assistClose(live.assistSession).catch(() => undefined);
   }
 
   /** Types a command at the prompt without pressing Enter: the person runs it. */
@@ -355,6 +547,9 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     );
     if (block === undefined) return;
     live.atPrompt = true;
+    const awaiting = live.awaiting;
+    live.awaiting = undefined;
+    awaiting?.(block);
     const decoration = live.terminal.registerDecoration({
       marker: block.promptMark,
       anchor: 'right',
@@ -395,11 +590,11 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         title: failed ? t('terminal', 'blockFailed') : t('terminal', 'blockSucceeded'),
       }),
       action(t('terminal', 'blockExplain'), 'Ctrl+Shift+E', sparklesIcon({ size: 14 }), () =>
-        runAssist(live, 'explain', blockTranscript(live, block)),
+        explain(live, block),
       ),
       failed
         ? action(t('terminal', 'blockFix'), 'Ctrl+Shift+F', wrenchIcon({ size: 14 }), () =>
-            runAssist(live, 'fix', blockTranscript(live, block)),
+            fix(live, block),
           )
         : undefined,
       action(t('terminal', 'blockCopy'), 'Ctrl+Shift+C', copyIcon({ size: 14 }), () =>
@@ -443,6 +638,22 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     }
 
     const shown = panel !== undefined && panel.tabKey === key ? panel : undefined;
+    if (shown?.status === 'approve' && live !== undefined) {
+      if (plain && event.key === 'Enter') {
+        if (live.markSeen) runApproved(live, shown.command);
+        else insertCommand(live, shown.command);
+        return true;
+      }
+      if ((plain && event.key === 'Escape') || (ctrl && name === 'c')) {
+        declineApproved(live, shown.command);
+        return true;
+      }
+    }
+    if (shown?.status === 'running' && live !== undefined && plain && event.key === 'Escape') {
+      live.awaiting = undefined;
+      rejectAnswer();
+      return true;
+    }
     if (shown?.status === 'done' && live !== undefined) {
       if (plain && event.key === 'Enter' && shown.command !== undefined) {
         insertCommand(live, shown.command);
@@ -463,12 +674,18 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       }
     }
 
-    const block = live?.blocks.blocks.at(-1);
-    if (live === undefined || block === undefined || !ctrlShift) return false;
-    if (name === 'e') runAssist(live, 'explain', blockTranscript(live, block));
-    else if (name === 'f' && block.exitCode !== 0)
-      runAssist(live, 'fix', blockTranscript(live, block));
-    else if (name === 'c') copyText(blockOutput(live, block));
+    if (live === undefined || !ctrlShift) return false;
+    if (name === 'e') {
+      explain(live);
+      return true;
+    }
+    if (name === 'f') {
+      fix(live);
+      return true;
+    }
+    const block = live.blocks.blocks.at(-1);
+    if (block === undefined) return false;
+    if (name === 'c') copyText(blockOutput(live, block));
     else if (name === 'r') rerunBlock(live, block);
     else return false;
     return true;
@@ -505,12 +722,14 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       live.typed = EMPTY_INPUT;
       live.suggestion = undefined;
       writeToShell(live, '\x15');
-      if (question !== '') runAssist(live, 'command', '', question);
+      if (question !== '') askAssistant(live, question);
       m.redraw();
       return;
     }
+    const wasComposing = live.typed.text.startsWith('#');
     const applied = applyTypedInput(live.typed, data);
     live.typed = applied.state;
+    if (wasComposing !== live.typed.text.startsWith('#')) m.redraw();
     if (applied.submitted !== undefined && applied.submitted.trim() !== '') {
       const command = applied.submitted.trim();
       live.pendingCommand = command;
@@ -534,7 +753,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     if (live !== undefined && live.host !== host) {
       // The tab moved to another machine (local <-> SSH, or another connection): the shell it
       // holds would keep running on the old one.
-      live.terminal.dispose();
+      disposeLive(live);
       terminals.delete(key);
       live = undefined;
     }
@@ -545,6 +764,8 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       // noticeably larger than the app's own text at the same nominal font size.
       const inheritedFontFamily = style.getPropertyValue('--fm-font-mono').trim();
       const terminal = new Terminal({
+        // `registerDecoration` (the block icons) is proposed API in xterm.js and throws without it.
+        allowProposedApi: true,
         cursorBlink: true,
         convertEol: true,
         fontSize: Number.isFinite(inheritedFontSize) ? inheritedFontSize : 12.88,
@@ -584,6 +805,9 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         atPrompt: true,
         markSeen: false,
         suggestion: undefined,
+        assistSession: crypto.randomUUID(),
+        removedChips: new Set(),
+        awaiting: undefined,
       };
       terminals.set(key, live);
       const current = live;
@@ -669,10 +893,23 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
             m('span.fm-terminal-suggestion-hint', t('terminal', 'suggestionAccept')),
             m('code', highlightedShell(`${live.typed.text}${live.suggestion}`)),
           ]);
-    if (consent === undefined && suggestion === undefined && shown === undefined) return undefined;
+    // While a `#` question is being typed, show what would be sent so the person can trim it.
+    const composing =
+      live !== undefined && shown === undefined && live.typed.text.startsWith('#')
+        ? contextRow(live, live.typed.text)
+        : undefined;
+    if (
+      consent === undefined &&
+      suggestion === undefined &&
+      shown === undefined &&
+      composing === undefined
+    ) {
+      return undefined;
+    }
     return m('.fm-terminal-strip', [
       suggestion,
       consent,
+      composing,
       shown === undefined ? undefined : answerPanel(shown, live),
     ]);
   }
@@ -691,9 +928,71 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     );
   }
 
+  /** The label of one context chip. */
+  function chipLabel(chip: ContextChip): string {
+    switch (chip.id) {
+      case 'environment':
+        return t('terminal', 'contextEnvironment');
+      case 'listing':
+        return t('terminal', 'contextListing', { count: String(chip.count ?? 0) });
+      case 'selection':
+        return t('terminal', 'contextSelection', { count: String(chip.count ?? 0) });
+      case 'otherFolder':
+        return t('terminal', 'contextOtherFolder');
+      case 'blocks':
+        return t('terminal', 'contextBlocks', { count: String(chip.count ?? 0) });
+      case 'file':
+        return t('terminal', 'contextFile', { name: chip.name ?? '' });
+    }
+  }
+
+  /**
+   * What would be sent with the next question, one chip per part. A chip toggles its part off and
+   * on; `@dir`, `@output` and `@path` in the question put parts back or add files.
+   */
+  function contextRow(live: LiveTerminal, questionText: string): m.Children {
+    const chips = contextChips(assistSource(live), live.removedChips, parseMentions(questionText));
+    return m(
+      '.fm-terminal-context',
+      { role: 'group', 'aria-label': t('terminal', 'contextLabel') },
+      chips.map((chip) =>
+        m(
+          'button.fm-terminal-chip',
+          {
+            type: 'button',
+            class: chip.removed ? 'fm-terminal-chip--off' : undefined,
+            disabled: chip.id === 'file',
+            'aria-pressed': chip.id === 'file' ? undefined : String(!chip.removed),
+            title: chip.removed ? t('terminal', 'contextRestore') : t('terminal', 'contextRemove'),
+            onclick: () => {
+              if (chip.id === 'file') return;
+              if (live.removedChips.has(chip.id)) live.removedChips.delete(chip.id);
+              else live.removedChips.add(chip.id);
+              m.redraw();
+            },
+          },
+          chipLabel(chip),
+        ),
+      ),
+    );
+  }
+
+  /** What the assistant looked at on the way, one line each. */
+  function stepsView(steps: readonly string[]): m.Children {
+    return steps.length === 0
+      ? undefined
+      : m(
+          'ul.fm-terminal-assist-steps',
+          steps.map((step) => m('li', step)),
+        );
+  }
+
   function answerPanel(shown: AssistPanel, live: LiveTerminal | undefined): m.Children {
     const busy = shown.status === 'busy';
     if (shown.status !== 'done') editing = undefined;
+    if (shown.status === 'approve' || shown.status === 'running') {
+      return approvalPanel(shown, live);
+    }
     const answer =
       shown.status === 'busy'
         ? m('p.fm-terminal-assist-status', t('terminal', 'assistBusy'))
@@ -720,32 +1019,103 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
                 },
               })
             : m('pre.fm-terminal-assist-text', answerNodes(shown.kind, shown.text));
+    const done = shown.status === 'done' ? shown : undefined;
     // The body scrolls; the buttons stay in a footer that is always in reach.
     return m('.fm-terminal-assist-panel', { role: 'status' }, [
       m('.fm-terminal-assist-body', [
+        done === undefined ? undefined : stepsView(done.steps),
         answer,
-        shown.status === 'done' && shown.command === undefined
+        done !== undefined && done.command === undefined
           ? m('p.fm-terminal-assist-status', t('terminal', 'assistNoCommand'))
+          : undefined,
+        live === undefined ? undefined : contextRow(live, followUp),
+        done !== undefined && live !== undefined
+          ? m('input.fm-terminal-assist-followup', {
+              type: 'text',
+              value: followUp,
+              placeholder: t('terminal', 'followUpPlaceholder'),
+              'aria-label': t('terminal', 'followUpPlaceholder'),
+              oninput: (event: Event) => {
+                followUp = (event.target as HTMLInputElement).value;
+              },
+              onkeydown: (event: KeyboardEvent) => {
+                if (event.key === 'Enter' && followUp.trim() !== '') {
+                  event.preventDefault();
+                  askAssistant(live, followUp.trim());
+                } else if (event.key === 'Escape') {
+                  event.preventDefault();
+                  live.terminal.focus();
+                }
+              },
+            })
           : undefined,
         m('p.fm-terminal-assist-note', t('terminal', 'assistSendsNote')),
       ]),
       m('.fm-terminal-assist-buttons', [
-        shown.status === 'done' && shown.command !== undefined && live !== undefined
+        done !== undefined && done.command !== undefined && live !== undefined
           ? shortcutButton(t('terminal', 'assistInsert'), 'Enter', () => {
-              if (shown.status === 'done' && shown.command !== undefined) {
-                insertCommand(live, shown.command);
-              }
+              if (done.command !== undefined) insertCommand(live, done.command);
             })
           : undefined,
-        shown.status === 'done' && shown.command !== undefined
+        done !== undefined && done.command !== undefined
           ? shortcutButton(t('terminal', 'assistEdit'), 'Ctrl+E', () => {
-              editing = shown.command;
+              editing = done.command;
               m.redraw();
             })
           : undefined,
+        live === undefined || busy
+          ? undefined
+          : shortcutButton(t('terminal', 'blockExplain'), 'Ctrl+Shift+E', () => explain(live)),
+        live === undefined || busy
+          ? undefined
+          : shortcutButton(t('terminal', 'blockFix'), 'Ctrl+Shift+F', () => fix(live)),
         shortcutButton(t('terminal', 'assistDismiss'), busy ? undefined : 'Ctrl+C', () =>
           rejectAnswer(),
         ),
+      ]),
+    ]);
+  }
+
+  /** A command the assistant asks to run: approve it, or decline and the assistant stops. */
+  function approvalPanel(
+    shown: Extract<AssistPanel, { status: 'approve' | 'running' }>,
+    live: LiveTerminal | undefined,
+  ): m.Children {
+    const canRun = live?.markSeen === true;
+    return m('.fm-terminal-assist-panel', { role: 'status' }, [
+      m('.fm-terminal-assist-body', [
+        shown.status === 'approve' ? stepsView(shown.steps) : undefined,
+        m('pre.fm-terminal-assist-text', [
+          m('span.fm-shell-command-line', highlightedShell(shown.command)),
+        ]),
+        m(
+          'p.fm-terminal-assist-status',
+          shown.status === 'running'
+            ? t('terminal', 'assistRunning')
+            : canRun
+              ? t('terminal', 'assistApproveNote')
+              : t('terminal', 'assistNeedsBlocks'),
+        ),
+      ]),
+      m('.fm-terminal-assist-buttons', [
+        shown.status === 'approve' && live !== undefined
+          ? shortcutButton(
+              canRun ? t('terminal', 'assistRun') : t('terminal', 'assistInsert'),
+              'Enter',
+              () => {
+                if (canRun) runApproved(live, shown.command);
+                else insertCommand(live, shown.command);
+              },
+            )
+          : undefined,
+        shown.status === 'approve' && live !== undefined
+          ? shortcutButton(t('terminal', 'assistDecline'), 'Ctrl+C', () =>
+              declineApproved(live, shown.command),
+            )
+          : shortcutButton(t('terminal', 'assistStop'), 'Esc', () => {
+              if (live !== undefined) live.awaiting = undefined;
+              rejectAnswer();
+            }),
       ]),
     ]);
   }
@@ -812,13 +1182,13 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       attrs.registerDisposeTab?.((key) => {
         const live = terminals.get(key);
         if (live === undefined) return;
-        live.terminal.dispose();
+        disposeLive(live);
         terminals.delete(key);
       });
     },
     onremove: () => {
       observer?.disconnect();
-      for (const live of terminals.values()) live.terminal.dispose();
+      for (const live of terminals.values()) disposeLive(live);
     },
     view: ({ attrs }) => {
       currentAttrs = attrs;

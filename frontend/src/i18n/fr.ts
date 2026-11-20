@@ -2704,7 +2704,7 @@ export const fr = {
     assistInsert: "Insérer à l'invite",
     assistDismiss: 'Ignorer',
     assistSendsNote:
-      "Envoie la sortie récente de ce terminal au point de terminaison de chat. Rien n'est exécuté.",
+      "Envoie le contexte affiché ci-dessus au point de terminaison de chat. Rien ne s'exécute sans votre accord.",
     assistNoCommand: 'La réponse ne contient aucune commande.',
     assistNoOutput: "Il n'y a pas encore de sortie de terminal.",
     assistRoleNotAssigned:
@@ -2726,6 +2726,23 @@ export const fr = {
     consentEnable: 'Activer',
     consentDecline: 'Pas maintenant',
     assistEdit: 'Modifier',
+    contextEnvironment: 'Système',
+    contextListing: '{count} noms',
+    contextSelection: '{count} sélectionnés',
+    contextOtherFolder: 'Autre volet',
+    contextBlocks: '{count} dernières commandes',
+    contextFile: 'Fichier {name}',
+    contextLabel: "Contexte envoyé à l'assistant",
+    contextRestore: 'Inclure à nouveau',
+    contextRemove: 'Exclure',
+    followUpPlaceholder: 'Poser une question de suivi…',
+    assistRunning: 'En cours dans le terminal…',
+    assistApproveNote: "L'assistant veut exécuter cette commande dans votre terminal.",
+    assistNeedsBlocks:
+      "L'exécution de commandes nécessite les blocs de commandes. Insérez-la plutôt dans l'invite.",
+    assistRun: 'Exécuter',
+    assistDecline: 'Refuser',
+    assistStop: 'Arrêter',
   },
   contextMenu: {
     directoryActions: 'Actions de répertoire',

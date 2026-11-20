@@ -2683,7 +2683,7 @@ export const it = {
     assistInsert: 'Inserisci al prompt',
     assistDismiss: 'Chiudi',
     assistSendsNote:
-      "Invia l'output recente di questo terminale all'endpoint di chat. Non viene eseguito nulla.",
+      "Invia il contesto mostrato sopra all'endpoint di chat. Non viene eseguito nulla senza la tua approvazione.",
     assistNoCommand: 'La risposta non contiene alcun comando.',
     assistNoOutput: 'Non c’è ancora alcun output del terminale.',
     assistRoleNotAssigned:
@@ -2704,6 +2704,23 @@ export const it = {
     consentEnable: 'Attiva',
     consentDecline: 'Non ora',
     assistEdit: 'Modifica',
+    contextEnvironment: 'Sistema',
+    contextListing: '{count} nomi',
+    contextSelection: '{count} selezionati',
+    contextOtherFolder: 'Altro pannello',
+    contextBlocks: 'Ultimi {count} comandi',
+    contextFile: 'Contenuto di {name}',
+    contextLabel: "Contesto inviato all'assistente",
+    contextRestore: 'Includi di nuovo',
+    contextRemove: 'Escludi',
+    followUpPlaceholder: 'Fai una domanda di approfondimento…',
+    assistRunning: 'In esecuzione nel terminale…',
+    assistApproveNote: "L'assistente vuole eseguire questo comando nel tuo terminale.",
+    assistNeedsBlocks:
+      'Eseguire comandi richiede i blocchi di comandi. Inseriscilo invece nel prompt.',
+    assistRun: 'Esegui',
+    assistDecline: 'Rifiuta',
+    assistStop: 'Ferma',
   },
   contextMenu: {
     directoryActions: 'Azioni cartella',

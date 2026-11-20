@@ -22,6 +22,8 @@ export interface TerminalClient {
   resize(sessionId: string, columns: number, rows: number): Promise<void>;
   /** Asks the configured chat endpoint about the terminal (task 0333). Nothing is run. */
   assist(request: TerminalAssistRequest): Promise<TerminalAssistReply>;
+  /** Forgets one tab's assistant conversation when the tab closes (task 0336). */
+  assistClose(sessionId: string): Promise<void>;
 }
 
 /** Desktop PTY IPC boundary; the browser host deliberately has no PTY implementation. */
@@ -42,4 +44,5 @@ export const tauriTerminalClient: TerminalClient = {
   resize: (sessionId, columns, rows) =>
     invoke('resize_embedded_terminal', { sessionId, columns, rows }),
   assist: (request) => invoke<TerminalAssistReply>('terminal_assist', { request }),
+  assistClose: (sessionId) => invoke<void>('terminal_assist_close', { sessionId }),
 };

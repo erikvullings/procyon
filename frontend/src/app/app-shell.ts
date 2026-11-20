@@ -172,7 +172,11 @@ import {
 } from '../features/sync-profiles/sync-profile-controller';
 import { SyncProfilesDialog } from '../features/sync-profiles/sync-profiles-dialog';
 import { tauriTerminalClient } from '../features/terminal/terminal-client';
-import { TerminalDrawer, terminalHost } from '../features/terminal/terminal-drawer';
+import {
+  TerminalDrawer,
+  type TerminalPaneContext,
+  terminalHost,
+} from '../features/terminal/terminal-drawer';
 import { absolutePathOf, shellQuote } from '../features/terminal/terminal-paths';
 import { focusOpenedTerminal, isTerminalVisible } from '../features/terminal/terminal-state';
 import { ToolbarOverflow, type ToolbarOverflowItem } from '../features/toolbar/toolbar-overflow.ts';
@@ -1477,6 +1481,26 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     const location =
       paneId === undefined ? undefined : shellState.directories.get(activeTabKey(paneId))?.location;
     return paneId === undefined || location === undefined ? undefined : { paneId, location };
+  }
+
+  /** What the terminal assistant may be told about the active pane (task 0336). */
+  function terminalPaneContext(): TerminalPaneContext {
+    const paneId = shellState.workspace?.activePaneId;
+    if (paneId === undefined) return { listing: [], selected: [] };
+    const key = activeTabKey(paneId);
+    const entries = shellState.directories.get(key)?.entries ?? [];
+    const selectedIds = new Set(shellState.selections.get(key)?.selectedEntryIds ?? []);
+    const label = (entry: EntrySummary) =>
+      entry.kind === 'directory' ? `${entry.name}/` : entry.name;
+    const otherPaneId = shellState.workspace?.paneOrder.find((id) => id !== paneId);
+    return {
+      listing: entries.map(label).sort((a, b) => a.localeCompare(b)),
+      selected: entries.filter((entry) => selectedIds.has(entry.id)).map(label),
+      otherFolder:
+        otherPaneId === undefined
+          ? undefined
+          : shellState.directories.get(activeTabKey(otherPaneId))?.location?.uri,
+    };
   }
 
   /** A short display label for the tree sidebar's root row - the host segment of a remote
@@ -4769,6 +4793,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 location: activeDirectory()?.location,
                 client: tauriTerminalClient,
                 shellIntegration: shellState.currentSettings?.terminalShellIntegration ?? 'unset',
+                paneContext: terminalPaneContext,
                 registerInsert: (insert) => {
                   shellState.insertIntoTerminal = insert;
                 },

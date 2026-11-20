@@ -29,6 +29,7 @@ describe('TerminalDrawer', () => {
       resize: vi.fn(async () => undefined),
       close: vi.fn(async () => true),
       assist: vi.fn(async () => ({ text: '' })),
+      assistClose: vi.fn(async () => undefined),
     };
 
     expect(() =>
@@ -62,6 +63,7 @@ describe('TerminalDrawer', () => {
       resize: vi.fn(async () => undefined),
       close: vi.fn(async () => true),
       assist: vi.fn(async () => ({ text: '' })),
+      assistClose: vi.fn(async () => undefined),
     };
     const location = { providerId: 'local', uri: 'file:///home' };
     m.mount(root, {
@@ -101,6 +103,7 @@ describe('TerminalDrawer', () => {
       resize: vi.fn(async () => undefined),
       close: vi.fn(async () => true),
       assist: vi.fn(async () => ({ text: '' })),
+      assistClose: vi.fn(async () => undefined),
     };
     let location = { providerId: 'local', uri: 'file:///home' };
     m.mount(root, {
@@ -138,6 +141,7 @@ describe('TerminalDrawer', () => {
       resize: vi.fn(async () => undefined),
       close: vi.fn(async () => true),
       assist: vi.fn(async () => ({ text: '' })),
+      assistClose: vi.fn(async () => undefined),
     };
     m.mount(root, {
       view: () =>
@@ -192,6 +196,7 @@ describe('TerminalDrawer', () => {
       resize: vi.fn(async () => undefined),
       close: vi.fn(async () => true),
       assist: vi.fn(async () => ({ text: '' })),
+      assistClose: vi.fn(async () => undefined),
     };
     m.mount(root, {
       view: () =>
@@ -378,13 +383,14 @@ describe('TerminalDrawer questions with #', () => {
 
   it('sends a # question to the assistant and clears the line instead of running it', async () => {
     const write = vi.fn<TerminalClient['write']>(async () => undefined);
-    const assist = vi.fn(async () => ({ text: 'ls -la' }));
+    const assist = vi.fn(async () => ({ text: 'Try this.\nCommand: ls -la' }));
     mount({
       open: vi.fn(async () => 'session-1'),
       write,
       resize: vi.fn(async () => undefined),
       close: vi.fn(async () => true),
       assist,
+      assistClose: vi.fn(async () => undefined),
     });
     await vi.waitFor(() =>
       expect(root.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')).not.toBeNull(),
@@ -398,11 +404,11 @@ describe('TerminalDrawer questions with #', () => {
     pressEnter(textarea);
 
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-terminal-assist-text')?.textContent).toBe('ls -la'),
+      expect(root.querySelector('.fm-terminal-assist-text')?.textContent).toContain('ls -la'),
     );
     expect(assist).toHaveBeenCalledWith(
       expect.objectContaining({
-        kind: 'command',
+        kind: 'ask',
         request: 'list files',
         workingDirectory: 'file:///home',
       }),
@@ -420,7 +426,8 @@ describe('TerminalDrawer questions with #', () => {
       write,
       resize: vi.fn(async () => undefined),
       close: vi.fn(async () => true),
-      assist: vi.fn(async () => ({ text: 'ls -la' })),
+      assist: vi.fn(async () => ({ text: 'Try this.\nCommand: ls -la' })),
+      assistClose: vi.fn(async () => undefined),
     });
     await vi.waitFor(() =>
       expect(root.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')).not.toBeNull(),
@@ -432,7 +439,7 @@ describe('TerminalDrawer questions with #', () => {
     await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
     pressEnter(textarea);
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-terminal-assist-text')?.textContent).toBe('ls -la'),
+      expect(root.querySelector('.fm-terminal-assist-text')?.textContent).toContain('ls -la'),
     );
 
     const insert = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
@@ -482,6 +489,7 @@ describe('TerminalDrawer consent prompt', () => {
       resize: vi.fn(async () => undefined),
       close: vi.fn(async () => true),
       assist: vi.fn(async () => ({ text: '' })),
+      assistClose: vi.fn(async () => undefined),
     };
     m.mount(root, {
       view: () =>
@@ -530,7 +538,8 @@ describe('TerminalDrawer after inserting a generated command', () => {
       write,
       resize: vi.fn(async () => undefined),
       close: vi.fn(async () => true),
-      assist: vi.fn(async () => ({ text: 'ls -la' })),
+      assist: vi.fn(async () => ({ text: 'Try this.\nCommand: ls -la' })),
+      assistClose: vi.fn(async () => undefined),
     };
     m.mount(root, {
       view: () =>
@@ -559,7 +568,7 @@ describe('TerminalDrawer after inserting a generated command', () => {
     Object.defineProperty(enter, 'keyCode', { value: 13 });
     textarea.dispatchEvent(enter);
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-terminal-assist-text')?.textContent).toBe('ls -la'),
+      expect(root.querySelector('.fm-terminal-assist-text')?.textContent).toContain('ls -la'),
     );
     const insert = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
       (button) => button.textContent?.startsWith('Insert at prompt') === true,
@@ -605,7 +614,7 @@ describe('TerminalDrawer # after editing keys', () => {
 
   it('still asks when the line was edited with an arrow key first', async () => {
     const write = vi.fn<TerminalClient['write']>(async () => undefined);
-    const assist = vi.fn(async () => ({ text: 'ls -la' }));
+    const assist = vi.fn(async () => ({ text: 'Try this.\nCommand: ls -la' }));
     let echo: ((event: { type: 'output'; data: number[] }) => void) | undefined;
     const client: TerminalClient = {
       open: vi.fn(async (_location, _cols, _rows, output) => {
@@ -616,6 +625,7 @@ describe('TerminalDrawer # after editing keys', () => {
       resize: vi.fn(async () => undefined),
       close: vi.fn(async () => true),
       assist,
+      assistClose: vi.fn(async () => undefined),
     };
     m.mount(root, {
       view: () =>
@@ -657,7 +667,7 @@ describe('TerminalDrawer # after editing keys', () => {
     await vi.waitFor(() =>
       expect(assist).toHaveBeenCalledWith(
         expect.objectContaining({
-          kind: 'command',
+          kind: 'ask',
           request: 'How to list all files sorted by size',
         }),
       ),
@@ -700,7 +710,8 @@ describe('TerminalDrawer keyboard shortcuts for answers', () => {
       write,
       resize: vi.fn(async () => undefined),
       close: vi.fn(async () => true),
-      assist: vi.fn(async () => ({ text: 'ls -la' })),
+      assist: vi.fn(async () => ({ text: 'Try this.\nCommand: ls -la' })),
+      assistClose: vi.fn(async () => undefined),
     };
     m.mount(root, {
       view: () =>
@@ -748,7 +759,7 @@ describe('TerminalDrawer keyboard shortcuts for answers', () => {
     await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
     press(textarea(), 'Enter', {}, 13);
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-terminal-assist-text')?.textContent).toBe('ls -la'),
+      expect(root.querySelector('.fm-terminal-assist-text')?.textContent).toContain('ls -la'),
     );
   }
 
@@ -786,5 +797,206 @@ describe('TerminalDrawer keyboard shortcuts for answers', () => {
     press(edit, 'Enter');
 
     await vi.waitFor(() => expect(sent()).toContainEqual([...new TextEncoder().encode('ls -lh')]));
+  });
+});
+
+describe('TerminalDrawer assistant session (task 0336)', () => {
+  let root: HTMLElement;
+  let write: ReturnType<typeof vi.fn<TerminalClient['write']>>;
+  let assist: ReturnType<typeof vi.fn<TerminalClient['assist']>>;
+  let assistClose: ReturnType<typeof vi.fn<TerminalClient['assistClose']>>;
+  let echo: ((event: { type: 'output'; data: number[] }) => void) | undefined;
+  let disposeTab: ((tabKey: string) => void) | undefined;
+
+  const bytes = (text: string) => [...new TextEncoder().encode(text)];
+  const textarea = () => {
+    const element = root.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea');
+    if (element === null) throw new Error('xterm textarea missing');
+    return element;
+  };
+  const key = (name: string, keyCode: number) => {
+    const event = new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'keyCode', { value: keyCode });
+    textarea().dispatchEvent(event);
+  };
+  const ask = (text: string) => {
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', { value: { getData: () => text } });
+    textarea().dispatchEvent(paste);
+    echo?.({ type: 'output', data: bytes(`user % ${text}`) });
+    key('Enter', 13);
+  };
+  const button = (label: string) =>
+    [...root.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+      candidate.textContent?.startsWith(label),
+    );
+  const sentAt = (call: number) => assist.mock.calls[call]?.[0];
+
+  async function mount(): Promise<void> {
+    m.mount(root, {
+      view: () =>
+        m(TerminalDrawer, {
+          open: true,
+          tabKey: 'pane-1:tab-1',
+          location: { providerId: 'local', uri: 'file:///home' },
+          client: {
+            open: vi.fn(async (_location, _cols, _rows, output) => {
+              echo = output;
+              return 'session-1';
+            }),
+            write,
+            resize: vi.fn(async () => undefined),
+            close: vi.fn(async () => true),
+            assist,
+            assistClose,
+          },
+          onToggle: vi.fn(),
+          shellIntegration: 'disabled',
+          paneContext: () => ({
+            listing: ['a.txt', 'src/'],
+            selected: ['a.txt'],
+            otherFolder: 'file:///other',
+          }),
+          registerDisposeTab: (dispose) => {
+            disposeTab = dispose;
+          },
+        }),
+    });
+    await vi.waitFor(() => expect(root.querySelector('.xterm-helper-textarea')).not.toBeNull());
+    await vi.waitFor(() => expect(echo).toBeDefined());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false, addListener: vi.fn(), removeListener: vi.fn() })),
+    );
+    root = document.createElement('div');
+    document.body.append(root);
+    echo = undefined;
+    disposeTab = undefined;
+    write = vi.fn<TerminalClient['write']>(async () => undefined);
+    assist = vi.fn<TerminalClient['assist']>(async () => ({
+      text: 'Fine.\nCommand: ls',
+      steps: ['Read a.txt'],
+    }));
+    assistClose = vi.fn<TerminalClient['assistClose']>(async () => undefined);
+  });
+
+  afterEach(() => {
+    m.mount(root, null);
+    root.remove();
+    vi.unstubAllGlobals();
+  });
+
+  it('sends the pane context with a # question, shows the steps, and keeps one session', async () => {
+    await mount();
+    ask('# what is here?');
+
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledOnce());
+    expect(sentAt(0)).toMatchObject({
+      kind: 'ask',
+      request: 'what is here?',
+      workingDirectory: 'file:///home',
+      context: { listing: ['a.txt', 'src/'], selected: ['a.txt'], otherFolder: 'file:///other' },
+    });
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-terminal-assist-steps')?.textContent).toBe('Read a.txt'),
+    );
+
+    const followUp = root.querySelector<HTMLInputElement>('.fm-terminal-assist-followup');
+    if (followUp === null) throw new Error('follow-up field missing');
+    followUp.value = 'and then?';
+    followUp.dispatchEvent(new Event('input'));
+    followUp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
+    expect(sentAt(1)?.request).toBe('and then?');
+    expect(sentAt(1)?.sessionId).toBe(sentAt(0)?.sessionId);
+    expect(sentAt(0)?.sessionId).toEqual(expect.any(String));
+  });
+
+  it('leaves a part out of the next question after its chip is toggled off', async () => {
+    await mount();
+    ask('# first');
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(button('2 names')).toBeDefined());
+
+    button('2 names')?.click();
+    await vi.waitFor(() => expect(button('2 names')?.getAttribute('aria-pressed')).toBe('false'));
+    const followUp = root.querySelector<HTMLInputElement>('.fm-terminal-assist-followup');
+    if (followUp === null) throw new Error('follow-up field missing');
+    followUp.value = 'second';
+    followUp.dispatchEvent(new Event('input'));
+    followUp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
+    expect(sentAt(1)?.context?.listing).toBeUndefined();
+    expect(sentAt(1)?.context?.selected).toEqual(['a.txt']);
+  });
+
+  it('runs an approved command and sends its exit status and output back', async () => {
+    assist.mockResolvedValueOnce({ text: '', runCommand: 'cargo test' });
+    await mount();
+    echo?.({ type: 'output', data: bytes('\x1b]133;A\x07user % ') });
+    ask('# run the tests');
+
+    await vi.waitFor(() => expect(button('Run')).toBeDefined());
+    expect(write).not.toHaveBeenCalledWith('session-1', new TextEncoder().encode('cargo test\r'));
+    button('Run')?.click();
+    await vi.waitFor(() =>
+      expect(write).toHaveBeenCalledWith('session-1', new TextEncoder().encode('cargo test\r')),
+    );
+
+    echo?.({ type: 'output', data: bytes('\x1b]133;C\x07\r\n1 failed\r\n\x1b]133;D;3\x07') });
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
+    expect(sentAt(1)?.toolResult).toMatchObject({ command: 'cargo test', exitCode: 3 });
+    expect(sentAt(1)?.toolResult?.output).toContain('1 failed');
+  });
+
+  it('tells the session when a command is declined and shows nothing more', async () => {
+    assist.mockResolvedValueOnce({ text: '', runCommand: 'rm -rf build' });
+    await mount();
+    echo?.({ type: 'output', data: bytes('\x1b]133;A\x07user % ') });
+    ask('# clean');
+
+    await vi.waitFor(() => expect(button('Decline')).toBeDefined());
+    button('Decline')?.click();
+
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
+    expect(sentAt(1)?.toolResult).toEqual({ command: 'rm -rf build', declined: true });
+    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-assist-panel')).toBeNull());
+  });
+
+  it('forgets the conversation when the tab closes', async () => {
+    await mount();
+    ask('# hello');
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledOnce());
+
+    disposeTab?.('pane-1:tab-1');
+
+    expect(assistClose).toHaveBeenCalledWith(sentAt(0)?.sessionId);
+  });
+
+  it('explains from the visible output when the shell reports no command blocks', async () => {
+    await mount();
+    echo?.({ type: 'output', data: bytes('error: boom\r\n') });
+    await vi.waitFor(() => expect(root.textContent).toContain('boom'));
+
+    const shortcut = new KeyboardEvent('keydown', {
+      key: 'e',
+      ctrlKey: true,
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(shortcut, 'keyCode', { value: 69 });
+    textarea().dispatchEvent(shortcut);
+
+    await vi.waitFor(() =>
+      expect(assist).toHaveBeenCalledWith(expect.objectContaining({ kind: 'explain' })),
+    );
+    expect(assist.mock.calls.at(-1)?.[0].transcript).toContain('boom');
   });
 });

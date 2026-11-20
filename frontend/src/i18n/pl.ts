@@ -2683,7 +2683,7 @@ export const pl = {
     assistInsert: 'Wstaw w wierszu poleceń',
     assistDismiss: 'Odrzuć',
     assistSendsNote:
-      'Wysyła ostatnie wyjście tego terminala do endpointu czatu. Nic nie jest uruchamiane.',
+      'Wysyła pokazany wyżej kontekst do endpointu czatu. Nic nie jest uruchamiane bez Twojej zgody.',
     assistNoCommand: 'Odpowiedź nie zawiera polecenia.',
     assistNoOutput: 'Brak jeszcze wyjścia terminala.',
     assistRoleNotAssigned:
@@ -2704,6 +2704,23 @@ export const pl = {
     consentEnable: 'Włącz',
     consentDecline: 'Nie teraz',
     assistEdit: 'Edytuj',
+    contextEnvironment: 'Środowisko',
+    contextListing: '{count} nazw',
+    contextSelection: 'Zaznaczone: {count}',
+    contextOtherFolder: 'Drugi panel',
+    contextBlocks: 'Ostatnie polecenia: {count}',
+    contextFile: 'Plik {name}',
+    contextLabel: 'Kontekst wysyłany do asystenta',
+    contextRestore: 'Dołącz ponownie',
+    contextRemove: 'Pomiń',
+    followUpPlaceholder: 'Zadaj pytanie uzupełniające…',
+    assistRunning: 'Działa w terminalu…',
+    assistApproveNote: 'Asystent chce uruchomić to polecenie w Twoim terminalu.',
+    assistNeedsBlocks:
+      'Uruchamianie poleceń wymaga bloków poleceń. Wstaw je zamiast tego w wierszu poleceń.',
+    assistRun: 'Uruchom',
+    assistDecline: 'Odrzuć',
+    assistStop: 'Zatrzymaj',
   },
   contextMenu: {
     directoryActions: 'Akcje katalogu',
