@@ -1835,6 +1835,9 @@ export const de = {
     computeUnknown: 'Gerät vom Worker nicht gemeldet',
     libraryDetails: 'Bibliotheksdetails',
     pdfTools: 'Gescannte PDFs durchsuchbar machen',
+    failedSourcesCount: '{count} Datei(en) konnten nicht indiziert werden',
+    failedSourcesHeading: 'Dateien, die nicht indiziert werden konnten',
+    rescanFolder: 'Ordner erneut prüfen',
     ocrNeededCount:
       '{count} gescannte(s) PDF(s) benötigen Texterkennung; siehe Indizierungsdetails.',
     missingRootGuidance:

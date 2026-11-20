@@ -2219,6 +2219,9 @@ export const nl = {
     computeUnknown: 'Apparaat niet gemeld door de worker',
     libraryDetails: 'Bibliotheekdetails',
     pdfTools: "Gescande pdf's doorzoekbaar maken",
+    failedSourcesCount: '{count} bestand(en) konden niet worden geïndexeerd',
+    failedSourcesHeading: 'Bestanden die niet konden worden geïndexeerd',
+    rescanFolder: 'Map opnieuw scannen',
     ocrNeededCount: '{count} gescande pdf(s) hebben tekstherkenning nodig; zie indexeringsdetails.',
     missingRootGuidance:
       'Een verplaatste of verwijderde map verdwijnt niet automatisch uit de index. Offline mappen behouden hun zoekgegevens; gebruik Uit indexering verwijderen om deze te wissen.',

@@ -47,7 +47,8 @@ type BusyAction =
   | 'cleanup'
   | 'override'
   | 'workspaces'
-  | 'media';
+  | 'media'
+  | 'rescan';
 
 interface PdfImageConsentOption {
   readonly enabled: boolean;
@@ -531,8 +532,10 @@ function rootStatusView(
     reason: SemanticEligibilityReason,
     action: SemanticEligibilityOverride | undefined,
   ) => void,
+  onRescan: (() => void) | undefined,
 ): Vnode {
   const removed = rootExclusion(root) !== undefined;
+  const failedSources = root.failedSources ?? [];
   const oversizedCount =
     root.eligibilityReasonCounts.find((reason) => reason.reason === 'oversized')?.count ?? 0;
   return m('li.fm-semantic-library-root', { key: root.id }, [
@@ -555,6 +558,26 @@ function rootStatusView(
             ),
       ),
       removed ? m('span', t('semanticLibrary', 'excluded')) : undefined,
+      !removed && failedSources.length > 0
+        ? m(
+            'span.fm-semantic-library-failed-badge',
+            t('semanticLibrary', 'failedSourcesCount', { count: failedSources.length }),
+          )
+        : undefined,
+      !removed && onRescan !== undefined
+        ? m(
+            'button.fm-semantic-library-action',
+            { type: 'button', disabled: busy !== undefined, onclick: onRescan },
+            t('semanticLibrary', 'rescanFolder'),
+          )
+        : undefined,
+      // Visible on the folder row, so files needing OCR or unreachable folders show without opening it.
+      !removed && root.ocrRequiredFiles.length > 0
+        ? m(
+            'span.fm-semantic-library-ocr-badge',
+            t('semanticLibrary', 'ocrNeededCount', { count: root.ocrRequiredFiles.length }),
+          )
+        : undefined,
       !removed && canRemove && workspaceId !== undefined
         ? m(
             'button.fm-semantic-library-action',
@@ -567,6 +590,20 @@ function rootStatusView(
           )
         : undefined,
     ]),
+    failedSources.length > 0
+      ? m('details.fm-semantic-library-failed-sources', { open: true }, [
+          m('summary', t('semanticLibrary', 'failedSourcesHeading')),
+          m(
+            'ul',
+            failedSources.map((source) =>
+              m('li', { key: source.location.uri }, [
+                m('span.fm-semantic-library-location', decodedLocation(source.location.uri)),
+                ` — ${source.reason}`,
+              ]),
+            ),
+          ),
+        ])
+      : undefined,
     root.availability.state === 'temporarilyUnavailable'
       ? m('.fm-semantic-library-source-unavailable', { role: 'status' }, [
           m('strong', t('semanticLibrary', 'sourceUnavailable')),
@@ -1121,6 +1158,12 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
             }),
           (selectedRoot, reason, selectedOverride) =>
             void updateOverride(attrs, selectedRoot, reason, selectedOverride),
+          attrs.client.rescanSemanticRoot === undefined
+            ? undefined
+            : () =>
+                void action(attrs, 'rescan', async () => {
+                  await attrs.client.rescanSemanticRoot?.(candidate.id);
+                }),
         );
       const indexedDocuments = includedRoots.reduce(
         (sum, root) =>
@@ -1148,7 +1191,8 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
             refreshError === undefined
               ? undefined
               : m('p.fm-semantic-library-error', { role: 'alert' }, refreshError),
-            m('details.fm-semantic-library-indexed-folders', [
+            // Open by default: the included folders are the first thing to find and exclude.
+            m('details.fm-semantic-library-indexed-folders', { open: true }, [
               m(
                 'summary',
                 t('semanticLibrary', 'indexedFoldersSummary', {

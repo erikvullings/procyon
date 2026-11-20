@@ -150,6 +150,16 @@ pub struct SemanticEligibilityReasonCountDto {
     pub count: u64,
 }
 
+/// A file that failed to index in its root's latest reconciliation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SemanticFailedSourceDto {
+    /// The file that failed to index.
+    pub location: LocationDto,
+    /// Sanitized reason from the worker or conversion step.
+    pub reason: String,
+}
+
 /// Files skipped for one reason.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -418,6 +428,9 @@ pub struct SemanticRootStatusDto {
     pub eligibility_reason_counts: Vec<SemanticEligibilityReasonCountDto>,
     /// Files whose latest completed reconciliation requires OCR.
     pub ocr_required_files: Vec<LocationDto>,
+    /// Files whose latest completed reconciliation failed to index.
+    #[serde(default)]
+    pub failed_sources: Vec<SemanticFailedSourceDto>,
     /// Files skipped by the last reconciliation, grouped by reason and capped per reason.
     #[serde(default)]
     pub skipped_files: Vec<SemanticSkippedFilesDto>,

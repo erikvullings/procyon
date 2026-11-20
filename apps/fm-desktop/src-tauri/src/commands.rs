@@ -1589,6 +1589,40 @@ pub(crate) async fn confirm_semantic_enrolment(
     Ok(status)
 }
 
+/// Re-reads an enrolled folder and re-runs its indexing, so files that failed to index or now
+/// need OCR are tried again. Runs in the background; the status updates as it progresses.
+#[tauri::command]
+pub(crate) async fn rescan_semantic_root(
+    state: State<'_, AppState>,
+    root_id: String,
+) -> Result<(), SemanticLibraryErrorDto> {
+    let Some(root_id) = root_id.parse().ok() else {
+        return Err(semantic_library_error(
+            fm_application::semantic_library::SemanticLibraryError::InvalidRequest,
+        ));
+    };
+    if state.semantic_managed_components {
+        let service = Arc::clone(&state.service);
+        tauri::async_runtime::spawn(async move {
+            if let Err(error) = service
+                .semantic_reconcile_enrolled_root(
+                    &desktop_semantic_access(),
+                    root_id,
+                    tokio_util::sync::CancellationToken::new(),
+                )
+                .await
+            {
+                tracing::error!(
+                    root_id = %root_id,
+                    error = %error,
+                    "semantic rescan of an enrolled folder failed"
+                );
+            }
+        });
+    }
+    Ok(())
+}
+
 /// Creates an authoritative destructive exclusion plan.
 #[tauri::command]
 pub(crate) async fn plan_semantic_exclusion(

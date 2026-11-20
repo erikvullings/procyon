@@ -6,6 +6,7 @@ import type { LocationDto } from './locationDto.ts';
 import type { SemanticEligibilityOverrideStatusDto } from './semanticEligibilityOverrideStatusDto.ts';
 import type { SemanticEligibilityReasonCountDto } from './semanticEligibilityReasonCountDto.ts';
 import type { SemanticExclusionStatusDto } from './semanticExclusionStatusDto.ts';
+import type { SemanticFailedSourceDto } from './semanticFailedSourceDto.ts';
 import type { SemanticRootAvailabilityDto } from './semanticRootAvailabilityDto.ts';
 import type { SemanticSkippedFilesDto } from './semanticSkippedFilesDto.ts';
 
@@ -23,6 +24,8 @@ export interface SemanticRootStatusDto {
   eligibilityReasonCounts: SemanticEligibilityReasonCountDto[];
   /** Explicit exclusions. */
   exclusions: SemanticExclusionStatusDto[];
+  /** Files whose latest completed reconciliation failed to index. */
+  failedSources?: SemanticFailedSourceDto[];
   /** Stable path-independent root identity. */
   id: string;
   /**

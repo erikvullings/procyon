@@ -37,9 +37,9 @@ use crate::semantic::{
     SemanticIngestionState, SemanticOperationId, SemanticScope, SemanticService, TenantId,
 };
 use crate::semantic_library::{
-    SemanticAccessContext, SemanticEligibilityReasonCount, SemanticFeedCandidate,
-    SemanticIndexingObservation, SemanticLibraryError, SemanticLibraryService,
-    SemanticRootAvailability,
+    SemanticAccessContext, SemanticEligibilityReasonCount, SemanticFailedSource,
+    SemanticFeedCandidate, SemanticIndexingObservation, SemanticLibraryError,
+    SemanticLibraryService, SemanticRootAvailability,
 };
 
 const PAGE_SIZE: usize = 128;
@@ -88,6 +88,8 @@ pub struct SemanticIndexingReport {
     pub exclusion_details: Vec<String>,
     /// Source files whose latest completed reconciliation requires OCR.
     pub ocr_required_files: Vec<Location>,
+    /// Source files that failed to index, one entry per file however many workspaces it reached.
+    pub failed_sources: Vec<SemanticFailedSource>,
     /// Entries rejected by the curated eligibility policy.
     pub skipped_reason_counts: Vec<SemanticEligibilityReasonCount>,
     /// Files that could not be read; their previous index is retained.
@@ -145,6 +147,7 @@ pub struct SemanticIndexingService {
     scanned_entries: AtomicU64,
     semantic: std::sync::RwLock<SemanticService>,
     ocr_required_files: std::sync::RwLock<BTreeMap<RootId, Vec<Location>>>,
+    failed_sources: std::sync::RwLock<BTreeMap<RootId, Vec<SemanticFailedSource>>>,
     skipped_files: std::sync::RwLock<BTreeMap<RootId, BTreeMap<EligibilityReason, Vec<Location>>>>,
     run_lock: tokio::sync::Mutex<()>,
     jsonl_windows: std::sync::RwLock<(usize, u32)>,
@@ -171,6 +174,7 @@ impl SemanticIndexingService {
             scanned_entries: AtomicU64::new(0),
             semantic: std::sync::RwLock::new(SemanticService::unavailable()),
             ocr_required_files: std::sync::RwLock::new(BTreeMap::new()),
+            failed_sources: std::sync::RwLock::new(BTreeMap::new()),
             skipped_files: std::sync::RwLock::new(BTreeMap::new()),
             run_lock: tokio::sync::Mutex::new(()),
             jsonl_windows: std::sync::RwLock::new((
@@ -214,6 +218,16 @@ impl SemanticIndexingService {
 
     pub(crate) fn ocr_required_files(&self, root_id: RootId) -> Vec<Location> {
         self.ocr_required_files
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&root_id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Files the last reconciliation failed to index.
+    pub(crate) fn failed_sources(&self, root_id: RootId) -> Vec<SemanticFailedSource> {
+        self.failed_sources
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get(&root_id)
@@ -290,14 +304,15 @@ impl SemanticIndexingService {
         self.publish_progress(
             &job_id,
             match &result {
-                Ok(report) if report.failed_occurrences > 0 => "failed",
+                Ok(report) if !report.failed_sources.is_empty() => "failed",
                 Ok(_) => "complete",
                 Err(SemanticIndexingError::Cancelled) => "cancelled",
                 Err(_) => "failed",
             },
             self.scanned_entries.load(Ordering::Relaxed),
             match &result {
-                Ok(report) => report.failed_occurrences,
+                // Counted in sources, the same unit the settings list shows.
+                Ok(report) => report.failed_sources.len() as u64,
                 Err(_) => 1,
             },
         );
@@ -361,6 +376,7 @@ impl SemanticIndexingService {
         let mut excluded_occurrences = 0_u64;
         let mut exclusion_details = BTreeSet::new();
         let mut ocr_required_files = Vec::new();
+        let mut failed_sources = Vec::new();
         let mut skipped = BTreeMap::<EligibilityReason, u64>::new();
         let mut skipped_files = BTreeMap::<EligibilityReason, Vec<Location>>::new();
         let mut preserved = Vec::new();
@@ -482,6 +498,17 @@ impl SemanticIndexingService {
                                         ingested_occurrences.saturating_add(report.ingested);
                                     failed_occurrences =
                                         failed_occurrences.saturating_add(report.failed);
+                                    // One source per file, however many workspaces it reached.
+                                    if report.failed > 0 {
+                                        failed_sources.push(SemanticFailedSource {
+                                            location: entry.location.clone(),
+                                            reason: report
+                                                .failure_details
+                                                .first()
+                                                .cloned()
+                                                .unwrap_or_else(|| "indexing failed".to_owned()),
+                                        });
+                                    }
                                     for detail in report.failure_details {
                                         retain_failure_detail(
                                             &mut failure_details,
@@ -538,6 +565,10 @@ impl SemanticIndexingService {
                 .write()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .insert(root_id, ocr_required_files.clone());
+            self.failed_sources
+                .write()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .insert(root_id, failed_sources.clone());
             self.skipped_files
                 .write()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -569,6 +600,7 @@ impl SemanticIndexingService {
             excluded_occurrences,
             exclusion_details: exclusion_details.into_iter().collect(),
             ocr_required_files,
+            failed_sources,
             skipped_reason_counts: skipped
                 .into_iter()
                 .map(|(reason, count)| SemanticEligibilityReasonCount { reason, count })

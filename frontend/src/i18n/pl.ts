@@ -1804,6 +1804,9 @@ export const pl = {
     computeUnknown: 'Urządzenie nie zostało zgłoszone przez workera',
     libraryDetails: 'Szczegóły biblioteki',
     pdfTools: 'Umożliw wyszukiwanie w zeskanowanych plikach PDF',
+    failedSourcesCount: '{count} plików nie udało się zindeksować',
+    failedSourcesHeading: 'Pliki, których nie udało się zindeksować',
+    rescanFolder: 'Ponownie przeskanuj folder',
     ocrNeededCount:
       'Zeskanowane pliki PDF wymagające rozpoznawania tekstu: {count}; zobacz szczegóły indeksowania.',
     missingRootGuidance:

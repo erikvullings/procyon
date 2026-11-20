@@ -1758,8 +1758,9 @@ describe('FileViewer', () => {
 
     expect(root.querySelector('.fm-json-token-property')?.textContent).toBe('"city"');
     expect(root.querySelector('.fm-structured-json-source-wrap')).not.toBeNull();
-    expect(root.querySelector('.fm-structured-window-previous')).not.toBeNull();
-    expect(root.querySelector('.fm-structured-window-next')).not.toBeNull();
+    // Paging is in the breadcrumb bar: 64 KB pages of a 100,000-byte file.
+    expect(root.querySelector('.fm-structured-window-previous')).toBeNull();
+    expect(root.querySelector('.fm-file-viewer-page-controls')?.textContent).toContain('1 / 2');
   });
 
   describe('markdown search-match highlighting', () => {

@@ -463,6 +463,8 @@ pub struct SemanticRootStatus {
     pub eligibility_reason_counts: Vec<SemanticEligibilityReasonCount>,
     /// Files whose latest completed reconciliation requires OCR.
     pub ocr_required_files: Vec<Location>,
+    /// Files whose latest completed reconciliation failed to index, with a sanitized reason.
+    pub failed_sources: Vec<SemanticFailedSource>,
     /// Files skipped by the last reconciliation, grouped by reason and capped per reason.
     pub skipped_files: Vec<SemanticSkippedFiles>,
     /// Current source reachability.
@@ -479,6 +481,15 @@ pub struct SemanticRootStatus {
     pub unverified_legacy_occurrences_by_workspace: BTreeMap<Uuid, u64>,
     /// Explicit descendant/root exclusions.
     pub exclusions: Vec<SemanticExclusionStatus>,
+}
+
+/// A file whose latest completed reconciliation failed to index.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SemanticFailedSource {
+    /// The file that failed to index.
+    pub location: Location,
+    /// Sanitized reason from the worker or conversion step.
+    pub reason: String,
 }
 
 /// Files skipped for one eligibility reason.
@@ -3754,6 +3765,7 @@ fn project_root(
             .collect(),
         eligibility_reason_counts: counts.map_or_else(Vec::new, reason_counts),
         ocr_required_files: Vec::new(),
+        failed_sources: Vec::new(),
         skipped_files: Vec::new(),
         availability: match data.catalog.root_availability(root.id()) {
             core::RootAvailability::Available => SemanticRootAvailability::Available,

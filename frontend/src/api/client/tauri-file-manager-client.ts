@@ -588,6 +588,10 @@ export class TauriFileManagerClient implements FileManagerClient {
     return invoke<SemanticLibraryStatus>('update_gemma_media', { request });
   }
 
+  async rescanSemanticRoot(rootId: string, _signal?: AbortSignal): Promise<void> {
+    await invoke<void>('rescan_semantic_root', { rootId });
+  }
+
   async listSemanticVocabularies(_signal?: AbortSignal): Promise<readonly SemanticVocabulary[]> {
     return invoke<SemanticVocabulary[]>('list_semantic_vocabularies');
   }

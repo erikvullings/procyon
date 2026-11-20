@@ -959,6 +959,7 @@ impl FileManagerService {
         for root in &mut status.roots {
             if let Ok(root_id) = root.id.parse() {
                 root.ocr_required_files = self.semantic_indexing.ocr_required_files(root_id);
+                root.failed_sources = self.semantic_indexing.failed_sources(root_id);
                 root.skipped_files = self
                     .semantic_indexing
                     .skipped_files(root_id)

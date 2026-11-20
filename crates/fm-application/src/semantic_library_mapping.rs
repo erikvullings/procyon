@@ -13,15 +13,15 @@ use fm_transport_dto::{
     SemanticEligibilityOverrideStatusDto, SemanticEligibilityReasonCountDto,
     SemanticEligibilityReasonDto, SemanticEnrolmentEstimateDto, SemanticEnrolmentPreviewDto,
     SemanticEstimateCompletenessDto, SemanticExclusionPlanDto, SemanticExclusionStatusDto,
-    SemanticFolderConsentDto, SemanticFolderStatusDto, SemanticLibraryAuthorityDto,
-    SemanticLibraryCapabilitiesDto, SemanticLibraryErrorCodeDto, SemanticLibraryErrorDetailsDto,
-    SemanticLibraryErrorDto, SemanticLibraryIdentityDto, SemanticLibraryModelIdentityDto,
-    SemanticLibraryOperationDto, SemanticLibraryResourceBudgetsDto,
-    SemanticLibraryResourceProfileDto, SemanticLibraryResourceProfileKindDto,
-    SemanticLibraryRevisionRequestDto, SemanticLibraryStatusDto, SemanticRootAvailabilityDto,
-    SemanticRootStatusDto, SemanticSkippedFilesDto, SemanticUnavailableReasonDto,
-    UpdateGemmaMediaRequestDto, UpdateSemanticEligibilityOverridesRequestDto,
-    UpdateSemanticRootWorkspacesRequestDto,
+    SemanticFailedSourceDto, SemanticFolderConsentDto, SemanticFolderStatusDto,
+    SemanticLibraryAuthorityDto, SemanticLibraryCapabilitiesDto, SemanticLibraryErrorCodeDto,
+    SemanticLibraryErrorDetailsDto, SemanticLibraryErrorDto, SemanticLibraryIdentityDto,
+    SemanticLibraryModelIdentityDto, SemanticLibraryOperationDto,
+    SemanticLibraryResourceBudgetsDto, SemanticLibraryResourceProfileDto,
+    SemanticLibraryResourceProfileKindDto, SemanticLibraryRevisionRequestDto,
+    SemanticLibraryStatusDto, SemanticRootAvailabilityDto, SemanticRootStatusDto,
+    SemanticSkippedFilesDto, SemanticUnavailableReasonDto, UpdateGemmaMediaRequestDto,
+    UpdateSemanticEligibilityOverridesRequestDto, UpdateSemanticRootWorkspacesRequestDto,
 };
 use uuid::Uuid;
 
@@ -509,6 +509,14 @@ fn semantic_root_status_to_dto(root: SemanticRootStatus) -> SemanticRootStatusDt
             .ocr_required_files
             .into_iter()
             .map(Into::into)
+            .collect(),
+        failed_sources: root
+            .failed_sources
+            .into_iter()
+            .map(|source| SemanticFailedSourceDto {
+                location: source.location.into(),
+                reason: source.reason,
+            })
             .collect(),
         skipped_files: root
             .skipped_files

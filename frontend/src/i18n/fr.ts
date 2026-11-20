@@ -1817,6 +1817,9 @@ export const fr = {
     computeUnknown: 'Appareil non indiqué par le worker',
     libraryDetails: 'Détails de la bibliothèque',
     pdfTools: 'Rendre les PDF numérisés consultables',
+    failedSourcesCount: '{count} fichier(s) n’ont pas pu être indexés',
+    failedSourcesHeading: 'Fichiers non indexés',
+    rescanFolder: 'Réanalyser le dossier',
     ocrNeededCount:
       "{count} PDF numérisé(s) nécessite(nt) une reconnaissance de texte ; voir les détails de l'indexation.",
     missingRootGuidance:

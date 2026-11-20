@@ -552,6 +552,12 @@ export interface SemanticClient {
     signal?: AbortSignal,
   ): Promise<SemanticLibraryStatus>;
 
+  /**
+   * Re-reads an enrolled folder and re-runs its indexing (failed files, files needing OCR). Only
+   * the desktop host indexes, so the method is absent where indexing is not available.
+   */
+  rescanSemanticRoot?(rootId: string, signal?: AbortSignal): Promise<void>;
+
   updateLlmProfile(
     profileId: string,
     request: SaveLlmProfileRequest,

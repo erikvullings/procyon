@@ -1,6 +1,6 @@
 import { EditorView } from '@codemirror/view';
 import m, { type FactoryComponent } from 'mithril';
-import { FlatButton, ModalPanel, PaginationControls, Select, Skeleton } from 'mithril-materialized';
+import { ModalPanel, PaginationControls, Select, Skeleton } from 'mithril-materialized';
 import {
   closeIcon,
   copyIcon,
@@ -210,6 +210,16 @@ function pagedContentInfo(
     return {
       current: Math.floor(content.windowOffset / TEXT_WINDOW_BYTES) + 1,
       total: Math.ceil(totalBytes / TEXT_WINDOW_BYTES),
+    };
+  }
+  // JSON is read in the same 64 KB windows as text, so each window is a page. The last window is
+  // bounded to the file's end, so it is the last page by flag rather than by offset.
+  if (content.kind === 'structuredJson') {
+    if (content.atStart && content.atEnd) return undefined;
+    const total = Math.max(1, Math.ceil(content.sourceBytes / TEXT_WINDOW_BYTES));
+    return {
+      current: content.atEnd ? total : Math.floor(content.windowOffset / TEXT_WINDOW_BYTES) + 1,
+      total,
     };
   }
   if (content.kind === 'pdf')
@@ -1013,10 +1023,7 @@ const StructuredTable: FactoryComponent<{
   };
 };
 
-function renderStructuredJson(
-  attrs: FileViewerAttrs,
-  state: Extract<FileViewerState, { status: 'ready' }>,
-): m.Children {
+function renderStructuredJson(state: Extract<FileViewerState, { status: 'ready' }>): m.Children {
   if (state.content.kind !== 'structuredJson') return undefined;
   const content = state.content;
   const bytes = Uint8Array.from(content.data);
@@ -1032,27 +1039,8 @@ function renderStructuredJson(
     cursor = end;
   }
   if (cursor < bytes.length) parts.push(decoder.decode(bytes.slice(cursor)));
+  // Paging is in the breadcrumb bar (see `pagedContentInfo`), like text and PDF pages.
   return m('.fm-structured-json', [
-    m('.fm-file-viewer-window-controls', [
-      m(FlatButton, {
-        className: 'fm-structured-window-previous',
-        label: '<',
-        disabled: content.atStart,
-        tooltip: t('viewer', 'previousWindow'),
-        onclick: () => attrs.onLoadJsonWindow(Math.max(0, content.windowOffset - 64 * 1024)),
-      }),
-      m(
-        'span',
-        `${content.windowOffset.toLocaleString()}–${(content.windowOffset + bytes.length).toLocaleString()} / ${content.sourceBytes.toLocaleString()} bytes`,
-      ),
-      m(FlatButton, {
-        className: 'fm-structured-window-next',
-        label: '>',
-        disabled: content.atEnd,
-        tooltip: t('viewer', 'nextWindow'),
-        onclick: () => attrs.onLoadJsonWindow(content.windowOffset + bytes.length),
-      }),
-    ]),
     content.warning === undefined ? undefined : m('.fm-structured-warning', content.warning),
     m('pre.fm-structured-json-source.fm-structured-json-source-wrap', parts),
   ]);
@@ -1917,6 +1905,8 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                   const stepPage = (delta: -1 | 1) => {
                     if (state.content.kind === 'text')
                       attrs.onLoadTextPage(pageInfo.current - 1 + delta);
+                    else if (state.content.kind === 'structuredJson')
+                      attrs.onLoadJsonWindow((pageInfo.current - 1 + delta) * TEXT_WINDOW_BYTES);
                     else if (delta < 0) attrs.onPreviousPage();
                     else attrs.onNextPage();
                   };
@@ -2275,7 +2265,7 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                       : state.content.kind === 'structuredTable'
                         ? m(StructuredTable, { attrs, state })
                         : state.content.kind === 'structuredJson'
-                          ? renderStructuredJson(attrs, state)
+                          ? renderStructuredJson(state)
                           : state.content.kind === 'sqlite'
                             ? m(SqliteBrowser, { content: state.content, actions: attrs.sqlite })
                             : state.content.kind === 'structuredFallback'

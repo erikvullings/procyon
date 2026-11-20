@@ -2146,6 +2146,9 @@ async fn one_failed_document_does_not_abort_the_root_reconciliation() {
         ["page 33 image 1 exceeds the PDF visual limit; no partial generation published"]
     );
     assert!(!report.failure_details_truncated);
+    // One failed source for the file, with the worker's reason; the count is per file.
+    assert_eq!(report.failed_sources.len(), 1, "{report:?}");
+    assert_eq!(report.failed_sources[0].reason, report.failure_details[0]);
     let roots = service
         .list_knowledge_roots(
             &HOST,

@@ -1815,6 +1815,9 @@ export const pt = {
     computeUnknown: 'Dispositivo não indicado pelo worker',
     libraryDetails: 'Detalhes da biblioteca',
     pdfTools: 'Tornar pesquisáveis os PDFs digitalizados',
+    failedSourcesCount: '{count} ficheiro(s) não foram indexados',
+    failedSourcesHeading: 'Ficheiros que não foram indexados',
+    rescanFolder: 'Analisar a pasta novamente',
     ocrNeededCount:
       '{count} PDF digitalizado(s) precisa(m) de reconhecimento de texto; consulte os detalhes da indexação.',
     missingRootGuidance:

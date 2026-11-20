@@ -761,9 +761,10 @@ export function createPaneContentBuilder(
       },
       onListSubfolders: async (path) => {
         if (tab === undefined) return [];
+        // Same visibility as the pane listing: hidden folders show when the setting is on.
         const children = await client.listDirectoryChildren(
           context.locationForPath(tab.location, path),
-          false,
+          context.getCurrentSettings()?.showHiddenFiles === true,
         );
         return children
           .filter((entry) => entry.kind === 'directory')

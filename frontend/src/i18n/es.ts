@@ -1810,6 +1810,9 @@ export const es = {
     computeUnknown: 'Dispositivo no indicado por el worker',
     libraryDetails: 'Detalles de la biblioteca',
     pdfTools: 'Hacer buscables los PDF escaneados',
+    failedSourcesCount: '{count} archivo(s) no se pudo indexar',
+    failedSourcesHeading: 'Archivos que no se pudieron indexar',
+    rescanFolder: 'Volver a analizar la carpeta',
     ocrNeededCount:
       '{count} PDF escaneado(s) necesita(n) reconocimiento de texto; consulta los detalles de la indexación.',
     missingRootGuidance:

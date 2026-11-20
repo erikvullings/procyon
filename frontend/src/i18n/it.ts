@@ -1809,6 +1809,9 @@ export const it = {
     computeUnknown: 'Dispositivo non indicato dal worker',
     libraryDetails: 'Dettagli della libreria',
     pdfTools: 'Rendere ricercabili i PDF scansionati',
+    failedSourcesCount: '{count} file non indicizzati',
+    failedSourcesHeading: 'File non indicizzati',
+    rescanFolder: 'Riesamina la cartella',
     ocrNeededCount:
       "{count} PDF scansionato/i richiede/richiedono il riconoscimento del testo; vedi i dettagli dell'indicizzazione.",
     missingRootGuidance:

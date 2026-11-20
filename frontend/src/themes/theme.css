@@ -1130,6 +1130,24 @@ main.fm-workspace {
   color: var(--fm-error);
 }
 
+/* Per-folder status shown on the folder row, so problems are visible without opening it. */
+.fm-semantic-library-failed-badge,
+.fm-semantic-library-ocr-badge {
+  padding: 0 0.4rem;
+  border-radius: var(--fm-radius);
+  background: var(--fm-warning-subtle, transparent);
+  color: var(--fm-warning);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.fm-semantic-library-failed-sources ul {
+  margin: 0.25rem 0 0;
+  padding-inline-start: 1.25rem;
+  color: var(--fm-error);
+  font-size: 0.9em;
+}
+
 .fm-semantic-folder-prompt .fm-semantic-library-plan {
   border: 0;
   padding: 0;

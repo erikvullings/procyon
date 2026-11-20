@@ -25798,6 +25798,24 @@
           }
         }
       },
+      "SemanticFailedSourceDto": {
+        "type": "object",
+        "description": "A file that failed to index in its root's latest reconciliation.",
+        "required": [
+          "location",
+          "reason"
+        ],
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The file that failed to index."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Sanitized reason from the worker or conversion step."
+          }
+        }
+      },
       "SemanticFolderConsentDto": {
         "type": "string",
         "description": "Effective consent at one active folder.",
@@ -26851,6 +26869,13 @@
               "$ref": "#/components/schemas/SemanticExclusionStatusDto"
             },
             "description": "Explicit exclusions."
+          },
+          "failedSources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SemanticFailedSourceDto"
+            },
+            "description": "Files whose latest completed reconciliation failed to index."
           },
           "id": {
             "type": "string",

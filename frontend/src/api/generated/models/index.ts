@@ -515,6 +515,7 @@ export * from './semanticEstimateCompletenessDto.ts';
 export * from './semanticEvidenceDto.ts';
 export * from './semanticExclusionPlanDto.ts';
 export * from './semanticExclusionStatusDto.ts';
+export * from './semanticFailedSourceDto.ts';
 export * from './semanticFolderConsentDto.ts';
 export * from './semanticFolderStatusDto.ts';
 export * from './semanticIndexRecordCountsDto.ts';

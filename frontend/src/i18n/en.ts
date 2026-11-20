@@ -2183,6 +2183,9 @@ export const en = {
     pdfTools: 'Make scanned PDFs searchable',
     pdfToolsEnabled: 'Make scanned PDFs searchable (enabled)',
     pdfToolsDisabled: 'Make scanned PDFs searchable (disabled)',
+    failedSourcesCount: '{count} file(s) failed to index',
+    failedSourcesHeading: 'Files that failed to index',
+    rescanFolder: 'Rescan folder',
     ocrNeededCount: '{count} scanned PDF(s) need text recognition; see indexing details.',
     missingRootGuidance:
       'Moving or deleting an included folder does not remove its index automatically. Offline folders keep their search data; use Remove from indexing to delete it.',
