@@ -68,20 +68,14 @@ const source = (over: Partial<TerminalAssistSource> = {}): TerminalAssistSource 
 });
 
 describe('parseMentions', () => {
-  it('finds files and the @dir and @output keywords', () => {
-    expect(parseMentions('why does @src/lib.rs fail? see @output and @dir, also @a.txt.')).toEqual({
+  it('finds the files named with @', () => {
+    expect(parseMentions('why does @src/lib.rs fail? also @a.txt.')).toEqual({
       files: ['src/lib.rs', 'a.txt'],
-      wantsListing: true,
-      wantsOutput: true,
     });
   });
 
   it('ignores emails and a lone @', () => {
-    expect(parseMentions('mail me@example.com or @ later')).toEqual({
-      files: [],
-      wantsListing: false,
-      wantsOutput: false,
-    });
+    expect(parseMentions('mail me@example.com or @ later')).toEqual({ files: [] });
   });
 
   it('lists each file once', () => {
@@ -113,14 +107,8 @@ describe('assistContext', () => {
     expect(context).toEqual({ omitEnvironment: true });
   });
 
-  it('puts a mentioned part back and adds mentioned files', () => {
-    const context = assistContext(
-      source(),
-      new Set(['listing', 'blocks'] as const),
-      parseMentions('@dir @output @a.txt'),
-    );
-    expect(context.listing).toEqual(['a.txt', 'src/']);
-    expect(context.blocks).toHaveLength(1);
+  it('adds the files named in the question', () => {
+    const context = assistContext(source(), new Set(), parseMentions('see @a.txt'));
     expect(context.files).toEqual(['a.txt']);
   });
 

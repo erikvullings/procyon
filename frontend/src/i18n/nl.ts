@@ -2703,25 +2703,19 @@ export const nl = {
     consentDecline: 'Niet nu',
     assistEdit: 'Bewerken',
     contextEnvironment: 'Systeem',
-    contextListing: '{count} namen',
-    contextSelection: '{count} geselecteerd',
-    contextOtherFolder: 'Ander paneel',
-    contextBlocks: 'Laatste {count} commando’s',
-    contextFile: 'Bestand {name}',
     contextEnvironmentDetail: 'Besturingssysteem, architectuur en shell',
     help: 'Hulp bij de assistent',
     helpTitle: 'Terminalassistent',
     helpClose: 'Sluiten',
     helpAsk:
-      'Typ # gevolgd door een vraag bij de prompt en druk op Enter. De vraag wordt nooit als commando uitgevoerd.',
+      'Typ # gevolgd door een vraag bij de prompt en druk op Enter. Vraag en antwoord verschijnen in de terminal; de vraag wordt nooit als commando uitgevoerd.',
     helpContext:
       'Chips onder de vraag tonen wat er wordt verstuurd: systeem, maplijst, selectie, ander paneel en recente commando’s. Klik op een chip om hem weg te laten of weer op te nemen; de tooltip toont details.',
-    helpMentions:
-      'In een vraag voegt @dir de maplijst toe, @output de recente uitvoer en @bestand.txt voegt dat bestand bij.',
+    helpMentions: 'Typ @bestand.txt in een vraag om dat bestand bij te voegen.',
     helpExplainFix:
       'Ctrl+Shift+E legt de laatste uitvoer uit en Ctrl+Shift+F stelt een oplossing voor. Commandoblokken bieden hetzelfde bij elk afgerond commando.',
     helpFollowUp:
-      'Stel vervolgvragen onder een antwoord. Het gesprek blijft per terminaltabblad bewaard tot het tabblad sluit.',
+      'Stel een vervolgvraag door opnieuw # te typen. Het gesprek blijft per terminaltabblad bewaard tot het tabblad sluit.',
     helpRun:
       'De assistent kan mappen tonen en bestanden in de werkmap lezen, ook via SSH (zoeken alleen lokaal). Wil hij een commando uitvoeren, dan keurt u dat eerst goed: Enter voert uit, Ctrl+C weigert.',
     helpSafety:
@@ -2731,6 +2725,11 @@ export const nl = {
     contextRemove: 'Weglaten',
     followUpPlaceholder: 'Stel een vervolgvraag…',
     assistRunning: 'Draait in de terminal…',
+    contextListing: '{count} namen',
+    contextSelection: '{count} geselecteerd',
+    contextOtherFolder: 'Ander paneel',
+    contextBlocks: 'Laatste {count} commando’s',
+    contextFile: 'Bestand {name}',
     assistApproveNote: 'De assistent wil dit commando in uw terminal uitvoeren.',
     assistNeedsBlocks:
       'Commando’s uitvoeren vereist commandoblokken. Voeg het in plaats daarvan in bij de prompt.',

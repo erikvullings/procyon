@@ -2733,25 +2733,19 @@ export const de = {
     consentDecline: 'Nicht jetzt',
     assistEdit: 'Bearbeiten',
     contextEnvironment: 'Betriebssystem',
-    contextListing: '{count} Namen',
-    contextSelection: '{count} ausgewählt',
-    contextOtherFolder: 'Anderes Fenster',
-    contextBlocks: 'Letzte {count} Befehle',
-    contextFile: 'Datei {name}',
     contextEnvironmentDetail: 'Betriebssystem, Architektur und Shell',
     help: 'Hilfe zum Assistenten',
     helpTitle: 'Terminal-Assistent',
     helpClose: 'Schließen',
     helpAsk:
-      'Geben Sie am Prompt # und eine Frage ein und drücken Sie Enter. Die Frage wird nie als Befehl ausgeführt.',
+      'Geben Sie am Prompt # und eine Frage ein und drücken Sie Enter. Frage und Antwort erscheinen im Terminal; die Frage wird nie als Befehl ausgeführt.',
     helpContext:
       'Chips unter der Frage zeigen, was gesendet wird: System, Ordnerinhalt, Auswahl, anderes Fenster und letzte Befehle. Ein Klick auf einen Chip lässt ihn weg oder nimmt ihn wieder auf; der Tooltip zeigt Details.',
-    helpMentions:
-      'In einer Frage fügt @dir den Ordnerinhalt hinzu, @output die letzte Ausgabe und @datei.txt hängt diese Datei an.',
+    helpMentions: 'Schreiben Sie @datei.txt in eine Frage, um diese Datei anzuhängen.',
     helpExplainFix:
       'Strg+Umschalt+E erklärt die letzte Ausgabe, Strg+Umschalt+F schlägt eine Korrektur vor. Befehlsblöcke bieten dasselbe für jeden beendeten Befehl.',
     helpFollowUp:
-      'Stellen Sie unter einer Antwort Rückfragen. Das Gespräch bleibt pro Terminal-Tab erhalten, bis der Tab geschlossen wird.',
+      'Stellen Sie eine Rückfrage, indem Sie erneut # eingeben. Das Gespräch bleibt pro Terminal-Tab erhalten, bis der Tab geschlossen wird.',
     helpRun:
       'Der Assistent kann Ordner auflisten und Dateien im Arbeitsordner lesen, auch über SSH (die Suche nur lokal). Will er einen Befehl ausführen, bestätigen Sie zuerst: Enter führt aus, Strg+C lehnt ab.',
     helpSafety:
@@ -2761,6 +2755,11 @@ export const de = {
     contextRemove: 'Weglassen',
     followUpPlaceholder: 'Rückfrage stellen…',
     assistRunning: 'Läuft im Terminal…',
+    contextListing: '{count} Namen',
+    contextSelection: '{count} ausgewählt',
+    contextOtherFolder: 'Anderes Fenster',
+    contextBlocks: 'Letzte {count} Befehle',
+    contextFile: 'Datei {name}',
     assistApproveNote: 'Der Assistent möchte diesen Befehl in Ihrem Terminal ausführen.',
     assistNeedsBlocks:
       'Zum Ausführen von Befehlen sind Befehlsblöcke nötig. Fügen Sie ihn stattdessen am Prompt ein.',

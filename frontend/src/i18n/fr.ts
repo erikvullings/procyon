@@ -2727,25 +2727,19 @@ export const fr = {
     consentDecline: 'Pas maintenant',
     assistEdit: 'Modifier',
     contextEnvironment: 'Système',
-    contextListing: '{count} noms',
-    contextSelection: '{count} sélectionnés',
-    contextOtherFolder: 'Autre volet',
-    contextBlocks: '{count} dernières commandes',
-    contextFile: 'Fichier {name}',
     contextEnvironmentDetail: "Système d'exploitation, architecture et shell",
     help: "Aide de l'assistant",
     helpTitle: 'Assistant de terminal',
     helpClose: 'Fermer',
     helpAsk:
-      "Tapez # suivi d'une question à l'invite, puis Entrée. La question n'est jamais exécutée comme commande.",
+      "Tapez # suivi d'une question à l'invite, puis Entrée. La question et la réponse s'affichent dans le terminal ; la question n'est jamais exécutée comme commande.",
     helpContext:
       "Les puces sous la question montrent ce qui est envoyé : système, liste du dossier, sélection, autre volet et commandes récentes. Cliquez sur une puce pour l'exclure ou la réinclure ; l'infobulle donne le détail.",
-    helpMentions:
-      'Dans une question, @dir ajoute la liste du dossier, @output la sortie récente et @fichier.txt joint ce fichier.',
+    helpMentions: 'Écrivez @fichier.txt dans une question pour joindre ce fichier.',
     helpExplainFix:
       'Ctrl+Maj+E explique la dernière sortie et Ctrl+Maj+F propose une correction. Les blocs de commandes offrent la même chose pour chaque commande terminée.',
     helpFollowUp:
-      "Posez des questions de suivi sous une réponse. La conversation est conservée par onglet de terminal jusqu'à sa fermeture.",
+      "Posez une question de suivi en tapant # à nouveau. La conversation est conservée par onglet de terminal jusqu'à sa fermeture.",
     helpRun:
       "L'assistant peut lister des dossiers et lire des fichiers du dossier de travail, y compris via SSH (la recherche seulement en local). S'il veut exécuter une commande, vous l'approuvez d'abord : Entrée l'exécute, Ctrl+C la refuse.",
     helpSafety:
@@ -2755,6 +2749,11 @@ export const fr = {
     contextRemove: 'Exclure',
     followUpPlaceholder: 'Poser une question de suivi…',
     assistRunning: 'En cours dans le terminal…',
+    contextListing: '{count} noms',
+    contextSelection: '{count} sélectionnés',
+    contextOtherFolder: 'Autre volet',
+    contextBlocks: '{count} dernières commandes',
+    contextFile: 'Fichier {name}',
     assistApproveNote: "L'assistant veut exécuter cette commande dans votre terminal.",
     assistNeedsBlocks:
       "L'exécution de commandes nécessite les blocs de commandes. Insérez-la plutôt dans l'invite.",

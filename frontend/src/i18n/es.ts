@@ -2712,25 +2712,19 @@ export const es = {
     consentDecline: 'Ahora no',
     assistEdit: 'Editar',
     contextEnvironment: 'Sistema',
-    contextListing: '{count} nombres',
-    contextSelection: '{count} seleccionados',
-    contextOtherFolder: 'Otro panel',
-    contextBlocks: 'Últimos {count} comandos',
-    contextFile: 'Archivo {name}',
     contextEnvironmentDetail: 'Sistema operativo, arquitectura y shell',
     help: 'Ayuda del asistente',
     helpTitle: 'Asistente de terminal',
     helpClose: 'Cerrar',
     helpAsk:
-      'Escribe # y una pregunta en el prompt y pulsa Intro. La pregunta nunca se ejecuta como comando.',
+      'Escribe # y una pregunta en el prompt y pulsa Intro. La pregunta y la respuesta aparecen en la terminal; la pregunta nunca se ejecuta como comando.',
     helpContext:
       'Los chips bajo la pregunta muestran qué se envía: sistema, listado de la carpeta, selección, otro panel y comandos recientes. Haz clic en un chip para omitirlo o incluirlo de nuevo; el tooltip da detalles.',
-    helpMentions:
-      'En una pregunta, @dir añade el listado de la carpeta, @output la salida reciente y @archivo.txt adjunta ese archivo.',
+    helpMentions: 'Escribe @archivo.txt en una pregunta para adjuntar ese archivo.',
     helpExplainFix:
       'Ctrl+Mayús+E explica la última salida y Ctrl+Mayús+F sugiere una corrección. Los bloques de comandos añaden lo mismo a cada comando terminado.',
     helpFollowUp:
-      'Haz preguntas de seguimiento bajo una respuesta. La conversación se conserva por pestaña de terminal hasta que se cierra.',
+      'Haz una pregunta de seguimiento escribiendo # otra vez. La conversación se conserva por pestaña de terminal hasta que se cierra.',
     helpRun:
       'El asistente puede listar carpetas y leer archivos de la carpeta de trabajo, también por SSH (la búsqueda solo en local). Si quiere ejecutar un comando, lo apruebas antes: Intro lo ejecuta, Ctrl+C lo rechaza.',
     helpSafety:
@@ -2740,6 +2734,11 @@ export const es = {
     contextRemove: 'Omitir',
     followUpPlaceholder: 'Haz una pregunta de seguimiento…',
     assistRunning: 'Ejecutándose en la terminal…',
+    contextListing: '{count} nombres',
+    contextSelection: '{count} seleccionados',
+    contextOtherFolder: 'Otro panel',
+    contextBlocks: 'Últimos {count} comandos',
+    contextFile: 'Archivo {name}',
     assistApproveNote: 'El asistente quiere ejecutar este comando en tu terminal.',
     assistNeedsBlocks: 'Ejecutar comandos requiere bloques de comandos. Insértalo en el prompt.',
     assistRun: 'Ejecutar',

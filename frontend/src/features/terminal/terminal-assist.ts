@@ -111,48 +111,40 @@ export interface TerminalAssistSource {
   readonly otherFolder?: string | undefined;
 }
 
-/** `@path` mentions in a question, and the two keywords `@dir` and `@output`. */
+/** The files named with `@path` in a question. */
 export interface Mentions {
   readonly files: readonly string[];
-  readonly wantsListing: boolean;
-  readonly wantsOutput: boolean;
 }
 
-/** Finds the `@` mentions in a question. An `@` inside a word (an email) is not a mention. */
+/** Finds the `@path` mentions in a question. An `@` inside a word (an email) is not a mention. */
 export function parseMentions(text: string): Mentions {
   const files: string[] = [];
-  let wantsListing = false;
-  let wantsOutput = false;
   for (const match of text.matchAll(/(?:^|\s)@(\S+)/g)) {
     const name = (match[1] ?? '').replace(/[,;:!?)\]]+$/, '').replace(/\.+$/, '');
-    if (name === '') continue;
-    const keyword = name.toLowerCase();
-    if (keyword === 'dir') wantsListing = true;
-    else if (keyword === 'output') wantsOutput = true;
-    else if (!files.includes(name)) files.push(name);
+    if (name !== '' && !files.includes(name)) files.push(name);
   }
-  return { files, wantsListing, wantsOutput };
+  return { files };
 }
 
-const NO_MENTIONS: Mentions = { files: [], wantsListing: false, wantsOutput: false };
+const NO_MENTIONS: Mentions = { files: [] };
 
 /**
- * What goes to the assistant: everything by default, minus the parts the person removed. A part
- * named in the question (`@dir`, `@output`) is put back, and `@path` files are attached.
+ * What goes to the assistant: everything by default, minus the parts the person removed, and the
+ * `@path` files named in the question.
  */
 export function assistContext(
   source: TerminalAssistSource,
   removed: ReadonlySet<RemovableChipId>,
   mentions: Mentions = NO_MENTIONS,
 ): TerminalAssistContext {
-  const keep = (id: RemovableChipId, forced = false) => forced || !removed.has(id);
-  const blocks = keep('blocks', mentions.wantsOutput)
+  const keep = (id: RemovableChipId) => !removed.has(id);
+  const blocks = keep('blocks')
     ? source.blocks.slice(-MAX_CONTEXT_BLOCKS).map((block) => ({
         ...block,
         output: transcriptTail(block.output.split('\n')),
       }))
     : [];
-  const listing = keep('listing', mentions.wantsListing) ? source.listing : [];
+  const listing = keep('listing') ? source.listing : [];
   const selected = keep('selection') ? source.selected : [];
   return {
     ...(removed.has('environment') ? { omitEnvironment: true } : {}),

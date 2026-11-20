@@ -110,3 +110,14 @@ Phase 4 — `run_command` with approval, exit code and output returned to the lo
     and the new chip/approval CSS visually. Unit tests only (backend fake generator, jsdom drawer).
   - Not done: native tool-calling, cancellation, `@`-completion UI, a git branch override, a
     Settings toggle for the assistant.
+- 2026-11-20 Claude: layout rework after first use. The conversation is now written into the
+  terminal itself (`answer-ansi.ts` turns the Markdown answer into styled, wrapped terminal text;
+  control characters from the model are stripped, so it cannot send escape sequences). The question
+  replaces the prompt line, the answer follows, and the shell prompt returns with an empty Enter.
+  Keys typed meanwhile are held and sent after the prompt is back; a half-typed command is set
+  aside with Ctrl+U and put back with Ctrl+Y (Explain/Fix from the bar or shortcut). Only a slim
+  bar stays below: pills (hover tooltip via CSS `data-tooltip`; the webview shows no native
+  `title`), the command to insert/approve, and Explain / Fix. No follow-up field: the next `#`
+  question is the follow-up. Enter inserts or runs the offered command only while the prompt line
+  is empty. `@dir` and `@output` were dropped (the pills already cover them); `@file` stays.
+  Not verified in the Tauri app: the prompt return and held-key flow need a real zsh/bash/fish.

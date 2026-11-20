@@ -2705,25 +2705,19 @@ export const pl = {
     consentDecline: 'Nie teraz',
     assistEdit: 'Edytuj',
     contextEnvironment: 'Środowisko',
-    contextListing: '{count} nazw',
-    contextSelection: 'Zaznaczone: {count}',
-    contextOtherFolder: 'Drugi panel',
-    contextBlocks: 'Ostatnie polecenia: {count}',
-    contextFile: 'Plik {name}',
     contextEnvironmentDetail: 'System operacyjny, architektura i powłoka',
     help: 'Pomoc asystenta',
     helpTitle: 'Asystent terminala',
     helpClose: 'Zamknij',
     helpAsk:
-      'Wpisz # i pytanie w wierszu poleceń, a następnie naciśnij Enter. Pytanie nigdy nie jest uruchamiane jako polecenie.',
+      'Wpisz # i pytanie w wierszu poleceń, a następnie naciśnij Enter. Pytanie i odpowiedź pojawiają się w terminalu; pytanie nigdy nie jest uruchamiane jako polecenie.',
     helpContext:
       'Znaczniki pod pytaniem pokazują, co jest wysyłane: system, listę folderu, zaznaczenie, drugi panel i ostatnie polecenia. Kliknij znacznik, aby go pominąć lub dołączyć ponownie; podpowiedź pokazuje szczegóły.',
-    helpMentions:
-      'W pytaniu @dir dodaje listę folderu, @output ostatnie wyjście, a @plik.txt załącza ten plik.',
+    helpMentions: 'Wpisz @plik.txt w pytaniu, aby załączyć ten plik.',
     helpExplainFix:
       'Ctrl+Shift+E wyjaśnia ostatnie wyjście, a Ctrl+Shift+F proponuje poprawkę. Bloki poleceń oferują to samo przy każdym zakończonym poleceniu.',
     helpFollowUp:
-      'Zadawaj pytania uzupełniające pod odpowiedzią. Rozmowa jest zachowana dla karty terminala do jej zamknięcia.',
+      'Zadaj pytanie uzupełniające, wpisując ponownie #. Rozmowa jest zachowana dla karty terminala do jej zamknięcia.',
     helpRun:
       'Asystent może wyświetlać foldery i czytać pliki w folderze roboczym, także przez SSH (wyszukiwanie tylko lokalnie). Gdy chce uruchomić polecenie, najpierw je zatwierdzasz: Enter uruchamia, Ctrl+C odrzuca.',
     helpSafety:
@@ -2733,6 +2727,11 @@ export const pl = {
     contextRemove: 'Pomiń',
     followUpPlaceholder: 'Zadaj pytanie uzupełniające…',
     assistRunning: 'Działa w terminalu…',
+    contextListing: '{count} nazw',
+    contextSelection: 'Zaznaczone: {count}',
+    contextOtherFolder: 'Drugi panel',
+    contextBlocks: 'Ostatnie polecenia: {count}',
+    contextFile: 'Plik {name}',
     assistApproveNote: 'Asystent chce uruchomić to polecenie w Twoim terminalu.',
     assistNeedsBlocks:
       'Uruchamianie poleceń wymaga bloków poleceń. Wstaw je zamiast tego w wierszu poleceń.',

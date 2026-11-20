@@ -2705,25 +2705,19 @@ export const it = {
     consentDecline: 'Non ora',
     assistEdit: 'Modifica',
     contextEnvironment: 'Sistema',
-    contextListing: '{count} nomi',
-    contextSelection: '{count} selezionati',
-    contextOtherFolder: 'Altro pannello',
-    contextBlocks: 'Ultimi {count} comandi',
-    contextFile: 'Contenuto di {name}',
     contextEnvironmentDetail: 'Sistema operativo, architettura e shell',
     help: "Guida dell'assistente",
     helpTitle: 'Assistente del terminale',
     helpClose: 'Chiudi',
     helpAsk:
-      'Digita # seguito da una domanda al prompt e premi Invio. La domanda non viene mai eseguita come comando.',
+      'Digita # seguito da una domanda al prompt e premi Invio. Domanda e risposta compaiono nel terminale; la domanda non viene mai eseguita come comando.',
     helpContext:
       'I chip sotto la domanda mostrano cosa viene inviato: sistema, elenco della cartella, selezione, altro pannello e comandi recenti. Fai clic su un chip per escluderlo o reincluderlo; il tooltip mostra i dettagli.',
-    helpMentions:
-      "In una domanda, @dir aggiunge l'elenco della cartella, @output l'output recente e @file.txt allega quel file.",
+    helpMentions: 'Scrivi @file.txt in una domanda per allegare quel file.',
     helpExplainFix:
       "Ctrl+Maiusc+E spiega l'ultimo output e Ctrl+Maiusc+F suggerisce una correzione. I blocchi di comandi offrono lo stesso per ogni comando terminato.",
     helpFollowUp:
-      'Fai domande di approfondimento sotto una risposta. La conversazione resta per scheda del terminale finché non la chiudi.',
+      'Fai una domanda di approfondimento digitando di nuovo #. La conversazione resta per scheda del terminale finché non la chiudi.',
     helpRun:
       "L'assistente può elencare cartelle e leggere file nella cartella di lavoro, anche via SSH (la ricerca solo in locale). Se vuole eseguire un comando lo approvi prima: Invio lo esegue, Ctrl+C lo rifiuta.",
     helpSafety:
@@ -2733,6 +2727,11 @@ export const it = {
     contextRemove: 'Escludi',
     followUpPlaceholder: 'Fai una domanda di approfondimento…',
     assistRunning: 'In esecuzione nel terminale…',
+    contextListing: '{count} nomi',
+    contextSelection: '{count} selezionati',
+    contextOtherFolder: 'Altro pannello',
+    contextBlocks: 'Ultimi {count} comandi',
+    contextFile: 'Contenuto di {name}',
     assistApproveNote: "L'assistente vuole eseguire questo comando nel tuo terminale.",
     assistNeedsBlocks:
       'Eseguire comandi richiede i blocchi di comandi. Inseriscilo invece nel prompt.',

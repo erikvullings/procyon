@@ -404,7 +404,7 @@ describe('TerminalDrawer questions with #', () => {
     pressEnter(textarea);
 
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-terminal-assist-text')?.textContent).toContain('ls -la'),
+      expect(root.querySelector('.fm-terminal-assist-command')?.textContent).toContain('ls -la'),
     );
     expect(assist).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -415,7 +415,8 @@ describe('TerminalDrawer questions with #', () => {
     );
     const sent = write.mock.calls.map(([, data]) => new TextDecoder().decode(data));
     expect(sent).toContain('\x15');
-    expect(sent).not.toContain('\r');
+    // The Enter after the clear only brings the prompt back once the answer is shown.
+    expect(sent.indexOf('\r')).toBeGreaterThan(sent.indexOf('\x15'));
     expect(sent).not.toContain('\n');
   });
 
@@ -439,7 +440,7 @@ describe('TerminalDrawer questions with #', () => {
     await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
     pressEnter(textarea);
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-terminal-assist-text')?.textContent).toContain('ls -la'),
+      expect(root.querySelector('.fm-terminal-assist-command')?.textContent).toContain('ls -la'),
     );
 
     const insert = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
@@ -450,7 +451,7 @@ describe('TerminalDrawer questions with #', () => {
     await vi.waitFor(() =>
       expect(write).toHaveBeenLastCalledWith('session-1', new TextEncoder().encode('ls -la')),
     );
-    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-assist-panel')).toBeNull());
+    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-assist-command')).toBeNull());
   });
 });
 
@@ -568,13 +569,13 @@ describe('TerminalDrawer after inserting a generated command', () => {
     Object.defineProperty(enter, 'keyCode', { value: 13 });
     textarea.dispatchEvent(enter);
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-terminal-assist-text')?.textContent).toContain('ls -la'),
+      expect(root.querySelector('.fm-terminal-assist-command')?.textContent).toContain('ls -la'),
     );
     const insert = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
       (button) => button.textContent?.startsWith('Insert at prompt') === true,
     );
     insert?.click();
-    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(4));
 
     const submit = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
     Object.defineProperty(submit, 'keyCode', { value: 13 });
@@ -672,8 +673,11 @@ describe('TerminalDrawer # after editing keys', () => {
         }),
       ),
     );
-    const sent = write.mock.calls.map(([, data]) => [...data]);
-    expect(sent.some(([byte]) => byte === 13)).toBe(false);
+    // The Enter that follows only brings the prompt back, after the clear and the answer.
+    await vi.waitFor(() => {
+      const bytes = write.mock.calls.map(([, data]) => data[0]);
+      expect(bytes.indexOf(13)).toBeGreaterThan(bytes.indexOf(21));
+    });
   });
 });
 
@@ -759,7 +763,7 @@ describe('TerminalDrawer keyboard shortcuts for answers', () => {
     await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
     press(textarea(), 'Enter', {}, 13);
     await vi.waitFor(() =>
-      expect(root.querySelector('.fm-terminal-assist-text')?.textContent).toContain('ls -la'),
+      expect(root.querySelector('.fm-terminal-assist-command')?.textContent).toContain('ls -la'),
     );
   }
 
@@ -768,14 +772,19 @@ describe('TerminalDrawer keyboard shortcuts for answers', () => {
     press(textarea(), 'Enter', {}, 13);
 
     await vi.waitFor(() => expect(sent()).toContainEqual([...new TextEncoder().encode('ls -la')]));
-    expect(sent().some(([byte]) => byte === 13)).toBe(false);
-    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-assist-panel')).toBeNull());
+    const inserted = sent().findIndex((bytes) => bytes.length === 6);
+    expect(
+      sent()
+        .slice(inserted + 1)
+        .some(([byte]) => byte === 13),
+    ).toBe(false);
+    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-assist-command')).toBeNull());
   });
 
   it('rejects a shown answer with Ctrl+C, and sends Ctrl+C to the shell when no answer is shown', async () => {
     await askForAnswer();
     press(textarea(), 'c', { ctrlKey: true }, 67);
-    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-assist-panel')).toBeNull());
+    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-assist-command')).toBeNull());
     expect(sent().some(([byte]) => byte === 3)).toBe(false);
 
     press(textarea(), 'c', { ctrlKey: true }, 67);
@@ -825,6 +834,11 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     textarea().dispatchEvent(paste);
     echo?.({ type: 'output', data: bytes(`user % ${text}`) });
     key('Enter', 13);
+  };
+  /** Shows a shell prompt mark and waits until the terminal has processed it. */
+  const markPrompt = async () => {
+    echo?.({ type: 'output', data: bytes('\x1b]133;A\x07user % ') });
+    await new Promise((resolve) => setTimeout(resolve, 30));
   };
   const button = (label: string) =>
     [...root.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
@@ -890,7 +904,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     vi.unstubAllGlobals();
   });
 
-  it('sends the pane context with a # question, shows the steps, and keeps one session', async () => {
+  it('sends the pane context with a # question, writes the answer into the terminal, and keeps one session', async () => {
     await mount();
     ask('# what is here?');
 
@@ -902,15 +916,13 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
       context: { listing: ['a.txt', 'src/'], selected: ['a.txt'] },
     });
     expect(sentAt(0)?.context?.otherFolder).toBeUndefined();
-    await vi.waitFor(() =>
-      expect(root.querySelector('.fm-terminal-assist-steps')?.textContent).toBe('Read a.txt'),
-    );
+    await vi.waitFor(() => {
+      expect(root.textContent).toContain('what is here?');
+      expect(root.textContent).toContain('Read a.txt');
+      expect(root.textContent).toContain('Fine.');
+    });
 
-    const followUp = root.querySelector<HTMLInputElement>('.fm-terminal-assist-followup');
-    if (followUp === null) throw new Error('follow-up field missing');
-    followUp.value = 'and then?';
-    followUp.dispatchEvent(new Event('input'));
-    followUp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    ask('# and then?');
 
     await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
     expect(sentAt(1)?.request).toBe('and then?');
@@ -926,11 +938,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
 
     button('2 names')?.click();
     await vi.waitFor(() => expect(button('2 names')?.getAttribute('aria-pressed')).toBe('false'));
-    const followUp = root.querySelector<HTMLInputElement>('.fm-terminal-assist-followup');
-    if (followUp === null) throw new Error('follow-up field missing');
-    followUp.value = 'second';
-    followUp.dispatchEvent(new Event('input'));
-    followUp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    ask('# second');
 
     await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
     expect(sentAt(1)?.context?.listing).toBeUndefined();
@@ -942,50 +950,83 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     ask('# first');
     await vi.waitFor(() => expect(button('Other pane')).toBeDefined());
     expect(button('Other pane')?.getAttribute('aria-pressed')).toBe('false');
-    expect(button('2 names')?.title).toContain('a.txt, src/');
+    expect(button('2 names')?.getAttribute('data-tooltip')).toContain('a.txt, src/');
 
     button('Other pane')?.click();
     await vi.waitFor(() => expect(button('Other pane')?.getAttribute('aria-pressed')).toBe('true'));
-    const followUp = root.querySelector<HTMLInputElement>('.fm-terminal-assist-followup');
-    if (followUp === null) throw new Error('follow-up field missing');
-    followUp.value = 'second';
-    followUp.dispatchEvent(new Event('input'));
-    followUp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    ask('# second');
 
     await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
     expect(sentAt(1)?.context?.otherFolder).toBe('file:///other');
   });
 
-  it('shows a markdown answer as formatted text, not raw markup', async () => {
+  it('writes a markdown answer into the terminal as formatted text, not raw markup', async () => {
     assist.mockResolvedValueOnce({
-      text: 'You have:\n- **keys** and `a.pem`\n- *old* ones\nCommand: ls',
+      text: 'You have:\n- **keys** and `a.pem`\n- *old* ones',
     });
     await mount();
     ask('# what');
 
-    await vi.waitFor(() =>
-      expect(root.querySelector('.fm-terminal-assist-text ul')).not.toBeNull(),
+    await vi.waitFor(() => expect(root.textContent).toContain('• keys and a.pem'));
+    expect(root.textContent).toContain('• old ones');
+    expect(root.textContent).not.toContain('**');
+    expect(root.textContent).not.toContain('`');
+  });
+
+  it('takes the typed keys back to the shell only once the answer is shown', async () => {
+    let answer: ((reply: { text: string }) => void) | undefined;
+    assist.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
     );
-    const text = root.querySelector('.fm-terminal-assist-text');
-    expect(text?.querySelectorAll('li')).toHaveLength(2);
-    expect(text?.querySelector('strong')?.textContent).toBe('keys');
-    expect(text?.querySelector('code')?.textContent).toBe('a.pem');
-    expect(text?.querySelector('em')?.textContent).toBe('old');
-    expect(text?.textContent).not.toContain('**');
-    expect(text?.querySelector('.fm-shell-command-line')?.textContent).toContain('ls');
+    await mount();
+    ask('# slow');
+    await vi.waitFor(() => expect(answer).toBeDefined());
+
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', { value: { getData: () => 'ls' } });
+    textarea().dispatchEvent(paste);
+    const sentNow = () => write.mock.calls.map(([, data]) => new TextDecoder().decode(data));
+    expect(sentNow()).not.toContain('ls');
+
+    answer?.({ text: 'Done.' });
+    await vi.waitFor(() => expect(sentNow()).toContain('ls'));
+    expect(sentNow().indexOf('\r')).toBeLessThan(sentNow().indexOf('ls'));
+  });
+
+  it('inserts the suggested command with Enter after a second question', async () => {
+    await mount();
+    ask('# first');
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledOnce());
+    ask('# second');
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-terminal-assist-command')?.textContent).toContain('ls'),
+    );
+
+    key('Enter', 13);
+
+    await vi.waitFor(() =>
+      expect(write).toHaveBeenLastCalledWith('session-1', new TextEncoder().encode('ls')),
+    );
   });
 
   it('runs an approved command and sends its exit status and output back', async () => {
     assist.mockResolvedValueOnce({ text: '', runCommand: 'cargo test' });
     await mount();
-    echo?.({ type: 'output', data: bytes('\x1b]133;A\x07user % ') });
+    await markPrompt();
     ask('# run the tests');
 
     await vi.waitFor(() => expect(button('Run')).toBeDefined());
-    expect(write).not.toHaveBeenCalledWith('session-1', new TextEncoder().encode('cargo test\r'));
+    expect(write).not.toHaveBeenCalledWith(
+      'session-1',
+      new TextEncoder().encode('\x15cargo test\r'),
+    );
     button('Run')?.click();
     await vi.waitFor(() =>
-      expect(write).toHaveBeenCalledWith('session-1', new TextEncoder().encode('cargo test\r')),
+      expect(write).toHaveBeenCalledWith('session-1', new TextEncoder().encode('\x15cargo test\r')),
     );
 
     echo?.({ type: 'output', data: bytes('\x1b]133;C\x07\r\n1 failed\r\n\x1b]133;D;3\x07') });
@@ -997,7 +1038,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
   it('tells the session when a command is declined and shows nothing more', async () => {
     assist.mockResolvedValueOnce({ text: '', runCommand: 'rm -rf build' });
     await mount();
-    echo?.({ type: 'output', data: bytes('\x1b]133;A\x07user % ') });
+    await markPrompt();
     ask('# clean');
 
     await vi.waitFor(() => expect(button('Decline')).toBeDefined());
@@ -1005,7 +1046,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
 
     await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
     expect(sentAt(1)?.toolResult).toEqual({ command: 'rm -rf build', declined: true });
-    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-assist-panel')).toBeNull());
+    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-assist-command')).toBeNull());
   });
 
   it('opens a help dialog from the question mark and closes it with Escape', async () => {
@@ -1017,7 +1058,8 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     const dialog = root.querySelector('.fm-terminal-help-dialog');
     expect(dialog?.getAttribute('role')).toBe('dialog');
     expect(dialog?.getAttribute('aria-modal')).toBe('true');
-    expect(dialog?.textContent).toContain('@dir');
+    expect(dialog?.textContent).toContain('@file');
+    expect(dialog?.textContent).not.toContain('@dir');
     expect(dialog?.textContent).toContain('Ctrl+Shift+E');
 
     dialog?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -1057,8 +1099,8 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     textarea().dispatchEvent(shortcut);
 
     await vi.waitFor(() =>
-      expect(assist).toHaveBeenCalledWith(expect.objectContaining({ kind: 'explain' })),
+      expect(assist).toHaveBeenCalledWith(expect.objectContaining({ kind: 'ask' })),
     );
-    expect(assist.mock.calls.at(-1)?.[0].transcript).toContain('boom');
+    expect(assist.mock.calls.at(-1)?.[0].context?.blocks?.[0]?.output).toContain('boom');
   });
 });

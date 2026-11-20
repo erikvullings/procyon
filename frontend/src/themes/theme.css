@@ -583,6 +583,9 @@ main.fm-workspace {
 
 .fm-terminal-close {
   position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   top: 4px;
   /* Clear of the 8px scrollbar on the pane's right edge. */
   right: 12px;
@@ -607,7 +610,8 @@ main.fm-workspace {
 /* The assistant help button, left of the close button, and its dialog (task 0336). */
 .fm-terminal-help {
   position: absolute;
-  top: 4px;
+  /* The × glyph sits low in its box, so the icon is nudged down to share its centre line. */
+  top: 6px;
   right: 38px;
   z-index: 2;
   display: inline-flex;
@@ -626,6 +630,49 @@ main.fm-workspace {
 .fm-terminal-help:hover {
   background: var(--fm-hover);
   color: var(--fm-text);
+}
+
+/* A tooltip that appears after a short hover delay. The webview shows no native `title` tooltip
+   for these, so the text lives in `data-tooltip` and is drawn here. */
+.fm-terminal-chip[data-tooltip]::after,
+.fm-terminal-help[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  z-index: 10;
+  width: max-content;
+  max-width: 360px;
+  padding: 4px 8px;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface);
+  color: var(--fm-text);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: left;
+  white-space: pre-line;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+}
+
+.fm-terminal-chip[data-tooltip]::after {
+  bottom: calc(100% + 6px);
+  left: 0;
+}
+
+.fm-terminal-help[data-tooltip]::after {
+  top: calc(100% + 4px);
+  right: 0;
+}
+
+.fm-terminal-chip[data-tooltip]:hover::after,
+.fm-terminal-help[data-tooltip]:hover::after {
+  visibility: visible;
+  opacity: 1;
+  transition:
+    opacity 0.1s linear 0.6s,
+    visibility 0s linear 0.6s;
 }
 
 .fm-terminal-help-backdrop {
@@ -688,9 +735,6 @@ main.fm-workspace {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 45%;
-  /* The answer body scrolls on its own; scrolling here too would give a second scrollbar. */
-  overflow: hidden;
   padding: 6px 8px;
   border-top: 1px solid var(--fm-border);
   background: var(--fm-surface);
@@ -762,6 +806,7 @@ main.fm-workspace {
 }
 
 .fm-terminal-chip {
+  position: relative;
   padding: 1px 8px;
   border: 1px solid var(--fm-border);
   border-radius: var(--fm-radius-pill);
@@ -785,25 +830,6 @@ main.fm-workspace {
   cursor: default;
 }
 
-.fm-terminal-assist-followup {
-  width: 100%;
-  box-sizing: border-box;
-  margin: 0 0 6px;
-  padding: 3px 6px;
-  border: 1px solid var(--fm-border);
-  border-radius: var(--fm-radius);
-  background: var(--fm-surface);
-  color: var(--fm-text);
-  font-size: 12px;
-}
-
-.fm-terminal-assist-steps {
-  margin: 0 0 6px;
-  padding-left: 16px;
-  color: var(--fm-text-muted);
-  font-size: 11px;
-}
-
 .fm-terminal-assist-action:hover:not(:disabled) {
   background: var(--fm-hover);
 }
@@ -813,7 +839,6 @@ main.fm-workspace {
   cursor: default;
 }
 
-.fm-terminal-assist-panel,
 .fm-terminal-consent {
   display: flex;
   flex-direction: column;
@@ -823,67 +848,38 @@ main.fm-workspace {
   font-size: 12px;
 }
 
-.fm-terminal-assist-panel {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.fm-terminal-assist-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.fm-terminal-assist-footer {
-  flex: 0 0 auto;
-}
-
 .fm-terminal-assist-buttons {
   flex: 0 0 auto;
 }
 
-.fm-terminal-assist-text {
-  margin: 0 0 6px;
-  line-height: 1.45;
+/* The bar under the terminal while the assistant is in use (task 0336): what it waits on, then
+   the context pills and the actions. The conversation is written into the terminal itself. */
+.fm-terminal-assist-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  color: var(--fm-text);
+  font-size: 12px;
 }
 
-.fm-terminal-assist-text--mono {
-  font-family: var(--fm-font-mono);
-  white-space: pre-wrap;
+.fm-terminal-assist-row,
+.fm-terminal-assist-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
 }
 
-.fm-terminal-assist-text p {
-  margin: 0 0 6px;
-}
-
-.fm-terminal-assist-text ul,
-.fm-terminal-assist-text ol {
-  margin: 0 0 6px;
-  padding-left: 20px;
-}
-
-.fm-terminal-assist-text code {
-  padding: 0 4px;
-  border-radius: var(--fm-radius-control);
-  background: var(--fm-hover);
-  font-family: var(--fm-font-mono);
-  font-size: 11.5px;
-}
-
-.fm-terminal-assist-codeblock {
-  margin: 0 0 6px;
-  padding: 6px 8px;
-  overflow-x: auto;
-  border-radius: var(--fm-radius);
-  background: var(--fm-hover);
-}
-
-.fm-terminal-assist-codeblock code {
-  padding: 0;
-  background: none;
+.fm-terminal-assist-row .fm-terminal-assist-edit {
+  flex: 1 1 240px;
+  width: auto;
 }
 
 .fm-terminal-assist-command {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-family: var(--fm-font-mono);
 }
 
@@ -915,9 +911,7 @@ main.fm-workspace {
   font-style: italic;
 }
 
-.fm-terminal-assist-status,
-.fm-terminal-assist-note {
-  margin: 0 0 6px;
+.fm-terminal-assist-status {
   color: var(--fm-text-muted);
 }
 
