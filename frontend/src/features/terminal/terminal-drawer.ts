@@ -1074,7 +1074,9 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         if (completion === undefined) return;
         typeInput(live, '\x7f'.repeat(completion.erase) + completion.insert);
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        console.warn('Listing the folder for @ completion failed.', error);
+      });
     return true;
   }
 

@@ -1500,21 +1500,35 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     });
   }
 
-  /** The names in a folder for `@name` completion in the terminal (folders end with `/`). */
+  /** One listing session for every terminal completion, so they never pile up in the backend. */
+  const terminalListingPaneId = crypto.randomUUID();
+
+  /**
+   * The names in a folder for `@name` completion in the terminal (folders end with `/`). The
+   * active pane's own listing answers when it shows that folder (always so while the terminal and
+   * pane follow each other); any other folder is listed in a session of its own.
+   */
   async function terminalFolderNames(location: Location): Promise<readonly string[]> {
+    const label = (entry: EntrySummary) =>
+      entry.kind === 'directory' ? `${entry.name}/` : entry.name;
+    const activePaneId = shellState.workspace?.activePaneId;
+    const shown =
+      activePaneId === undefined
+        ? undefined
+        : shellState.directories.get(activeTabKey(activePaneId));
+    if (shown?.location?.uri === location.uri && shown.entries.length > 0) {
+      return shown.entries.map(label);
+    }
     const workspaceId = shellState.workspace?.id;
     if (workspaceId === undefined) return [];
     const snapshot = await shellState.client.listDirectory({
       workspaceId,
-      // A listing session of its own, so the visible panes are not disturbed.
-      paneId: crypto.randomUUID(),
+      paneId: terminalListingPaneId,
       requestId: crypto.randomUUID(),
       location,
       showHidden: true,
     });
-    return snapshot.entries.map((entry) =>
-      entry.kind === 'directory' ? `${entry.name}/` : entry.name,
-    );
+    return snapshot.entries.map(label);
   }
 
   /** What the terminal assistant may be told about the active pane (task 0336). */

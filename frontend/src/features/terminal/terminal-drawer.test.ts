@@ -863,6 +863,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
   let paneListing: string[] = ['a.txt', 'src/'];
   let assistantEnabled = true;
   let autoRunReadOnly = true;
+  let folderNames: readonly string[] = ['README.md'];
 
   const bytes = (text: string) => [...new TextEncoder().encode(text)];
   const textarea = () => {
@@ -916,6 +917,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
           shellIntegration: 'disabled',
           assistantEnabled,
           autoRunReadOnly,
+          listFolder: async () => folderNames,
           paneContext: () => ({
             listing: paneListing,
             selected: ['a.txt'],
@@ -1197,6 +1199,24 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
 
     await vi.waitFor(() => expect(button('Run')).toBeDefined());
     expect(write).not.toHaveBeenCalledWith('session-1', new TextEncoder().encode('\x15ls -la\r'));
+  });
+
+  it('completes an @name with Tab from the folder, quoting a name with spaces', async () => {
+    folderNames = ['ATP 7-100.1 Russian Tactics  2024.pdf', 'notes.md'];
+    await mount();
+    await markPrompt();
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', { value: { getData: () => '# read @ATP' } });
+    textarea().dispatchEvent(paste);
+    echo?.({ type: 'output', data: bytes('user % # read @ATP') });
+
+    key('Tab', 9);
+
+    await vi.waitFor(() =>
+      expect(write.mock.calls.map(([, data]) => new TextDecoder().decode(data)).join('')).toContain(
+        '"ATP 7-100.1 Russian Tactics  2024.pdf" ',
+      ),
+    );
   });
 
   it('recalls earlier questions with Up and Down on a # line', async () => {
