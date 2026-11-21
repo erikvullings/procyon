@@ -181,3 +181,7 @@ Phase 4 — `run_command` with approval, exit code and output returned to the lo
   still asks. Output is redacted before the model sees it.
 - While thinking, the strip shows "Thinking" with animated dots and Esc in the controls row (no
   extra row); the strip uses the panes' status-bar colours.
+- Up/Down on a line starting with `#` recalls this tab's earlier questions (per tab, 100 kept,
+  Down past the newest restores the draft); other lines keep the shell's own history.
+- Setting `terminalHideFunctionKeys` (default on): the function-key bar is hidden while the
+  terminal is open, giving the terminal the room.

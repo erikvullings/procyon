@@ -712,6 +712,8 @@ pub struct Settings {
     pub terminal_follow_pane: bool,
     /// Whether strictly read-only commands the assistant proposes run without asking.
     pub terminal_auto_run_read_only: bool,
+    /// Whether the function-key bar is hidden while the terminal is open.
+    pub terminal_hide_function_keys: bool,
 }
 
 impl Settings {
@@ -812,6 +814,7 @@ impl Default for Settings {
             terminal_assistant: true,
             terminal_follow_pane: true,
             terminal_auto_run_read_only: true,
+            terminal_hide_function_keys: true,
         }
     }
 }

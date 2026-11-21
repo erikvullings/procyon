@@ -56,6 +56,7 @@ export function settingsFromDto(settings: SettingsDto): Settings {
     terminalAssistant: settings.terminalAssistant ?? true,
     terminalFollowPane: settings.terminalFollowPane ?? true,
     terminalAutoRunReadOnly: settings.terminalAutoRunReadOnly ?? true,
+    terminalHideFunctionKeys: settings.terminalHideFunctionKeys ?? true,
     map: settings.map ?? DEFAULT_MAP_SETTINGS,
   };
 }

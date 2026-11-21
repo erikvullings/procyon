@@ -255,6 +255,7 @@ export class MockContext {
     terminalAssistant: true,
     terminalFollowPane: true,
     terminalAutoRunReadOnly: true,
+    terminalHideFunctionKeys: true,
     semanticMaxSourceMib: 64,
     semanticThemeRootIds: [],
     quickFilterMatchMode: 'fuzzy',

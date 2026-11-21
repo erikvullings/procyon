@@ -27,6 +27,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     terminalAssistant: true,
     terminalFollowPane: true,
     terminalAutoRunReadOnly: true,
+    terminalHideFunctionKeys: true,
     schemaVersion: 2,
     theme: 'auto',
     language: 'en',

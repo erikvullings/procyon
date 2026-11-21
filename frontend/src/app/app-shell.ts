@@ -3601,6 +3601,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         platform: shellState.platform,
         runtime: attrs.runtime === 'http' ? ('browser' as const) : ('desktop' as const),
       };
+      // The terminal gets the room of the function-key bar while it is open (a setting).
+      const hideFunctionKeys =
+        shellState.runtimeKind === 'tauri' &&
+        (shellState.currentSettings?.terminalHideFunctionKeys ?? true) &&
+        isTerminalVisible(shellState.openTerminalTabKeys, treeWiring.activeTerminalTabKey());
       const footerBindings = footerFunctionKeyBindings(
         localisedActions,
         shellState.currentSettings?.keybindings ?? {},
@@ -5289,31 +5294,33 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 controller: shellState.playerController,
               })
             : undefined,
-          m(
-            '.fm-function-key-bar',
-            m(
-              '.fm-function-key-list',
-              footerBindings.map((binding) => {
-                const collect =
-                  basketF5 && binding.actionId === 'core.copy' && binding.shortcut === 'F5';
-                const available = collect
-                  ? basketWiring.basketSourcePaneId() !== undefined
-                  : binding.actionAvailable;
-                return m(
-                  'button.fm-function-key',
-                  {
-                    key: binding.actionId,
-                    type: 'button',
-                    disabled: !available,
-                    onclick: available
-                      ? () => miscWiring.invokeFunctionKeyShortcut(binding.shortcut)
-                      : undefined,
-                  },
-                  `${binding.key} ${collect ? t('basket', 'addShort') : miscWiring.functionKeyTitle(binding)}`,
-                );
-              }),
-            ),
-          ),
+          hideFunctionKeys
+            ? undefined
+            : m(
+                '.fm-function-key-bar',
+                m(
+                  '.fm-function-key-list',
+                  footerBindings.map((binding) => {
+                    const collect =
+                      basketF5 && binding.actionId === 'core.copy' && binding.shortcut === 'F5';
+                    const available = collect
+                      ? basketWiring.basketSourcePaneId() !== undefined
+                      : binding.actionAvailable;
+                    return m(
+                      'button.fm-function-key',
+                      {
+                        key: binding.actionId,
+                        type: 'button',
+                        disabled: !available,
+                        onclick: available
+                          ? () => miscWiring.invokeFunctionKeyShortcut(binding.shortcut)
+                          : undefined,
+                      },
+                      `${binding.key} ${collect ? t('basket', 'addShort') : miscWiring.functionKeyTitle(binding)}`,
+                    );
+                  }),
+                ),
+              ),
         ],
       );
     },

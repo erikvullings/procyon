@@ -594,6 +594,15 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                         onchange: (checked: boolean) =>
                           update(current, { terminalAutoRunReadOnly: checked }),
                       }),
+                      m(Switch, {
+                        className: 'col s12 m6',
+                        label: t('settings', 'terminalHideFunctionKeys'),
+                        checked: activeDraft.terminalHideFunctionKeys,
+                        left: t('settings', 'off'),
+                        right: t('settings', 'on'),
+                        onchange: (checked: boolean) =>
+                          update(current, { terminalHideFunctionKeys: checked }),
+                      }),
                     ]),
 
                     m('.row', [

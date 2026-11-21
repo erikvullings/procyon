@@ -128,6 +128,10 @@ const fn terminal_auto_run_read_only_default() -> bool {
     true
 }
 
+const fn terminal_hide_function_keys_default() -> bool {
+    true
+}
+
 fn terminal_shell_integration_default() -> TerminalShellIntegrationDto {
     TerminalShellIntegrationDto::Unset
 }
@@ -499,6 +503,9 @@ pub struct SettingsDto {
     /// Whether strictly read-only commands the assistant proposes run without asking.
     #[serde(default = "terminal_auto_run_read_only_default")]
     pub terminal_auto_run_read_only: bool,
+    /// Whether the function-key bar is hidden while the terminal is open.
+    #[serde(default = "terminal_hide_function_keys_default")]
+    pub terminal_hide_function_keys: bool,
 }
 
 const fn default_semantic_max_source_mib() -> u32 {

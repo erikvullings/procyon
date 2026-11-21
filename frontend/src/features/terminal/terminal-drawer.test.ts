@@ -1199,6 +1199,43 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     expect(write).not.toHaveBeenCalledWith('session-1', new TextEncoder().encode('\x15ls -la\r'));
   });
 
+  it('recalls earlier questions with Up and Down on a # line', async () => {
+    await mount();
+    await markPrompt();
+    ask('# first');
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(1));
+    ask('# second');
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
+    const typed = () => write.mock.calls.map(([, data]) => new TextDecoder().decode(data));
+
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', { value: { getData: () => '#' } });
+    textarea().dispatchEvent(paste);
+    key('ArrowUp', 38);
+    await vi.waitFor(() => expect(typed()).toContain('\x15# second'));
+    key('ArrowUp', 38);
+    await vi.waitFor(() => expect(typed()).toContain('\x15# first'));
+    key('ArrowDown', 40);
+    await vi.waitFor(() =>
+      expect(typed().filter((text) => text === '\x15# second')).toHaveLength(2),
+    );
+    key('ArrowDown', 40);
+    await vi.waitFor(() => expect(typed().at(-1)).toBe('\x15#'));
+  });
+
+  it('leaves Up to the shell on a line that is not a question', async () => {
+    await mount();
+    await markPrompt();
+    ask('# first');
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(1));
+    const before = write.mock.calls.length;
+    key('ArrowUp', 38);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(
+      write.mock.calls.slice(before).map(([, data]) => new TextDecoder().decode(data)),
+    ).not.toContain('\x15# first');
+  });
+
   it('offers Explain after a command and Fix only after a failed one', async () => {
     await mount();
     await markPrompt();

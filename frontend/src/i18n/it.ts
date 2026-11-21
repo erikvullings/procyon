@@ -400,6 +400,7 @@ export const it = {
     terminalAssistant: 'Assistente del terminale (domande con #, Spiega e Correggi)',
     terminalFollowPane: 'Terminale e riquadro si seguono (stessa cartella)',
     terminalAutoRunReadOnly: 'Esegui senza chiedere i comandi di sola lettura',
+    terminalHideFunctionKeys: 'Nascondi la barra dei tasti funzione quando il terminale è aperto',
     terminalApps: 'Terminali esterni',
     terminalAppsHelp:
       'Uno per riga: Nome = comando (un nome di applicazione su macOS, un eseguibile su Windows). Proposti da «Apri terminale con…».',

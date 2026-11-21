@@ -27842,6 +27842,10 @@
             "type": "boolean",
             "description": "Whether the terminal and the active pane keep to the same folder."
           },
+          "terminalHideFunctionKeys": {
+            "type": "boolean",
+            "description": "Whether the function-key bar is hidden while the terminal is open."
+          },
           "terminalShellIntegration": {
             "$ref": "#/components/schemas/TerminalShellIntegrationDto",
             "description": "Command-block shell integration for new terminals (task 0333)."

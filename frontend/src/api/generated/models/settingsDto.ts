@@ -137,6 +137,8 @@ export interface SettingsDto {
   terminalCommand?: string | null;
   /** Whether the terminal and the active pane keep to the same folder. */
   terminalFollowPane?: boolean;
+  /** Whether the function-key bar is hidden while the terminal is open. */
+  terminalHideFunctionKeys?: boolean;
   /** Command-block shell integration for new terminals (task 0333). */
   terminalShellIntegration?: TerminalShellIntegrationDto;
   /** Application theme. */

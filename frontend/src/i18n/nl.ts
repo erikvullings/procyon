@@ -397,6 +397,7 @@ export const nl = {
     terminalAssistant: 'Terminalassistent (#-vragen, Uitleggen en Oplossen)',
     terminalFollowPane: 'Terminal en paneel volgen elkaar (zelfde map)',
     terminalAutoRunReadOnly: 'Alleen-lezen opdrachten uitvoeren zonder te vragen',
+    terminalHideFunctionKeys: 'Functietoetsenbalk verbergen zolang de terminal open is',
     terminalApps: 'Externe terminals',
     terminalAppsHelp:
       'Eén per regel: Naam = commando (een toepassingsnaam op macOS, een uitvoerbaar bestand op Windows). Aangeboden door “Terminal openen met…”.',

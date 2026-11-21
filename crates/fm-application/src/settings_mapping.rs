@@ -197,6 +197,7 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
         terminal_assistant: settings.terminal_assistant,
         terminal_follow_pane: settings.terminal_follow_pane,
         terminal_auto_run_read_only: settings.terminal_auto_run_read_only,
+        terminal_hide_function_keys: settings.terminal_hide_function_keys,
     }
 }
 
@@ -379,6 +380,7 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
         terminal_assistant: settings.terminal_assistant,
         terminal_follow_pane: settings.terminal_follow_pane,
         terminal_auto_run_read_only: settings.terminal_auto_run_read_only,
+        terminal_hide_function_keys: settings.terminal_hide_function_keys,
     }
 }
 

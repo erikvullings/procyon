@@ -132,6 +132,12 @@ type LiveTerminal = {
   folder: string | undefined;
   /** Commands run in this session, oldest first, for suggestions. */
   history: string[];
+  /** The `#` questions asked in this tab, oldest first, for Up/Down recall. */
+  questions: string[];
+  /** The question shown by recall (an index into `questions`), `undefined` when not recalling. */
+  recallIndex: number | undefined;
+  /** What was typed before recall started, brought back by Down past the newest question. */
+  recallDraft: string;
   /** The command the person just ran; becomes the next block's command. */
   pendingCommand: string;
   /** Whether the shell is waiting for input (true before any shell mark is seen). */
@@ -174,6 +180,8 @@ export interface TerminalKeyHandlers {
   readonly onAssistantKey?: (event: KeyboardEvent) => boolean;
   /** Completes the `@name` being typed after `#`. Returns whether it used the Tab. */
   readonly onCompleteMention?: () => boolean;
+  /** Up/Down on a `#` line recalls earlier questions. Returns whether it used the key. */
+  readonly onRecallQuestion?: (direction: 'older' | 'newer') => boolean;
   /** Sends line-editing bytes (word and line jumps and deletes) to the shell. */
   readonly onShellInput?: (data: string) => void;
 }
@@ -233,6 +241,16 @@ export function handleTerminalKeyEvent(
       event.stopPropagation();
       return false;
     }
+  }
+  if (
+    bareModifiers &&
+    !event.ctrlKey &&
+    (event.key === 'ArrowUp' || event.key === 'ArrowDown') &&
+    handlers.onRecallQuestion?.(event.key === 'ArrowUp' ? 'older' : 'newer') === true
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    return false;
   }
   const edit = lineEditSequence(event);
   if (edit !== undefined && handlers.onShellInput !== undefined) {
@@ -1002,6 +1020,38 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     else if (live.sessionId !== undefined) onTypedData(live, data);
   }
 
+  /** Most questions remembered per tab. */
+  const MAX_QUESTIONS = 100;
+
+  /**
+   * Up/Down on a line that starts with `#` walks through the questions asked in this tab, like a
+   * shell's history; Down past the newest brings back what was typed. Other lines keep the shell's
+   * own history.
+   */
+  function recallQuestion(live: LiveTerminal, direction: 'older' | 'newer'): boolean {
+    if (!assistantOn() || !live.ready || isBusy(live) || live.sessionId === undefined) return false;
+    const recalling = live.recallIndex !== undefined;
+    if (!recalling && !(live.typed.known && live.typed.text.startsWith('#'))) return false;
+    const last = live.questions.length - 1;
+    if (last < 0) return false;
+    let index: number | undefined;
+    let draft = live.recallDraft;
+    if (direction === 'older') {
+      if (live.recallIndex === undefined) draft = live.typed.text;
+      index = live.recallIndex === undefined ? last : Math.max(0, live.recallIndex - 1);
+    } else {
+      if (live.recallIndex === undefined) return false;
+      index = live.recallIndex >= last ? undefined : live.recallIndex + 1;
+    }
+    const text = index === undefined ? draft : `# ${live.questions[index] ?? ''}`;
+    // Typed as input, so the shell shows it and the typed-line tracker follows. The text comes
+    // from the tracker, which never holds control characters.
+    onTypedData(live, `\x15${text}`);
+    live.recallDraft = draft;
+    live.recallIndex = index;
+    return true;
+  }
+
   /** Tab after `# ... @par` completes the name from the terminal's current folder. */
   function completeMentionInShell(live: LiveTerminal): boolean {
     const attrs = currentAttrs;
@@ -1034,6 +1084,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       live.held.push(data);
       return;
     }
+    live.recallIndex = undefined;
     const atPrompt = live.atPrompt || !live.markSeen;
     const question =
       data === '\r' && atPrompt && assistantOn()
@@ -1043,7 +1094,11 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       live.typed = EMPTY_INPUT;
       live.suggestion = undefined;
       writeToShell(live, '\x15');
-      if (question !== '') askAssistant(live, question);
+      if (question !== '') {
+        if (live.questions.at(-1) !== question) live.questions.push(question);
+        if (live.questions.length > MAX_QUESTIONS) live.questions.shift();
+        askAssistant(live, question);
+      }
       m.redraw();
       return;
     }
@@ -1126,6 +1181,9 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         typed: EMPTY_INPUT,
         folder: undefined,
         history: [],
+        questions: [],
+        recallIndex: undefined,
+        recallDraft: '',
         pendingCommand: '',
         atPrompt: true,
         markSeen: false,
@@ -1161,6 +1219,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           onAcceptSuggestion: () => acceptSuggestion(current),
           onAssistantKey: (event) => assistantKey(event),
           onCompleteMention: () => completeMentionInShell(current),
+          onRecallQuestion: (direction) => recallQuestion(current, direction),
           onShellInput: (data) => typeInput(current, data),
         }),
       );

@@ -400,6 +400,7 @@ export const pl = {
     terminalAssistant: 'Asystent terminala (pytania z #, Wyjaśnij i Napraw)',
     terminalFollowPane: 'Terminal i panel podążają za sobą (ten sam folder)',
     terminalAutoRunReadOnly: 'Uruchamiaj polecenia tylko do odczytu bez pytania',
+    terminalHideFunctionKeys: 'Ukryj pasek klawiszy funkcyjnych, gdy terminal jest otwarty',
     terminalApps: 'Zewnętrzne terminale',
     terminalAppsHelp:
       'Po jednym w wierszu: Nazwa = polecenie (nazwa aplikacji w macOS, plik wykonywalny w Windows). Oferowane przez „Otwórz terminal za pomocą…”.',
