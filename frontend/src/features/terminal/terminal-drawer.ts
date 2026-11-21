@@ -818,6 +818,8 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     );
     if (block === undefined) return;
     live.atPrompt = true;
+    // The strip offers Explain and Fix according to the newest block.
+    m.redraw();
     const awaiting = live.awaiting;
     live.awaiting = undefined;
     awaiting?.(block);
@@ -1452,10 +1454,10 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         const canRun = live.markSeen;
         return m('.fm-terminal-assist-row', [
           command(shown.command),
-          m(
-            'span.fm-terminal-assist-status',
-            canRun ? t('terminal', 'assistApproveNote') : t('terminal', 'assistNeedsBlocks'),
-          ),
+          // The command and its Run / Decline say what is asked; only the exception needs words.
+          canRun
+            ? undefined
+            : m('span.fm-terminal-assist-status', t('terminal', 'assistNeedsBlocks')),
           m('.fm-terminal-assist-buttons', [
             shortcutButton(
               canRun ? t('terminal', 'assistRun') : t('terminal', 'assistInsert'),
@@ -1485,6 +1487,18 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     }
   }
 
+  /** Explain is offered once there is output to explain (or when blocks are not tracked). */
+  function offerExplain(live: LiveTerminal): boolean {
+    return !live.markSeen || live.blocks.blocks.length > 0;
+  }
+
+  /** Fix is offered after a failed command (or when blocks are not tracked, so failure is unknown). */
+  function offerFix(live: LiveTerminal): boolean {
+    if (!live.markSeen) return true;
+    const exitCode = live.blocks.blocks.at(-1)?.exitCode;
+    return exitCode !== undefined && exitCode !== 0;
+  }
+
   /**
    * The bar under the terminal while the assistant is in use: what it waits on, the context pills
    * and Explain / Fix. It shows while a `#` question is typed, so the pills can be trimmed first.
@@ -1503,10 +1517,10 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           busy
             ? shortcutButton(t('terminal', 'assistDismiss'), 'Esc', () => cancelBusy(live))
             : undefined,
-          busy
+          busy || !offerExplain(live)
             ? undefined
             : shortcutButton(t('terminal', 'blockExplain'), 'Ctrl+Shift+E', () => explain(live)),
-          busy
+          busy || !offerFix(live)
             ? undefined
             : shortcutButton(t('terminal', 'blockFix'), 'Ctrl+Shift+F', () => fix(live)),
           busy || currentAttrs?.onSaveAsNote === undefined

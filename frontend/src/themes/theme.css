@@ -864,6 +864,31 @@ main.fm-workspace {
   cursor: default;
 }
 
+/* Quiet actions in the strip: text with a faint key hint, no boxes. The first action of a
+   status row (Run, Insert) is the one to take, so it is the only emphasised one. */
+.fm-terminal-strip .fm-terminal-assist-action {
+  border-color: transparent;
+  background: transparent;
+  color: var(--fm-text-muted);
+}
+
+.fm-terminal-strip .fm-terminal-assist-row .fm-terminal-assist-action:first-child {
+  color: var(--fm-text);
+  font-weight: 600;
+}
+
+.fm-terminal-strip .fm-terminal-assist-action:hover:not(:disabled) {
+  background: var(--fm-hover);
+  color: var(--fm-text);
+}
+
+.fm-terminal-strip .fm-terminal-kbd {
+  margin-left: 4px;
+  padding: 0;
+  border-color: transparent;
+  opacity: 0.7;
+}
+
 .fm-terminal-consent {
   display: flex;
   flex-direction: column;

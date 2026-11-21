@@ -1199,6 +1199,27 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     expect(write).not.toHaveBeenCalledWith('session-1', new TextEncoder().encode('\x15ls -la\r'));
   });
 
+  it('offers Explain after a command and Fix only after a failed one', async () => {
+    await mount();
+    await markPrompt();
+    ask('# hello');
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledOnce());
+    expect(button('Explain')).toBeUndefined();
+    expect(button('Suggest a fix')).toBeUndefined();
+
+    ask('ls');
+    echo?.({ type: 'output', data: bytes('\x1b]133;C\x07\r\nok\r\n\x1b]133;D;0\x07') });
+    await vi.waitFor(() => expect(button('Explain')).toBeDefined());
+    expect(button('Suggest a fix')).toBeUndefined();
+
+    ask('false');
+    echo?.({
+      type: 'output',
+      data: bytes('\x1b]133;A\x07\x1b]133;C\x07\r\nbad\r\n\x1b]133;D;2\x07'),
+    });
+    await vi.waitFor(() => expect(button('Suggest a fix')).toBeDefined());
+  });
+
   it('tells the session when a command is declined and shows nothing more', async () => {
     assist.mockResolvedValueOnce({ text: '', runCommand: 'rm -rf build' });
     await mount();
