@@ -84,6 +84,12 @@ describe('createAnswerStream', () => {
     );
   });
 
+  it('drops the Markdown markers inside a heading', () => {
+    expect(feed(['### **Core Problem**: the *kill* chain'])).toBe(
+      '  \x1b[1;4mCore Problem: the kill chain\x1b[22;24m\r\n',
+    );
+  });
+
   it('keeps the numbers of a numbered list and wraps with a hanging indent', () => {
     expect(feed(['1. aaa bbb ccc ddd', '2. eee'], 12)).toBe(
       '  1. aaa bbb\r\n     ccc ddd\r\n  2. eee\r\n',

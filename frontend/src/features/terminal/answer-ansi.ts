@@ -190,7 +190,8 @@ export function createAnswerStream(width: number): AnswerStream {
       const heading = HEADING_LINE.exec(text);
       if (heading !== null) {
         return (
-          start('heading') + rows([`${INDENT}\x1b[1;4m${(heading[1] ?? '').trim()}\x1b[22;24m`])
+          start('heading') +
+          rows([`${INDENT}\x1b[1;4m${plain(parseInline((heading[1] ?? '').trim()))}\x1b[22;24m`])
         );
       }
       const bullet = BULLET_LINE.exec(text);
