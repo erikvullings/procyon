@@ -1066,6 +1066,9 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         allowProposedApi: true,
         cursorBlink: true,
         convertEol: true,
+        // Lighter than xterm's 400/700, closer to the weight of the panes' proportional text.
+        fontWeight: 300,
+        fontWeightBold: 500,
         fontSize: Number.isFinite(inheritedFontSize) ? inheritedFontSize : 12.88,
         ...(inheritedFontFamily === '' ? {} : { fontFamily: inheritedFontFamily }),
         theme: {
