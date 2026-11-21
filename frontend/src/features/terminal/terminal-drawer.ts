@@ -109,6 +109,16 @@ export function terminalHost(location: Location): string {
   return match?.[0] ?? 'local';
 }
 
+const IS_MAC = typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent);
+
+/**
+ * The label of an assistant chord for a letter: `Ctrl+Shift+E`, or `⌘⇧E` on a Mac, where Cmd+Shift
+ * works as well as the physical Control key (Control stays as it is for the shell's own use).
+ */
+function chordLabel(letter: string): string {
+  return IS_MAC ? `⌘⇧${letter}` : `Ctrl+Shift+${letter}`;
+}
+
 /** Most command blocks kept per terminal; older blocks lose their markers and actions. */
 const MAX_BLOCKS = 200;
 /** Most commands remembered for suggestions in one terminal session. */
@@ -881,19 +891,19 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         title: failed ? t('terminal', 'blockFailed') : t('terminal', 'blockSucceeded'),
       }),
       assistantOn()
-        ? action(t('terminal', 'blockExplain'), 'Ctrl+Shift+E', sparklesIcon({ size: 14 }), () =>
+        ? action(t('terminal', 'blockExplain'), chordLabel('E'), sparklesIcon({ size: 14 }), () =>
             explain(live, block),
           )
         : undefined,
       assistantOn() && failed
-        ? action(t('terminal', 'blockFix'), 'Ctrl+Shift+F', wrenchIcon({ size: 14 }), () =>
+        ? action(t('terminal', 'blockFix'), chordLabel('F'), wrenchIcon({ size: 14 }), () =>
             fix(live, block),
           )
         : undefined,
-      action(t('terminal', 'blockCopy'), 'Ctrl+Shift+C', copyIcon({ size: 14 }), () =>
+      action(t('terminal', 'blockCopy'), chordLabel('C'), copyIcon({ size: 14 }), () =>
         copyText(blockOutput(live, block)),
       ),
-      action(t('terminal', 'blockRerun'), 'Ctrl+Shift+R', refreshIcon({ size: 14 }), () =>
+      action(t('terminal', 'blockRerun'), chordLabel('R'), refreshIcon({ size: 14 }), () =>
         rerunBlock(live, block),
       ),
     ]);
@@ -906,7 +916,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   /**
    * Keys owned by the assistant and the command blocks (task 0333). While an answer is shown,
    * Enter inserts it, Ctrl+E edits it and Ctrl+C or Escape rejects it; those keys reach the shell
-   * again once the answer is gone. Ctrl+Shift+E/F/C/R act on the last command block. Alt+Y and
+   * again once the answer is gone. Ctrl+Shift+E/F/C/R/S (Cmd+Shift on a Mac too) act on the last command block or the session. Alt+Y and
    * Alt+N answer the shell-integration prompt. Returns whether the key was used.
    */
   function assistantKey(event: KeyboardEvent): boolean {
@@ -916,7 +926,10 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     const name = event.key.toLowerCase();
     const plain = !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
     const ctrl = event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
-    const ctrlShift = event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey;
+    const ctrlShift =
+      event.shiftKey &&
+      !event.altKey &&
+      (IS_MAC ? event.ctrlKey !== event.metaKey : event.ctrlKey && !event.metaKey);
 
     if (
       event.altKey &&
@@ -985,6 +998,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       fix(live);
       return true;
     }
+    if (name === 's') return saveAsNote(live);
     const block = live.blocks.blocks.at(-1);
     if (block === undefined) return false;
     if (name === 'c') copyText(blockOutput(live, block));
@@ -1580,20 +1594,21 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
             : undefined,
           busy || !offerExplain(live)
             ? undefined
-            : shortcutButton(t('terminal', 'blockExplain'), 'Ctrl+Shift+E', () => explain(live)),
+            : shortcutButton(t('terminal', 'blockExplain'), chordLabel('E'), () => explain(live)),
           busy || !offerFix(live)
             ? undefined
-            : shortcutButton(t('terminal', 'blockFix'), 'Ctrl+Shift+F', () => fix(live)),
+            : shortcutButton(t('terminal', 'blockFix'), chordLabel('F'), () => fix(live)),
           busy || currentAttrs?.onSaveAsNote === undefined
             ? undefined
             : m(
                 'button.fm-terminal-assist-action',
                 {
                   type: 'button',
+                  'aria-keyshortcuts': chordLabel('S'),
                   ...tooltipEvents(() => t('notes', 'saveAsNoteHelp'), 'above-left'),
                   onclick: () => saveAsNote(live),
                 },
-                t('notes', 'saveAsNote'),
+                [t('notes', 'saveAsNote'), m('kbd.fm-terminal-kbd', chordLabel('S'))],
               ),
           live.assistActive && shown === undefined
             ? m(

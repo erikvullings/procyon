@@ -864,6 +864,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
   let assistantEnabled = true;
   let autoRunReadOnly = true;
   let folderNames: readonly string[] = ['README.md'];
+  const saveNote = vi.fn();
 
   const bytes = (text: string) => [...new TextEncoder().encode(text)];
   const textarea = () => {
@@ -898,6 +899,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     m.mount(root, {
       view: () =>
         m(TerminalDrawer, {
+          onSaveAsNote: saveNote,
           ...extra,
           open: true,
           tabKey: 'pane-1:tab-1',
@@ -1217,6 +1219,26 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
         '"ATP 7-100.1 Russian Tactics  2024.pdf" ',
       ),
     );
+  });
+
+  it('saves the session as a note with Ctrl+Shift+S', async () => {
+    saveNote.mockClear();
+    await mount();
+    await markPrompt();
+    ask('# hello');
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledOnce());
+
+    textarea().dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'S',
+        ctrlKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    expect(saveNote).toHaveBeenCalledOnce();
   });
 
   it('recalls earlier questions with Up and Down on a # line', async () => {
