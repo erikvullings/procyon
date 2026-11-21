@@ -1,5 +1,7 @@
 import DOMPurify from 'dompurify';
 import { render } from 'slimdown-js';
+import { metadataTableHtml, splitMetadata } from './markdown-metadata';
+import './markdown-metadata.css';
 
 /** The DOMPurify configuration shared by Markdown, EPUB and plugin previews. */
 export const PREVIEW_SANITIZE_OPTIONS = {
@@ -12,9 +14,18 @@ export const PREVIEW_SANITIZE_OPTIONS = {
 /** slimdown leaves its list placeholder behind for a bullet without text. */
 const LEAKED_LIST_PLACEHOLDER = /\{\{LISTITEM:[^{}]*\}\}/g;
 
+function renderMarkdown(markdown: string): string {
+  return render(markdown).replace(LEAKED_LIST_PLACEHOLDER, '');
+}
+
+/** Markdown as sanitized HTML; front matter or a TASKS-style `Key: value` header becomes a table. */
 export function safeMarkdownHtml(markdown: string): string {
-  return DOMPurify.sanitize(
-    render(markdown).replace(LEAKED_LIST_PLACEHOLDER, ''),
-    PREVIEW_SANITIZE_OPTIONS,
-  );
+  const metadata = splitMetadata(markdown);
+  const html =
+    metadata === undefined
+      ? renderMarkdown(markdown)
+      : (metadata.before.trim() === '' ? '' : renderMarkdown(metadata.before)) +
+        metadataTableHtml(metadata.fields) +
+        renderMarkdown(metadata.after);
+  return DOMPurify.sanitize(html, PREVIEW_SANITIZE_OPTIONS);
 }

@@ -1,0 +1,55 @@
+/* Front matter and TASKS-style headers, rendered by `metadataTableHtml` in every Markdown view. */
+table.fm-md-meta {
+  width: auto;
+  margin: 0 0 1em;
+  border-collapse: collapse;
+  font-size: 0.9em;
+  border: 1px solid var(--fm-border);
+}
+
+table.fm-md-meta th,
+table.fm-md-meta td {
+  padding: 0.2em 0.75em;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--fm-border);
+}
+
+table.fm-md-meta th {
+  font-weight: 600;
+  color: var(--fm-text-muted);
+  white-space: nowrap;
+}
+
+.fm-md-meta-chip,
+.fm-md-meta-status {
+  display: inline-block;
+  padding: 0 0.5em;
+  border-radius: 0.75em;
+  border: 1px solid var(--fm-border);
+  line-height: 1.6;
+}
+
+.fm-md-meta-status {
+  font-weight: 600;
+}
+
+.fm-md-meta-status-done {
+  color: var(--fm-success);
+  border-color: var(--fm-success);
+}
+
+.fm-md-meta-status-in-progress {
+  color: var(--fm-accent);
+  border-color: var(--fm-accent);
+}
+
+.fm-md-meta-status-blocked {
+  color: var(--fm-error);
+  border-color: var(--fm-error);
+}
+
+.fm-md-meta-status-cancelled {
+  color: var(--fm-text-muted);
+  text-decoration: line-through;
+}
