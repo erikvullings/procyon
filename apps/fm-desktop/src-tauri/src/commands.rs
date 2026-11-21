@@ -2908,7 +2908,10 @@ pub(crate) async fn terminal_assist(
     state: State<'_, AppState>,
     request: fm_transport_dto::TerminalAssistRequestDto,
 ) -> Result<fm_transport_dto::TerminalAssistReplyDto, fm_transport_dto::ChatFailureDto> {
-    state.service.terminal_assist(request).await
+    state
+        .service
+        .terminal_assist(&desktop_semantic_access(), request)
+        .await
 }
 
 /// Like `terminal_assist`, and the finished lines of the answer and the steps are sent on `events`
@@ -2921,7 +2924,7 @@ pub(crate) async fn terminal_assist_stream(
 ) -> Result<fm_transport_dto::TerminalAssistReplyDto, fm_transport_dto::ChatFailureDto> {
     state
         .service
-        .terminal_assist_streaming(request, &mut |event| {
+        .terminal_assist_streaming(&desktop_semantic_access(), request, &mut |event| {
             // A closed channel means the window is gone; there is no one left to tell.
             let _ = events.send(event);
         })
@@ -2932,6 +2935,62 @@ pub(crate) async fn terminal_assist_stream(
 #[tauri::command]
 pub(crate) fn terminal_assist_close(state: State<'_, AppState>, session_id: String) {
     state.service.terminal_assist_close(&session_id);
+}
+
+/// Where notes live, whether that folder exists, and what setup suggests (task 0337).
+#[tauri::command]
+pub(crate) async fn get_notes_setup(
+    state: State<'_, AppState>,
+) -> Result<fm_transport_dto::NotesSetupDto, ApplicationErrorDto> {
+    Ok(state.service.notes_setup().await)
+}
+
+/// Stores an existing folder as the notes folder (task 0337).
+#[tauri::command]
+pub(crate) async fn set_notes_root(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::SetNotesRootRequestDto,
+) -> Result<fm_transport_dto::NotesSetupDto, ApplicationErrorDto> {
+    state
+        .service
+        .set_notes_root(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Searches the notes folder, semantically when it is indexed (task 0337).
+#[tauri::command]
+pub(crate) async fn search_notes(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::SearchNotesRequestDto,
+) -> Result<fm_transport_dto::NotesSearchResultDto, ApplicationErrorDto> {
+    state
+        .service
+        .search_notes(&desktop_semantic_access(), request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Reads one note inside the notes folder (task 0337).
+#[tauri::command]
+pub(crate) async fn read_note(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::ReadNoteRequestDto,
+) -> Result<fm_transport_dto::NoteDto, ApplicationErrorDto> {
+    state
+        .service
+        .read_note(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Drafts a note from a terminal assistant session for review; nothing is written (task 0337).
+#[tauri::command]
+pub(crate) async fn draft_note(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::DraftNoteRequestDto,
+) -> Result<fm_transport_dto::NoteDraftDto, fm_transport_dto::ChatFailureDto> {
+    state.service.draft_note(request).await
 }
 
 /// Streams the next chat reply (task 0324): fragments, then one final event on `events`. Every

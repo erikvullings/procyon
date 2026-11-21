@@ -33,6 +33,7 @@ pub mod llm_profile;
 pub mod location;
 pub mod metadata_tokens;
 pub mod music_duplicates;
+pub mod notes;
 pub mod operation;
 pub mod plugin;
 pub mod rag;
@@ -212,6 +213,11 @@ pub use music_duplicates::{
     MusicDuplicateConfidenceDto, MusicDuplicateFileDto, MusicDuplicateGroupDto,
     MusicDuplicatePageDto, MusicDuplicateScanPhaseDto, StartMusicDuplicateScanRequestDto,
     StartMusicDuplicateScanResponseDto,
+};
+pub use notes::{
+    DraftNoteRequestDto, NoteDraftDto, NoteDto, NoteHitDto, NoteProposalDto, NotesSearchResultDto,
+    NotesSearchStrategyDto, NotesSetupDto, ReadNoteRequestDto, SearchNotesRequestDto,
+    SetNotesRootRequestDto,
 };
 pub use operation::{
     ArchiveFormatDto, ConflictResolutionDto, EntryRefDto, LinkKindDto, LinkKindOptionDto,

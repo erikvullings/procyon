@@ -53,6 +53,7 @@ import type {
   DocxPreview,
   DocxPreviewResource,
   DocxPreviewSessionRequest,
+  DraftNoteRequest,
   DuplicatePage,
   EditableFile,
   EditableFileSave,
@@ -128,6 +129,10 @@ import type {
   MoveSemanticDataRequest,
   MusicDuplicatePage,
   NavigateRequest,
+  Note,
+  NoteDraft,
+  NotesSearchResult,
+  NotesSetup,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
   OpenPptxPreviewRequest,
@@ -179,6 +184,7 @@ import type {
   ScanDiskUsageRequest,
   SearchInFileRequest,
   SearchInFileResult,
+  SearchNotesRequest,
   SearchStructuredRowsRequest,
   SemanticComponentCapabilities,
   SemanticComponentStatus,
@@ -251,6 +257,7 @@ import type {
 import type { FileManagerClient, NativeFileDrop } from './file-manager-client';
 import { MockConnectionClient } from './mock-connection-client';
 import { MockContext } from './mock-context';
+import { MockNotesClient } from './mock-notes-client';
 import { MockOperationClient } from './mock-operation-client';
 import { MockPluginClient } from './mock-plugin-client';
 import { MockSemanticClient } from './mock-semantic-client';
@@ -271,6 +278,7 @@ export class MockFileManagerClient implements FileManagerClient {
   private readonly operationClient: MockOperationClient;
   private readonly semanticClient: MockSemanticClient;
   private readonly pluginClient: MockPluginClient;
+  private readonly notesClient: MockNotesClient;
   constructor(options?: MockFileManagerClientOptions) {
     this.ctx = new MockContext(options);
     this.connectionClient = new MockConnectionClient(this.ctx);
@@ -278,6 +286,7 @@ export class MockFileManagerClient implements FileManagerClient {
     this.operationClient = new MockOperationClient(this.ctx);
     this.semanticClient = new MockSemanticClient(this.ctx);
     this.pluginClient = new MockPluginClient(this.ctx);
+    this.notesClient = new MockNotesClient(this.ctx);
     this.ctx.connectionClient = this.connectionClient;
     this.ctx.workspaceClient = this.workspaceClient;
     this.ctx.operationClient = this.operationClient;
@@ -577,6 +586,21 @@ export class MockFileManagerClient implements FileManagerClient {
 
   listFileTemplates(signal?: AbortSignal): Promise<FileTemplateEntry[]> {
     return this.connectionClient.listFileTemplates(signal);
+  }
+  getNotesSetup(signal?: AbortSignal): Promise<NotesSetup> {
+    return this.notesClient.getNotesSetup(signal);
+  }
+  setNotesRoot(location: Location, signal?: AbortSignal): Promise<NotesSetup> {
+    return this.notesClient.setNotesRoot(location, signal);
+  }
+  searchNotes(request: SearchNotesRequest, signal?: AbortSignal): Promise<NotesSearchResult> {
+    return this.notesClient.searchNotes(request, signal);
+  }
+  readNote(path: string, signal?: AbortSignal): Promise<Note> {
+    return this.notesClient.readNote(path, signal);
+  }
+  draftNote(request: DraftNoteRequest, signal?: AbortSignal): Promise<NoteDraft> {
+    return this.notesClient.draftNote(request, signal);
   }
   getFileIcon(sampleLocationUri: string, signal?: AbortSignal): Promise<Uint8Array | undefined> {
     return this.workspaceClient.getFileIcon(sampleLocationUri, signal);

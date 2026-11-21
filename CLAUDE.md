@@ -115,7 +115,8 @@ deep capability module under `crates/fm-application/src/`. Existing seams includ
 `SearchComparisonCoordinator` (search/comparison lifecycle and sync plans), `ActionInvoker`
 (core/plugin/platform action dispatch), `ChecksumCoordinator`, `FileEditorService`,
 `DocxPreviewService` (bounded semantic conversion and retained package resources),
-`PptxPreviewService` (bounded conversion to retained PDF),
+`PptxPreviewService` (bounded conversion to retained PDF), `NotesService` (notes folder setting,
+session-to-runbook drafts, semantic-or-text note search; it never writes notes),
 `ConnectionFacade`, `PluginManager`, `SemanticService`, `SemanticComponentService`, and
 `SemanticLibraryService`. Semantic capabilities are optional and lazy: their fake, local-IPC, or
 managed capabilities are injected explicitly, while ordinary

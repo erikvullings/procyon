@@ -381,6 +381,26 @@ Unavailable entries are excluded from actions. The basket survives navigation an
 For remote providers with path-based identities, the recheck also compares known size and
 modification time; a replacement with identical metadata cannot be distinguished.
 
+## Notes
+
+Notes are plain Markdown files in one folder you choose, so Obsidian or any editor can open the
+same folder. Open **Set up notes…** from the command palette (or Settings → Files & operations →
+Notes). Setup suggests `Procyon Notes` in your Documents folder on the desktop; a server suggests
+nothing, and its notes folder must lie inside the server's accessible roots. When semantic search
+is installed, setup can also include the folder in it; you confirm what is indexed in the same
+dialog.
+
+In the desktop terminal, **Save as note** in the assistant bar (or **Save terminal session as
+note** in the command palette) turns the assistant conversation and the finished commands into a
+runbook draft: title, tags, steps with the commands that worked, how to verify, and pitfalls from
+failed commands. Secrets are redacted before the model sees the session and again in the draft;
+the review shows how many values were replaced. Nothing is written until you save: a new note is
+created by the normal create-file operation, so an existing file is never replaced without asking.
+
+The terminal assistant searches your notes before answering how-to questions (semantically when
+the folder is indexed, by text otherwise) and can propose a new note or an update, which you review
+as a diff before saving.
+
 ## Architecture
 
 ```text

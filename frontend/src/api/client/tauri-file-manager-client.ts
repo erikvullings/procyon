@@ -64,6 +64,7 @@ import type {
   DocxPreview,
   DocxPreviewResource,
   DocxPreviewSessionRequest,
+  DraftNoteRequest,
   DuplicatePage,
   EditableFile,
   EditableFileSave,
@@ -140,6 +141,10 @@ import type {
   MoveSemanticDataRequest,
   MusicDuplicatePage,
   NavigateRequest,
+  Note,
+  NoteDraft,
+  NotesSearchResult,
+  NotesSetup,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
   OpenPptxPreviewRequest,
@@ -191,6 +196,7 @@ import type {
   ScanDiskUsageRequest,
   SearchInFileRequest,
   SearchInFileResult,
+  SearchNotesRequest,
   SearchStructuredRowsRequest,
   SemanticComponentCapabilities,
   SemanticComponentStatus,
@@ -877,6 +883,26 @@ export class TauriFileManagerClient implements FileManagerClient {
       uri: locationUri,
       request: comment,
     });
+  }
+
+  getNotesSetup(_signal?: AbortSignal): Promise<NotesSetup> {
+    return invoke<NotesSetup>('get_notes_setup');
+  }
+
+  setNotesRoot(location: Location, _signal?: AbortSignal): Promise<NotesSetup> {
+    return invoke<NotesSetup>('set_notes_root', { request: { location } });
+  }
+
+  searchNotes(request: SearchNotesRequest, _signal?: AbortSignal): Promise<NotesSearchResult> {
+    return invoke<NotesSearchResult>('search_notes', { request });
+  }
+
+  readNote(path: string, _signal?: AbortSignal): Promise<Note> {
+    return invoke<Note>('read_note', { request: { path } });
+  }
+
+  draftNote(request: DraftNoteRequest, _signal?: AbortSignal): Promise<NoteDraft> {
+    return invoke<NoteDraft>('draft_note', { request });
   }
 
   async listFileTemplates(_signal?: AbortSignal): Promise<FileTemplateEntry[]> {

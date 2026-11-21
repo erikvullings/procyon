@@ -6,6 +6,7 @@ import {
   questionAtPrompt,
   showTerminalSurface,
   TerminalDrawer,
+  type TerminalDrawerAttrs,
   terminalHost,
 } from './terminal-drawer';
 
@@ -850,10 +851,11 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     );
   const sentAt = (call: number) => assist.mock.calls[call]?.[0];
 
-  async function mount(): Promise<void> {
+  async function mount(extra: Partial<TerminalDrawerAttrs> = {}): Promise<void> {
     m.mount(root, {
       view: () =>
         m(TerminalDrawer, {
+          ...extra,
           open: true,
           tabKey: 'pane-1:tab-1',
           location: { providerId: 'local', uri: 'file:///home' },
@@ -1193,5 +1195,36 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
       ),
     );
     expect(assist.mock.calls.at(-1)?.[0].context?.blocks?.[0]?.output).toContain('boom');
+  });
+
+  it('saves the session as a note with its conversation and output (task 0337)', async () => {
+    const onSaveAsNote = vi.fn();
+    await mount({ onSaveAsNote, workspaceId: 'ws-1' });
+    echo?.({ type: 'output', data: bytes('certbot renew done\r\n') });
+    ask('# how do I renew?');
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledOnce());
+    expect(sentAt(0)?.workspaceId).toBe('ws-1');
+    await vi.waitFor(() => expect(button('Save as note')).toBeDefined());
+
+    button('Save as note')?.click();
+
+    expect(onSaveAsNote).toHaveBeenCalledWith({
+      sessionId: sentAt(0)?.sessionId,
+      blocks: [expect.objectContaining({ output: expect.stringContaining('certbot renew') })],
+      workingDirectory: 'file:///home',
+    });
+  });
+
+  it('hands a note the assistant proposed to the owner for review (task 0337)', async () => {
+    const onNoteProposal = vi.fn();
+    const proposal = {
+      draft: { title: 'T', fileName: 't.md', tags: [], content: '# T', redactions: 0 },
+    };
+    assist.mockResolvedValueOnce({ text: '', noteProposal: proposal });
+    await mount({ onNoteProposal });
+    ask('# write this down as a note');
+
+    await vi.waitFor(() => expect(onNoteProposal).toHaveBeenCalledWith(proposal));
+    await vi.waitFor(() => expect(root.textContent).toContain('proposed a note'));
   });
 });

@@ -24,6 +24,7 @@ import type {
 import { perfEndAfterRender, perfStart } from '../../utilities/perf';
 import { DiagnosticsViewComponent } from '../diagnostics/diagnostics-view';
 import { MapSettingsSection } from '../map/map-settings-section';
+import { NotesSettingsSection } from '../notes/notes-settings';
 import { PluginManagement } from '../plugin-management/plugin-management';
 import type { SelectionPlatform } from '../selection/keybindings';
 import { AppUpdateSettings } from './app-update-settings';
@@ -109,6 +110,10 @@ export interface SettingsEditorAttrs {
   readonly onSemanticStatusChange?: (status: SemanticComponentStatus) => void;
   readonly onSemanticInstallationChange?: SemanticComponentManagementAttrs['onInstallationChange'];
   readonly semanticInstallInProgress?: boolean;
+  /** Opens the notes setup dialog (task 0337). */
+  readonly onOpenNotesSetup?: () => void;
+  /** Opens the semantic consent for the notes folder (task 0337). */
+  readonly onIndexNotes?: (root: Location) => void;
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -592,6 +597,14 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                         m('p.helper-text', t('settings', 'terminalAppsHelp')),
                       ]),
                     ]),
+
+                    current.onOpenNotesSetup === undefined
+                      ? undefined
+                      : m(NotesSettingsSection, {
+                          client: current.client,
+                          onChangeFolder: current.onOpenNotesSetup,
+                          onIndexFolder: current.onIndexNotes,
+                        }),
 
                     m('.row', [
                       m('.col.s12', [

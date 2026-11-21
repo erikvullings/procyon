@@ -9,6 +9,10 @@ import { MINIFY_GEO_ACTION_ID } from '../features/geo/minify-geo-actions';
 import { SHOW_ON_MAP_ACTION_ID } from '../features/image-map/image-map-actions';
 import { EDIT_IMAGE_METADATA_ACTION_ID } from '../features/image-metadata/image-metadata-edit';
 import {
+  SAVE_TERMINAL_NOTE_ACTION_ID,
+  SET_UP_NOTES_ACTION_ID,
+} from '../features/notes/notes-actions';
+import {
   COMPARE_SNAPSHOT_ACTION_ID,
   FIND_BROKEN_LINKS_ACTION_ID,
   FIND_MUSIC_DUPLICATES_ACTION_ID,
@@ -195,6 +199,26 @@ export function createActionsWiring(shellState: ShellState) {
         contextRequirements: {},
         source: { kind: 'core' as const },
       },
+      {
+        id: SET_UP_NOTES_ACTION_ID,
+        title: t('notes', 'actionSetUp'),
+        category: 'tools',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' as const },
+      },
+      ...(shellState.runtimeKind === 'tauri'
+        ? [
+            {
+              id: SAVE_TERMINAL_NOTE_ACTION_ID,
+              title: t('notes', 'actionSaveTerminal'),
+              category: 'tools',
+              defaultShortcuts: [],
+              contextRequirements: {},
+              source: { kind: 'core' as const },
+            },
+          ]
+        : []),
       ...(hasQueue
         ? PLAYER_CLIENT_ACTIONS.map(({ id, title }) => ({
             id,

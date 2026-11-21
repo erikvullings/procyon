@@ -213,6 +213,12 @@ impl Sessions {
         rendered[start..].concat()
     }
 
+    /// The conversation so far, as the model sees it; empty for an unknown session. Used to turn
+    /// a session into a draft note (task 0337).
+    pub(crate) fn transcript(&self, id: &str) -> String {
+        self.render(id)
+    }
+
     /// Forgets a session.
     pub(crate) fn close(&self, id: &str) {
         let mut state = self.lock();

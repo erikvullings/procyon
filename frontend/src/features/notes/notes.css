@@ -1,0 +1,161 @@
+/* Notes dialogs and settings (task 0337). */
+
+.fm-notes-modal .modal-content {
+  max-width: 52rem;
+}
+
+.fm-notes-setup,
+.fm-notes-review,
+.fm-notes-enrol {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  color: var(--fm-text);
+}
+
+.fm-notes-intro,
+.fm-notes-busy {
+  margin: 0;
+  color: var(--fm-text-secondary);
+}
+
+.fm-notes-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.fm-notes-field > span {
+  font-size: var(--fm-type-label);
+  color: var(--fm-text-secondary);
+}
+
+.fm-notes-field input {
+  height: var(--fm-control-height);
+  padding: 0 0.5rem;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius-control);
+  background: var(--fm-background);
+  color: var(--fm-text);
+  font-family: var(--fm-font-mono);
+}
+
+.fm-notes-help {
+  color: var(--fm-text-muted);
+  font-size: var(--fm-type-meta);
+}
+
+.fm-notes-check {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.5rem;
+  align-items: center;
+}
+
+.fm-notes-check > input {
+  position: static;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.fm-notes-check > .fm-notes-help {
+  grid-column: 2;
+}
+
+.fm-notes-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.5rem 0.75rem;
+}
+
+.fm-notes-warning {
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--fm-warning);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface-muted);
+}
+
+.fm-notes-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--fm-border);
+}
+
+.fm-notes-tab {
+  padding: 0.25rem 0.75rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--fm-text-secondary);
+  cursor: pointer;
+}
+
+.fm-notes-tab[aria-selected="true"] {
+  border-bottom-color: var(--fm-accent);
+  color: var(--fm-text);
+}
+
+.fm-notes-tab:focus-visible {
+  outline: 2px solid var(--fm-focus);
+}
+
+.fm-notes-content,
+.fm-notes-preview,
+.fm-notes-diff {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 18rem;
+  max-height: 50vh;
+  overflow: auto;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-background);
+  color: var(--fm-text);
+}
+
+.fm-notes-content,
+.fm-notes-diff {
+  font-family: var(--fm-font-mono);
+  font-size: var(--fm-type-body);
+  white-space: pre;
+}
+
+.fm-notes-content {
+  resize: vertical;
+}
+
+.fm-notes-diff {
+  margin: 0;
+}
+
+.fm-notes-diff-line--added {
+  background: color-mix(in srgb, var(--fm-success) 18%, transparent);
+}
+
+.fm-notes-diff-line--removed {
+  background: color-mix(in srgb, var(--fm-danger) 18%, transparent);
+  text-decoration: line-through;
+}
+
+.fm-notes-settings-root {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.fm-notes-settings-label {
+  color: var(--fm-text-secondary);
+}
+
+.fm-notes-settings-path {
+  overflow-wrap: anywhere;
+}
+
+.fm-notes-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}

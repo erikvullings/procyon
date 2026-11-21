@@ -703,6 +703,9 @@ pub struct Settings {
     pub quick_filter_match_mode: QuickFilterMatchMode,
     /// Command-block shell integration for new terminals (task 0333).
     pub terminal_shell_integration: TerminalShellIntegration,
+    /// Folder holding the person's Markdown notes (task 0337); `None` until notes are set up.
+    /// Owned by the backend: a client replacing the settings document cannot change it.
+    pub notes_root: Option<Location>,
     /// Whether the terminal assistant (`#` questions, Explain and Fix) is on (task 0336).
     pub terminal_assistant: bool,
 }
@@ -801,6 +804,7 @@ impl Default for Settings {
             semantic_theme_root_ids: Vec::new(),
             quick_filter_match_mode: QuickFilterMatchMode::default(),
             terminal_shell_integration: TerminalShellIntegration::default(),
+            notes_root: None,
             terminal_assistant: true,
         }
     }

@@ -148,6 +148,9 @@ import type {
   MoveSemanticDataRequestDto,
   MusicDuplicatePageDto,
   NavigateRequest,
+  NoteDto,
+  NotesSearchResultDto,
+  NotesSetupDto,
   OneDriveAuthorizationAttemptDto,
   OpenDocxPreviewRequestDto,
   OpenDocxPreviewResponseDto,
@@ -188,6 +191,7 @@ import type {
   ReadImageGpsRequestDto,
   ReadImageGpsResponseDto,
   ReadImageMetadataRequestDto,
+  ReadNoteRequestDto,
   ReadPptxPreviewPdfRequestDto,
   ReadStructuredJsonWindowRequestDto,
   ReadStructuredJsonWindowResponseDto,
@@ -223,6 +227,7 @@ import type {
   ScanDiskUsageRequestDto,
   SearchInFileRequestDto,
   SearchInFileResponseDto,
+  SearchNotesRequestDto,
   SearchStructuredRowsRequestDto,
   SearchStructuredRowsResponseDto,
   SemanticComponentCapabilitiesDto,
@@ -248,6 +253,7 @@ import type {
   SemanticVocabularyDto,
   SemanticWorkerPatchResponseDto,
   SetFinderTagsParams,
+  SetNotesRootRequestDto,
   SetPaneActivityRequest,
   SetSpotlightCommentParams,
   SettingsDto,
@@ -5927,6 +5933,179 @@ export const navigatePane = async (navigateRequest: NavigateRequest, options?: P
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(navigateRequest)
+  }
+);}
+
+
+
+export type readNoteResponse200 = {
+  data: NoteDto
+  status: 200
+}
+
+export type readNoteResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type readNoteResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type readNoteResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type readNoteResponseSuccess = (readNoteResponse200) & {
+  headers: Headers;
+};
+export type readNoteResponseError = (readNoteResponse400 | readNoteResponse403 | readNoteResponse404) & {
+  headers: Headers;
+};
+
+export type readNoteResponse = (readNoteResponseSuccess | readNoteResponseError)
+
+export const getReadNoteUrl = () => {
+
+
+
+
+  return `/api/v1/notes/read`
+}
+
+export const readNote = async (readNoteRequestDto: ReadNoteRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<readNoteResponse> => {
+
+  return fetchMutator<readNoteResponse>(getReadNoteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(readNoteRequestDto)
+  }
+);}
+
+
+
+export type setNotesRootResponse200 = {
+  data: NotesSetupDto
+  status: 200
+}
+
+export type setNotesRootResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type setNotesRootResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type setNotesRootResponseSuccess = (setNotesRootResponse200) & {
+  headers: Headers;
+};
+export type setNotesRootResponseError = (setNotesRootResponse400 | setNotesRootResponse403) & {
+  headers: Headers;
+};
+
+export type setNotesRootResponse = (setNotesRootResponseSuccess | setNotesRootResponseError)
+
+export const getSetNotesRootUrl = () => {
+
+
+
+
+  return `/api/v1/notes/root`
+}
+
+export const setNotesRoot = async (setNotesRootRequestDto: SetNotesRootRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<setNotesRootResponse> => {
+
+  return fetchMutator<setNotesRootResponse>(getSetNotesRootUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(setNotesRootRequestDto)
+  }
+);}
+
+
+
+export type searchNotesResponse200 = {
+  data: NotesSearchResultDto
+  status: 200
+}
+
+export type searchNotesResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type searchNotesResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type searchNotesResponseSuccess = (searchNotesResponse200) & {
+  headers: Headers;
+};
+export type searchNotesResponseError = (searchNotesResponse400 | searchNotesResponse403) & {
+  headers: Headers;
+};
+
+export type searchNotesResponse = (searchNotesResponseSuccess | searchNotesResponseError)
+
+export const getSearchNotesUrl = () => {
+
+
+
+
+  return `/api/v1/notes/search`
+}
+
+export const searchNotes = async (searchNotesRequestDto: SearchNotesRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<searchNotesResponse> => {
+
+  return fetchMutator<searchNotesResponse>(getSearchNotesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(searchNotesRequestDto)
+  }
+);}
+
+
+
+export type getNotesSetupResponse200 = {
+  data: NotesSetupDto
+  status: 200
+}
+
+export type getNotesSetupResponseSuccess = (getNotesSetupResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getNotesSetupResponse = (getNotesSetupResponseSuccess)
+
+export const getGetNotesSetupUrl = () => {
+
+
+
+
+  return `/api/v1/notes/setup`
+}
+
+export const getNotesSetup = async ( options?: Parameters<typeof fetchMutator>[1]): Promise<getNotesSetupResponse> => {
+
+  return fetchMutator<getNotesSetupResponse>(getGetNotesSetupUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 

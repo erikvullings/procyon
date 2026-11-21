@@ -22,6 +22,27 @@ pub(super) enum ToolCall {
     RunCommand {
         command: String,
     },
+    /// Searches the person's notes (task 0337).
+    SearchNotes {
+        query: String,
+        #[serde(default)]
+        limit: Option<u32>,
+    },
+    /// Reads one note inside the notes folder.
+    ReadNote {
+        path: String,
+    },
+    /// Proposes a new note for the person to review.
+    ProposeNote {
+        #[serde(default)]
+        title: Option<String>,
+        content: String,
+    },
+    /// Proposes new text for an existing note for the person to review.
+    ProposeNoteUpdate {
+        path: String,
+        content: String,
+    },
 }
 
 /// The tool call in a model reply. The documented form is a `TOOL {json}` line, but models also
@@ -52,7 +73,18 @@ fn tool_call_at(text: &str) -> Option<ToolCall> {
         {
             None
         }
-        ToolCall::ListDir { path } | ToolCall::ReadFile { path } if path.trim().is_empty() => None,
+        ToolCall::ListDir { path } | ToolCall::ReadFile { path } | ToolCall::ReadNote { path }
+            if path.trim().is_empty() =>
+        {
+            None
+        }
+        ToolCall::SearchNotes { query, .. } if query.trim().is_empty() => None,
+        ToolCall::ProposeNote { content, .. } | ToolCall::ProposeNoteUpdate { content, .. }
+            if content.trim().is_empty() =>
+        {
+            None
+        }
+        ToolCall::ProposeNoteUpdate { path, .. } if path.trim().is_empty() => None,
         ToolCall::Grep { pattern, .. } if pattern.is_empty() => None,
         _ => Some(call),
     }

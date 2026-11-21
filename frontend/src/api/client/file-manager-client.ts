@@ -1,4 +1,5 @@
 import type { ConnectionClient } from './connection-client';
+import type { NotesClient } from './notes-client';
 import type { OperationClient } from './operation-client';
 import type { PluginClient } from './plugin-client';
 import type { SemanticClient } from './semantic-client';
@@ -12,6 +13,7 @@ export type {
   WindowChrome,
 } from './client-types';
 export type { ConnectionClient } from './connection-client';
+export type { NotesClient } from './notes-client';
 export type { OperationClient } from './operation-client';
 export type { PluginClient } from './plugin-client';
 export type { SemanticClient } from './semantic-client';
@@ -33,4 +35,5 @@ export interface FileManagerClient
     WorkspaceClient,
     OperationClient,
     SemanticClient,
-    PluginClient {}
+    PluginClient,
+    NotesClient {}

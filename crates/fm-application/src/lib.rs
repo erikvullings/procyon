@@ -66,6 +66,7 @@ pub use map_tiles::MapTile;
 mod appendable_test_provider;
 mod metadata_tokens;
 mod music_duplicates;
+mod notes;
 mod onedrive;
 mod operation_history;
 mod operation_planner;

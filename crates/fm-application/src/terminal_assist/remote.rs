@@ -45,6 +45,10 @@ impl RemoteSandbox {
             ToolCall::RunCommand { .. } => {
                 ("Run command".to_owned(), Err(ToolError::NeedsApproval))
             }
+            ToolCall::SearchNotes { .. }
+            | ToolCall::ReadNote { .. }
+            | ToolCall::ProposeNote { .. }
+            | ToolCall::ProposeNoteUpdate { .. } => ("Notes".to_owned(), Err(ToolError::NotesTool)),
         };
         ToolOutput {
             step,

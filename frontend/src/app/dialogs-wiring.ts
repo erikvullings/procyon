@@ -17,6 +17,10 @@ import {
 } from '../features/image-metadata/image-metadata-edit';
 import type { PaneDirectoryView } from '../features/navigation/navigation';
 import { parentLocation } from '../features/navigation/navigation';
+import {
+  SAVE_TERMINAL_NOTE_ACTION_ID,
+  SET_UP_NOTES_ACTION_ID,
+} from '../features/notes/notes-actions';
 import type { QueueMode } from '../features/player/play-selection';
 import {
   collectMedia,
@@ -700,6 +704,15 @@ export function createDialogWiring(shellState: ShellState, core: DialogCore) {
     }
     if (actionId === FIND_MUSIC_DUPLICATES_ACTION_ID) {
       beginMusicDuplicateScan(invocation);
+      return true;
+    }
+    if (actionId === SET_UP_NOTES_ACTION_ID) {
+      void shellState.notesController?.openSetup();
+      return true;
+    }
+    if (actionId === SAVE_TERMINAL_NOTE_ACTION_ID) {
+      // Without an open terminal tab there is no session to save.
+      if (shellState.saveTerminalNote?.() !== true) toast({ html: t('notes', 'nothingToSave') });
       return true;
     }
     if (

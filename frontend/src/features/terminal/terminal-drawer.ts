@@ -11,7 +11,7 @@ import {
   wrenchIcon,
 } from '../../components/tabler-icons';
 import { t } from '../../i18n';
-import type { Location } from '../../models';
+import type { DraftNoteRequest, Location, NoteProposal } from '../../models';
 import type { TerminalShellIntegration } from '../../models/settings';
 import {
   createAnswerStream,
@@ -77,6 +77,14 @@ export interface TerminalDrawerAttrs {
   readonly shellIntegration?: TerminalShellIntegration;
   /** Hands the owner a way to type text at this drawer's active prompt (task 0333). */
   readonly registerInsert?: (insert: (text: string, host: string) => boolean) => void;
+  /** The active workspace; its semantic consent lets the assistant search the notes index. */
+  readonly workspaceId?: string | undefined;
+  /** Hands the owner a way to save the active tab's session as a note (task 0337). */
+  readonly registerSaveAsNote?: (save: () => boolean) => void;
+  /** Turns the session into a draft note for review (task 0337). */
+  readonly onSaveAsNote?: (request: DraftNoteRequest) => void;
+  /** A note the assistant proposed, for review (task 0337). */
+  readonly onNoteProposal?: (proposal: NoteProposal) => void;
   /** Saves the choice; `undefined` hides the consent prompt. */
   readonly onShellIntegrationChoice?: (choice: 'enabled' | 'disabled') => Promise<void>;
 }
@@ -478,6 +486,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           transcript: '',
           workingDirectory: attrs.location.uri,
           sessionId: live.assistSession,
+          ...(attrs.workspaceId === undefined ? {} : { workspaceId: attrs.workspaceId }),
           ...(input.question === undefined ? {} : { request: input.question }),
           ...(input.context === undefined ? {} : { context: input.context }),
           ...(input.toolResult === undefined ? {} : { toolResult: input.toolResult }),
@@ -501,6 +510,10 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     // A streamed answer is already in the terminal; only a host that cannot stream gets it now.
     let text = streamed ? '' : stepsAnsi(reply.steps ?? []);
     let next: AssistPanel | undefined;
+    if (reply.noteProposal !== undefined && token === live.requestId) {
+      text += noticeAnsi(t('notes', 'proposalShown'));
+      currentAttrs?.onNoteProposal?.(reply.noteProposal);
+    }
     if (reply.runCommand !== undefined) {
       next = { status: 'approve', tabKey: live.key, command: cleanCommand(reply.runCommand) };
     } else {
@@ -572,6 +585,24 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     // Ctrl+U first, so the command never runs appended to something half typed.
     writeToShell(live, `\x15${command}\r`);
     m.redraw();
+  }
+
+  /**
+   * Asks the owner to turn this tab's session into a note: the assistant conversation and the
+   * finished commands (or, without command blocks, the visible output). Returns whether there was
+   * a terminal to save.
+   */
+  function saveAsNote(live: LiveTerminal | undefined): boolean {
+    const attrs = currentAttrs;
+    if (live === undefined || attrs?.location === undefined || attrs.onSaveAsNote === undefined) {
+      return false;
+    }
+    attrs.onSaveAsNote({
+      ...(live.assistActive ? { sessionId: live.assistSession } : {}),
+      blocks: assistSource(live, undefined, true).blocks ?? [],
+      workingDirectory: attrs.location.uri,
+    });
+    return true;
   }
 
   /** Tells the session the person declined; the assistant stops. */
@@ -1313,6 +1344,17 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           busy
             ? undefined
             : shortcutButton(t('terminal', 'blockFix'), 'Ctrl+Shift+F', () => fix(live)),
+          busy || currentAttrs?.onSaveAsNote === undefined
+            ? undefined
+            : m(
+                'button.fm-terminal-assist-action',
+                {
+                  type: 'button',
+                  ...tooltipEvents(() => t('notes', 'saveAsNoteHelp'), 'above-left'),
+                  onclick: () => saveAsNote(live),
+                },
+                t('notes', 'saveAsNote'),
+              ),
           live.assistActive && shown === undefined
             ? m(
                 'button.fm-terminal-assist-action',
@@ -1392,6 +1434,10 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         return true;
       });
       attrs.registerInsert?.((text, host) => insertAtPrompt(text, host));
+      attrs.registerSaveAsNote?.(() => {
+        const key = currentAttrs?.tabKey;
+        return saveAsNote(key === undefined ? undefined : terminals.get(key));
+      });
       attrs.registerDisposeTab?.((key) => {
         const live = terminals.get(key);
         if (live === undefined) return;

@@ -44,6 +44,8 @@ pub(super) enum ToolError {
     Unreadable(String),
     #[error("run_command needs the person's approval.")]
     NeedsApproval,
+    #[error("notes tools only work on the notes folder.")]
+    NotesTool,
     #[error(
         "grep is not available for remote folders. Use read_file, or ask to run grep with run_command."
     )]
@@ -88,6 +90,10 @@ impl Sandbox {
             ToolCall::RunCommand { .. } => {
                 ("Run command".to_owned(), Err(ToolError::NeedsApproval))
             }
+            ToolCall::SearchNotes { .. }
+            | ToolCall::ReadNote { .. }
+            | ToolCall::ProposeNote { .. }
+            | ToolCall::ProposeNoteUpdate { .. } => ("Notes".to_owned(), Err(ToolError::NotesTool)),
         };
         ToolOutput {
             step,
@@ -237,7 +243,7 @@ impl Sandbox {
 }
 
 /// Names that usually hold secrets; never read.
-pub(super) fn is_secret_name(name: &str) -> bool {
+pub(crate) fn is_secret_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     const EXACT: &[&str] = &[
         ".env",
@@ -265,7 +271,7 @@ pub(super) fn is_secret_name(name: &str) -> bool {
 }
 
 /// Folders that hold credentials; nothing under them is read or searched.
-pub(super) fn is_credential_folder(name: &str) -> bool {
+pub(crate) fn is_credential_folder(name: &str) -> bool {
     matches!(
         name,
         ".ssh" | ".aws" | ".kube" | ".gnupg" | ".docker" | ".azure"

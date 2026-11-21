@@ -5390,6 +5390,174 @@
         }
       }
     },
+    "/api/v1/notes/read": {
+      "post": {
+        "operationId": "readNote",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadNoteRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notes/root": {
+      "post": {
+        "operationId": "setNotesRoot",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetNotesRootRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotesSetupDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notes/search": {
+      "post": {
+        "operationId": "searchNotes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchNotesRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotesSearchResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notes/setup": {
+      "get": {
+        "operationId": "getNotesSetup",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotesSetupDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/onedrive/authorizations/{attemptId}": {
       "get": {
         "summary": "Polls a OneDrive authorization attempt's current status.",
@@ -20303,6 +20471,140 @@
           }
         }
       },
+      "NoteDto": {
+        "type": "object",
+        "description": "One note's text, with the revision the editor save expects.",
+        "required": [
+          "location",
+          "path",
+          "content",
+          "revision"
+        ],
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "The whole file."
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The note file."
+          },
+          "path": {
+            "type": "string",
+            "description": "Its path inside the notes folder."
+          },
+          "revision": {
+            "type": "string",
+            "description": "Revision for `saveEditableFile`."
+          }
+        }
+      },
+      "NoteHitDto": {
+        "type": "object",
+        "description": "One matching note.",
+        "required": [
+          "location",
+          "path",
+          "title",
+          "tags",
+          "snippet",
+          "score"
+        ],
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The note file."
+          },
+          "path": {
+            "type": "string",
+            "description": "Its path inside the notes folder, with `/` separators."
+          },
+          "score": {
+            "type": "number",
+            "format": "float",
+            "description": "Relative rank within this result; higher is better."
+          },
+          "snippet": {
+            "type": "string",
+            "description": "The best matching line or passage, bounded."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Front-matter tags."
+          },
+          "title": {
+            "type": "string",
+            "description": "The front-matter title, the first heading, or the file name."
+          }
+        }
+      },
+      "NotesSearchResultDto": {
+        "type": "object",
+        "description": "Ranked notes and how they were found.",
+        "required": [
+          "strategy",
+          "hits"
+        ],
+        "properties": {
+          "hits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NoteHitDto"
+            },
+            "description": "Best first."
+          },
+          "strategy": {
+            "$ref": "#/components/schemas/NotesSearchStrategyDto",
+            "description": "The search that produced `hits`."
+          }
+        }
+      },
+      "NotesSearchStrategyDto": {
+        "type": "string",
+        "description": "Which search produced the hits.",
+        "enum": [
+          "semantic",
+          "text"
+        ]
+      },
+      "NotesSetupDto": {
+        "type": "object",
+        "description": "Where notes live and what setup would suggest.",
+        "required": [
+          "rootExists"
+        ],
+        "properties": {
+          "root": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LocationDto",
+                "description": "The configured notes folder; `None` until notes are set up."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rootExists": {
+            "type": "boolean",
+            "description": "Whether the configured folder currently exists as a folder."
+          },
+          "suggestedRoot": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LocationDto",
+                "description": "The folder setup suggests on this host; `None` when the host guesses none (a server)."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
       "OneDriveAuthorizationAttemptDto": {
         "type": "object",
         "description": "A OneDrive authorization attempt, as returned by beginning, polling or\ncancelling it (task 0110, spec-suggested transport-neutral shape shared\nby both the HTTP and Tauri hosts).",
@@ -22999,6 +23301,19 @@
           }
         }
       },
+      "ReadNoteRequestDto": {
+        "type": "object",
+        "description": "Reads one note inside the notes folder.",
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Path inside the notes folder, with `/` separators."
+          }
+        }
+      },
       "ReadPptxPreviewPdfRequestDto": {
         "type": "object",
         "description": "Requests one bounded byte range from a rendered PowerPoint PDF.",
@@ -24292,6 +24607,36 @@
           },
           "pattern": {
             "type": "string"
+          }
+        }
+      },
+      "SearchNotesRequestDto": {
+        "type": "object",
+        "description": "Searches the notes folder.",
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Most hits returned; the host caps it.",
+            "minimum": 0
+          },
+          "query": {
+            "type": "string",
+            "description": "What to look for."
+          },
+          "workspaceId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Workspace whose semantic consent applies; without one only the text search runs."
           }
         }
       },
@@ -27186,6 +27531,19 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "SetNotesRootRequestDto": {
+        "type": "object",
+        "description": "Checks or stores the notes folder.",
+        "required": [
+          "location"
+        ],
+        "properties": {
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The folder. It must exist; setup creates it first through the operation engine."
           }
         }
       },

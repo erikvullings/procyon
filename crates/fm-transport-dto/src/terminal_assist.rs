@@ -3,6 +3,9 @@
 //! answers in text only; the person decides whether a suggested command is run.
 
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use crate::NoteProposalDto;
 
 /// What the person asked the assistant to do with the terminal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -100,6 +103,10 @@ pub struct TerminalAssistRequestDto {
     /// The result of the command the previous reply asked to run. Only for `ask`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_result: Option<TerminalToolResultDto>,
+    /// The active workspace, whose semantic consent lets `search_notes` use the notes index
+    /// (task 0337). Without it notes are searched by text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<Uuid>,
 }
 
 /// The assistant's answer as plain text. For `command`, the text is exactly one command line.
@@ -115,6 +122,10 @@ pub struct TerminalAssistReplyDto {
     /// comes back as `toolResult` on the next request.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_command: Option<String>,
+    /// A note the assistant proposes to create or change (task 0337). Nothing is written until
+    /// the person reviews and saves it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note_proposal: Option<NoteProposalDto>,
 }
 
 /// Something shown while an `ask` is answered, so the terminal can write it as it happens.

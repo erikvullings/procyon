@@ -234,6 +234,7 @@ pub struct FileManagerService {
     file_assistant: crate::file_assistant::FileAssistantService,
     chat: crate::chat::ChatService,
     terminal_sessions: crate::terminal_assist::Sessions,
+    notes: crate::notes::NotesService,
     chat_conversations: crate::chat_conversations::ChatConversationService,
     image_prompts: crate::image_prompts::ImagePromptService,
     image_generation: crate::image_generation::ImageGenerationService,
@@ -681,6 +682,18 @@ impl FileManagerService {
             pptx_preview: PptxPreviewService::new(providers.clone()),
             structured_view: StructuredViewService::new(providers.clone()),
             sqlite_view: SqliteViewService::new(providers.clone()),
+            notes: crate::notes::NotesService::new(
+                providers.clone(),
+                settings_mutex.clone(),
+                settings_store.clone(),
+                match runtime {
+                    // A server guesses no folder on its host; the person chooses one.
+                    RuntimeKindDto::BrowserServer => None,
+                    RuntimeKindDto::Tauri | RuntimeKindDto::Mock => {
+                        crate::notes::NotesService::desktop_suggested_root()
+                    }
+                },
+            ),
             providers,
             archive_provider,
             events: events.clone(),
@@ -3483,12 +3496,15 @@ impl FileManagerService {
     /// is saved to disk and nothing is run here: a command is returned for the person to approve.
     pub async fn terminal_assist(
         &self,
+        access: &SemanticAccessContext,
         request: fm_transport_dto::TerminalAssistRequestDto,
     ) -> Result<fm_transport_dto::TerminalAssistReplyDto, fm_transport_dto::ChatFailureDto> {
+        let notes = self.assistant_notes(access, request.workspace_id).await;
         crate::terminal_assist::reply(
             &self.llm_profiles,
             &self.providers,
             &self.terminal_sessions,
+            Some(&notes),
             request,
         )
         .await
@@ -3498,13 +3514,16 @@ impl FileManagerService {
     /// of the answer, and each step, to `on_event` as it happens (task 0336).
     pub async fn terminal_assist_streaming(
         &self,
+        access: &SemanticAccessContext,
         request: fm_transport_dto::TerminalAssistRequestDto,
         on_event: &mut (dyn FnMut(fm_transport_dto::TerminalAssistEventDto) + Send),
     ) -> Result<fm_transport_dto::TerminalAssistReplyDto, fm_transport_dto::ChatFailureDto> {
+        let notes = self.assistant_notes(access, request.workspace_id).await;
         crate::terminal_assist::reply_streaming(
             &self.llm_profiles,
             &self.providers,
             &self.terminal_sessions,
+            Some(&notes),
             request,
             on_event,
         )
@@ -3514,6 +3533,131 @@ impl FileManagerService {
     /// Forgets one terminal tab's assistant session, when the tab closes.
     pub fn terminal_assist_close(&self, session_id: &str) {
         self.terminal_sessions.close(session_id);
+    }
+
+    /// Where notes live, whether that folder exists, and what setup suggests (task 0337).
+    pub async fn notes_setup(&self) -> fm_transport_dto::NotesSetupDto {
+        self.notes.setup().await
+    }
+
+    /// Stores an existing folder as the notes folder; files are never moved.
+    pub async fn set_notes_root(
+        &self,
+        request: fm_transport_dto::SetNotesRootRequestDto,
+    ) -> Result<fm_transport_dto::NotesSetupDto, ApplicationError> {
+        self.notes
+            .set_root(request.location.into())
+            .await
+            .map_err(crate::notes::notes_error)
+    }
+
+    /// Searches the notes folder: through its semantic index when a workspace's consent covers
+    /// it, by text otherwise.
+    pub async fn search_notes(
+        &self,
+        access: &SemanticAccessContext,
+        request: fm_transport_dto::SearchNotesRequestDto,
+    ) -> Result<fm_transport_dto::NotesSearchResultDto, ApplicationError> {
+        let store = self
+            .notes
+            .store()
+            .await
+            .map_err(crate::notes::notes_error)?;
+        let semantic = self
+            .notes_index(access, request.workspace_id, store.root())
+            .await;
+        Ok(self
+            .notes
+            .search(
+                &store,
+                semantic
+                    .as_ref()
+                    .map(|index| index as &dyn crate::notes::SemanticNotes),
+                &request,
+            )
+            .await)
+    }
+
+    /// Reads one note inside the notes folder, with the revision the editor save expects.
+    pub async fn read_note(
+        &self,
+        request: fm_transport_dto::ReadNoteRequestDto,
+    ) -> Result<fm_transport_dto::NoteDto, ApplicationError> {
+        let store = self
+            .notes
+            .store()
+            .await
+            .map_err(crate::notes::notes_error)?;
+        let location = store
+            .locate(&request.path)
+            .await
+            .map_err(crate::notes::notes_error)?;
+        let path = store
+            .path_of(&location)
+            .await
+            .unwrap_or_else(|| request.path.clone());
+        let loaded = self
+            .editor
+            .load(fm_transport_dto::LoadEditableFileRequestDto {
+                location: location.clone().into(),
+            })
+            .await?;
+        Ok(fm_transport_dto::NoteDto {
+            location: location.into(),
+            path,
+            content: loaded.content,
+            revision: loaded.revision,
+        })
+    }
+
+    /// Drafts a note from a terminal assistant session for the person to review (desktop host,
+    /// like the terminal). Nothing is written.
+    pub async fn draft_note(
+        &self,
+        request: fm_transport_dto::DraftNoteRequestDto,
+    ) -> Result<fm_transport_dto::NoteDraftDto, fm_transport_dto::ChatFailureDto> {
+        let conversation = request
+            .session_id
+            .as_deref()
+            .map(|id| self.terminal_sessions.transcript(id))
+            .unwrap_or_default();
+        self.notes
+            .draft(&self.llm_profiles, conversation, request)
+            .await
+    }
+
+    /// The notes folder as the terminal assistant may use it for one request.
+    async fn assistant_notes<'a>(
+        &'a self,
+        access: &'a SemanticAccessContext,
+        workspace_id: Option<uuid::Uuid>,
+    ) -> crate::notes::AssistantNotes<'a> {
+        let store = self.notes.store().await.ok();
+        let semantic = match &store {
+            Some(store) => self
+                .notes_index(access, workspace_id, store.root())
+                .await
+                .map(|index| Box::new(index) as Box<dyn crate::notes::SemanticNotes + 'a>),
+            None => None,
+        };
+        crate::notes::AssistantNotes { store, semantic }
+    }
+
+    /// The notes folder's semantic index for a workspace's consent; `None` without a workspace.
+    async fn notes_index<'a>(
+        &'a self,
+        access: &'a SemanticAccessContext,
+        workspace_id: Option<uuid::Uuid>,
+        folder: &Location,
+    ) -> Option<crate::notes::KnowledgeNotesIndex<'a>> {
+        let workspace_id = self.semantic_workspace_uuid(workspace_id?).await;
+        Some(crate::notes::KnowledgeNotesIndex {
+            knowledge: &self.knowledge,
+            library: self.semantic_library().await,
+            access,
+            workspace_id,
+            folder: folder.clone(),
+        })
     }
 
     /// Streams the next reply in a saved conversation through the chat role (task 0324): fragments
@@ -3812,6 +3956,8 @@ impl FileManagerService {
         // Remembered folder views are backend-owned (task 0270): a client replaying an old
         // settings document must not wipe them.
         settings.folder_views = current.folder_views.clone();
+        // The notes folder is set through the notes setup (task 0337), not the settings document.
+        settings.notes_root = current.notes_root.clone();
         for (plugin_id, value) in &current.plugin_settings {
             if self.plugin_manager.owns_panel_settings(plugin_id) {
                 settings

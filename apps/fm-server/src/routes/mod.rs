@@ -27,6 +27,7 @@ pub(crate) mod llm_profile;
 pub(crate) mod map;
 pub(crate) mod media;
 pub(crate) mod music_duplicates;
+pub(crate) mod notes;
 pub(crate) mod onedrive_authorization;
 pub(crate) mod operation;
 pub(crate) mod plugin;

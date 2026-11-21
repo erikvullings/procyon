@@ -26,6 +26,7 @@ export * from './location';
 export * from './metadata-tokens';
 export * from './music-duplicates';
 export * from './native-menu';
+export * from './notes';
 export * from './operation';
 export * from './plugin';
 export * from './rag';

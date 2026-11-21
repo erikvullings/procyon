@@ -344,6 +344,14 @@ pub mod reason {
     pub const SPLIT_MANIFEST_COUNT: &str = "splitManifestCount";
     /// Rejection reason `splitManifestName` (see the frontend `rejectionReason` catalogue).
     pub const SPLIT_MANIFEST_NAME: &str = "splitManifestName";
+    /// Notes have not been set up yet (task 0337).
+    pub const NOTES_NOT_CONFIGURED: &str = "notesNotConfigured";
+    /// The notes folder is missing or not a folder.
+    pub const NOTES_ROOT_UNAVAILABLE: &str = "notesRootUnavailable";
+    /// A note path is missing or outside the notes folder (`path`).
+    pub const NOTES_PATH_UNAVAILABLE: &str = "notesPathUnavailable";
+    /// A note is not a readable text file (`path`).
+    pub const NOTES_NOT_TEXT: &str = "notesNotText";
 }
 
 /// Keys of the budget a preview exceeded (`resource` parameter of `previewBudget`).

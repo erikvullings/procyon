@@ -1,3 +1,5 @@
+import type { NoteProposal } from '../../models';
+
 /**
  * Pure helpers for terminal assistance (task 0333, phase 1). The drawer gathers the transcript
  * and shows the answer; the functions here decide how much output is sent and which line of an
@@ -42,6 +44,8 @@ export interface TerminalAssistRequest {
   readonly sessionId?: string;
   readonly context?: TerminalAssistContext;
   readonly toolResult?: TerminalToolResult;
+  /** The active workspace, so `search_notes` may use the notes index (task 0337). */
+  readonly workspaceId?: string;
 }
 
 /** The assistant's answer: text, what it looked at, and a command it asks to run. */
@@ -49,6 +53,8 @@ export interface TerminalAssistReply {
   readonly text: string;
   readonly steps?: readonly string[];
   readonly runCommand?: string;
+  /** A note the assistant proposes; it is reviewed before anything is saved (task 0337). */
+  readonly noteProposal?: NoteProposal;
 }
 
 /** Something shown while an answer is written: a finished line of it, or a step taken. */

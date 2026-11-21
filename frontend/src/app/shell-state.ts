@@ -59,6 +59,8 @@ import {
 } from '../features/music-duplicates/music-duplicates-state';
 import type { NavigationController, PaneDirectoryView } from '../features/navigation/navigation';
 import type { SyncedBrowsingController } from '../features/navigation/synced-browsing';
+import type { NotesController } from '../features/notes/notes-controller';
+import { INITIAL_NOTES_STATE, type NotesState } from '../features/notes/notes-state';
 import { createOperationsState } from '../features/operations/operation-state';
 import type {
   OperationConfirmationDecision,
@@ -282,6 +284,8 @@ export function createShellState(client: FileManagerClient) {
     focusTerminal: undefined as unknown as (() => boolean) | undefined,
     /** Types text at the active terminal's prompt; `undefined` when no terminal is mounted (task 0333). */
     insertIntoTerminal: undefined as ((text: string, host: string) => boolean) | undefined,
+    /** Saves the active terminal tab's session as a note (task 0337); set by the drawer. */
+    saveTerminalNote: undefined as (() => boolean) | undefined,
     /** Registered by `DirectoryTree` (task 0139): moves DOM focus into the tree sidebar. */
     focusDirectoryTree: undefined as unknown as (() => boolean) | undefined,
     commandPaletteOpen: false,
@@ -461,6 +465,9 @@ export function createShellState(client: FileManagerClient) {
     saveSnapshotRequest: undefined as unknown as SaveSnapshotRequest | undefined,
     linkDoctorState: INITIAL_LINK_DOCTOR_STATE as LinkDoctorState,
     musicDuplicatesState: INITIAL_MUSIC_DUPLICATES_STATE as MusicDuplicatesState,
+    /** Notes setup and review (task 0337). */
+    notesState: INITIAL_NOTES_STATE as NotesState,
+    notesController: undefined as unknown as NotesController | undefined,
     emptyPlayerState: createInitialPlayerState(),
     operations: createOperationsState(),
     /** Transfers the previous session left interrupted, awaiting a decision (task 0300). */

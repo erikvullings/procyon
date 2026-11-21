@@ -2675,6 +2675,56 @@ export const it = {
     move: 'Sposta',
     create: 'Crea',
   },
+  notes: {
+    setupTitle: 'Configura le note',
+    setupIntro:
+      "Le note sono file Markdown in un'unica cartella. Obsidian o qualsiasi editor può aprire la stessa cartella.",
+    folderLabel: 'Cartella delle note',
+    folderHelp: 'Viene creata se non esiste. I file non vengono mai spostati.',
+    folderInvalid: 'Inserisci un percorso di cartella completo.',
+    indexLabel: 'Indicizza le note per la ricerca semantica',
+    indexHelp:
+      "L'assistente trova così le note per significato, non solo per parole. Nel passaggio successivo confermi cosa viene indicizzato.",
+    indexUnavailable:
+      'La ricerca semantica non è installata, quindi le note vengono cercate per testo.',
+    setupConfirm: 'Configura',
+    cancel: 'Annulla',
+    setupDone: 'Le note sono configurate.',
+    enrolTitle: 'Indicizza le note per la ricerca semantica',
+    enrolIntro:
+      'Conferma cosa viene indicizzato. Puoi saltare questo passaggio; le note verranno cercate per testo.',
+    drafting: 'Scrittura di una nota dalla sessione…',
+    reviewNewTitle: 'Salva come nota',
+    reviewUpdateTitle: 'Aggiorna nota',
+    titleLabel: 'Titolo',
+    tagsLabel: 'Tag',
+    tagsHelp: 'Separati da virgole',
+    fileNameLabel: 'Nome file',
+    fileNameInvalid: 'Usa un nome file senza cartelle.',
+    edit: 'Modifica',
+    preview: 'Anteprima',
+    changes: 'Modifiche',
+    redactions: '{count} valori sono stati sostituiti da [redacted]. Controllali prima di salvare.',
+    save: 'Salva',
+    saved: '{name} salvato.',
+    nothingToSave: "In questa sessione non c'è ancora niente da salvare.",
+    draftFailed: 'Non è stato possibile scrivere la nota.',
+    saveAsNote: 'Salva come nota',
+    saveAsNoteHelp: 'Trasforma questa sessione in una nota di procedura',
+    proposalShown: "L'assistente propone una nota. Controllala prima che venga salvata.",
+    actionSaveTerminal: 'Salva la sessione del terminale come nota',
+    actionSetUp: 'Configura le note…',
+    settingsTitle: 'Note',
+    settingsIntro:
+      "Procedure e altre note Markdown. L'assistente del terminale le cerca e puoi salvare una sessione come nota.",
+    settingsRoot: 'Cartella',
+    settingsNoRoot: 'Le note non sono ancora configurate.',
+    settingsMissing: 'La cartella manca.',
+    settingsChange: 'Cambia cartella…',
+    settingsIndex: 'Indicizza le note…',
+    settingsIndexHelp:
+      "Permette all'assistente di trovare le note per significato. Confermi tu cosa viene indicizzato.",
+  },
   terminal: {
     drawer: 'Pannello del terminale',
     selectDirectory: 'Seleziona una cartella per aprire un terminale.',
@@ -3055,6 +3105,11 @@ export const it = {
       'I collegamenti simbolici e gli altri elementi che non sono file non possono essere sostituiti dall’editor.',
     editorContentTooLarge: 'Il contenuto modificato supera il limite di {limitBytes}.',
     invalidRangeLength: 'La lunghezza richiesta deve essere compresa tra 1 byte e {maxBytes}.',
+    notesNotConfigured:
+      'Le note non sono ancora configurate. Scegli prima una cartella delle note.',
+    notesRootUnavailable: 'La cartella delle note manca o non è una cartella.',
+    notesPathUnavailable: '{path} non è disponibile nella cartella delle note.',
+    notesNotText: '{path} non è una nota di testo leggibile.',
     tooManyPreviews:
       'Possono essere aperte al massimo {max} anteprime alla volta. Chiudine prima una.',
     previewMalformed:

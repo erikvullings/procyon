@@ -372,6 +372,8 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
             TerminalShellIntegrationDto::Enabled => TerminalShellIntegration::Enabled,
             TerminalShellIntegrationDto::Disabled => TerminalShellIntegration::Disabled,
         },
+        // Backend-owned (task 0337): `update_settings` keeps the configured notes folder.
+        notes_root: None,
         terminal_assistant: settings.terminal_assistant,
     }
 }

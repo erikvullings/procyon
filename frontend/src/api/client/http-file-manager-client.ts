@@ -54,6 +54,7 @@ import type {
   DocxPreview,
   DocxPreviewResource,
   DocxPreviewSessionRequest,
+  DraftNoteRequest,
   DuplicatePage,
   EditableFile,
   EditableFileSave,
@@ -130,6 +131,10 @@ import type {
   MoveSemanticDataRequest,
   MusicDuplicatePage,
   NavigateRequest,
+  Note,
+  NoteDraft,
+  NotesSearchResult,
+  NotesSetup,
   OneDriveAuthorizationAttempt,
   OpenDocxPreviewRequest,
   OpenPptxPreviewRequest,
@@ -182,6 +187,7 @@ import type {
   ScanDiskUsageRequest,
   SearchInFileRequest,
   SearchInFileResult,
+  SearchNotesRequest,
   SearchStructuredRowsRequest,
   SemanticComponentCapabilities,
   SemanticComponentStatus,
@@ -389,6 +395,10 @@ import {
   getMusicDuplicateScan as requestMusicDuplicateScanGet,
   startMusicDuplicateScan as requestMusicDuplicateScanStart,
   navigatePane as requestNavigation,
+  readNote as requestNoteRead,
+  setNotesRoot as requestNotesRootSet,
+  searchNotes as requestNotesSearch,
+  getNotesSetup as requestNotesSetup,
   getOneDriveAuthorizationAttempt as requestOneDriveAuthorizationAttempt,
   beginOneDriveAuthorization as requestOneDriveAuthorizationBegin,
   cancelOneDriveAuthorization as requestOneDriveAuthorizationCancel,
@@ -1289,6 +1299,45 @@ export class HttpFileManagerClient implements FileManagerClient {
     return settingsFromDto(
       (await requestSettings(signal === undefined ? undefined : { signal })).data,
     );
+  }
+
+  async getNotesSetup(signal?: AbortSignal): Promise<NotesSetup> {
+    const response = await requestNotesSetup(signal === undefined ? undefined : { signal });
+    if (response.status !== 200) throw unexpectedResponseError('getNotesSetup', response.status);
+    return response.data;
+  }
+
+  async setNotesRoot(location: Location, signal?: AbortSignal): Promise<NotesSetup> {
+    const response = await requestNotesRootSet(
+      { location },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) throw unexpectedResponseError('setNotesRoot', response.status);
+    return response.data;
+  }
+
+  async searchNotes(request: SearchNotesRequest, signal?: AbortSignal): Promise<NotesSearchResult> {
+    const response = await requestNotesSearch(
+      {
+        query: request.query,
+        ...(request.workspaceId === undefined ? {} : { workspaceId: request.workspaceId }),
+        ...(request.limit === undefined ? {} : { limit: request.limit }),
+      },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) throw unexpectedResponseError('searchNotes', response.status);
+    return response.data;
+  }
+
+  async readNote(path: string, signal?: AbortSignal): Promise<Note> {
+    const response = await requestNoteRead({ path }, signal === undefined ? undefined : { signal });
+    if (response.status !== 200) throw unexpectedResponseError('readNote', response.status);
+    return response.data;
+  }
+
+  /** Drafting follows the terminal, which only exists in the desktop host. */
+  draftNote(_request: DraftNoteRequest, _signal?: AbortSignal): Promise<NoteDraft> {
+    return Promise.reject(desktopHostRequiredError());
   }
 
   async listFileTemplates(signal?: AbortSignal): Promise<FileTemplateEntry[]> {

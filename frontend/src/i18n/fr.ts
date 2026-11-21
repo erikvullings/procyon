@@ -2696,6 +2696,57 @@ export const fr = {
     move: 'Déplacer',
     create: 'Créer',
   },
+  notes: {
+    setupTitle: 'Configurer les notes',
+    setupIntro:
+      'Les notes sont des fichiers Markdown dans un seul dossier. Obsidian ou tout éditeur peut ouvrir ce même dossier.',
+    folderLabel: 'Dossier de notes',
+    folderHelp: "Créé s'il n'existe pas. Les fichiers ne sont jamais déplacés.",
+    folderInvalid: 'Saisissez un chemin de dossier complet.',
+    indexLabel: 'Indexer les notes pour la recherche sémantique',
+    indexHelp:
+      "L'assistant trouve alors les notes par leur sens, pas seulement par les mots. Vous confirmez ce qui est indexé à l'étape suivante.",
+    indexUnavailable:
+      "La recherche sémantique n'est pas installée ; les notes sont donc recherchées par texte.",
+    setupConfirm: 'Configurer',
+    cancel: 'Annuler',
+    setupDone: 'Les notes sont configurées.',
+    enrolTitle: 'Indexer les notes pour la recherche sémantique',
+    enrolIntro:
+      'Confirmez ce qui est indexé. Vous pouvez passer cette étape ; les notes sont alors recherchées par texte.',
+    drafting: "Rédaction d'une note à partir de la session…",
+    reviewNewTitle: 'Enregistrer comme note',
+    reviewUpdateTitle: 'Mettre à jour la note',
+    titleLabel: 'Titre',
+    tagsLabel: 'Étiquettes',
+    tagsHelp: 'Séparées par des virgules',
+    fileNameLabel: 'Nom de fichier',
+    fileNameInvalid: 'Utilisez un nom de fichier sans dossier.',
+    edit: 'Modifier',
+    preview: 'Aperçu',
+    changes: 'Modifications',
+    redactions:
+      "{count} valeurs ont été remplacées par [redacted]. Vérifiez-les avant d'enregistrer.",
+    save: 'Enregistrer',
+    saved: '{name} enregistré.',
+    nothingToSave: 'Cette session ne contient encore rien à enregistrer.',
+    draftFailed: "La note n'a pas pu être rédigée.",
+    saveAsNote: 'Enregistrer comme note',
+    saveAsNoteHelp: 'Transformer cette session en note de procédure',
+    proposalShown: "L'assistant propose une note. Vérifiez-la avant qu'elle soit enregistrée.",
+    actionSaveTerminal: 'Enregistrer la session du terminal comme note',
+    actionSetUp: 'Configurer les notes…',
+    settingsTitle: 'Mes notes',
+    settingsIntro:
+      "Procédures et autres notes Markdown. L'assistant du terminal les recherche, et vous pouvez enregistrer une session comme note.",
+    settingsRoot: 'Dossier',
+    settingsNoRoot: 'Les notes ne sont pas encore configurées.',
+    settingsMissing: 'Le dossier est introuvable.',
+    settingsChange: 'Changer de dossier…',
+    settingsIndex: 'Indexer les notes…',
+    settingsIndexHelp:
+      "Permet à l'assistant de trouver les notes par leur sens. Vous confirmez ce qui est indexé.",
+  },
   terminal: {
     drawer: 'Tiroir de terminal',
     selectDirectory: 'Sélectionnez un répertoire pour ouvrir un terminal.',
@@ -3079,6 +3130,11 @@ export const fr = {
       'Les liens symboliques et autres éléments qui ne sont pas des fichiers ne peuvent pas être remplacés par l’éditeur.',
     editorContentTooLarge: 'Le contenu modifié dépasse la limite de {limitBytes}.',
     invalidRangeLength: 'La longueur demandée doit être comprise entre 1 octet et {maxBytes}.',
+    notesNotConfigured:
+      "Les notes ne sont pas encore configurées. Choisissez d'abord un dossier de notes.",
+    notesRootUnavailable: "Le dossier de notes est introuvable ou n'est pas un dossier.",
+    notesPathUnavailable: "{path} n'est pas disponible dans le dossier de notes.",
+    notesNotText: "{path} n'est pas une note texte lisible.",
     tooManyPreviews:
       'Au plus {max} aperçus peuvent être ouverts en même temps. Fermez-en un d’abord.',
     previewMalformed:

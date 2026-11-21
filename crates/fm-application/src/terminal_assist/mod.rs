@@ -4,6 +4,7 @@
 //! proposed, and runs after the person approves it. Nothing is saved to disk.
 
 mod context;
+mod notes;
 mod protocol;
 mod redact;
 mod remote;
@@ -11,7 +12,10 @@ mod session;
 mod stream;
 mod tools;
 
+pub(crate) use notes::{NoteToolCall, NoteToolOutcome, NotesAccess};
+pub(crate) use redact::redact_secrets;
 pub(crate) use session::Sessions;
+pub(crate) use tools::{is_credential_folder, is_secret_name};
 
 use fm_transport_dto::{
     ChatFailureDto, TerminalAssistEventDto, TerminalAssistKindDto, TerminalAssistReplyDto,
@@ -26,7 +30,6 @@ use crate::llm_profiles::{LlmChatGeneration, LlmProfileError, LlmRole};
 
 use self::context::{AttachedFile, render_activity, render_context, state_sections};
 use self::protocol::{ToolCall, parse_tool_call};
-use self::redact::redact_secrets;
 use self::stream::LineStreamer;
 use self::tools::{ToolHost, ToolOutput};
 
@@ -61,7 +64,15 @@ const ASK_PROMPT: &str = "You are the assistant in the person's embedded termina
      {\"tool\":\"run_command\",\"command\":\"cargo test\"} asks the person to run a command in \
      their terminal. They may decline, and the result returns with its exit status and output. \
      Paths are relative to the working folder and cannot leave it. Look things up instead of \
-     guessing.";
+     guessing.\n\
+     The person keeps notes, such as runbooks for tasks they do rarely. Before answering a \
+     how-to question, search them: \
+     {\"tool\":\"search_notes\",\"query\":\"replace nginx certificate\"} finds notes; \
+     {\"tool\":\"read_note\",\"path\":\"ops/nginx.md\"} reads one; \
+     {\"tool\":\"propose_note\",\"title\":\"...\",\"content\":\"...\"} proposes a new \
+     Markdown note and {\"tool\":\"propose_note_update\",\"path\":\"ops/nginx.md\",\
+     \"content\":\"...\"} proposes new text for a note. The person reviews a proposal before \
+     anything is saved; propose only when they ask for a note or a note is clearly outdated.";
 
 const COMMAND_PROMPT: &str = "You turn a request into one command for the person's shell. Reply \
      with exactly one line containing only the command: no explanation, no markdown, no code \
@@ -79,9 +90,10 @@ pub(crate) async fn reply(
     generator: &impl ChatGenerator,
     providers: &ProviderRegistry,
     sessions: &Sessions,
+    notes: Option<&dyn NotesAccess>,
     request: TerminalAssistRequestDto,
 ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
-    reply_streaming(generator, providers, sessions, request, &mut |_| {}).await
+    reply_streaming(generator, providers, sessions, notes, request, &mut |_| {}).await
 }
 
 /// Like [`reply`], and for an `ask` also reports each finished line of the answer, and each step,
@@ -90,11 +102,12 @@ pub(crate) async fn reply_streaming(
     generator: &impl ChatGenerator,
     providers: &ProviderRegistry,
     sessions: &Sessions,
+    notes: Option<&dyn NotesAccess>,
     request: TerminalAssistRequestDto,
     on_event: &mut (dyn FnMut(TerminalAssistEventDto) + Send),
 ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
     if request.kind == TerminalAssistKindDto::Ask {
-        return ask(generator, providers, sessions, request, on_event).await;
+        return ask(generator, providers, sessions, notes, request, on_event).await;
     }
     let (system_prompt, user_prompt) = prompts(&request)?;
     let raw = generate(generator, system_prompt, user_prompt, &mut |_: &str| {}).await?;
@@ -110,6 +123,7 @@ pub(crate) async fn reply_streaming(
         text,
         steps: Vec::new(),
         run_command: None,
+        note_proposal: None,
     })
 }
 
@@ -144,6 +158,7 @@ async fn ask(
     generator: &impl ChatGenerator,
     providers: &ProviderRegistry,
     sessions: &Sessions,
+    notes: Option<&dyn NotesAccess>,
     request: TerminalAssistRequestDto,
     on_event: &mut (dyn FnMut(TerminalAssistEventDto) + Send),
 ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
@@ -246,11 +261,42 @@ async fn ask(
                     text: String::new(),
                     steps,
                     run_command: Some(command.trim().to_owned()),
+                    note_proposal: None,
                 });
             }
             Some(call) => {
                 if sessions.next_step(&id) > MAX_STEPS {
                     return Ok(stopped(step_limit_text(), steps));
+                }
+                if let Some(note_call) = note_tool_call(&call) {
+                    let outcome = match notes {
+                        Some(notes) => notes.run(note_call).await,
+                        None => NoteToolOutcome::Output {
+                            step: "Looked in the notes".to_owned(),
+                            text: "Error: notes are not available here.".to_owned(),
+                        },
+                    };
+                    match outcome {
+                        NoteToolOutcome::Proposal(proposal) => {
+                            sessions.push_tool(
+                                &id,
+                                "The note was shown to the person for review. Nothing is saved \
+                                 unless they save it.",
+                            );
+                            return Ok(TerminalAssistReplyDto {
+                                text: String::new(),
+                                steps,
+                                run_command: None,
+                                note_proposal: Some(proposal),
+                            });
+                        }
+                        NoteToolOutcome::Output { step, text } => {
+                            on_event(TerminalAssistEventDto::Step { text: step.clone() });
+                            steps.push(step);
+                            sessions.push_tool(&id, &text);
+                        }
+                    }
+                    continue;
                 }
                 let output = match &host {
                     Some(host) => host.run(call).await,
@@ -269,11 +315,34 @@ async fn ask(
     }
 }
 
+/// The notes tool behind a parsed tool call, when it is one.
+fn note_tool_call(call: &ToolCall) -> Option<NoteToolCall> {
+    match call {
+        ToolCall::SearchNotes { query, limit } => Some(NoteToolCall::Search {
+            query: query.clone(),
+            limit: *limit,
+        }),
+        ToolCall::ReadNote { path } => Some(NoteToolCall::Read { path: path.clone() }),
+        ToolCall::ProposeNote { title, content } => Some(NoteToolCall::Propose {
+            path: None,
+            title: title.clone(),
+            content: content.clone(),
+        }),
+        ToolCall::ProposeNoteUpdate { path, content } => Some(NoteToolCall::Propose {
+            path: Some(path.clone()),
+            title: None,
+            content: content.clone(),
+        }),
+        _ => None,
+    }
+}
+
 fn stopped(text: String, steps: Vec<String>) -> TerminalAssistReplyDto {
     TerminalAssistReplyDto {
         text,
         steps,
         run_command: None,
+        note_proposal: None,
     }
 }
 
@@ -462,7 +531,7 @@ mod tests {
     ) -> impl std::future::Future<Output = Result<TerminalAssistReplyDto, ChatFailureDto>> + '_
     {
         let sessions = Sessions::default();
-        async move { super::reply(fake, &ProviderRegistry::new(), &sessions, request).await }
+        async move { super::reply(fake, &ProviderRegistry::new(), &sessions, None, request).await }
     }
 
     fn command(request: &str) -> TerminalAssistRequestDto {
@@ -475,6 +544,7 @@ mod tests {
             session_id: None,
             context: TerminalContextDto::default(),
             tool_result: None,
+            workspace_id: None,
         }
     }
 
@@ -488,6 +558,7 @@ mod tests {
             session_id: None,
             context: TerminalContextDto::default(),
             tool_result: None,
+            workspace_id: None,
         }
     }
 
@@ -612,6 +683,7 @@ mod tests {
             session_id: Some(session.to_owned()),
             context: TerminalContextDto::default(),
             tool_result: None,
+            workspace_id: None,
         }
     }
 
@@ -620,7 +692,7 @@ mod tests {
         sessions: &Sessions,
         request: TerminalAssistRequestDto,
     ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
-        super::reply(fake, &ProviderRegistry::new(), sessions, request).await
+        super::reply(fake, &ProviderRegistry::new(), sessions, None, request).await
     }
 
     #[tokio::test]
@@ -896,6 +968,7 @@ mod tests {
             &fake,
             &ProviderRegistry::new(),
             &sessions,
+            None,
             ask_request("t1", "what is here?", dir.path()),
             &mut |event| events.push(event),
         )
@@ -929,6 +1002,7 @@ mod tests {
             &fake,
             &ProviderRegistry::new(),
             &sessions,
+            None,
             ask_request("t1", "show", dir.path()),
             &mut |event| events.push(event),
         )
@@ -944,5 +1018,183 @@ mod tests {
             })
             .collect();
         assert_eq!(texts, ["Config:", "{\"name\": \"x\"}", "that is all"]);
+    }
+
+    // --- notes tools (task 0337) ---
+
+    struct FakeNotes {
+        calls: StdMutex<Vec<NoteToolCall>>,
+    }
+
+    #[async_trait]
+    impl NotesAccess for FakeNotes {
+        async fn run(&self, call: NoteToolCall) -> NoteToolOutcome {
+            self.calls.lock().unwrap().push(call.clone());
+            match call {
+                NoteToolCall::Search { query, .. } => NoteToolOutcome::Output {
+                    step: format!("Searched notes for {query}"),
+                    text: "1. ops/nginx.md: Replace nginx certificate".into(),
+                },
+                NoteToolCall::Read { path } => NoteToolOutcome::Output {
+                    step: format!("Read note {path}"),
+                    text: "NOTE-BODY: sudo cp fullchain.pem /etc/nginx/".into(),
+                },
+                NoteToolCall::Propose { path, content, .. } => {
+                    NoteToolOutcome::Proposal(fm_transport_dto::NoteProposalDto {
+                        path,
+                        draft: fm_transport_dto::NoteDraftDto {
+                            title: "T".into(),
+                            file_name: "t.md".into(),
+                            tags: Vec::new(),
+                            content,
+                            redactions: 0,
+                        },
+                    })
+                }
+            }
+        }
+    }
+
+    fn fake_notes() -> FakeNotes {
+        FakeNotes {
+            calls: StdMutex::new(Vec::new()),
+        }
+    }
+
+    async fn ask_with_notes(
+        fake: &FakeGenerator,
+        sessions: &Sessions,
+        notes: Option<&dyn NotesAccess>,
+        request: TerminalAssistRequestDto,
+    ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
+        super::reply(fake, &ProviderRegistry::new(), sessions, notes, request).await
+    }
+
+    #[tokio::test]
+    async fn the_model_can_search_and_read_notes_before_answering() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&[
+            r#"TOOL {"tool":"search_notes","query":"nginx certificate"}"#,
+            r#"TOOL {"tool":"read_note","path":"ops/nginx.md"}"#,
+            "Copy the chain as your note says.",
+        ]);
+        let notes = fake_notes();
+        let sessions = Sessions::default();
+
+        let reply = ask_with_notes(
+            &fake,
+            &sessions,
+            Some(&notes),
+            ask_request("t1", "how do I replace the nginx cert?", dir.path()),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(reply.text, "Copy the chain as your note says.");
+        assert_eq!(
+            reply.steps,
+            [
+                "Searched notes for nginx certificate",
+                "Read note ops/nginx.md"
+            ]
+        );
+        assert_eq!(
+            *notes.calls.lock().unwrap(),
+            [
+                NoteToolCall::Search {
+                    query: "nginx certificate".into(),
+                    limit: None
+                },
+                NoteToolCall::Read {
+                    path: "ops/nginx.md".into()
+                }
+            ]
+        );
+        let seen = fake.seen.lock().unwrap();
+        assert!(seen[0].1.system_prompt.contains("search_notes"));
+        assert!(seen[2].1.user_prompt.contains("NOTE-BODY"));
+    }
+
+    #[tokio::test]
+    async fn a_proposed_note_ends_the_turn_for_review() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&[
+            r##"TOOL {"tool":"propose_note_update","path":"ops/nginx.md","content":"# New"}"##,
+            "never asked",
+        ]);
+        let notes = fake_notes();
+        let sessions = Sessions::default();
+
+        let reply = ask_with_notes(
+            &fake,
+            &sessions,
+            Some(&notes),
+            ask_request("t1", "update my nginx note", dir.path()),
+        )
+        .await
+        .unwrap();
+
+        let proposal = reply.note_proposal.expect("a proposal");
+        assert_eq!(proposal.path.as_deref(), Some("ops/nginx.md"));
+        assert_eq!(proposal.draft.content, "# New");
+        assert_eq!(reply.text, "");
+        assert_eq!(reply.run_command, None);
+        assert_eq!(fake.seen.lock().unwrap().len(), 1);
+        assert!(
+            sessions
+                .render("t1")
+                .contains("shown to the person for review")
+        );
+    }
+
+    #[tokio::test]
+    async fn without_notes_the_model_is_told_and_continues() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&[
+            r#"TOOL {"tool":"search_notes","query":"csr"}"#,
+            "I could not look at your notes.",
+        ]);
+        let sessions = Sessions::default();
+
+        let reply = ask_with_notes(
+            &fake,
+            &sessions,
+            None,
+            ask_request("t1", "csr?", dir.path()),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(reply.text, "I could not look at your notes.");
+        assert!(
+            fake.seen.lock().unwrap()[1]
+                .1
+                .user_prompt
+                .contains("Error: notes are not available here.")
+        );
+    }
+
+    #[test]
+    fn notes_tool_calls_need_their_text() {
+        use super::protocol::parse_tool_call;
+        assert_eq!(
+            parse_tool_call(r#"TOOL {"tool":"search_notes","query":"  "}"#),
+            None
+        );
+        assert_eq!(
+            parse_tool_call(r#"TOOL {"tool":"propose_note","content":""}"#),
+            None
+        );
+        assert_eq!(
+            parse_tool_call(r#"TOOL {"tool":"propose_note_update","path":" ","content":"x"}"#),
+            None
+        );
+        assert_eq!(
+            parse_tool_call(r#"TOOL {"tool":"search_notes","query":"tls","limit":3}"#),
+            Some(ToolCall::SearchNotes {
+                query: "tls".into(),
+                limit: Some(3)
+            })
+        );
     }
 }

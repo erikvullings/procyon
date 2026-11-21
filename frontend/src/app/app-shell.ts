@@ -98,6 +98,8 @@ import {
   createLocalStorageSyncStore,
   createSyncedBrowsing,
 } from '../features/navigation/synced-browsing';
+import { createNotesController } from '../features/notes/notes-controller';
+import { NotesDialogs } from '../features/notes/notes-dialogs';
 import {
   requestSkippingSpaceCheck,
   spaceShortfallOf,
@@ -3220,6 +3222,23 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
             }),
           dispose: (controller) => controller.dispose(),
         },
+        notes: {
+          create: () =>
+            createNotesController({
+              getClient: () => attrs.client,
+              getOps: () => shellState.opsController,
+              getState: () => shellState.notesState,
+              setState: (state) => {
+                shellState.notesState = state;
+              },
+              getWorkspaceId: () => shellState.workspace?.id,
+              toast: (message) => {
+                toast({ html: message });
+              },
+              redraw: () => m.redraw(),
+            }),
+          dispose: () => undefined,
+        },
         player: {
           create: () =>
             createPlayerController({
@@ -3358,6 +3377,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       shellState.paneContentBuilder = shellControllers.instances.paneContent;
       shellState.playerController = shellControllers.instances.player;
       shellState.musicDuplicatesController = shellControllers.instances.musicDuplicates;
+      shellState.notesController = shellControllers.instances.notes;
       shellState.linkDoctorController = shellControllers.instances.linkDoctor;
       shellState.snapshotController = shellControllers.instances.snapshots;
       shellState.navigation = shellControllers.instances.navigation;
@@ -4393,6 +4413,24 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                               platform: shellState.platform,
                               runtime: shellState.keybindingRuntime,
                               plugins: shellState.plugins,
+                              onOpenNotesSetup: () => {
+                                settingsWiring.closeSettingsDialog();
+                                void shellState.notesController?.openSetup();
+                              },
+                              ...(shellState.workspace === undefined
+                                ? {}
+                                : {
+                                    onIndexNotes: (root: Location) => {
+                                      const workspaceId = shellState.workspace?.id;
+                                      if (workspaceId === undefined) return;
+                                      settingsWiring.closeSettingsDialog();
+                                      shellState.semanticEnrolmentRequest = {
+                                        workspaceId,
+                                        location: root,
+                                      };
+                                      m.redraw();
+                                    },
+                                  }),
                               onOpenLocation: (location: Location) => {
                                 const paneId = activeDirectory()?.paneId;
                                 settingsWiring.closeSettingsDialog();
@@ -4769,6 +4807,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 onCancel: () => void shellState.linkDoctorController?.cancel(),
                 onClose: () => shellState.linkDoctorController?.close(),
               }),
+            shellState.notesController !== undefined &&
+              m(NotesDialogs, {
+                state: shellState.notesState,
+                controller: shellState.notesController,
+                client: attrs.client,
+                workspaceId: shellState.workspace?.id,
+              }),
             shellState.musicDuplicatesState.scanId !== undefined &&
               shellState.musicDuplicatesController !== undefined &&
               m(MusicDuplicatesView, {
@@ -4798,6 +4843,14 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 registerInsert: (insert) => {
                   shellState.insertIntoTerminal = insert;
                 },
+                workspaceId: shellState.workspace?.id,
+                registerSaveAsNote: (save) => {
+                  shellState.saveTerminalNote = save;
+                },
+                onSaveAsNote: (request) =>
+                  void shellState.notesController?.saveTerminalSession(request),
+                onNoteProposal: (proposal) =>
+                  void shellState.notesController?.showProposal(proposal),
                 onShellIntegrationChoice: async (choice) => {
                   await updateLocationSettings(shellState.client, (settings) => ({
                     ...settings,
