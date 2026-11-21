@@ -235,6 +235,15 @@ impl SemanticIndexingService {
             .unwrap_or_default()
     }
 
+    /// Forgets the recorded failures of a root so the user can accept them; the next
+    /// reconciliation records any file that still fails.
+    pub(crate) fn dismiss_failed_sources(&self, root_id: RootId) {
+        self.failed_sources
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&root_id);
+    }
+
     /// Files the last reconciliation skipped, per reason, capped per reason.
     pub(crate) fn skipped_files(&self, root_id: RootId) -> Vec<(EligibilityReason, Vec<Location>)> {
         self.skipped_files

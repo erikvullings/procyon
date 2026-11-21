@@ -558,6 +558,9 @@ export interface SemanticClient {
    */
   rescanSemanticRoot?(rootId: string, signal?: AbortSignal): Promise<void>;
 
+  /** Accepts the listed indexing failures of a folder so they stop showing. Desktop only. */
+  dismissSemanticFailedSources?(rootId: string, signal?: AbortSignal): Promise<void>;
+
   updateLlmProfile(
     profileId: string,
     request: SaveLlmProfileRequest,

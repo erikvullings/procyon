@@ -48,7 +48,8 @@ type BusyAction =
   | 'override'
   | 'workspaces'
   | 'media'
-  | 'rescan';
+  | 'rescan'
+  | 'dismissFailed';
 
 interface PdfImageConsentOption {
   readonly enabled: boolean;
@@ -514,6 +515,17 @@ function workspaceSelector(
   ]);
 }
 
+/** Turns a worker failure (often a Rust debug string) into a sentence a user can act on. */
+function friendlyFailureReason(reason: string): string {
+  if (/visual limit|attachment|image \d+ exceeds/i.test(reason)) {
+    return t('semanticLibrary', 'failedReasonTooManyImages');
+  }
+  if (/budget|too large|exceeds/i.test(reason)) {
+    return t('semanticLibrary', 'failedReasonTooLarge');
+  }
+  return t('semanticLibrary', 'failedReasonGeneric');
+}
+
 function rootStatusView(
   root: SemanticRootStatus,
   confirmedCompletedSources: number | undefined,
@@ -533,6 +545,8 @@ function rootStatusView(
     action: SemanticEligibilityOverride | undefined,
   ) => void,
   onRescan: (() => void) | undefined,
+  onDismissFailed: (() => void) | undefined,
+  exclusionPlan: Vnode | undefined,
 ): Vnode {
   const removed = rootExclusion(root) !== undefined;
   const failedSources = root.failedSources ?? [];
@@ -564,13 +578,6 @@ function rootStatusView(
             t('semanticLibrary', 'failedSourcesCount', { count: failedSources.length }),
           )
         : undefined,
-      !removed && onRescan !== undefined
-        ? m(
-            'button.fm-semantic-library-action',
-            { type: 'button', disabled: busy !== undefined, onclick: onRescan },
-            t('semanticLibrary', 'rescanFolder'),
-          )
-        : undefined,
       // Visible on the folder row, so files needing OCR or unreachable folders show without opening it.
       !removed && root.ocrRequiredFiles.length > 0
         ? m(
@@ -578,30 +585,60 @@ function rootStatusView(
             t('semanticLibrary', 'ocrNeededCount', { count: root.ocrRequiredFiles.length }),
           )
         : undefined,
-      !removed && canRemove && workspaceId !== undefined
-        ? m(
-            'button.fm-semantic-library-action',
-            {
-              type: 'button',
-              disabled: busy !== undefined,
-              onclick: () => onRemove(root.location),
-            },
-            t('semanticLibrary', 'removeFolder'),
-          )
-        : undefined,
+      // Fixed slot at the row's end, so the buttons never move when badges appear or vanish.
+      removed
+        ? undefined
+        : m('.fm-semantic-library-root-actions', [
+            onRescan === undefined
+              ? undefined
+              : m(
+                  'button.fm-semantic-library-action',
+                  { type: 'button', disabled: busy !== undefined, onclick: onRescan },
+                  t('semanticLibrary', 'rescanFolder'),
+                ),
+            canRemove && workspaceId !== undefined
+              ? m(
+                  'button.fm-semantic-library-action',
+                  {
+                    type: 'button',
+                    disabled: busy !== undefined,
+                    onclick: () => onRemove(root.location),
+                  },
+                  t('semanticLibrary', 'removeFolder'),
+                )
+              : undefined,
+          ]),
     ]),
+    // Next to the folder it concerns, not at the bottom of a long list.
+    exclusionPlan,
     failedSources.length > 0
       ? m('details.fm-semantic-library-failed-sources', { open: true }, [
           m('summary', t('semanticLibrary', 'failedSourcesHeading')),
           m(
             'ul',
             failedSources.map((source) =>
-              m('li', { key: source.location.uri }, [
+              m('li', { key: source.location.uri, title: source.reason }, [
                 m('span.fm-semantic-library-location', decodedLocation(source.location.uri)),
-                ` — ${source.reason}`,
+                ` — ${friendlyFailureReason(source.reason)}`,
               ]),
             ),
           ),
+          m('.fm-semantic-library-failed-actions', [
+            onRescan === undefined
+              ? undefined
+              : m(
+                  'button.fm-semantic-library-action',
+                  { type: 'button', disabled: busy !== undefined, onclick: onRescan },
+                  t('semanticLibrary', 'retryFailed'),
+                ),
+            onDismissFailed === undefined
+              ? undefined
+              : m(
+                  'button.fm-semantic-library-action',
+                  { type: 'button', disabled: busy !== undefined, onclick: onDismissFailed },
+                  t('semanticLibrary', 'dismissFailed'),
+                ),
+          ]),
         ])
       : undefined,
     root.availability.state === 'temporarilyUnavailable'
@@ -1164,6 +1201,23 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
                 void action(attrs, 'rescan', async () => {
                   await attrs.client.rescanSemanticRoot?.(candidate.id);
                 }),
+          attrs.client.dismissSemanticFailedSources === undefined
+            ? undefined
+            : () =>
+                void action(attrs, 'dismissFailed', async () => {
+                  await attrs.client.dismissSemanticFailedSources?.(candidate.id);
+                  status = await attrs.client.getSemanticLibraryStatus();
+                }),
+          exclusionPlan !== undefined && exclusionPlan.location.uri === candidate.location.uri
+            ? exclusionPlanView(
+                exclusionPlan,
+                busy,
+                () => confirmExclusion(attrs),
+                () => {
+                  exclusionPlan = undefined;
+                },
+              )
+            : undefined,
         );
       const indexedDocuments = includedRoots.reduce(
         (sum, root) =>
@@ -1367,16 +1421,6 @@ export const SemanticLibraryManagement: FactoryComponent<SemanticLibraryManageme
                         onChange: (enabled) => previewInclusion(attrs, enabled),
                       }
                     : undefined,
-                ),
-            exclusionPlan === undefined
-              ? undefined
-              : exclusionPlanView(
-                  exclusionPlan,
-                  busy,
-                  () => confirmExclusion(attrs),
-                  () => {
-                    exclusionPlan = undefined;
-                  },
                 ),
             error === undefined
               ? undefined
