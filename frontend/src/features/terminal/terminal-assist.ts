@@ -133,9 +133,9 @@ export interface Mentions {
 /** Finds the `@path` mentions in a question. An `@` inside a word (an email) is not a mention. */
 export function parseMentions(text: string): Mentions {
   const files: string[] = [];
-  for (const match of text.matchAll(/(?:^|\s)@(?:"([^"]+)"|(\S+))/g)) {
-    const quoted = match[1];
-    const name = quoted ?? (match[2] ?? '').replace(/[,;:!?)\]]+$/, '').replace(/\.+$/, '');
+  for (const match of text.matchAll(/(?:^|\s)@(?:"([^"]+)"|'([^']+)'|(\S+))/g)) {
+    const quoted = match[1] ?? match[2];
+    const name = quoted ?? (match[3] ?? '').replace(/[,;:!?)\]]+$/, '').replace(/\.+$/, '');
     if (name !== '' && !files.includes(name)) files.push(name);
   }
   return { files };
@@ -147,7 +147,7 @@ export interface MentionCompletion {
   readonly insert: string;
 }
 
-/** A mention as it is typed: names with spaces are quoted, `@"My File.md"`. */
+/** A mention as it is typed: names with spaces are quoted, `@"My File.md"`; `@'My File.md'` is read too. */
 export function mentionText(name: string): string {
   return /\s/.test(name) ? `@"${name}"` : `@${name}`;
 }
@@ -162,10 +162,12 @@ export function completeMention(
   typed: string,
   names: readonly string[],
 ): MentionCompletion | undefined {
-  const match = /(?:^|\s)@(?:"([^"]*)|(\S*))$/.exec(typed);
+  const match = /(?:^|\s)@(?:"([^"]*)|'([^']*)|(\S*))$/.exec(typed);
   if (match === null) return undefined;
-  const quoted = match[1] !== undefined;
-  const partial = match[1] ?? match[2] ?? '';
+  const quoted = match[1] !== undefined || match[2] !== undefined;
+  // The quote the person opened is the one closed; `"` unless a name contains it.
+  const mark = match[2] !== undefined ? "'" : '"';
+  const partial = match[1] ?? match[2] ?? match[3] ?? '';
   const typedLength = partial.length + (quoted ? 1 : 0);
   const lower = partial.toLowerCase();
   const matches = names.filter((name) => name.toLowerCase().startsWith(lower));
@@ -176,8 +178,8 @@ export function completeMention(
     const needsQuote = quoted || /\s/.test(first);
     if (!needsQuote)
       return { erase: 0, insert: `${first.slice(partial.length)}${folder ? '' : ' '}` };
-    const rest = quoted ? first.slice(partial.length) : `"${first}`;
-    return { erase: quoted ? 0 : typedLength, insert: `${rest}${folder ? '' : '" '}` };
+    const rest = quoted ? first.slice(partial.length) : `${mark}${first}`;
+    return { erase: quoted ? 0 : typedLength, insert: `${rest}${folder ? '' : `${mark} `}` };
   }
   let common = first;
   for (const name of matches) {

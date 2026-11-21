@@ -78,6 +78,12 @@ describe('parseMentions', () => {
     });
   });
 
+  it('reads single quotes the way a shell writes them', () => {
+    expect(parseMentions("Summarize @'ATP 7-100.1  Tactics 2024.pdf' now")).toEqual({
+      files: ['ATP 7-100.1  Tactics 2024.pdf'],
+    });
+  });
+
   it('finds the files named with @', () => {
     expect(parseMentions('why does @src/lib.rs fail? also @a.txt.')).toEqual({
       files: ['src/lib.rs', 'a.txt'],
@@ -250,6 +256,10 @@ describe('completeMention', () => {
     expect(completeMention('# open @My F', names)).toBeUndefined();
     expect(completeMention('# open @"My F', names)).toEqual({ erase: 0, insert: 'ile.md" ' });
     expect(completeMention('# open @"My', names)).toEqual({ erase: 0, insert: ' ' });
+  });
+
+  it('closes the single quote the person opened', () => {
+    expect(completeMention("# open @'My F", names)).toEqual({ erase: 0, insert: "ile.md' " });
   });
 
   it('opens the quote when the only match has a space', () => {

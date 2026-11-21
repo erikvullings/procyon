@@ -172,5 +172,6 @@ Phase 4 — `run_command` with approval, exit code and output returned to the lo
   MobaXterm style. It installs the same OSC 133 marks (so blocks and idle detection work over SSH
   too); the echoed line is drawn invisible (SGR 8) and reset by the line itself. Other remote
   shells (fish, csh, ...) are untouched and not synced.
+- Fish remote hook added as a second guarded eval (line < 1000 bytes: canonical-mode cap).
 - `Documents` caches converted text per question (4 documents), so `offset` continuations do not
   convert again; a new question starts with an empty cache.

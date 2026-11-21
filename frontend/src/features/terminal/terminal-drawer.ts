@@ -986,7 +986,11 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     if (!assistantOn() || !live.ready || isBusy(live)) return false;
     if (attrs?.listFolder === undefined || location === undefined) return false;
     const typed = live.typed;
-    if (!typed.known || !typed.text.startsWith('#') || !/(?:^|\s)@(?:"[^"]*|\S*)$/.test(typed.text))
+    if (
+      !typed.known ||
+      !typed.text.startsWith('#') ||
+      !/(?:^|\s)@(?:"[^"]*|'[^']*|\S*)$/.test(typed.text)
+    )
       return false;
     void attrs
       .listFolder(location)

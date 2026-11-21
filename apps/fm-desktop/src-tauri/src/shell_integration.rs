@@ -92,24 +92,31 @@ end
 "#;
 
 /// One line typed into a remote shell once it is up (the way MobaXterm follows folders): it
-/// installs the same marks as the local hooks for bash and zsh and does nothing in other shells.
+/// installs the same marks as the local hooks for bash, zsh and fish and does nothing in other shells.
 /// The echoed line is drawn invisible (SGR 8) and the line ends by resetting that, so nothing
 /// stays on screen; the leading space keeps it out of history where the shell ignores spaces.
-/// The hook source stays free of single quotes because it travels inside `eval '...'`.
+/// The line stays under 1000 bytes: a shell without line editing reads it in the terminal's
+/// canonical mode, which cuts input at 1024. The hook source stays free of single quotes because it travels inside `eval '...'`.
 pub(crate) const REMOTE_HOOK_LINE: &str = concat!(
     " [ -n \"$BASH_VERSION$ZSH_VERSION\" ] && eval '",
     "if [ -n \"$ZSH_VERSION\" ]; then ",
-    "__procyon_prompt() { printf \"\\033]133;D;%d\\007\\033]133;P;Cwd=%s\\007\\033]133;A\\007\" \"$?\" \"$PWD\"; }; ",
-    "__procyon_preexec() { printf \"\\033]133;C\\007\"; }; ",
-    "precmd_functions+=(__procyon_prompt); preexec_functions+=(__procyon_preexec); ",
+    "__py_prompt() { printf \"\\033]133;D;%d\\007\\033]133;P;Cwd=%s\\007\\033]133;A\\007\" \"$?\" \"$PWD\"; }; ",
+    "__py_preexec() { printf \"\\033]133;C\\007\"; }; ",
+    "precmd_functions+=(__py_prompt); preexec_functions+=(__py_preexec); ",
     "else ",
-    "__procyon_begin() { __procyon_status=$?; }; ",
-    "__procyon_end() { printf \"\\033]133;D;%d\\007\\033]133;P;Cwd=%s\\007\\033]133;A\\007\" \"$__procyon_status\" \"$PWD\"; __procyon_at_prompt=1; }; ",
-    "__procyon_at_prompt=1; ",
-    "__procyon_preexec() { if [ \"$__procyon_at_prompt\" = 1 ]; then __procyon_at_prompt=0; printf \"\\033]133;C\\007\"; fi; }; ",
-    "trap __procyon_preexec DEBUG; ",
-    "PROMPT_COMMAND=\"__procyon_begin${PROMPT_COMMAND:+; $PROMPT_COMMAND}; __procyon_end\"; ",
-    "fi'; printf '\\033[0m'\r"
+    "__py_begin() { __py_status=$?; }; ",
+    "__py_end() { printf \"\\033]133;D;%d\\007\\033]133;P;Cwd=%s\\007\\033]133;A\\007\" \"$__py_status\" \"$PWD\"; __py_at_prompt=1; }; ",
+    "__py_at_prompt=1; ",
+    "__py_preexec() { if [ \"$__py_at_prompt\" = 1 ]; then __py_at_prompt=0; printf \"\\033]133;C\\007\"; fi; }; ",
+    "trap __py_preexec DEBUG; ",
+    "PROMPT_COMMAND=\"__py_begin${PROMPT_COMMAND:+; $PROMPT_COMMAND}; __py_end\"; ",
+    "fi'; ",
+    // Fish parses the whole line first, so its hooks sit in a second guarded `eval` of their own.
+    "[ -n \"$FISH_VERSION\" ] && eval '",
+    "function __py_prompt --on-event fish_prompt; set -l code $status; ",
+    "printf \"\\033]133;D;%d\\007\\033]133;P;Cwd=%s\\007\\033]133;A\\007\" $code \"$PWD\"; end; ",
+    "function __py_preexec --on-event fish_preexec; printf \"\\033]133;C\\007\"; end'; ",
+    "printf '\\033[0m'\r"
 );
 
 /// Starts drawing the echoed [`REMOTE_HOOK_LINE`] invisibly.
@@ -320,13 +327,17 @@ mod tests {
         drop(pair.slave);
         let mut writer = pair.master.take_writer().expect("pty writer");
         let mut reader = pair.master.try_clone_reader().expect("pty reader");
+        // Read while typing: a long line's echo would otherwise fill the PTY and stall the shell.
+        let drain = std::thread::spawn(move || {
+            let mut output = String::new();
+            let _ = reader.read_to_string(&mut output);
+            output
+        });
         for line in lines {
             writer.write_all(line.as_bytes()).expect("type input");
         }
         drop(writer);
-        // Drain before waiting: on macOS the child cannot exit while its PTY output is unread.
-        let mut output = String::new();
-        let _ = reader.read_to_string(&mut output);
+        let output = drain.join().expect("pty reader thread");
         let _ = child.wait();
         drop(pair.master);
         output
@@ -376,6 +387,11 @@ mod tests {
         );
     }
 
+    #[test]
+    fn the_remote_hook_line_fits_a_canonical_terminal_line() {
+        assert!(REMOTE_HOOK_LINE.len() < 1000, "{}", REMOTE_HOOK_LINE.len());
+    }
+
     /// Types the remote hook line into a plain interactive shell, as the terminal does over SSH.
     #[cfg(unix)]
     fn remote_hook_output(program: &str, args: &[&str]) -> String {
@@ -415,6 +431,27 @@ mod tests {
             return;
         }
         let output = remote_hook_output("/bin/zsh", &["-f", "-i"]);
+        assert!(output.contains("\x1b]133;P;Cwd=/"), "no folder: {output:?}");
+        assert!(output.contains("\x1b]133;C\x07"), "no start: {output:?}");
+        assert!(
+            output.contains("\x1b]133;D;1\x07"),
+            "no failure: {output:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_remote_hook_line_makes_fish_report_folder_and_command_marks() {
+        let Some(fish) = [
+            "/opt/homebrew/bin/fish",
+            "/usr/local/bin/fish",
+            "/usr/bin/fish",
+        ]
+        .into_iter()
+        .find(|path| Path::new(path).exists()) else {
+            return;
+        };
+        let output = remote_hook_output(fish, &["--no-config", "-i"]);
         assert!(output.contains("\x1b]133;P;Cwd=/"), "no folder: {output:?}");
         assert!(output.contains("\x1b]133;C\x07"), "no start: {output:?}");
         assert!(
