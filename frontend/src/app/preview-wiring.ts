@@ -393,6 +393,18 @@ export function createPreviewWiring(shellState: ShellState, core: PreviewCore) {
       editAt: (link) => {
         openEditor(shellState.client, paneId, link.entry, link.line);
       },
+      siblings: () => {
+        const folder = parentLocation(base);
+        const listing = [...shellState.directories.values()].find(
+          (snapshot) =>
+            snapshot.location?.providerId === folder.providerId &&
+            snapshot.location?.uri === folder.uri,
+        );
+        return listing?.entries ?? [];
+      },
+      view: (link) => {
+        openViewer(shellState.client, paneId, link.entry);
+      },
     };
   }
 

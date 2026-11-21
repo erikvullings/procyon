@@ -25,6 +25,11 @@ export interface EditorLinkHandlers {
   openInPane(link: Extract<ResolvedLink, { kind: 'path' }>): void;
   reveal(link: Extract<ResolvedLink, { kind: 'path' }>): void;
   editAt(link: Extract<ResolvedLink, { kind: 'path' }>): void;
+  /** Entries of the folder holding `base` when a pane has it listed; resolves Markdown name
+   * links such as `[[Note]]` and task IDs. */
+  siblings?(): readonly EntrySummary[];
+  /** Opens a file in the viewer; links clicked in rendered Markdown use it when present. */
+  view?(link: Extract<ResolvedLink, { kind: 'path' }>): void;
 }
 
 /** Only web links are ever handed to the system opener. */

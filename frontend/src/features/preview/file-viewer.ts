@@ -20,6 +20,7 @@ import {
 } from '../editor/editor-language';
 import type { EditorLinkHandlers } from '../editor/link-actions';
 import { LinkAwareEditor } from '../editor/link-aware-editor';
+import { markdownLinkClickHandler } from '../editor/markdown-links';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
 import {
   DEFAULT_ENTRY_FORMAT_SETTINGS,
@@ -152,6 +153,10 @@ export interface FileViewerAttrs {
  * the user's manual scrolling. */
 interface MarkdownPreviewAttrs {
   readonly text: string;
+  /** Resolves and opens clicked links; without it, link clicks do nothing. */
+  readonly links: EditorLinkHandlers | undefined;
+  /** Asks before handing a web link to the system browser. */
+  readonly onExternalLink: (url: string) => void;
   readonly highlightOffset: number | undefined;
   readonly highlightLength: number | undefined;
 }
@@ -174,9 +179,11 @@ const MarkdownPreview: FactoryComponent<MarkdownPreviewAttrs> = () => {
   return {
     oncreate: render,
     onupdate: render,
-    view: () =>
+    view: (vnode) =>
       m('.fm-file-viewer-markdown.browser-default', {
         tabindex: 0,
+        onclick: (event: MouseEvent) =>
+          markdownLinkClickHandler(vnode.attrs.links, vnode.attrs.onExternalLink)(event),
         onkeydown: (event: KeyboardEvent) => {
           if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
           const key = event.key.toLowerCase();
@@ -583,6 +590,7 @@ interface TextContentAttrs {
   readonly highlightOffset: number | undefined;
   readonly highlightLength: number | undefined;
   readonly onFindShortcut: () => void;
+  readonly onExternalLink: (url: string) => void;
 }
 
 /** Whether a text file opens rendered (Markdown or HTML) and so has the header's preview toggle. */
@@ -628,6 +636,8 @@ const TextContent: FactoryComponent<TextContentAttrs> = () => {
       return rendered === 'markdown'
         ? m(MarkdownPreview, {
             text: attrs.text,
+            links: attrs.viewerAttrs.links,
+            onExternalLink: attrs.onExternalLink,
             highlightOffset: attrs.highlightOffset,
             highlightLength: attrs.highlightLength,
           })
@@ -645,6 +655,7 @@ function renderTextBody(
   state: Extract<FileViewerState, { status: 'ready' }>,
   onFindShortcut: () => void,
   showSource: boolean,
+  onExternalLink: (url: string) => void,
 ): m.Children {
   const content = state.content;
   if (content.kind !== 'text') return undefined;
@@ -661,6 +672,7 @@ function renderTextBody(
       highlightOffset: content.highlightOffset,
       highlightLength: content.highlightLength,
       onFindShortcut,
+      onExternalLink,
     }),
     content.loadingMore ? m('.fm-file-viewer-loading-more', t('viewer', 'loadingMore')) : undefined,
   ]);
@@ -2257,6 +2269,9 @@ export const FileViewer: FactoryComponent<FileViewerAttrs> = () => {
                       state,
                       () => searchInput?.focus(),
                       markdownSourceUri === state.entry.location.uri,
+                      (url) => {
+                        pendingExternalLink = url;
+                      },
                     )
                   : state.content.kind === 'hex'
                     ? renderHexBody(attrs, state)

@@ -11,6 +11,17 @@ import { newTabButton } from '../panes/tab-strip';
 import { jsonParseLinter, languageExtension } from './editor-language';
 import type { FileEditorController, FileEditorState } from './file-editor-controller';
 import type { EditorLinkHandlers } from './link-actions';
+import { markdownLinkClickHandler } from './markdown-links';
+
+/** Links in the editor's preview browse in a pane, like links in the source; the editor stays. */
+function previewLinkHandlers(
+  links: EditorLinkHandlers | undefined,
+): EditorLinkHandlers | undefined {
+  if (links === undefined) return undefined;
+  const { view: _view, ...browse } = links;
+  return browse;
+}
+
 import { LinkAwareEditor } from './link-aware-editor';
 import './file-editor.css';
 
@@ -246,7 +257,12 @@ export const FileEditor: Component<FileEditorAttrs> = {
                 onChange: (content) => controller.setContent(content),
               })
             : state.language === 'markdown' && state.previewVisible
-              ? m('.fm-file-editor-preview', { innerHTML: state.previewHtml ?? '' })
+              ? m('.fm-file-editor-preview', {
+                  innerHTML: state.previewHtml ?? '',
+                  onclick: markdownLinkClickHandler(previewLinkHandlers(attrs.links), (url) =>
+                    attrs.links?.openUrl(url),
+                  ),
+                })
               : m(LinkAwareEditor, {
                   content: state.content,
                   language: languageExtension(state.language),

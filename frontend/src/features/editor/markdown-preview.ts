@@ -9,7 +9,10 @@ export const PREVIEW_SANITIZE_OPTIONS = {
   USE_PROFILES: { html: true },
   FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'svg', 'math'],
   FORBID_ATTR: ['style'],
-  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
+  // DOMPurify's own default shape: a relative URL is anything whose leading run of scheme
+  // characters is not followed by `:`. The hyphen is escaped: an unescaped `.-:` is a range
+  // that also covers `/` and digits, which stripped relative links such as `docs/a.md`.
+  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
 };
 
 /** slimdown leaves its list placeholder behind for a bullet without text. */

@@ -80,7 +80,9 @@ describe('safeMarkdownHtml with metadata', () => {
   it('renders a task header as a table under the title', () => {
     const html = safeMarkdownHtml(TASK);
     expect(html.indexOf('<h1>0337 Notes</h1>')).toBeLessThan(html.indexOf('fm-md-meta'));
-    expect(html).toContain('<th scope="row">Depends on</th><td>0336</td>');
+    expect(html).toContain(
+      '<th scope="row">Depends on</th><td><a href="#" class="fm-md-task-link" data-fm-task="0336">0336</a></td>',
+    );
     expect(html).toContain('<h2>Context</h2>');
   });
 });
