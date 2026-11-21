@@ -55,6 +55,7 @@ export function settingsFromDto(settings: SettingsDto): Settings {
     terminalShellIntegration: settings.terminalShellIntegration ?? 'unset',
     terminalAssistant: settings.terminalAssistant ?? true,
     terminalFollowPane: settings.terminalFollowPane ?? true,
+    terminalAutoRunReadOnly: settings.terminalAutoRunReadOnly ?? true,
     map: settings.map ?? DEFAULT_MAP_SETTINGS,
   };
 }

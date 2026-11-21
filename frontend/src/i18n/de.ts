@@ -406,6 +406,7 @@ export const de = {
     terminalCommand: 'Terminalbefehl',
     terminalAssistant: 'Terminal-Assistent (#-Fragen, Erklären und Korrigieren)',
     terminalFollowPane: 'Terminal und Bereich folgen einander (gleicher Ordner)',
+    terminalAutoRunReadOnly: 'Schreibgeschützte Befehle ohne Nachfrage ausführen',
     terminalApps: 'Externe Terminals',
     terminalAppsHelp:
       'Eine pro Zeile: Name = Befehl (unter macOS ein Anwendungsname, unter Windows eine ausführbare Datei). Angeboten von „Terminal öffnen mit…“.',

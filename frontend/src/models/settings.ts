@@ -193,6 +193,8 @@ export interface Settings {
   readonly terminalAssistant: boolean;
   /** Whether the terminal and the active pane keep to the same folder. */
   readonly terminalFollowPane: boolean;
+  /** Whether strictly read-only commands the assistant proposes run without asking. */
+  readonly terminalAutoRunReadOnly: boolean;
   /** Remembers and restores the view (sort, columns, mode) chosen for each folder (task 0270). */
   readonly rememberFolderViews: boolean;
   /** Basemap of the shared map component (task 0275). */

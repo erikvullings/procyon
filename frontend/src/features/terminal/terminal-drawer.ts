@@ -21,6 +21,7 @@ import {
   stepsAnsi,
 } from './answer-ansi';
 import { type BlockTracker, type CommandBlock, createBlockTracker } from './block-tracker';
+import { isReadOnlyCommand } from './read-only-command';
 import { highlightShell } from './shell-highlight';
 import { parseShellMark } from './shell-integration';
 import {
@@ -76,6 +77,8 @@ export interface TerminalDrawerAttrs {
   /** The names in a folder (folders end with `/`), for `@name` completion in the terminal's folder. */
   /** Whether the terminal and the active pane keep to the same folder. */
   readonly followPane?: boolean;
+  /** Whether a strictly read-only command the assistant proposes runs without asking. */
+  readonly autoRunReadOnly?: boolean;
   /** The terminal's shell on `host` (see `terminalHost`) moved to this absolute folder; the pane follows. */
   readonly onFollowFolder?: (host: string, path: string) => void;
   readonly listFolder?: (location: Location) => Promise<readonly string[]>;
@@ -573,8 +576,21 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       text += noticeAnsi(t('notes', 'proposalShown'));
       currentAttrs?.onNoteProposal?.(reply.noteProposal);
     }
+    let autoRun: string | undefined;
     if (reply.runCommand !== undefined) {
-      next = { status: 'approve', tabKey: live.key, command: cleanCommand(reply.runCommand) };
+      const command = cleanCommand(reply.runCommand);
+      // A read-only command runs at once, unless the person has started typing meanwhile.
+      if (
+        currentAttrs?.autoRunReadOnly !== false &&
+        isReadOnlyCommand(command) &&
+        live.markSeen &&
+        live.typed.known &&
+        live.typed.text === ''
+      ) {
+        autoRun = command;
+      } else {
+        next = { status: 'approve', tabKey: live.key, command };
+      }
     } else {
       if (!streamed) text += renderAnswerAnsi(reply.text, live.terminal.cols);
       const command = commandFromAnswer('ask', reply.text);
@@ -582,7 +598,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         next = { status: 'suggest', tabKey: live.key, command: cleanCommand(command) };
       }
     }
-    present(live, token, text, next);
+    present(live, token, text, next, autoRun);
   }
 
   /** Shows `text` in the terminal, then brings the shell prompt back. Dropped if dismissed. */
@@ -591,11 +607,16 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     token: number,
     text: string,
     next: AssistPanel | undefined,
+    thenRun?: string,
   ): void {
     if (token !== live.requestId) return;
     panel = next;
-    if (text === '') releasePrompt(live);
-    else live.terminal.write(`\r\x1b[2K${text}`, () => releasePrompt(live));
+    const done = () => {
+      releasePrompt(live);
+      if (thenRun !== undefined && token === live.requestId) runApproved(live, thenRun);
+    };
+    if (text === '') done();
+    else live.terminal.write(`\r\x1b[2K${text}`, done);
   }
 
   /** Asks the shell for a fresh prompt, puts back a half-typed command, and sends held keys. */
@@ -1394,17 +1415,25 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     });
   }
 
+  /** "Thinking" with one, two, then three dots, animated by CSS; the dots keep their room. */
+  function thinkingStatus(): m.Children {
+    return m('span.fm-terminal-assist-status.fm-terminal-assist-thinking', { role: 'status' }, [
+      t('terminal', 'assistBusy').replace(/[….]+$/, ''),
+      m('span.fm-dots', { 'aria-hidden': 'true' }, [
+        m('span', '.'),
+        m('span', '.'),
+        m('span', '.'),
+      ]),
+    ]);
+  }
+
   /** What the assistant waits on: the answer, a command to insert, approve, or its progress. */
   function statusRow(shown: AssistPanel, live: LiveTerminal): m.Children {
     const command = (text: string) => m('code.fm-terminal-assist-command', highlightedShell(text));
     switch (shown.status) {
       case 'busy':
-        return m('.fm-terminal-assist-row', [
-          m('span.fm-terminal-assist-status', t('terminal', 'assistBusy')),
-          m('.fm-terminal-assist-buttons', [
-            shortcutButton(t('terminal', 'assistDismiss'), 'Esc', () => cancelBusy(live)),
-          ]),
-        ]);
+        // Shown in the controls row instead, so the strip does not grow while the model thinks.
+        return undefined;
       case 'suggest':
         return m('.fm-terminal-assist-row', [
           editing === undefined ? command(shown.command) : editField(live, editing),
@@ -1470,6 +1499,10 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       m('.fm-terminal-assist-controls', [
         contextRow(live, typing ? live.typed.text : ''),
         m('.fm-terminal-assist-buttons', [
+          busy ? thinkingStatus() : undefined,
+          busy
+            ? shortcutButton(t('terminal', 'assistDismiss'), 'Esc', () => cancelBusy(live))
+            : undefined,
           busy
             ? undefined
             : shortcutButton(t('terminal', 'blockExplain'), 'Ctrl+Shift+E', () => explain(live)),

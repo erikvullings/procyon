@@ -6013,6 +6013,7 @@ describe('AppShell', () => {
       terminalShellIntegration: 'unset',
       terminalAssistant: true,
       terminalFollowPane: true,
+      terminalAutoRunReadOnly: true,
       schemaVersion: 2,
       theme: 'auto',
       language: 'en',

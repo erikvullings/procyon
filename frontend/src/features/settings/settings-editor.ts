@@ -585,6 +585,15 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                         onchange: (checked: boolean) =>
                           update(current, { terminalFollowPane: checked }),
                       }),
+                      m(Switch, {
+                        className: 'col s12 m6',
+                        label: t('settings', 'terminalAutoRunReadOnly'),
+                        checked: activeDraft.terminalAutoRunReadOnly,
+                        left: t('settings', 'off'),
+                        right: t('settings', 'on'),
+                        onchange: (checked: boolean) =>
+                          update(current, { terminalAutoRunReadOnly: checked }),
+                      }),
                     ]),
 
                     m('.row', [

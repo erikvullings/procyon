@@ -715,10 +715,14 @@ main.fm-workspace {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 6px 8px;
+  gap: 4px;
+  /* Like the panes' status bars (surface, border, muted text, 0.9em), a little taller for the
+     buttons it carries. */
+  padding: 3px 0.5rem;
   border-top: 1px solid var(--fm-border);
-  background: var(--fm-surface);
+  background: var(--fm-surface-elevated);
+  color: var(--fm-text-muted);
+  font-size: 0.9em;
 }
 
 .fm-terminal-suggestion {
@@ -881,8 +885,8 @@ main.fm-workspace {
   flex-direction: column;
   gap: 6px;
   min-width: 0;
-  color: var(--fm-text);
-  font-size: 12px;
+  color: var(--fm-text-muted);
+  font-size: inherit;
 }
 
 .fm-terminal-assist-row,
@@ -935,6 +939,57 @@ main.fm-workspace {
 
 .fm-terminal-assist-status {
   color: var(--fm-text-muted);
+}
+
+.fm-terminal-assist-thinking {
+  align-self: center;
+  margin-inline-end: 4px;
+  white-space: nowrap;
+}
+
+/* One, two, three dots, repeating; every dot keeps its room so nothing shifts. */
+.fm-dots > span {
+  animation: fm-dot 1.2s steps(1, end) infinite;
+}
+
+.fm-dots > span:nth-child(2) {
+  animation-name: fm-dot-second;
+}
+
+.fm-dots > span:nth-child(3) {
+  animation-name: fm-dot-third;
+}
+
+@keyframes fm-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes fm-dot-second {
+  0% {
+    opacity: 0;
+  }
+  33% {
+    opacity: 1;
+  }
+}
+
+@keyframes fm-dot-third {
+  0% {
+    opacity: 0;
+  }
+  66% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fm-dots > span {
+    animation: none;
+    opacity: 1;
+  }
 }
 
 /* Actions on a finished command, drawn on its prompt line by an xterm decoration. */
@@ -1054,6 +1109,14 @@ main.fm-workspace {
 
 .fm-semantic-library-location {
   overflow-wrap: anywhere;
+}
+
+/* Pinned to the row's end so Rescan/Remove keep their place whatever badges are shown. */
+.fm-semantic-library-root-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.5rem;
+  margin-inline-start: auto;
 }
 
 .fm-semantic-library-guidance {
@@ -1367,6 +1430,9 @@ main.fm-workspace {
 
 .fm-semantic-library-action {
   margin: 0.25rem 0.5rem 0.25rem 0;
+}
+.fm-semantic-library-root-actions .fm-semantic-library-action {
+  margin: 0;
 }
 
 .fm-semantic-library-destructive {

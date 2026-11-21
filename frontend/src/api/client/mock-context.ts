@@ -254,6 +254,7 @@ export class MockContext {
     terminalShellIntegration: 'unset',
     terminalAssistant: true,
     terminalFollowPane: true,
+    terminalAutoRunReadOnly: true,
     semanticMaxSourceMib: 64,
     semanticThemeRootIds: [],
     quickFilterMatchMode: 'fuzzy',

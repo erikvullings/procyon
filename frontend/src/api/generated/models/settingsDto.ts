@@ -128,6 +128,8 @@ export interface SettingsDto {
   terminalApps?: TerminalAppDto[];
   /** Whether the terminal assistant (`#` questions, Explain and Fix) is on (task 0336). */
   terminalAssistant?: boolean;
+  /** Whether strictly read-only commands the assistant proposes run without asking. */
+  terminalAutoRunReadOnly?: boolean;
   /**
      * Optional terminal command.
      * @nullable

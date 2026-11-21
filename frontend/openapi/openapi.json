@@ -27827,6 +27827,10 @@
             "type": "boolean",
             "description": "Whether the terminal assistant (`#` questions, Explain and Fix) is on (task 0336)."
           },
+          "terminalAutoRunReadOnly": {
+            "type": "boolean",
+            "description": "Whether strictly read-only commands the assistant proposes run without asking."
+          },
           "terminalCommand": {
             "type": [
               "string",

@@ -124,6 +124,10 @@ const fn terminal_follow_pane_default() -> bool {
     true
 }
 
+const fn terminal_auto_run_read_only_default() -> bool {
+    true
+}
+
 fn terminal_shell_integration_default() -> TerminalShellIntegrationDto {
     TerminalShellIntegrationDto::Unset
 }
@@ -492,6 +496,9 @@ pub struct SettingsDto {
     /// Whether the terminal and the active pane keep to the same folder.
     #[serde(default = "terminal_follow_pane_default")]
     pub terminal_follow_pane: bool,
+    /// Whether strictly read-only commands the assistant proposes run without asking.
+    #[serde(default = "terminal_auto_run_read_only_default")]
+    pub terminal_auto_run_read_only: bool,
 }
 
 const fn default_semantic_max_source_mib() -> u32 {

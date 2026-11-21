@@ -710,6 +710,8 @@ pub struct Settings {
     pub terminal_assistant: bool,
     /// Whether the terminal and the active pane keep to the same folder.
     pub terminal_follow_pane: bool,
+    /// Whether strictly read-only commands the assistant proposes run without asking.
+    pub terminal_auto_run_read_only: bool,
 }
 
 impl Settings {
@@ -809,6 +811,7 @@ impl Default for Settings {
             notes_root: None,
             terminal_assistant: true,
             terminal_follow_pane: true,
+            terminal_auto_run_read_only: true,
         }
     }
 }

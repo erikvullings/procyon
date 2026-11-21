@@ -399,6 +399,7 @@ export const it = {
     terminalCommand: 'Comando del terminale',
     terminalAssistant: 'Assistente del terminale (domande con #, Spiega e Correggi)',
     terminalFollowPane: 'Terminale e riquadro si seguono (stessa cartella)',
+    terminalAutoRunReadOnly: 'Esegui senza chiedere i comandi di sola lettura',
     terminalApps: 'Terminali esterni',
     terminalAppsHelp:
       'Uno per riga: Nome = comando (un nome di applicazione su macOS, un eseguibile su Windows). Proposti da «Apri terminale con…».',

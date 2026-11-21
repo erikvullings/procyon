@@ -196,6 +196,7 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
         },
         terminal_assistant: settings.terminal_assistant,
         terminal_follow_pane: settings.terminal_follow_pane,
+        terminal_auto_run_read_only: settings.terminal_auto_run_read_only,
     }
 }
 
@@ -377,6 +378,7 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
         notes_root: None,
         terminal_assistant: settings.terminal_assistant,
         terminal_follow_pane: settings.terminal_follow_pane,
+        terminal_auto_run_read_only: settings.terminal_auto_run_read_only,
     }
 }
 

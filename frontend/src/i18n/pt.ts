@@ -401,6 +401,7 @@ export const pt = {
     terminalCommand: 'Comando do terminal',
     terminalAssistant: 'Assistente do terminal (perguntas com #, Explicar e Corrigir)',
     terminalFollowPane: 'Terminal e painel acompanham-se (mesma pasta)',
+    terminalAutoRunReadOnly: 'Executar sem perguntar os comandos só de leitura',
     terminalApps: 'Terminais externos',
     terminalAppsHelp:
       'Um por linha: Nome = comando (um nome de aplicação no macOS, um executável no Windows). Oferecidos por «Abrir terminal com…».',

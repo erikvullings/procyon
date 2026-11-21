@@ -175,3 +175,9 @@ Phase 4 — `run_command` with approval, exit code and output returned to the lo
 - Fish remote hook added as a second guarded eval (line < 1000 bytes: canonical-mode cap).
 - `Documents` caches converted text per question (4 documents), so `offset` continuations do not
   convert again; a new question starts with an empty cache.
+- Read-only auto-run: `read-only-command.ts` decides (strict allow-list pipeline, paths inside the
+  working folder, no redirects/expansion/credential names); matching `run_command` proposals run
+  at once when the prompt is empty. Setting `terminalAutoRunReadOnly` (default on). Anything else
+  still asks. Output is redacted before the model sees it.
+- While thinking, the strip shows "Thinking" with animated dots and Esc in the controls row (no
+  extra row); the strip uses the panes' status-bar colours.

@@ -394,6 +394,7 @@ export const en = {
     terminalCommand: 'Terminal command',
     terminalAssistant: 'Terminal assistant (# questions, Explain and Fix)',
     terminalFollowPane: 'Terminal and pane follow each other (same folder)',
+    terminalAutoRunReadOnly: 'Run read-only commands without asking',
     terminalApps: 'External terminals',
     terminalAppsHelp:
       'One per line: Name = command (an application name on macOS, an executable on Windows). Offered by “Open Terminal With…”.',

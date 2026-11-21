@@ -862,6 +862,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
   let disposeTab: ((tabKey: string) => void) | undefined;
   let paneListing: string[] = ['a.txt', 'src/'];
   let assistantEnabled = true;
+  let autoRunReadOnly = true;
 
   const bytes = (text: string) => [...new TextEncoder().encode(text)];
   const textarea = () => {
@@ -914,6 +915,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
           onToggle: vi.fn(),
           shellIntegration: 'disabled',
           assistantEnabled,
+          autoRunReadOnly,
           paneContext: () => ({
             listing: paneListing,
             selected: ['a.txt'],
@@ -940,6 +942,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     disposeTab = undefined;
     paneListing = ['a.txt', 'src/'];
     assistantEnabled = true;
+    autoRunReadOnly = true;
     write = vi.fn<TerminalClient['write']>(async () => undefined);
     assist = vi.fn<TerminalClient['assist']>(async () => ({
       text: 'Fine.\nCommand: ls',
@@ -1164,6 +1167,36 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
     expect(sentAt(1)?.toolResult).toMatchObject({ command: 'cargo test', exitCode: 3 });
     expect(sentAt(1)?.toolResult?.output).toContain('1 failed');
+  });
+
+  it('runs a read-only command at once, without a Run button', async () => {
+    assist.mockResolvedValueOnce({ text: '', runCommand: 'grep -n foo src | head -5' });
+    await mount();
+    await markPrompt();
+    ask('# find foo');
+
+    await vi.waitFor(() =>
+      expect(write).toHaveBeenCalledWith(
+        'session-1',
+        new TextEncoder().encode('\x15grep -n foo src | head -5\r'),
+      ),
+    );
+    expect(button('Run')).toBeUndefined();
+
+    echo?.({ type: 'output', data: bytes('\x1b]133;C\x07\r\nsrc:1:foo\r\n\x1b]133;D;0\x07') });
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
+    expect(sentAt(1)?.toolResult).toMatchObject({ command: 'grep -n foo src | head -5' });
+  });
+
+  it('still asks for a read-only command when the setting is off', async () => {
+    autoRunReadOnly = false;
+    assist.mockResolvedValueOnce({ text: '', runCommand: 'ls -la' });
+    await mount();
+    await markPrompt();
+    ask('# list');
+
+    await vi.waitFor(() => expect(button('Run')).toBeDefined());
+    expect(write).not.toHaveBeenCalledWith('session-1', new TextEncoder().encode('\x15ls -la\r'));
   });
 
   it('tells the session when a command is declined and shows nothing more', async () => {

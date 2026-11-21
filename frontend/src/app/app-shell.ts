@@ -4873,6 +4873,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 paneContext: terminalPaneContext,
                 listFolder: terminalFolderNames,
                 followPane: shellState.currentSettings?.terminalFollowPane ?? true,
+                autoRunReadOnly: shellState.currentSettings?.terminalAutoRunReadOnly ?? true,
                 onFollowFolder: followTerminalFolder,
                 assistantEnabled: shellState.currentSettings?.terminalAssistant ?? true,
                 registerInsert: (insert) => {
