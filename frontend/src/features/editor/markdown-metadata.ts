@@ -160,6 +160,21 @@ function statusSlug(value: string): string {
     .replace(/^-|-$/g, '');
 }
 
+/** A four-digit task ID, as used by `TASKS/NNNN-title.md` files. */
+const TASK_ID = /^\d{4}$/;
+
+/** `Depends on: 0004, 0012` with each task ID as a link the Markdown views resolve on click. */
+function dependsOnHtml(value: string): string {
+  return value
+    .split(/(\s*,\s*|\s+)/)
+    .map((part) =>
+      TASK_ID.test(part)
+        ? `<a href="#" class="fm-md-task-link" data-fm-task="${part}">${part}</a>`
+        : escapeHtml(part),
+    )
+    .join('');
+}
+
 function valueHtml(field: MetadataField): string {
   if (field.list) {
     return field.values
@@ -170,6 +185,7 @@ function valueHtml(field: MetadataField): string {
   if (field.key.toLowerCase() === 'status' && value !== '') {
     return `<span class="fm-md-meta-status fm-md-meta-status-${statusSlug(value)}">${escapeHtml(value)}</span>`;
   }
+  if (field.key.toLowerCase() === 'depends on') return dependsOnHtml(value);
   return escapeHtml(value);
 }
 

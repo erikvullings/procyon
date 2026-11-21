@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { absolutePathOf, shellQuote } from './terminal-paths';
+import { absolutePathOf, cdCommand, fileUriOfPath, shellQuote } from './terminal-paths';
 
 describe('absolutePathOf', () => {
   it('decodes a local file location to its absolute path', () => {
@@ -26,5 +26,18 @@ describe('shellQuote', () => {
   it('quotes spaces and special characters, and escapes single quotes', () => {
     expect(shellQuote('/Users/me/My File.txt')).toBe("'/Users/me/My File.txt'");
     expect(shellQuote("/tmp/it's here")).toBe("'/tmp/it'\\''s here'");
+  });
+});
+
+describe('cdCommand and fileUriOfPath', () => {
+  it('quotes the folder for the shell', () => {
+    expect(cdCommand('/Users/me/docs')).toBe('cd -- /Users/me/docs');
+    expect(cdCommand("/Users/me/It's here")).toBe("cd -- '/Users/me/It'\\''s here'");
+  });
+
+  it('round-trips a path through a file URI', () => {
+    const path = '/Users/me/My Docs/ünï#1';
+    expect(fileUriOfPath(path)).toBe('file:///Users/me/My%20Docs/%C3%BCn%C3%AF%231');
+    expect(absolutePathOf(fileUriOfPath(path))).toBe(path);
   });
 });

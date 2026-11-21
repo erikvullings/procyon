@@ -74,6 +74,8 @@ export function createBlockTracker<Mark>(options: BlockTrackerOptions<Mark>): Bl
           }
           return block;
         }
+        case 'cwd':
+          return undefined;
       }
     },
     get blocks() {

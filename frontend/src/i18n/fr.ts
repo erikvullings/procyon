@@ -400,6 +400,7 @@ export const fr = {
     terminal: 'Terminal',
     terminalCommand: 'Commande du terminal',
     terminalAssistant: 'Assistant de terminal (questions avec #, Expliquer et Corriger)',
+    terminalFollowPane: 'Terminal et panneau se suivent (même dossier)',
     terminalApps: 'Terminaux externes',
     terminalAppsHelp:
       'Un par ligne : Nom = commande (un nom d’application sur macOS, un exécutable sous Windows). Proposés par « Ouvrir un terminal avec… ».',
@@ -1820,6 +1821,11 @@ export const fr = {
     pdfTools: 'Rendre les PDF numérisés consultables',
     failedSourcesCount: '{count} fichier(s) n’ont pas pu être indexés',
     failedSourcesHeading: 'Fichiers non indexés',
+    failedReasonTooManyImages: "Trop d'images dans ce PDF pour l'indexer.",
+    failedReasonTooLarge: 'Trop volumineux ou complexe pour être indexé.',
+    failedReasonGeneric: 'Impossible à lire ou à convertir.',
+    retryFailed: 'Réessayer les fichiers en échec',
+    dismissFailed: 'Ignorer',
     rescanFolder: 'Réanalyser le dossier',
     ocrNeededCount:
       "{count} PDF numérisé(s) nécessite(nt) une reconnaissance de texte ; voir les détails de l'indexation.",
@@ -2802,16 +2808,16 @@ export const fr = {
     contextOtherFolder: 'Autre volet',
     contextBlocks: '{count} dernières commandes',
     contextFile: 'Fichier {name}',
-    assistApproveNote: "L'assistant veut exécuter cette commande dans votre terminal.",
-    assistNeedsBlocks:
-      "L'exécution de commandes nécessite les blocs de commandes. Insérez-la plutôt dans l'invite.",
-    assistRun: 'Exécuter',
-    assistDecline: 'Refuser',
     contextLabel: "Contexte envoyé à l'assistant",
     contextRestore: 'Non inclus. Cliquez pour inclure.',
     contextRemove: 'Inclus. Cliquez pour exclure.',
     followUpPlaceholder: 'Poser une question de suivi…',
     assistRunning: 'En cours dans le terminal…',
+    assistApproveNote: "L'assistant veut exécuter cette commande dans votre terminal.",
+    assistNeedsBlocks:
+      "L'exécution de commandes nécessite les blocs de commandes. Insérez-la plutôt dans l'invite.",
+    assistRun: 'Exécuter',
+    assistDecline: 'Refuser',
     assistStop: 'Arrêter',
   },
   contextMenu: {

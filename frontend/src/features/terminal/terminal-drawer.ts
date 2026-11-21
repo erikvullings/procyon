@@ -28,6 +28,7 @@ import {
   type ContextChip,
   cleanCommand,
   commandFromAnswer,
+  completeMention,
   contextChips,
   EXPLAIN_REQUEST,
   effectiveRemoved,
@@ -42,6 +43,7 @@ import {
   transcriptTail,
 } from './terminal-assist';
 import type { TerminalClient } from './terminal-client';
+import { absolutePathOf, cdCommand } from './terminal-paths';
 import { applyTypedInput, EMPTY_INPUT, suggestionRemainder, type TypedInput } from './typed-input';
 
 /** What the file manager shows beside the terminal; the assistant may be told about it. */
@@ -71,6 +73,12 @@ export interface TerminalDrawerAttrs {
   readonly registerDisposeTab?: (dispose: (tabKey: string) => void) => void;
   /** The active pane's listing and selection, read when the person asks the assistant (0336). */
   readonly paneContext?: () => TerminalPaneContext;
+  /** The names in a folder (folders end with `/`), for `@name` completion in the terminal's folder. */
+  /** Whether the terminal and the active pane keep to the same folder. */
+  readonly followPane?: boolean;
+  /** The terminal's shell on `host` (see `terminalHost`) moved to this absolute folder; the pane follows. */
+  readonly onFollowFolder?: (host: string, path: string) => void;
+  readonly listFolder?: (location: Location) => Promise<readonly string[]>;
   /** Whether the assistant is on (the Terminal setting); off leaves `#` to the shell (0336). */
   readonly assistantEnabled?: boolean;
   /** The person's choice for command-block shell integration (task 0333). */
@@ -117,6 +125,8 @@ type LiveTerminal = {
   openToken?: object | undefined;
   /** What the person has typed on the current shell line. */
   typed: TypedInput;
+  /** The folder the pane and the shell were last known to share; see `followPane`. */
+  folder: string | undefined;
   /** Commands run in this session, oldest first, for suggestions. */
   history: string[];
   /** The command the person just ran; becomes the next block's command. */
@@ -159,6 +169,36 @@ export interface TerminalKeyHandlers {
   readonly onAcceptSuggestion?: () => boolean;
   /** The assistant's and block keys (Enter, Ctrl+E, Ctrl+C, ...). Returns whether it used the key. */
   readonly onAssistantKey?: (event: KeyboardEvent) => boolean;
+  /** Completes the `@name` being typed after `#`. Returns whether it used the Tab. */
+  readonly onCompleteMention?: () => boolean;
+  /** Sends line-editing bytes (word and line jumps and deletes) to the shell. */
+  readonly onShellInput?: (data: string) => void;
+}
+
+/**
+ * The shell bytes for the line-editing chords xterm.js does not send by itself, so word and line
+ * jumps and deletes behave as in a native terminal: Option/Ctrl+Left/Right move by word,
+ * Cmd+Left/Right go to the start/end of the line, Option/Ctrl+Backspace delete the word before the
+ * cursor, Cmd+Backspace deletes to the start of the line, Option+Delete the word after it and
+ * Cmd+Delete to the end of the line. `undefined` for every other key.
+ */
+export function lineEditSequence(event: KeyboardEvent): string | undefined {
+  if (event.shiftKey) return undefined;
+  const word = (event.altKey || event.ctrlKey) && !event.metaKey;
+  const line = event.metaKey && !event.altKey && !event.ctrlKey;
+  if (!word && !line) return undefined;
+  switch (event.key) {
+    case 'ArrowLeft':
+      return word ? '\x1bb' : '\x01';
+    case 'ArrowRight':
+      return word ? '\x1bf' : '\x05';
+    case 'Backspace':
+      return word ? (event.ctrlKey ? '\x17' : '\x1b\x7f') : '\x15';
+    case 'Delete':
+      return word ? '\x1bd' : '\x0b';
+    default:
+      return undefined;
+  }
 }
 
 /**
@@ -190,6 +230,25 @@ export function handleTerminalKeyEvent(
       event.stopPropagation();
       return false;
     }
+  }
+  const edit = lineEditSequence(event);
+  if (edit !== undefined && handlers.onShellInput !== undefined) {
+    handlers.onShellInput(edit);
+    event.preventDefault();
+    event.stopPropagation();
+    return false;
+  }
+  if (
+    event.key === 'Tab' &&
+    !event.ctrlKey &&
+    !event.altKey &&
+    !event.metaKey &&
+    !event.shiftKey &&
+    handlers.onCompleteMention?.() === true
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    return false;
   }
   const tabKey = event.key === 'Tab' || event.code === 'Tab';
   const navTabKey = tabKey && !event.metaKey && (event.ctrlKey || event.altKey);
@@ -554,6 +613,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   /** Stops waiting for the answer; it is dropped when it arrives. */
   function cancelBusy(live: LiveTerminal): void {
     live.requestId += 1;
+    void currentAttrs?.client.assistCancel?.(live.assistSession).catch(() => undefined);
     panel = undefined;
     live.terminal.write('\r\x1b[2K', () => releasePrompt(live));
     m.redraw();
@@ -687,9 +747,45 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   }
 
   /** Records a shell mark; a finished command becomes a block with its own actions. */
+  /** The shell reported its folder: the pane follows, unless it is already there. */
+  function shellFolderChanged(live: LiveTerminal, path: string): void {
+    if (live.folder === path) return;
+    live.folder = path;
+    const attrs = currentAttrs;
+    if (attrs?.followPane === true && attrs.location !== undefined) {
+      attrs.onFollowFolder?.(terminalHost(attrs.location), path);
+    }
+  }
+
+  /**
+   * The pane moved to another folder: a shell waiting at an empty prompt follows with `cd`. The
+   * terminal is never touched while a program runs or something is typed, and the folder is
+   * remembered either way so the two are not compared again until the pane moves.
+   */
+  function paneFolderChanged(live: LiveTerminal, attrs: TerminalDrawerAttrs): void {
+    const path = attrs.location === undefined ? undefined : absolutePathOf(attrs.location.uri);
+    if (path === undefined || !path.startsWith('/')) return;
+    const previous = live.folder;
+    live.folder = path;
+    if (previous === undefined || previous === path || attrs.followPane !== true) return;
+    const idle =
+      live.ready &&
+      live.sessionId !== undefined &&
+      live.markSeen &&
+      live.atPrompt &&
+      !isBusy(live) &&
+      live.typed.known &&
+      live.typed.text === '';
+    if (idle) writeToShell(live, `${cdCommand(path)}\r`);
+  }
+
   function onShellMark(live: LiveTerminal, payload: string): void {
     const mark = parseShellMark(payload);
     if (mark === undefined) return;
+    if (mark.kind === 'cwd') {
+      shellFolderChanged(live, mark.path);
+      return;
+    }
     live.markSeen = true;
     markReady(live);
     if (mark.kind === 'prompt') live.atPrompt = true;
@@ -877,6 +973,34 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
    * Handles keyboard input the person types into the terminal. A line that starts with `#` and is
    * submitted is a question for the assistant: it is cleared from the prompt and never run.
    */
+  /** Keyboard input: held until the shell is ready, then tracked and sent. */
+  function typeInput(live: LiveTerminal, data: string): void {
+    if (!live.ready) live.pendingInput.push(data);
+    else if (live.sessionId !== undefined) onTypedData(live, data);
+  }
+
+  /** Tab after `# ... @par` completes the name from the terminal's current folder. */
+  function completeMentionInShell(live: LiveTerminal): boolean {
+    const attrs = currentAttrs;
+    const location = attrs?.location;
+    if (!assistantOn() || !live.ready || isBusy(live)) return false;
+    if (attrs?.listFolder === undefined || location === undefined) return false;
+    const typed = live.typed;
+    if (!typed.known || !typed.text.startsWith('#') || !/(?:^|\s)@(?:"[^"]*|\S*)$/.test(typed.text))
+      return false;
+    void attrs
+      .listFolder(location)
+      .then((names) => {
+        // The line may have changed while the folder was read.
+        if (live.typed.text !== typed.text) return;
+        const completion = completeMention(typed.text, names);
+        if (completion === undefined) return;
+        typeInput(live, '\x7f'.repeat(completion.erase) + completion.insert);
+      })
+      .catch(() => undefined);
+    return true;
+  }
+
   function onTypedData(live: LiveTerminal, data: string): void {
     if (isBusy(live)) {
       // The terminal shows the answer where the prompt was; keys wait for the prompt to return.
@@ -970,6 +1094,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         blocks,
         decorations,
         typed: EMPTY_INPUT,
+        folder: undefined,
         history: [],
         pendingCommand: '',
         atPrompt: true,
@@ -1005,18 +1130,18 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           ...(attrs.onFocusFolder === undefined ? {} : { onFocusFolder: attrs.onFocusFolder }),
           onAcceptSuggestion: () => acceptSuggestion(current),
           onAssistantKey: (event) => assistantKey(event),
+          onCompleteMention: () => completeMentionInShell(current),
+          onShellInput: (data) => typeInput(current, data),
         }),
       );
-      terminal.onData((data) => {
-        if (!current.ready) current.pendingInput.push(data);
-        else if (current.sessionId !== undefined) onTypedData(current, data);
-      });
+      terminal.onData((data) => typeInput(current, data));
       showTerminalSurface(element, surface);
       terminal.open(surface);
     } else {
       showTerminalSurface(element, live.surface);
     }
     live.fit.fit();
+    paneFolderChanged(live, attrs);
     const session = live;
     if (session.sessionId === undefined && session.opening === undefined) {
       const token = {};

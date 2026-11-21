@@ -179,7 +179,7 @@ import {
   type TerminalPaneContext,
   terminalHost,
 } from '../features/terminal/terminal-drawer';
-import { absolutePathOf, shellQuote } from '../features/terminal/terminal-paths';
+import { absolutePathOf, fileUriOfPath, shellQuote } from '../features/terminal/terminal-paths';
 import { focusOpenedTerminal, isTerminalVisible } from '../features/terminal/terminal-state';
 import { ToolbarOverflow, type ToolbarOverflowItem } from '../features/toolbar/toolbar-overflow.ts';
 import { WalkthroughPanel } from '../features/walkthroughs/walkthrough-panel';
@@ -1483,6 +1483,38 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     const location =
       paneId === undefined ? undefined : shellState.directories.get(activeTabKey(paneId))?.location;
     return paneId === undefined || location === undefined ? undefined : { paneId, location };
+  }
+
+  /** The terminal's shell moved to a folder on `host`: the active pane goes there too. */
+  function followTerminalFolder(host: string, path: string): void {
+    const active = activeDirectory();
+    if (active === undefined || terminalHost(active.location) !== host) return;
+    const uri =
+      host === 'local'
+        ? fileUriOfPath(path)
+        : `${host}${fileUriOfPath(path).slice('file://'.length)}`;
+    if (uri === active.location.uri) return;
+    void shellState.navigation.navigate(active.paneId, {
+      providerId: active.location.providerId,
+      uri,
+    });
+  }
+
+  /** The names in a folder for `@name` completion in the terminal (folders end with `/`). */
+  async function terminalFolderNames(location: Location): Promise<readonly string[]> {
+    const workspaceId = shellState.workspace?.id;
+    if (workspaceId === undefined) return [];
+    const snapshot = await shellState.client.listDirectory({
+      workspaceId,
+      // A listing session of its own, so the visible panes are not disturbed.
+      paneId: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+      location,
+      showHidden: true,
+    });
+    return snapshot.entries.map((entry) =>
+      entry.kind === 'directory' ? `${entry.name}/` : entry.name,
+    );
   }
 
   /** What the terminal assistant may be told about the active pane (task 0336). */
@@ -4839,6 +4871,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 client: tauriTerminalClient,
                 shellIntegration: shellState.currentSettings?.terminalShellIntegration ?? 'unset',
                 paneContext: terminalPaneContext,
+                listFolder: terminalFolderNames,
+                followPane: shellState.currentSettings?.terminalFollowPane ?? true,
+                onFollowFolder: followTerminalFolder,
                 assistantEnabled: shellState.currentSettings?.terminalAssistant ?? true,
                 registerInsert: (insert) => {
                   shellState.insertIntoTerminal = insert;

@@ -8,7 +8,9 @@
 export type ShellMark =
   | { readonly kind: 'prompt' }
   | { readonly kind: 'output' }
-  | { readonly kind: 'end'; readonly exitCode: number };
+  | { readonly kind: 'end'; readonly exitCode: number }
+  /** The shell's working folder, reported at each prompt as `P;Cwd=<absolute path>`. */
+  | { readonly kind: 'cwd'; readonly path: string };
 
 /** Reads the payload of an OSC 133 sequence. Unknown payloads are ignored. */
 export function parseShellMark(payload: string): ShellMark | undefined {
@@ -17,6 +19,13 @@ export function parseShellMark(payload: string): ShellMark | undefined {
   if (payload === 'D' || payload.startsWith('D;')) {
     const code = Number.parseInt(payload.slice(2), 10);
     return { kind: 'end', exitCode: Number.isFinite(code) ? code : 0 };
+  }
+  if (payload.startsWith('P;Cwd=')) {
+    const path = payload.slice('P;Cwd='.length);
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: rejecting control bytes is the point
+    return path.startsWith('/') && !/[\u0000-\u001f\u007f]/.test(path)
+      ? { kind: 'cwd', path }
+      : undefined;
   }
   return undefined;
 }

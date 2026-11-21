@@ -25,6 +25,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     quickFilterMatchMode: 'fuzzy',
     terminalShellIntegration: 'unset',
     terminalAssistant: true,
+    terminalFollowPane: true,
     schemaVersion: 2,
     theme: 'auto',
     language: 'en',

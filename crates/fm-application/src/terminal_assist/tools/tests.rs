@@ -27,6 +27,7 @@ fn paths_outside_the_folder_are_refused() {
     let (_dir, sandbox) = sandbox();
     let ToolOutput { text, .. } = sandbox.run(&ToolCall::ReadFile {
         path: "../secret".into(),
+        offset: None,
     });
     assert!(text.starts_with("Error:"), "{text}");
     let ToolOutput { text, .. } = sandbox.run(&ToolCall::ListDir {
@@ -44,6 +45,7 @@ fn a_symlink_leading_out_is_refused() {
     std::os::unix::fs::symlink(outside.path(), dir.path().join("link")).unwrap();
     let ToolOutput { text, .. } = sandbox.run(&ToolCall::ReadFile {
         path: "link/o.txt".into(),
+        offset: None,
     });
     assert!(text.starts_with("Error:"), "{text}");
 }
@@ -54,6 +56,7 @@ fn read_file_returns_redacted_bounded_text() {
     fs::write(dir.path().join("conf.txt"), "TOKEN=abc\nname=x\n").unwrap();
     let ToolOutput { step, text } = sandbox.run(&ToolCall::ReadFile {
         path: "conf.txt".into(),
+        offset: None,
     });
     assert_eq!(step, "Read conf.txt");
     assert_eq!(text, "TOKEN=[redacted]\nname=x\n");
@@ -61,9 +64,28 @@ fn read_file_returns_redacted_bounded_text() {
     fs::write(dir.path().join("big.txt"), "z".repeat(40_000)).unwrap();
     let ToolOutput { text, .. } = sandbox.run(&ToolCall::ReadFile {
         path: "big.txt".into(),
+        offset: None,
     });
-    assert!(text.len() < 17_000);
-    assert!(text.ends_with("[truncated]"));
+    assert!(text.len() < 33_000);
+    assert!(text.contains("[truncated at byte"));
+
+    // The rest of a cut-off file is reachable with `offset`.
+    let mut numbered = String::new();
+    for n in 0..8_000 {
+        numbered.push_str(&format!("{n:05}\n"));
+    }
+    fs::write(dir.path().join("long.txt"), &numbered).unwrap();
+    let ToolOutput { text: first, .. } = sandbox.run(&ToolCall::ReadFile {
+        path: "long.txt".into(),
+        offset: None,
+    });
+    assert!(first.contains("\"offset\":32768"));
+    let ToolOutput { text: rest, .. } = sandbox.run(&ToolCall::ReadFile {
+        path: "long.txt".into(),
+        offset: Some(32_768),
+    });
+    assert!(rest.ends_with("07999\n"));
+    assert!(!rest.contains("[truncated"));
 }
 
 #[test]
@@ -73,7 +95,10 @@ fn secret_looking_and_binary_files_are_not_read() {
     fs::write(dir.path().join("id_rsa"), "key").unwrap();
     fs::write(dir.path().join("bin.dat"), [0u8, 1, 2, 0]).unwrap();
     for name in [".env", "id_rsa", "bin.dat"] {
-        let ToolOutput { text, .. } = sandbox.run(&ToolCall::ReadFile { path: name.into() });
+        let ToolOutput { text, .. } = sandbox.run(&ToolCall::ReadFile {
+            path: name.into(),
+            offset: None,
+        });
         assert!(text.starts_with("Error:"), "{name}: {text}");
     }
     assert_eq!(sandbox.read_text(".env"), None);
@@ -110,9 +135,11 @@ fn a_missing_path_and_an_outside_path_read_the_same() {
     let (_dir, sandbox) = sandbox();
     let ToolOutput { text: missing, .. } = sandbox.run(&ToolCall::ReadFile {
         path: "nope.txt".into(),
+        offset: None,
     });
     let ToolOutput { text: outside, .. } = sandbox.run(&ToolCall::ReadFile {
         path: "/etc/hosts".into(),
+        offset: None,
     });
     assert_eq!(missing, "Error: nope.txt is not available.");
     assert_eq!(outside, "Error: /etc/hosts is not available.");
@@ -126,7 +153,10 @@ fn more_credential_files_and_folders_are_refused() {
     fs::create_dir(dir.path().join(".aws")).unwrap();
     fs::write(dir.path().join(".aws/credentials"), "key").unwrap();
     for name in [".pgpass", "state.tfstate", ".aws/credentials"] {
-        let ToolOutput { text, .. } = sandbox.run(&ToolCall::ReadFile { path: name.into() });
+        let ToolOutput { text, .. } = sandbox.run(&ToolCall::ReadFile {
+            path: name.into(),
+            offset: None,
+        });
         assert!(text.starts_with("Error:"), "{name}: {text}");
     }
     let ToolOutput { text, .. } = sandbox.run(&ToolCall::Grep {
@@ -147,6 +177,7 @@ fn a_fifo_is_refused_instead_of_blocking() {
     assert!(status.success());
     let ToolOutput { text, .. } = sandbox.run(&ToolCall::ReadFile {
         path: "pipe".into(),
+        offset: None,
     });
     assert!(text.starts_with("Error:"), "{text}");
     let ToolOutput { text, .. } = sandbox.run(&ToolCall::Grep {

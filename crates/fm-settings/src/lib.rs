@@ -708,6 +708,8 @@ pub struct Settings {
     pub notes_root: Option<Location>,
     /// Whether the terminal assistant (`#` questions, Explain and Fix) is on (task 0336).
     pub terminal_assistant: bool,
+    /// Whether the terminal and the active pane keep to the same folder.
+    pub terminal_follow_pane: bool,
 }
 
 impl Settings {
@@ -806,6 +808,7 @@ impl Default for Settings {
             terminal_shell_integration: TerminalShellIntegration::default(),
             notes_root: None,
             terminal_assistant: true,
+            terminal_follow_pane: true,
         }
     }
 }

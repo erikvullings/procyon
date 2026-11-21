@@ -46,6 +46,7 @@ async fn read_file_returns_redacted_bounded_text() {
         &sandbox,
         ToolCall::ReadFile {
             path: "conf.txt".into(),
+            offset: None,
         },
     )
     .await;
@@ -57,11 +58,12 @@ async fn read_file_returns_redacted_bounded_text() {
         &sandbox,
         ToolCall::ReadFile {
             path: "big.txt".into(),
+            offset: None,
         },
     )
     .await;
-    assert!(big.text.len() < 17_000);
-    assert!(big.text.ends_with("[truncated]"));
+    assert!(big.text.len() < 33_000);
+    assert!(big.text.contains("[truncated at byte"));
 }
 
 #[tokio::test]
@@ -78,13 +80,21 @@ async fn paths_outside_credential_folders_and_secret_files_are_refused() {
         ".ssh/config",
         "src/../a.txt",
     ] {
-        let output = run(&sandbox, ToolCall::ReadFile { path: path.into() }).await;
+        let output = run(
+            &sandbox,
+            ToolCall::ReadFile {
+                path: path.into(),
+                offset: None,
+            },
+        )
+        .await;
         assert!(output.text.starts_with("Error:"), "{path}: {}", output.text);
     }
     let missing = run(
         &sandbox,
         ToolCall::ReadFile {
             path: "missing.txt".into(),
+            offset: None,
         },
     )
     .await;
@@ -92,6 +102,7 @@ async fn paths_outside_credential_folders_and_secret_files_are_refused() {
         &sandbox,
         ToolCall::ReadFile {
             path: "../x".into(),
+            offset: None,
         },
     )
     .await;
@@ -108,7 +119,14 @@ async fn a_symlink_is_not_followed() {
     std::os::unix::fs::symlink(outside.path(), dir.path().join("link")).unwrap();
     std::os::unix::fs::symlink(dir.path().join("a.txt"), dir.path().join("a-link")).unwrap();
     for path in ["link/o.txt", "a-link"] {
-        let output = run(&sandbox, ToolCall::ReadFile { path: path.into() }).await;
+        let output = run(
+            &sandbox,
+            ToolCall::ReadFile {
+                path: path.into(),
+                offset: None,
+            },
+        )
+        .await;
         assert!(output.text.starts_with("Error:"), "{path}: {}", output.text);
     }
 }
@@ -117,10 +135,16 @@ async fn a_symlink_is_not_followed() {
 async fn a_folder_is_not_a_file_and_a_file_is_not_a_folder() {
     let (_dir, sandbox) = remote();
     assert!(
-        run(&sandbox, ToolCall::ReadFile { path: "src".into() })
-            .await
-            .text
-            .starts_with("Error:")
+        run(
+            &sandbox,
+            ToolCall::ReadFile {
+                path: "src".into(),
+                offset: None
+            }
+        )
+        .await
+        .text
+        .starts_with("Error:")
     );
     assert!(
         run(

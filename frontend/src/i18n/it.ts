@@ -398,6 +398,7 @@ export const it = {
     terminal: 'Terminale',
     terminalCommand: 'Comando del terminale',
     terminalAssistant: 'Assistente del terminale (domande con #, Spiega e Correggi)',
+    terminalFollowPane: 'Terminale e riquadro si seguono (stessa cartella)',
     terminalApps: 'Terminali esterni',
     terminalAppsHelp:
       'Uno per riga: Nome = comando (un nome di applicazione su macOS, un eseguibile su Windows). Proposti da «Apri terminale con…».',
@@ -1812,6 +1813,11 @@ export const it = {
     pdfTools: 'Rendere ricercabili i PDF scansionati',
     failedSourcesCount: '{count} file non indicizzati',
     failedSourcesHeading: 'File non indicizzati',
+    failedReasonTooManyImages: 'Troppe immagini in questo PDF per indicizzarlo.',
+    failedReasonTooLarge: 'Troppo grande o complesso da indicizzare.',
+    failedReasonGeneric: 'Impossibile leggere o convertire.',
+    retryFailed: 'Riprova i file non riusciti',
+    dismissFailed: 'Ignora',
     rescanFolder: 'Riesamina la cartella',
     ocrNeededCount:
       "{count} PDF scansionato/i richiede/richiedono il riconoscimento del testo; vedi i dettagli dell'indicizzazione.",
@@ -2779,16 +2785,16 @@ export const it = {
     contextOtherFolder: 'Altro pannello',
     contextBlocks: 'Ultimi {count} comandi',
     contextFile: 'Contenuto di {name}',
-    assistApproveNote: "L'assistente vuole eseguire questo comando nel tuo terminale.",
-    assistNeedsBlocks:
-      'Eseguire comandi richiede i blocchi di comandi. Inseriscilo invece nel prompt.',
-    assistRun: 'Esegui',
-    assistDecline: 'Rifiuta',
     contextLabel: "Contesto inviato all'assistente",
     contextRestore: 'Non incluso. Fai clic per includere.',
     contextRemove: 'Incluso. Fai clic per escludere.',
     followUpPlaceholder: 'Fai una domanda di approfondimento…',
     assistRunning: 'In esecuzione nel terminale…',
+    assistApproveNote: "L'assistente vuole eseguire questo comando nel tuo terminale.",
+    assistNeedsBlocks:
+      'Eseguire comandi richiede i blocchi di comandi. Inseriscilo invece nel prompt.',
+    assistRun: 'Esegui',
+    assistDecline: 'Rifiuta',
     assistStop: 'Ferma',
   },
   contextMenu: {

@@ -133,11 +133,64 @@ export interface Mentions {
 /** Finds the `@path` mentions in a question. An `@` inside a word (an email) is not a mention. */
 export function parseMentions(text: string): Mentions {
   const files: string[] = [];
-  for (const match of text.matchAll(/(?:^|\s)@(\S+)/g)) {
-    const name = (match[1] ?? '').replace(/[,;:!?)\]]+$/, '').replace(/\.+$/, '');
+  for (const match of text.matchAll(/(?:^|\s)@(?:"([^"]+)"|(\S+))/g)) {
+    const quoted = match[1];
+    const name = quoted ?? (match[2] ?? '').replace(/[,;:!?)\]]+$/, '').replace(/\.+$/, '');
     if (name !== '' && !files.includes(name)) files.push(name);
   }
   return { files };
+}
+
+/** What Tab types for an `@name`: delete `erase` typed characters, then type `insert`. */
+export interface MentionCompletion {
+  readonly erase: number;
+  readonly insert: string;
+}
+
+/** A mention as it is typed: names with spaces are quoted, `@"My File.md"`. */
+export function mentionText(name: string): string {
+  return /\s/.test(name) ? `@"${name}"` : `@${name}`;
+}
+
+/**
+ * Tab completion of the `@name` at the end of what is typed, against the folder's names, like a
+ * shell. A name with a space is completed in quotes (`@"My File.md"`); folders (listed with a
+ * trailing `/`) are completed without a closing quote or space so the path can continue. With
+ * several matches it extends to their common prefix. `undefined` when there is nothing to add.
+ */
+export function completeMention(
+  typed: string,
+  names: readonly string[],
+): MentionCompletion | undefined {
+  const match = /(?:^|\s)@(?:"([^"]*)|(\S*))$/.exec(typed);
+  if (match === null) return undefined;
+  const quoted = match[1] !== undefined;
+  const partial = match[1] ?? match[2] ?? '';
+  const typedLength = partial.length + (quoted ? 1 : 0);
+  const lower = partial.toLowerCase();
+  const matches = names.filter((name) => name.toLowerCase().startsWith(lower));
+  const first = matches[0];
+  if (first === undefined) return undefined;
+  if (matches.length === 1) {
+    const folder = first.endsWith('/');
+    const needsQuote = quoted || /\s/.test(first);
+    if (!needsQuote)
+      return { erase: 0, insert: `${first.slice(partial.length)}${folder ? '' : ' '}` };
+    const rest = quoted ? first.slice(partial.length) : `"${first}`;
+    return { erase: quoted ? 0 : typedLength, insert: `${rest}${folder ? '' : '" '}` };
+  }
+  let common = first;
+  for (const name of matches) {
+    let length = 0;
+    while (length < common.length && common[length]?.toLowerCase() === name[length]?.toLowerCase())
+      length += 1;
+    common = common.slice(0, length);
+  }
+  // Without a quote the mention ends at whitespace, so stop before it.
+  const space = common.search(/\s/);
+  if (!quoted && space >= 0) common = common.slice(0, space);
+  const insert = common.slice(partial.length);
+  return insert === '' ? undefined : { erase: 0, insert };
 }
 
 const NO_MENTIONS: Mentions = { files: [] };

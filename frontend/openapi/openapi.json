@@ -27834,6 +27834,10 @@
             ],
             "description": "Optional terminal command."
           },
+          "terminalFollowPane": {
+            "type": "boolean",
+            "description": "Whether the terminal and the active pane keep to the same folder."
+          },
           "terminalShellIntegration": {
             "$ref": "#/components/schemas/TerminalShellIntegrationDto",
             "description": "Command-block shell integration for new terminals (task 0333)."

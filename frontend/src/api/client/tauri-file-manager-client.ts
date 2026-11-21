@@ -598,6 +598,10 @@ export class TauriFileManagerClient implements FileManagerClient {
     await invoke<void>('rescan_semantic_root', { rootId });
   }
 
+  async dismissSemanticFailedSources(rootId: string, _signal?: AbortSignal): Promise<void> {
+    await invoke<void>('dismiss_semantic_failed_sources', { rootId });
+  }
+
   async listSemanticVocabularies(_signal?: AbortSignal): Promise<readonly SemanticVocabulary[]> {
     return invoke<SemanticVocabulary[]>('list_semantic_vocabularies');
   }

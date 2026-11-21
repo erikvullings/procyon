@@ -37,7 +37,10 @@ impl RemoteSandbox {
     pub(super) async fn run(&self, call: &ToolCall) -> ToolOutput {
         let (step, result) = match call {
             ToolCall::ListDir { path } => (format!("Listed {path}"), self.list_dir(path).await),
-            ToolCall::ReadFile { path } => (format!("Read {path}"), self.read_file(path).await),
+            ToolCall::ReadFile { path, offset } => (
+                format!("Read {path}"),
+                self.read_file(path, offset.unwrap_or(0)).await,
+            ),
             ToolCall::Grep { pattern, .. } => (
                 format!("Searched for {pattern}"),
                 Err(ToolError::RemoteGrep),
@@ -58,7 +61,7 @@ impl RemoteSandbox {
 
     /// The text of a file inside the folder, for `@path` mentions.
     pub(super) async fn read_text(&self, relative: &str) -> Option<String> {
-        self.read_file_text(relative).await.ok()
+        self.read_file_text(relative, 0).await.ok()
     }
 
     /// The location of `relative` inside the folder and what it is. The path is checked piece by
@@ -134,11 +137,25 @@ impl RemoteSandbox {
         Ok(names.join("\n"))
     }
 
-    async fn read_file(&self, relative: &str) -> Result<String, ToolError> {
-        Ok(redact_secrets(&self.read_file_text(relative).await?))
+    /// The location of a regular, non-secret file inside the folder.
+    pub(super) async fn document_location(&self, relative: &str) -> Result<Location, ToolError> {
+        let (location, summary) = self.locate(relative).await?;
+        if is_secret_name(&summary.name) {
+            return Err(ToolError::Secret(summary.name));
+        }
+        if summary.kind != EntryKind::File {
+            return Err(ToolError::NotText(summary.name));
+        }
+        Ok(location)
     }
 
-    async fn read_file_text(&self, relative: &str) -> Result<String, ToolError> {
+    async fn read_file(&self, relative: &str, offset: usize) -> Result<String, ToolError> {
+        Ok(redact_secrets(
+            &self.read_file_text(relative, offset).await?,
+        ))
+    }
+
+    async fn read_file_text(&self, relative: &str, offset: usize) -> Result<String, ToolError> {
         let (location, summary) = self.locate(relative).await?;
         let name = summary.name.clone();
         if is_secret_name(&name) {
@@ -156,13 +173,22 @@ impl RemoteSandbox {
             .open_read(&entry, CancellationToken::new())
             .await
             .map_err(|_| ToolError::Unreadable(name.clone()))?;
+        let mut stream = stream;
+        if offset > 0 {
+            tokio::io::copy(
+                &mut (&mut stream).take(offset as u64),
+                &mut tokio::io::sink(),
+            )
+            .await
+            .map_err(|_| ToolError::Unreadable(name.clone()))?;
+        }
         let mut buffer = Vec::new();
         stream
             .take(MAX_READ_BYTES as u64 + 1)
             .read_to_end(&mut buffer)
             .await
             .map_err(|_| ToolError::Unreadable(name.clone()))?;
-        text_from_bytes(buffer, &name)
+        text_from_bytes(buffer, &name, offset)
     }
 }
 

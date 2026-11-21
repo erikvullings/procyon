@@ -1,6 +1,7 @@
 import DOMPurify from 'dompurify';
 import { render } from 'slimdown-js';
 import { metadataTableHtml, splitMetadata } from './markdown-metadata';
+import { wikilinksToHtml } from './markdown-wikilinks';
 import './markdown-metadata.css';
 
 /** The DOMPurify configuration shared by Markdown, EPUB and plugin previews. */
@@ -15,7 +16,7 @@ export const PREVIEW_SANITIZE_OPTIONS = {
 const LEAKED_LIST_PLACEHOLDER = /\{\{LISTITEM:[^{}]*\}\}/g;
 
 function renderMarkdown(markdown: string): string {
-  return render(markdown).replace(LEAKED_LIST_PLACEHOLDER, '');
+  return render(wikilinksToHtml(markdown)).replace(LEAKED_LIST_PLACEHOLDER, '');
 }
 
 /** Markdown as sanitized HTML; front matter or a TASKS-style `Key: value` header becomes a table. */

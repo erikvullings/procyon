@@ -3,6 +3,7 @@ import {
   assistContext,
   cleanCommand,
   commandFromAnswer,
+  completeMention,
   contextChips,
   EXPLAIN_REQUEST,
   effectiveRemoved,
@@ -10,6 +11,7 @@ import {
   LARGE_LISTING_NAMES,
   MAX_CONTEXT_BLOCKS,
   MAX_TRANSCRIPT_LINES,
+  mentionText,
   parseMentions,
   type TerminalAssistSource,
   transcriptTail,
@@ -70,6 +72,12 @@ const source = (over: Partial<TerminalAssistSource> = {}): TerminalAssistSource 
 });
 
 describe('parseMentions', () => {
+  it('reads a quoted name with spaces', () => {
+    expect(parseMentions('summarise @"My File.md" and @b.txt')).toEqual({
+      files: ['My File.md', 'b.txt'],
+    });
+  });
+
   it('finds the files named with @', () => {
     expect(parseMentions('why does @src/lib.rs fail? also @a.txt.')).toEqual({
       files: ['src/lib.rs', 'a.txt'],
@@ -202,5 +210,63 @@ describe('effectiveRemoved', () => {
     const small = source({ listing: names(LARGE_LISTING_NAMES) });
     expect(effectiveRemoved(small, new Set(), new Set()).has('listing')).toBe(false);
     expect(effectiveRemoved(small, new Set(['blocks']), new Set()).has('blocks')).toBe(true);
+  });
+});
+
+describe('completeMention', () => {
+  const names = [
+    'small_report.md',
+    'small_notes.txt',
+    'src/',
+    'My File.md',
+    'My Notes.md',
+    'README.md',
+  ];
+
+  it('completes the only match and ends the file with a space', () => {
+    expect(completeMention('# summarise @READ', names)).toEqual({ erase: 0, insert: 'ME.md ' });
+  });
+
+  it('completes a folder without a space so the path can continue', () => {
+    expect(completeMention('# look in @sr', names)).toEqual({ erase: 0, insert: 'c/' });
+  });
+
+  it('extends to the common prefix of several matches', () => {
+    expect(completeMention('# explain @sm', names)).toEqual({ erase: 0, insert: 'all_' });
+  });
+
+  it('adds nothing when several matches share no more than is typed', () => {
+    expect(completeMention('# explain @small_', names)).toBeUndefined();
+  });
+
+  it('adds nothing without an @word at the end, a match, or inside an email', () => {
+    expect(completeMention('# explain', names)).toBeUndefined();
+    expect(completeMention('# explain @zzz', names)).toBeUndefined();
+    expect(completeMention('# mail me@sm', names)).toBeUndefined();
+    expect(completeMention('# explain @README.md and', names)).toBeUndefined();
+  });
+
+  it('quotes a name with a space, replacing what was typed', () => {
+    expect(completeMention('# open @My F', names)).toBeUndefined();
+    expect(completeMention('# open @"My F', names)).toEqual({ erase: 0, insert: 'ile.md" ' });
+    expect(completeMention('# open @"My', names)).toEqual({ erase: 0, insert: ' ' });
+  });
+
+  it('opens the quote when the only match has a space', () => {
+    expect(completeMention('# open @My', ['My File.md', 'a.txt'])).toEqual({
+      erase: 2,
+      insert: '"My File.md" ',
+    });
+  });
+
+  it('does not run on into whitespace without a quote', () => {
+    expect(completeMention('# open @M', names)).toEqual({ erase: 0, insert: 'y' });
+  });
+});
+
+describe('mentionText', () => {
+  it('quotes only names with whitespace', () => {
+    expect(mentionText('a.txt')).toBe('@a.txt');
+    expect(mentionText('My File.md')).toBe('@"My File.md"');
   });
 });

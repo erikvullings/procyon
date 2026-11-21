@@ -395,6 +395,7 @@ export const nl = {
     terminal: 'Terminal',
     terminalCommand: 'Terminalcommando',
     terminalAssistant: 'Terminalassistent (#-vragen, Uitleggen en Oplossen)',
+    terminalFollowPane: 'Terminal en paneel volgen elkaar (zelfde map)',
     terminalApps: 'Externe terminals',
     terminalAppsHelp:
       'Eén per regel: Naam = commando (een toepassingsnaam op macOS, een uitvoerbaar bestand op Windows). Aangeboden door “Terminal openen met…”.',
@@ -2222,6 +2223,11 @@ export const nl = {
     pdfTools: "Gescande pdf's doorzoekbaar maken",
     failedSourcesCount: '{count} bestand(en) konden niet worden geïndexeerd',
     failedSourcesHeading: 'Bestanden die niet konden worden geïndexeerd',
+    failedReasonTooManyImages: 'Te veel afbeeldingen in deze pdf om te indexeren.',
+    failedReasonTooLarge: 'Te groot of te complex om te indexeren.',
+    failedReasonGeneric: 'Kon niet worden gelezen of omgezet.',
+    retryFailed: 'Mislukte bestanden opnieuw proberen',
+    dismissFailed: 'Negeren',
     rescanFolder: 'Map opnieuw scannen',
     ocrNeededCount: '{count} gescande pdf(s) hebben tekstherkenning nodig; zie indexeringsdetails.',
     missingRootGuidance:
@@ -2777,16 +2783,16 @@ export const nl = {
     contextOtherFolder: 'Ander paneel',
     contextBlocks: 'Laatste {count} commando’s',
     contextFile: 'Bestand {name}',
-    assistApproveNote: 'De assistent wil dit commando in uw terminal uitvoeren.',
-    assistNeedsBlocks:
-      'Commando’s uitvoeren vereist commandoblokken. Voeg het in plaats daarvan in bij de prompt.',
-    assistRun: 'Uitvoeren',
-    assistDecline: 'Weigeren',
     contextLabel: 'Context die naar de assistent gaat',
     contextRestore: 'Niet opgenomen. Klik om op te nemen.',
     contextRemove: 'Opgenomen. Klik om weg te laten.',
     followUpPlaceholder: 'Stel een vervolgvraag…',
     assistRunning: 'Draait in de terminal…',
+    assistApproveNote: 'De assistent wil dit commando in uw terminal uitvoeren.',
+    assistNeedsBlocks:
+      'Commando’s uitvoeren vereist commandoblokken. Voeg het in plaats daarvan in bij de prompt.',
+    assistRun: 'Uitvoeren',
+    assistDecline: 'Weigeren',
     assistStop: 'Stoppen',
   },
   contextMenu: {

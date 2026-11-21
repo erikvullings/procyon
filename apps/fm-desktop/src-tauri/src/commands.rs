@@ -1623,6 +1623,21 @@ pub(crate) async fn rescan_semantic_root(
     Ok(())
 }
 
+/// Accepts the indexing failures listed for an enrolled folder so they disappear.
+#[tauri::command]
+pub(crate) async fn dismiss_semantic_failed_sources(
+    state: State<'_, AppState>,
+    root_id: String,
+) -> Result<(), SemanticLibraryErrorDto> {
+    let Some(root_id) = root_id.parse().ok() else {
+        return Err(semantic_library_error(
+            fm_application::semantic_library::SemanticLibraryError::InvalidRequest,
+        ));
+    };
+    state.service.semantic_dismiss_failed_sources(root_id);
+    Ok(())
+}
+
 /// Creates an authoritative destructive exclusion plan.
 #[tauri::command]
 pub(crate) async fn plan_semantic_exclusion(
@@ -2935,6 +2950,12 @@ pub(crate) async fn terminal_assist_stream(
 #[tauri::command]
 pub(crate) fn terminal_assist_close(state: State<'_, AppState>, session_id: String) {
     state.service.terminal_assist_close(&session_id);
+}
+
+/// Stops a terminal tab's running assistant request (task 0336).
+#[tauri::command]
+pub(crate) fn terminal_assist_cancel(state: State<'_, AppState>, session_id: String) {
+    state.service.terminal_assist_cancel(&session_id);
 }
 
 /// Where notes live, whether that folder exists, and what setup suggests (task 0337).

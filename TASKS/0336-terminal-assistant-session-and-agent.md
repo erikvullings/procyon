@@ -152,3 +152,25 @@ Phase 4 — `run_command` with approval, exit code and output returned to the lo
   - Setting `terminalAssistant` (default on; Settings → Terminal): off leaves `#` to the shell and
     hides the bar, help, block Explain/Fix and the shortcuts.
   - Not verified in the Tauri app: streaming over a real channel, the container query, the layout.
+
+### Follow-up notes: folder sync, documents, completion, cancel
+
+- **Folder sync** (`terminalFollowPane`, default on, Settings → Terminal): the local shell hooks print
+  `OSC 133;P;Cwd=<path>` at each prompt; the drawer follows it with the active pane
+  (`onFollowFolder`), and a pane folder change types `cd -- <path>` at an idle empty prompt
+  (`paneFolderChanged`). `LiveTerminal.folder` is the last shared folder and prevents ping-pong.
+  SSH shells have no hooks, so they are not synced.
+- **Documents:** `read_file` and `@file` read EPUB/DOCX/PDF/PPTX/XLSX through
+  `DocumentConversionService` (`terminal_assist/documents.rs`); `offset` continues into the
+  converted text. Each continuation converts again (no cache yet).
+- **`@` completion:** Tab lists the terminal folder (`listFolder`), quotes names with spaces.
+- **No step cap:** the tool loop runs until answered; ESC calls `terminal_assist_cancel`, which ends
+  it before the next model call. A model call already in flight still finishes.
+
+- SSH folder sync: with shell integration on, the desktop host types `REMOTE_HOOK_LINE`
+  (`shell_integration.rs`) into a remote bash/zsh once its first output has been quiet for 400 ms,
+  MobaXterm style. It installs the same OSC 133 marks (so blocks and idle detection work over SSH
+  too); the echoed line is drawn invisible (SGR 8) and reset by the line itself. Other remote
+  shells (fish, csh, ...) are untouched and not synced.
+- `Documents` caches converted text per question (4 documents), so `offset` continuations do not
+  convert again; a new question starts with an empty cache.

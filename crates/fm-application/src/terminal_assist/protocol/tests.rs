@@ -9,7 +9,8 @@ fn each_tool_parses_from_its_line() {
     assert_eq!(
         parse_tool_call(r#"TOOL {"tool":"read_file","path":"Cargo.toml"}"#),
         Some(ToolCall::ReadFile {
-            path: "Cargo.toml".into()
+            path: "Cargo.toml".into(),
+            offset: None,
         })
     );
     assert_eq!(
@@ -89,7 +90,8 @@ fn the_name_and_arguments_shape_is_accepted_too() {
     assert_eq!(
         parse_tool_call(r#"{"name": "read_file", "arguments": {"path": "Cargo.toml"}}"#),
         Some(ToolCall::ReadFile {
-            path: "Cargo.toml".into()
+            path: "Cargo.toml".into(),
+            offset: None,
         })
     );
     assert_eq!(

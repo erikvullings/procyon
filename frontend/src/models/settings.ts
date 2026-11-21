@@ -191,6 +191,8 @@ export interface Settings {
   readonly terminalShellIntegration: TerminalShellIntegration;
   /** Whether the terminal assistant (`#` questions, Explain and Fix) is on (task 0336). */
   readonly terminalAssistant: boolean;
+  /** Whether the terminal and the active pane keep to the same folder. */
+  readonly terminalFollowPane: boolean;
   /** Remembers and restores the view (sort, columns, mode) chosen for each folder (task 0270). */
   readonly rememberFolderViews: boolean;
   /** Basemap of the shared map component (task 0275). */

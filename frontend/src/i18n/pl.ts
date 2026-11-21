@@ -398,6 +398,7 @@ export const pl = {
     terminal: 'Terminal',
     terminalCommand: 'Polecenie terminala',
     terminalAssistant: 'Asystent terminala (pytania z #, Wyjaśnij i Napraw)',
+    terminalFollowPane: 'Terminal i panel podążają za sobą (ten sam folder)',
     terminalApps: 'Zewnętrzne terminale',
     terminalAppsHelp:
       'Po jednym w wierszu: Nazwa = polecenie (nazwa aplikacji w macOS, plik wykonywalny w Windows). Oferowane przez „Otwórz terminal za pomocą…”.',
@@ -1807,6 +1808,11 @@ export const pl = {
     pdfTools: 'Umożliw wyszukiwanie w zeskanowanych plikach PDF',
     failedSourcesCount: '{count} plików nie udało się zindeksować',
     failedSourcesHeading: 'Pliki, których nie udało się zindeksować',
+    failedReasonTooManyImages: 'Zbyt wiele obrazów w tym PDF, aby go zindeksować.',
+    failedReasonTooLarge: 'Zbyt duży lub złożony do zindeksowania.',
+    failedReasonGeneric: 'Nie udało się odczytać ani przekonwertować.',
+    retryFailed: 'Ponów dla plików z błędami',
+    dismissFailed: 'Odrzuć',
     rescanFolder: 'Ponownie przeskanuj folder',
     ocrNeededCount:
       'Zeskanowane pliki PDF wymagające rozpoznawania tekstu: {count}; zobacz szczegóły indeksowania.',
@@ -2779,16 +2785,16 @@ export const pl = {
     contextOtherFolder: 'Drugi panel',
     contextBlocks: 'Ostatnie polecenia: {count}',
     contextFile: 'Plik {name}',
-    assistApproveNote: 'Asystent chce uruchomić to polecenie w Twoim terminalu.',
-    assistNeedsBlocks:
-      'Uruchamianie poleceń wymaga bloków poleceń. Wstaw je zamiast tego w wierszu poleceń.',
-    assistRun: 'Uruchom',
-    assistDecline: 'Odrzuć',
     contextLabel: 'Kontekst wysyłany do asystenta',
     contextRestore: 'Niedołączone. Kliknij, aby dołączyć.',
     contextRemove: 'Dołączone. Kliknij, aby pominąć.',
     followUpPlaceholder: 'Zadaj pytanie uzupełniające…',
     assistRunning: 'Działa w terminalu…',
+    assistApproveNote: 'Asystent chce uruchomić to polecenie w Twoim terminalu.',
+    assistNeedsBlocks:
+      'Uruchamianie poleceń wymaga bloków poleceń. Wstaw je zamiast tego w wierszu poleceń.',
+    assistRun: 'Uruchom',
+    assistDecline: 'Odrzuć',
     assistStop: 'Zatrzymaj',
   },
   contextMenu: {

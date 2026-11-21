@@ -1,8 +1,9 @@
 //! The agent's read-only tools (task 0336). They look only inside the terminal's working folder,
 //! follow no symlink out of it, refuse files that usually hold secrets, and bound everything.
 
+use std::fmt::Write as _;
 use std::fs;
-use std::io::Read as _;
+use std::io::{Read as _, Seek as _, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use fm_vfs::ProviderRegistry;
@@ -14,7 +15,7 @@ use super::redact::redact_secrets;
 use super::remote::RemoteSandbox;
 
 /// Most bytes of one file returned.
-pub(super) const MAX_READ_BYTES: usize = 16 * 1024;
+pub(super) const MAX_READ_BYTES: usize = 32 * 1024;
 /// Most folder entries listed.
 pub(super) const MAX_LISTED: usize = 200;
 /// Most matching lines returned.
@@ -42,6 +43,8 @@ pub(super) enum ToolError {
     NotText(String),
     #[error("{0} cannot be read.")]
     Unreadable(String),
+    #[error("{0}")]
+    Document(String),
     #[error("run_command needs the person's approval.")]
     NeedsApproval,
     #[error("notes tools only work on the notes folder.")]
@@ -82,7 +85,10 @@ impl Sandbox {
     pub(super) fn run(&self, call: &ToolCall) -> ToolOutput {
         let (step, result) = match call {
             ToolCall::ListDir { path } => (format!("Listed {path}"), self.list_dir(path)),
-            ToolCall::ReadFile { path } => (format!("Read {path}"), self.read_file(path)),
+            ToolCall::ReadFile { path, offset } => (
+                format!("Read {path}"),
+                self.read_file(path, offset.unwrap_or(0)),
+            ),
             ToolCall::Grep { pattern, path } => (
                 format!("Searched for {pattern}"),
                 self.grep(pattern, path.as_deref().unwrap_or(".")),
@@ -104,7 +110,25 @@ impl Sandbox {
     /// The text of a file inside the folder, for `@path` mentions. `None` when it cannot be read.
     pub(super) fn read_text(&self, relative: &str) -> Option<String> {
         let path = self.resolve(relative).ok()?;
-        read_text_file(&path).ok()
+        read_text_file(&path, 0).ok()
+    }
+
+    /// The `file://` URL of a regular, non-secret file inside the folder, for document reads.
+    fn document_url(&self, relative: &str) -> Result<String, ToolError> {
+        let path = self.resolve(relative)?;
+        let name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if is_secret_name(&name) {
+            return Err(ToolError::Secret(name));
+        }
+        if !fs::metadata(&path).is_ok_and(|metadata| metadata.is_file()) {
+            return Err(ToolError::NotText(name));
+        }
+        url::Url::from_file_path(&path)
+            .map(String::from)
+            .map_err(|()| ToolError::Unreadable(name))
     }
 
     /// The canonical path of `relative`, which must stay inside the folder and avoid credential
@@ -151,9 +175,9 @@ impl Sandbox {
         Ok(names.join("\n"))
     }
 
-    fn read_file(&self, relative: &str) -> Result<String, ToolError> {
+    fn read_file(&self, relative: &str, offset: usize) -> Result<String, ToolError> {
         let path = self.resolve(relative)?;
-        Ok(redact_secrets(&read_text_file(&path)?))
+        Ok(redact_secrets(&read_text_file(&path, offset)?))
     }
 
     fn grep(&self, pattern: &str, relative: &str) -> Result<String, ToolError> {
@@ -222,7 +246,7 @@ impl Sandbox {
                 continue;
             }
             *budget -= 1;
-            let Ok(text) = read_text_file(&real) else {
+            let Ok(text) = read_text_file(&real, 0) else {
                 continue;
             };
             let shown = real
@@ -280,7 +304,7 @@ pub(crate) fn is_credential_folder(name: &str) -> bool {
 
 /// A bounded regular text file. Special files (a FIFO would block), binary files and
 /// secret-looking names are refused.
-fn read_text_file(path: &Path) -> Result<String, ToolError> {
+fn read_text_file(path: &Path, offset: usize) -> Result<String, ToolError> {
     let name = path
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
@@ -292,17 +316,25 @@ fn read_text_file(path: &Path) -> Result<String, ToolError> {
     if !metadata.is_file() {
         return Err(ToolError::NotText(name));
     }
-    let file = fs::File::open(path).map_err(|_| ToolError::Unreadable(name.clone()))?;
+    let mut file = fs::File::open(path).map_err(|_| ToolError::Unreadable(name.clone()))?;
+    if offset > 0 {
+        file.seek(SeekFrom::Start(offset as u64))
+            .map_err(|_| ToolError::Unreadable(name.clone()))?;
+    }
     let mut buffer = Vec::new();
     file.take(MAX_READ_BYTES as u64 + 1)
         .read_to_end(&mut buffer)
         .map_err(|_| ToolError::Unreadable(name.clone()))?;
-    text_from_bytes(buffer, &name)
+    text_from_bytes(buffer, &name, offset)
 }
 
 /// The text of at most `MAX_READ_BYTES + 1` bytes read from a file: binary content is refused and
 /// anything past the limit is cut with a marker.
-pub(super) fn text_from_bytes(mut buffer: Vec<u8>, name: &str) -> Result<String, ToolError> {
+pub(super) fn text_from_bytes(
+    mut buffer: Vec<u8>,
+    name: &str,
+    offset: usize,
+) -> Result<String, ToolError> {
     if buffer.contains(&0) {
         return Err(ToolError::NotText(name.to_owned()));
     }
@@ -310,7 +342,11 @@ pub(super) fn text_from_bytes(mut buffer: Vec<u8>, name: &str) -> Result<String,
     buffer.truncate(MAX_READ_BYTES);
     let mut text = String::from_utf8_lossy(&buffer).into_owned();
     if truncated {
-        text.push_str("\n[truncated]");
+        let _ = write!(
+            text,
+            "\n[truncated at byte {next}: call read_file with \"offset\":{next} to continue]",
+            next = offset + MAX_READ_BYTES
+        );
     }
     Ok(text)
 }
@@ -323,6 +359,23 @@ pub(super) enum ToolHost {
 }
 
 impl ToolHost {
+    /// The location of a document file the tools may read, checked like `read_file`.
+    pub(super) async fn document_location(
+        &self,
+        providers: &ProviderRegistry,
+        relative: &str,
+    ) -> Result<fm_domain::Location, ToolError> {
+        match self {
+            Self::Local(sandbox) => {
+                let url = sandbox.document_url(relative)?;
+                providers
+                    .parse(&url)
+                    .map_err(|_| ToolError::Unreadable(relative.to_owned()))
+            }
+            Self::Remote(remote) => remote.document_location(relative).await,
+        }
+    }
+
     /// `None` when the working folder cannot be reached.
     pub(super) fn open(providers: &ProviderRegistry, working_directory: &str) -> Option<Self> {
         match path_from_location(working_directory) {

@@ -105,13 +105,14 @@ fn the_oldest_turns_go_first_when_the_prompt_is_too_long() {
 }
 
 #[test]
-fn steps_count_per_person_turn() {
+fn a_stop_lasts_until_the_next_question() {
     let sessions = Sessions::default();
     sessions.push_person("t1", "a", "");
-    assert_eq!(sessions.next_step("t1"), 1);
-    assert_eq!(sessions.next_step("t1"), 2);
+    assert!(!sessions.is_cancelled("t1"));
+    sessions.cancel("t1");
+    assert!(sessions.is_cancelled("t1"));
     sessions.push_person("t1", "b", "");
-    assert_eq!(sessions.next_step("t1"), 1);
+    assert!(!sessions.is_cancelled("t1"));
 }
 
 #[test]

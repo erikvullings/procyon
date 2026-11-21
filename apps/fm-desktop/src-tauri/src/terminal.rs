@@ -19,6 +19,9 @@ use uuid::Uuid;
 /// Builds the user's default shell as a login shell (`-zsh` argv0 on Unix,
 /// `%ComSpec%` on Windows) so it sees the same `PATH` as a regular terminal
 /// rather than the minimal environment a GUI app inherits.
+/// How long a remote shell must be silent after its first output before the hook line is typed.
+const REMOTE_HOOK_QUIET: std::time::Duration = std::time::Duration::from_millis(400);
+
 fn local_shell_command(cwd: &Path) -> CommandBuilder {
     with_terminal_env(CommandBuilder::new_default_prog(), cwd)
 }
@@ -258,7 +261,7 @@ impl TerminalRegistry {
                     )
                     .await
                     .map_err(|error| TerminalError::Backend(error.to_string()))?;
-                self.open_remote(key, remote_channel, channel)
+                self.open_remote(key, remote_channel, shell_integration, channel)
             }
         }
     }
@@ -360,9 +363,11 @@ impl TerminalRegistry {
         &self,
         key: String,
         remote_channel: RemoteShellChannel,
+        shell_integration: bool,
         channel: Channel<TerminalEvent>,
     ) -> Result<String, TerminalError> {
         let RemoteShellChannel { mut reader, writer } = remote_channel;
+        let hook_writer = writer.clone();
         let subscribers = Arc::new(Mutex::new(vec![channel]));
         let history = Arc::new(Mutex::new(Vec::new()));
         let thread_subscribers = Arc::clone(&subscribers);
@@ -371,7 +376,34 @@ impl TerminalRegistry {
         let cleanup_key = key.clone();
         let session_id = Uuid::new_v4();
         tokio::spawn(async move {
-            while let Some(RemoteShellEvent::Data(bytes)) = reader.next().await {
+            // With integration on, the hook line goes in once the shell has been quiet for a
+            // moment after its first output (its prompt), so MOTD text is not hidden.
+            let mut pending_hook = shell_integration;
+            let mut seen_output = false;
+            loop {
+                let event = if pending_hook && seen_output {
+                    match tokio::time::timeout(REMOTE_HOOK_QUIET, reader.next()).await {
+                        Ok(event) => event,
+                        Err(_) => {
+                            pending_hook = false;
+                            record_and_broadcast(
+                                &thread_history,
+                                &thread_subscribers,
+                                shell_integration::HIDE_ECHO,
+                            );
+                            let _ = hook_writer
+                                .write(shell_integration::REMOTE_HOOK_LINE.as_bytes())
+                                .await;
+                            continue;
+                        }
+                    }
+                } else {
+                    reader.next().await
+                };
+                let Some(RemoteShellEvent::Data(bytes)) = event else {
+                    break;
+                };
+                seen_output = true;
                 record_and_broadcast(&thread_history, &thread_subscribers, &bytes);
             }
             broadcast_exit(&thread_subscribers);

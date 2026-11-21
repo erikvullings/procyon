@@ -30,7 +30,8 @@ enum Turn {
 #[derive(Debug, Default)]
 struct Session {
     turns: Vec<Turn>,
-    steps: u32,
+    /// Set when the person stopped the running request; ends the tool loop.
+    cancelled: bool,
     /// The state parts sent so far, as they were last sent.
     state: HashMap<String, String>,
     /// Whether any state was sent yet, which decides how an update is introduced.
@@ -137,10 +138,10 @@ impl Sessions {
         unsent
     }
 
-    /// Starts a new person turn; resets the tool-step counter.
+    /// Starts a new person turn; clears an earlier stop.
     pub(super) fn push_person(&self, id: &str, question: &str, context: &str) {
         self.with(id, |session| {
-            session.steps = 0;
+            session.cancelled = false;
             session.turns.push(Turn::Person {
                 question: question.to_owned(),
                 context: context.to_owned(),
@@ -167,13 +168,16 @@ impl Sessions {
     }
 
     /// Counts one tool step in the current turn and returns the new count.
-    pub(super) fn next_step(&self, id: &str) -> u32 {
-        let mut count = 0;
-        self.with(id, |session| {
-            session.steps += 1;
-            count = session.steps;
-        });
-        count
+    /// Stops the running request of a session: its tool loop ends before the next model call.
+    pub(crate) fn cancel(&self, id: &str) {
+        self.with(id, |session| session.cancelled = true);
+    }
+
+    /// Whether the person stopped the running request.
+    pub(super) fn is_cancelled(&self, id: &str) -> bool {
+        let mut cancelled = false;
+        self.with(id, |session| cancelled = session.cancelled);
+        cancelled
     }
 
     /// The conversation as the prompt body, newest turns kept within the size bound.

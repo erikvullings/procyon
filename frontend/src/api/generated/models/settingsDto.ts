@@ -133,6 +133,8 @@ export interface SettingsDto {
      * @nullable
      */
   terminalCommand?: string | null;
+  /** Whether the terminal and the active pane keep to the same folder. */
+  terminalFollowPane?: boolean;
   /** Command-block shell integration for new terminals (task 0333). */
   terminalShellIntegration?: TerminalShellIntegrationDto;
   /** Application theme. */

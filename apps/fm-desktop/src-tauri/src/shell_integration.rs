@@ -4,8 +4,8 @@
 //! files kept in the app's data folder. The wrappers load the person's own startup files exactly
 //! as the shell would, then install hooks that print OSC 133 marks (prompt, command output start,
 //! command end with exit status). Nothing in the person's dotfiles changes, and turning the
-//! setting off starts new shells without the wrappers. Other shells, and remote shells, are not
-//! wrapped.
+//! setting off starts new shells without the wrappers. Other shells are not wrapped. Remote
+//! (SSH) shells get a one-line hook typed in once they are up; see [`REMOTE_HOOK_LINE`].
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -17,6 +17,7 @@ const ZSH_HOOKS: &str = r#"# Procyon shell integration (command blocks)
 __procyon_precmd() {
   local exit_code=$?
   printf '\e]133;D;%d\a' "$exit_code"
+  printf '\e]133;P;Cwd=%s\a' "$PWD"
   printf '\e]133;A\a'
 }
 __procyon_preexec() {
@@ -61,6 +62,7 @@ unset __procyon_profile __procyon_loaded_bashrc
 __procyon_begin() { __procyon_status=$?; }
 __procyon_end() {
   printf '\e]133;D;%d\a' "$__procyon_status"
+  printf '\e]133;P;Cwd=%s\a' "$PWD"
   printf '\e]133;A\a'
   __procyon_at_prompt=1
 }
@@ -81,12 +83,37 @@ const FISH_HOOKS: &str = r#"# Procyon shell integration (command blocks)
 function __procyon_prompt --on-event fish_prompt
     set -l exit_code $status
     printf '\e]133;D;%d\a' $exit_code
+    printf '\e]133;P;Cwd=%s\a' $PWD
     printf '\e]133;A\a'
 end
 function __procyon_preexec --on-event fish_preexec
     printf '\e]133;C\a'
 end
 "#;
+
+/// One line typed into a remote shell once it is up (the way MobaXterm follows folders): it
+/// installs the same marks as the local hooks for bash and zsh and does nothing in other shells.
+/// The echoed line is drawn invisible (SGR 8) and the line ends by resetting that, so nothing
+/// stays on screen; the leading space keeps it out of history where the shell ignores spaces.
+/// The hook source stays free of single quotes because it travels inside `eval '...'`.
+pub(crate) const REMOTE_HOOK_LINE: &str = concat!(
+    " [ -n \"$BASH_VERSION$ZSH_VERSION\" ] && eval '",
+    "if [ -n \"$ZSH_VERSION\" ]; then ",
+    "__procyon_prompt() { printf \"\\033]133;D;%d\\007\\033]133;P;Cwd=%s\\007\\033]133;A\\007\" \"$?\" \"$PWD\"; }; ",
+    "__procyon_preexec() { printf \"\\033]133;C\\007\"; }; ",
+    "precmd_functions+=(__procyon_prompt); preexec_functions+=(__procyon_preexec); ",
+    "else ",
+    "__procyon_begin() { __procyon_status=$?; }; ",
+    "__procyon_end() { printf \"\\033]133;D;%d\\007\\033]133;P;Cwd=%s\\007\\033]133;A\\007\" \"$__procyon_status\" \"$PWD\"; __procyon_at_prompt=1; }; ",
+    "__procyon_at_prompt=1; ",
+    "__procyon_preexec() { if [ \"$__procyon_at_prompt\" = 1 ]; then __procyon_at_prompt=0; printf \"\\033]133;C\\007\"; fi; }; ",
+    "trap __procyon_preexec DEBUG; ",
+    "PROMPT_COMMAND=\"__procyon_begin${PROMPT_COMMAND:+; $PROMPT_COMMAND}; __procyon_end\"; ",
+    "fi'; printf '\\033[0m'\r"
+);
+
+/// Starts drawing the echoed [`REMOTE_HOOK_LINE`] invisibly.
+pub(crate) const HIDE_ECHO: &[u8] = b"\x1b[8m";
 
 /// The shells this module can wrap, identified from the shell program's file name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -340,8 +367,59 @@ mod tests {
             "no command start: {output:?}"
         );
         assert!(
+            output.contains("\x1b]133;P;Cwd=/"),
+            "no working folder mark: {output:?}"
+        );
+        assert!(
             output.contains("\x1b]133;D;1\x07"),
             "no failed end: {output:?}"
+        );
+    }
+
+    /// Types the remote hook line into a plain interactive shell, as the terminal does over SSH.
+    #[cfg(unix)]
+    fn remote_hook_output(program: &str, args: &[&str]) -> String {
+        let mut command = CommandBuilder::new(program);
+        command.args(args);
+        command.env("PS1", "$ ");
+        command.env("PROMPT", "$ ");
+        command.env("HOME", std::env::temp_dir());
+        run_in_pty(
+            command,
+            &[REMOTE_HOOK_LINE, "false\r", "cd /tmp\r", "exit\r"],
+        )
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_remote_hook_line_makes_bash_report_folder_and_command_marks() {
+        let output = remote_hook_output("/bin/bash", &["--noprofile", "--norc", "-i"]);
+        assert!(output.contains("\x1b]133;P;Cwd=/"), "no folder: {output:?}");
+        assert!(output.contains("\x1b]133;C\x07"), "no start: {output:?}");
+        assert!(
+            output.contains("\x1b]133;D;1\x07"),
+            "no failure: {output:?}"
+        );
+        assert!(
+            output.contains("\x1b]133;P;Cwd=/tmp\x07")
+                || output.contains("\x1b]133;P;Cwd=/private/tmp\x07"),
+            "no cd: {output:?}"
+        );
+        assert!(output.contains("\x1b[0m"), "echo stays hidden: {output:?}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_remote_hook_line_makes_zsh_report_folder_and_command_marks() {
+        if !Path::new("/bin/zsh").exists() {
+            return;
+        }
+        let output = remote_hook_output("/bin/zsh", &["-f", "-i"]);
+        assert!(output.contains("\x1b]133;P;Cwd=/"), "no folder: {output:?}");
+        assert!(output.contains("\x1b]133;C\x07"), "no start: {output:?}");
+        assert!(
+            output.contains("\x1b]133;D;1\x07"),
+            "no failure: {output:?}"
         );
     }
 
@@ -378,6 +456,10 @@ mod tests {
         assert!(
             output.contains("\x1b]133;C\x07"),
             "no command start: {output:?}"
+        );
+        assert!(
+            output.contains("\x1b]133;P;Cwd=/"),
+            "no working folder mark: {output:?}"
         );
         assert!(
             output.contains("\x1b]133;D;1\x07"),
@@ -426,6 +508,10 @@ mod tests {
         assert!(
             output.contains("\x1b]133;C\x07"),
             "no command start: {output:?}"
+        );
+        assert!(
+            output.contains("\x1b]133;P;Cwd=/"),
+            "no working folder mark: {output:?}"
         );
         assert!(
             output.contains("\x1b]133;D;1\x07"),

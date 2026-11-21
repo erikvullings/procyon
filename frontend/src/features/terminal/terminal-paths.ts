@@ -26,3 +26,13 @@ export function shellQuote(path: string): string {
   if (/^[A-Za-z0-9_./:@%+,=-]+$/.test(path)) return path;
   return `'${path.replace(/'/g, "'\\''")}'`;
 }
+
+/** The command that moves a POSIX shell to `path`. */
+export function cdCommand(path: string): string {
+  return `cd -- ${shellQuote(path)}`;
+}
+
+/** The `file://` URI of an absolute local path, the inverse of {@link absolutePathOf}. */
+export function fileUriOfPath(path: string): string {
+  return `file://${path.split('/').map(encodeURIComponent).join('/')}`;
+}

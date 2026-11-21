@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 
 use fm_transport_dto::{TerminalAssistRequestDto, TerminalBlockDto};
 
-use super::newest_bytes;
 use super::redact::redact_secrets;
+use super::{newest_bytes, truncate_to_bytes};
 
 /// Most folder names listed.
 const MAX_LISTED_NAMES: usize = 1000;
@@ -18,7 +18,7 @@ const MAX_BLOCK_OUTPUT_BYTES: usize = 4 * 1024;
 /// Most bytes for all recent commands together; the oldest go first.
 const MAX_BLOCKS_BYTES: usize = 10 * 1024;
 /// Most bytes kept for one attached file.
-const MAX_FILE_BYTES: usize = 8 * 1024;
+const MAX_FILE_BYTES: usize = 24 * 1024;
 
 /// A file the person named with `@path`, already read inside the working folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -125,8 +125,19 @@ pub(super) fn render_activity(blocks: &[TerminalBlockDto], files: &[AttachedFile
         let _ = write!(text, "Recent commands, oldest first:\n{blocks}");
     }
     for file in files {
-        let body = redact_secrets(newest_bytes(&file.text, MAX_FILE_BYTES));
-        let _ = writeln!(text, "File {}:\n{body}", line(&file.name));
+        // The start of a named file matters most; the model can read the rest with `offset`.
+        let kept = truncate_to_bytes(&file.text, MAX_FILE_BYTES);
+        let body = redact_secrets(kept);
+        let _ = write!(text, "File {}:\n{body}", line(&file.name));
+        if kept.len() < file.text.len() {
+            let _ = write!(
+                text,
+                "\n[cut at byte {}: read_file with \"offset\":{} continues]",
+                kept.len(),
+                kept.len()
+            );
+        }
+        text.push('\n');
     }
     text.trim_end().to_owned()
 }

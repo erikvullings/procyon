@@ -2031,6 +2031,11 @@ impl FileManagerService {
         }
     }
 
+    /// Accepts the recorded indexing failures of one folder so they stop being listed.
+    pub fn semantic_dismiss_failed_sources(&self, root_id: fm_semantic_library::RootId) {
+        self.semantic_indexing.dismiss_failed_sources(root_id);
+    }
+
     /// Reconciles one explicitly enrolled root into the active semantic worker.
     ///
     /// This is opt-in application orchestration for a trusted host command. It
@@ -3533,6 +3538,11 @@ impl FileManagerService {
     /// Forgets one terminal tab's assistant session, when the tab closes.
     pub fn terminal_assist_close(&self, session_id: &str) {
         self.terminal_sessions.close(session_id);
+    }
+
+    /// Stops the request a terminal tab's assistant is running (its tool loop ends).
+    pub fn terminal_assist_cancel(&self, session_id: &str) {
+        self.terminal_sessions.cancel(session_id);
     }
 
     /// Where notes live, whether that folder exists, and what setup suggests (task 0337).

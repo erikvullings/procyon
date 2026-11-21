@@ -13,6 +13,9 @@ pub(super) enum ToolCall {
     },
     ReadFile {
         path: String,
+        /// Byte offset to continue a file that an earlier read cut off.
+        #[serde(default)]
+        offset: Option<usize>,
     },
     Grep {
         pattern: String,
@@ -73,7 +76,9 @@ fn tool_call_at(text: &str) -> Option<ToolCall> {
         {
             None
         }
-        ToolCall::ListDir { path } | ToolCall::ReadFile { path } | ToolCall::ReadNote { path }
+        ToolCall::ListDir { path }
+        | ToolCall::ReadFile { path, .. }
+        | ToolCall::ReadNote { path }
             if path.trim().is_empty() =>
         {
             None

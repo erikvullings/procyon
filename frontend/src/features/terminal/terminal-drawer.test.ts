@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TerminalClient } from './terminal-client';
 import {
   handleTerminalKeyEvent,
+  lineEditSequence,
   questionAtPrompt,
   showTerminalSurface,
   TerminalDrawer,
@@ -227,6 +228,46 @@ describe('TerminalDrawer', () => {
     if (writeCall === undefined) throw new Error('pasted text was not forwarded');
     expect([...writeCall[1]]).toEqual([...new TextEncoder().encode('git status')]);
     vi.unstubAllGlobals();
+  });
+
+  it('turns word and line chords into the shell bytes native terminals send', () => {
+    const seq = (init: KeyboardEventInit) => lineEditSequence(new KeyboardEvent('keydown', init));
+    expect(seq({ key: 'ArrowLeft', altKey: true })).toBe('\x1bb');
+    expect(seq({ key: 'ArrowRight', ctrlKey: true })).toBe('\x1bf');
+    expect(seq({ key: 'ArrowLeft', metaKey: true })).toBe('\x01');
+    expect(seq({ key: 'ArrowRight', metaKey: true })).toBe('\x05');
+    expect(seq({ key: 'Backspace', altKey: true })).toBe('\x1b\x7f');
+    expect(seq({ key: 'Backspace', ctrlKey: true })).toBe('\x17');
+    expect(seq({ key: 'Backspace', metaKey: true })).toBe('\x15');
+    expect(seq({ key: 'Delete', altKey: true })).toBe('\x1bd');
+    expect(seq({ key: 'Delete', metaKey: true })).toBe('\x0b');
+    expect(seq({ key: 'ArrowLeft' })).toBeUndefined();
+    expect(seq({ key: 'ArrowLeft', altKey: true, shiftKey: true })).toBeUndefined();
+    expect(seq({ key: 'a', altKey: true })).toBeUndefined();
+  });
+
+  it('sends a line-edit chord to the shell and keeps it from xterm', () => {
+    const onShellInput = vi.fn();
+    const event = new KeyboardEvent('keydown', {
+      key: 'Backspace',
+      altKey: true,
+      cancelable: true,
+    });
+    expect(handleTerminalKeyEvent(event, { onToggle: vi.fn(), onShellInput })).toBe(false);
+    expect(onShellInput).toHaveBeenCalledWith('\x1b\x7f');
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('keeps Tab for the shell unless a mention was completed', () => {
+    const tab = () => new KeyboardEvent('keydown', { key: 'Tab', cancelable: true });
+    expect(
+      handleTerminalKeyEvent(tab(), { onToggle: vi.fn(), onCompleteMention: () => false }),
+    ).toBe(true);
+    const event = tab();
+    expect(
+      handleTerminalKeyEvent(event, { onToggle: vi.fn(), onCompleteMention: () => true }),
+    ).toBe(false);
+    expect(event.defaultPrevented).toBe(true);
   });
 
   it('returns F12 to the file manager while xterm has focus', () => {

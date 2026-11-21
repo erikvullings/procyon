@@ -35,6 +35,8 @@ export interface TerminalClient {
   ): Promise<TerminalAssistReply>;
   /** Forgets one tab's assistant conversation when the tab closes (task 0336). */
   assistClose(sessionId: string): Promise<void>;
+  /** Stops the request the tab's assistant is running (ESC while it works). */
+  assistCancel?(sessionId: string): Promise<void>;
 }
 
 /** Desktop PTY IPC boundary; the browser host deliberately has no PTY implementation. */
@@ -61,4 +63,5 @@ export const tauriTerminalClient: TerminalClient = {
     return invoke<TerminalAssistReply>('terminal_assist_stream', { request, events });
   },
   assistClose: (sessionId) => invoke<void>('terminal_assist_close', { sessionId }),
+  assistCancel: (sessionId) => invoke<void>('terminal_assist_cancel', { sessionId }),
 };

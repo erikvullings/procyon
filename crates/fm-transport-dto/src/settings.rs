@@ -120,6 +120,10 @@ const fn terminal_assistant_default() -> bool {
     true
 }
 
+const fn terminal_follow_pane_default() -> bool {
+    true
+}
+
 fn terminal_shell_integration_default() -> TerminalShellIntegrationDto {
     TerminalShellIntegrationDto::Unset
 }
@@ -485,6 +489,9 @@ pub struct SettingsDto {
     /// Whether the terminal assistant (`#` questions, Explain and Fix) is on (task 0336).
     #[serde(default = "terminal_assistant_default")]
     pub terminal_assistant: bool,
+    /// Whether the terminal and the active pane keep to the same folder.
+    #[serde(default = "terminal_follow_pane_default")]
+    pub terminal_follow_pane: bool,
 }
 
 const fn default_semantic_max_source_mib() -> u32 {

@@ -576,6 +576,15 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                         onchange: (checked: boolean) =>
                           update(current, { terminalAssistant: checked }),
                       }),
+                      m(Switch, {
+                        className: 'col s12 m6',
+                        label: t('settings', 'terminalFollowPane'),
+                        checked: activeDraft.terminalFollowPane,
+                        left: t('settings', 'off'),
+                        right: t('settings', 'on'),
+                        onchange: (checked: boolean) =>
+                          update(current, { terminalFollowPane: checked }),
+                      }),
                     ]),
 
                     m('.row', [

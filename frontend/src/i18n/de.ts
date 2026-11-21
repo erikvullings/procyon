@@ -405,6 +405,7 @@ export const de = {
     terminal: 'Terminal',
     terminalCommand: 'Terminalbefehl',
     terminalAssistant: 'Terminal-Assistent (#-Fragen, Erklären und Korrigieren)',
+    terminalFollowPane: 'Terminal und Bereich folgen einander (gleicher Ordner)',
     terminalApps: 'Externe Terminals',
     terminalAppsHelp:
       'Eine pro Zeile: Name = Befehl (unter macOS ein Anwendungsname, unter Windows eine ausführbare Datei). Angeboten von „Terminal öffnen mit…“.',
@@ -1838,6 +1839,11 @@ export const de = {
     pdfTools: 'Gescannte PDFs durchsuchbar machen',
     failedSourcesCount: '{count} Datei(en) konnten nicht indiziert werden',
     failedSourcesHeading: 'Dateien, die nicht indiziert werden konnten',
+    failedReasonTooManyImages: 'Zu viele Bilder in diesem PDF zum Indizieren.',
+    failedReasonTooLarge: 'Zu groß oder zu komplex zum Indizieren.',
+    failedReasonGeneric: 'Konnte nicht gelesen oder konvertiert werden.',
+    retryFailed: 'Fehlgeschlagene Dateien erneut versuchen',
+    dismissFailed: 'Ausblenden',
     rescanFolder: 'Ordner erneut prüfen',
     ocrNeededCount:
       '{count} gescannte(s) PDF(s) benötigen Texterkennung; siehe Indizierungsdetails.',
@@ -2807,16 +2813,16 @@ export const de = {
     contextOtherFolder: 'Anderes Fenster',
     contextBlocks: 'Letzte {count} Befehle',
     contextFile: 'Datei {name}',
-    assistApproveNote: 'Der Assistent möchte diesen Befehl in Ihrem Terminal ausführen.',
-    assistNeedsBlocks:
-      'Zum Ausführen von Befehlen sind Befehlsblöcke nötig. Fügen Sie ihn stattdessen am Prompt ein.',
-    assistRun: 'Ausführen',
-    assistDecline: 'Ablehnen',
     contextLabel: 'An den Assistenten gesendeter Kontext',
     contextRestore: 'Nicht enthalten. Klicken zum Einschließen.',
     contextRemove: 'Enthalten. Klicken zum Ausschließen.',
     followUpPlaceholder: 'Rückfrage stellen…',
     assistRunning: 'Läuft im Terminal…',
+    assistApproveNote: 'Der Assistent möchte diesen Befehl in Ihrem Terminal ausführen.',
+    assistNeedsBlocks:
+      'Zum Ausführen von Befehlen sind Befehlsblöcke nötig. Fügen Sie ihn stattdessen am Prompt ein.',
+    assistRun: 'Ausführen',
+    assistDecline: 'Ablehnen',
     assistStop: 'Stopp',
   },
   contextMenu: {

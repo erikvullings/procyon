@@ -4,6 +4,7 @@
 //! proposed, and runs after the person approves it. Nothing is saved to disk.
 
 mod context;
+mod documents;
 mod notes;
 mod protocol;
 mod redact;
@@ -29,6 +30,7 @@ use crate::file_assistant::truncate_to_bytes;
 use crate::llm_profiles::{LlmChatGeneration, LlmProfileError, LlmRole};
 
 use self::context::{AttachedFile, render_activity, render_context, state_sections};
+use self::documents::{Documents, is_document};
 use self::protocol::{ToolCall, parse_tool_call};
 use self::stream::LineStreamer;
 use self::tools::{ToolHost, ToolOutput};
@@ -41,8 +43,6 @@ const MAX_TRANSCRIPT_BYTES: usize = 16 * 1024;
 const MAX_REPLY_BYTES: usize = 8 * 1024;
 /// Upper bound on generated tokens for one answer.
 const MAX_REPLY_TOKENS: u32 = 1024;
-/// Most tool steps (read-only tools and approved commands) for one question.
-const MAX_STEPS: u32 = 8;
 /// Most files attached with `@path` to one question.
 const MAX_ATTACHED_FILES: usize = 5;
 /// Longest session id, in characters.
@@ -58,13 +58,16 @@ const ASK_PROMPT: &str = "You are the assistant in the person's embedded termina
      You may use tools. To use one, reply with exactly one line and nothing else: `TOOL {json}`. \
      Then wait for the result. Tools: \
      {\"tool\":\"list_dir\",\"path\":\".\"} lists a folder; \
-     {\"tool\":\"read_file\",\"path\":\"Cargo.toml\"} reads a text file; \
+     {\"tool\":\"read_file\",\"path\":\"Cargo.toml\"} reads a text file, or the text of an \
+     EPUB, Word, PDF, PowerPoint or Excel document (a long file is cut \
+     off with a note: continue with {\"tool\":\"read_file\",\"path\":\"Cargo.toml\",\"offset\":32768}); \
      {\"tool\":\"grep\",\"pattern\":\"text\",\"path\":\"src\"} finds lines containing text \
      (path is optional); \
      {\"tool\":\"run_command\",\"command\":\"cargo test\"} asks the person to run a command in \
      their terminal. They may decline, and the result returns with its exit status and output. \
      Paths are relative to the working folder and cannot leave it. Look things up instead of \
-     guessing.\n\
+     guessing. Never say you will look something up without making the TOOL call in the same \
+     reply.\n\
      The person keeps notes, such as runbooks for tasks they do rarely. Before answering a \
      how-to question, search them: \
      {\"tool\":\"search_notes\",\"query\":\"replace nginx certificate\"} finds notes; \
@@ -175,6 +178,7 @@ async fn ask(
         .ok_or(ChatFailureDto::InvalidRequest)?
         .to_owned();
     let host = ToolHost::open(providers, &request.working_directory);
+    let documents = Documents::new(providers);
     let mut steps = Vec::new();
 
     if let Some(result) = &request.tool_result {
@@ -192,8 +196,8 @@ async fn ask(
             return Ok(stopped(String::new(), steps));
         }
         sessions.push_tool(&id, &command_result_text(result));
-        if sessions.next_step(&id) > MAX_STEPS {
-            return Ok(stopped(step_limit_text(), steps));
+        if sessions.is_cancelled(&id) {
+            return Ok(stopped(String::new(), steps));
         }
     } else {
         let question = request
@@ -202,7 +206,7 @@ async fn ask(
             .map(str::trim)
             .filter(|text| !text.is_empty() && text.chars().count() <= MAX_REQUEST_CHARS)
             .ok_or(ChatFailureDto::InvalidRequest)?;
-        let files = attached_files(host.as_ref(), &request.context.files).await;
+        let files = attached_files(host.as_ref(), &documents, &request.context.files).await;
         // The state goes in with the first question, and later only the parts that changed are
         // added: what was sent stays as it was, so a cached prompt prefix still matches and an
         // old command is never taken to have run in the new folder. Commands already sent in an
@@ -265,8 +269,8 @@ async fn ask(
                 });
             }
             Some(call) => {
-                if sessions.next_step(&id) > MAX_STEPS {
-                    return Ok(stopped(step_limit_text(), steps));
+                if sessions.is_cancelled(&id) {
+                    return Ok(stopped(String::new(), steps));
                 }
                 if let Some(note_call) = note_tool_call(&call) {
                     let outcome = match notes {
@@ -299,7 +303,10 @@ async fn ask(
                     continue;
                 }
                 let output = match &host {
-                    Some(host) => host.run(call).await,
+                    Some(host) => match documents.run(host, &call).await {
+                        Some(output) => output,
+                        None => host.run(call).await,
+                    },
                     None => ToolOutput {
                         step: "Looked up a file".to_owned(),
                         text: "Error: file tools are not available for this location.".to_owned(),
@@ -346,10 +353,6 @@ fn stopped(text: String, steps: Vec<String>) -> TerminalAssistReplyDto {
     }
 }
 
-fn step_limit_text() -> String {
-    format!("Stopped after {MAX_STEPS} steps. Ask again to continue.")
-}
-
 fn command_result_text(result: &TerminalToolResultDto) -> String {
     let status = result
         .exit_code
@@ -365,13 +368,22 @@ fn command_result_text(result: &TerminalToolResultDto) -> String {
 }
 
 /// The files the person named with `@path`, read inside the working folder.
-async fn attached_files(host: Option<&ToolHost>, names: &[String]) -> Vec<AttachedFile> {
+async fn attached_files(
+    host: Option<&ToolHost>,
+    documents: &Documents,
+    names: &[String],
+) -> Vec<AttachedFile> {
     let Some(host) = host else {
         return Vec::new();
     };
     let mut files = Vec::new();
     for name in names.iter().take(MAX_ATTACHED_FILES) {
-        if let Some(text) = host.read_text(name).await {
+        let text = if is_document(name) {
+            documents.read(host, name, 0).await.ok()
+        } else {
+            host.read_text(name).await
+        };
+        if let Some(text) = text {
             files.push(AttachedFile {
                 name: name.clone(),
                 text,
@@ -840,18 +852,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn too_many_tool_steps_end_the_turn() {
+    async fn a_long_tool_loop_runs_until_the_person_stops_it() {
         let dir = tempfile::tempdir().unwrap();
         let looping = r#"TOOL {"tool":"list_dir","path":"."}"#;
-        let fake = scripted(&[looping; 12]);
+        let mut script = vec![looping; 20];
+        script.push("done");
+        let fake = scripted(&script);
         let sessions = Sessions::default();
 
         let reply = ask_in(&fake, &sessions, ask_request("t1", "loop", dir.path()))
             .await
             .unwrap();
-
-        assert!(reply.text.starts_with("Stopped after"));
-        assert_eq!(fake.seen.lock().unwrap().len() as u32, MAX_STEPS + 1);
+        assert_eq!(reply.text, "done");
+        assert_eq!(reply.steps.len(), 20);
     }
 
     #[tokio::test]
