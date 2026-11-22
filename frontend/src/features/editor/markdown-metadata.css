@@ -53,3 +53,14 @@ table.fm-md-meta th {
   color: var(--fm-text-muted);
   text-decoration: line-through;
 }
+
+table.fm-md-meta-nested {
+  margin: 0;
+  border: none;
+  font-size: 1em;
+}
+
+table.fm-md-meta-nested tr:last-child th,
+table.fm-md-meta-nested tr:last-child td {
+  border-bottom: none;
+}

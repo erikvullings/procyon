@@ -42,6 +42,66 @@ describe('splitFrontMatter', () => {
   });
 });
 
+describe('splitFrontMatter for SKILL.md files', () => {
+  it('reads folded and literal block scalars, nested maps and unindented lists', () => {
+    const skill = [
+      '---',
+      'name: mem-setup',
+      'description: >-',
+      '  Use this when the user asks',
+      '  to "set up".',
+      '',
+      '  Second paragraph.',
+      'notes: |',
+      '  line one',
+      '  line two',
+      'allowed-tools:',
+      '- Bash',
+      '- Read',
+      'metadata:',
+      '  version: "0.1.0"',
+      '  owner:',
+      '    team: docs',
+      'summary:',
+      '  "Starts on the next line',
+      '  and continues."',
+      '---',
+      '# Body',
+    ].join('\n');
+    expect(splitFrontMatter(skill)?.fields).toEqual([
+      { key: 'name', values: ['mem-setup'], list: false },
+      {
+        key: 'description',
+        values: ['Use this when the user asks to "set up".\nSecond paragraph.'],
+        list: false,
+      },
+      { key: 'notes', values: ['line one\nline two'], list: false, multiline: true },
+      { key: 'allowed-tools', values: ['Bash', 'Read'], list: true },
+      {
+        key: 'metadata',
+        values: [],
+        list: false,
+        children: [
+          { key: 'version', values: ['0.1.0'], list: false },
+          {
+            key: 'owner',
+            values: [],
+            list: false,
+            children: [{ key: 'team', values: ['docs'], list: false }],
+          },
+        ],
+      },
+      { key: 'summary', values: ['Starts on the next line and continues.'], list: false },
+    ]);
+  });
+
+  it('renders nested maps as an inner table and keeps literal line breaks', () => {
+    const html = safeMarkdownHtml('---\nnotes: |\n  a\n  b\nmetadata:\n  version: 1\n---\nx');
+    expect(html).toContain('a<br>b');
+    expect(html).toContain('<table class="fm-md-meta fm-md-meta-nested">');
+  });
+});
+
 describe('splitHeaderFields', () => {
   it('takes the Key: value paragraph after the title', () => {
     const split = splitHeaderFields(TASK);

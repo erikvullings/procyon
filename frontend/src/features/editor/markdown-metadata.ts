@@ -4,8 +4,10 @@
  * - YAML front matter (`---` … `---`), as written by Obsidian and Procyon notes;
  * - a TASKS-style header: a paragraph of `Key: value` lines right after the leading `# Title`.
  *
- * Both become a small key/value table. The parser covers flat YAML only (scalars, `[a, b]` flow
- * lists and `- item` block lists); anything else is shown as raw text rather than guessed at.
+ * Both become a small key/value table. The parser covers the YAML front matter actually seen in
+ * notes and agent SKILL.md files: scalars (also continued over several lines), `[a, b]` flow
+ * lists, `- item` block lists, `|` / `>` block scalars and nested maps. Anything else is shown as
+ * raw text rather than guessed at.
  */
 
 export interface MetadataField {
@@ -13,6 +15,10 @@ export interface MetadataField {
   /** One entry for a scalar, several for a list. */
   readonly values: readonly string[];
   readonly list: boolean;
+  /** A literal (`|`) block scalar, whose line breaks are kept. */
+  readonly multiline?: boolean;
+  /** The fields of a nested map; `values` is then empty. */
+  readonly children?: readonly MetadataField[];
 }
 
 export interface MetadataSplit {
@@ -27,7 +33,9 @@ const FRONT_MATTER_OPEN = /^---[ \t]*$/;
 const FRONT_MATTER_CLOSE = /^(?:---|\.\.\.)[ \t]*$/;
 const MAX_FRONT_MATTER_LINES = 200;
 const YAML_KEY = /^([A-Za-z_][\w .-]{0,63}):(?:[ \t]+(.*))?$/;
-const YAML_ITEM = /^[ \t]+-[ \t]+(.*)$/;
+const YAML_ITEM = /^-(?:[ \t]+(.*))?$/;
+const BLOCK_SCALAR = /^([|>])([+-]?)$/;
+const MAX_DEPTH = 4;
 const HEADER_FIELD = /^([A-Z][A-Za-z0-9 _-]{0,31}):[ \t]+(\S.*)$/;
 const MIN_HEADER_FIELDS = 2;
 
@@ -78,36 +86,115 @@ export function splitMetadata(markdown: string): MetadataSplit | undefined {
   return splitFrontMatter(markdown) ?? splitHeaderFields(markdown);
 }
 
-/** Parses flat YAML, or `undefined` when a line is something this parser does not understand. */
-function parseYamlFields(lines: readonly string[]): MetadataField[] | undefined {
-  const fields: MetadataField[] = [];
-  let pending: { key: string; items: string[] } | undefined;
-  const flush = (): void => {
-    if (pending === undefined) return;
-    fields.push({ key: pending.key, values: pending.items, list: true });
-    pending = undefined;
-  };
-  for (const line of lines) {
-    if (line.trim() === '' || line.trimStart().startsWith('#')) continue;
-    const item = YAML_ITEM.exec(line);
-    if (item !== null && pending !== undefined) {
-      pending.items.push(unquote(item[1] ?? ''));
-      continue;
+function indentOf(line: string): number {
+  return line.length - line.trimStart().length;
+}
+
+function isBlank(line: string): boolean {
+  return line.trim() === '';
+}
+
+/** Removes the common indentation of the non-blank lines. */
+function dedent(lines: readonly string[]): string[] {
+  const indents = lines.filter((line) => !isBlank(line)).map(indentOf);
+  const common = indents.length === 0 ? 0 : Math.min(...indents);
+  return lines.map((line) => (isBlank(line) ? '' : line.slice(common)));
+}
+
+/** A `|` (literal) or `>` (folded) block scalar; `-` strips and `+` keeps trailing breaks. */
+function blockScalar(style: string, chomping: string, lines: readonly string[]): string {
+  const body = dedent(lines);
+  let text: string;
+  if (style === '|') {
+    text = body.join('\n');
+  } else {
+    text = '';
+    for (const line of body) {
+      if (line === '') text += '\n';
+      else text += text === '' || text.endsWith('\n') ? line : ` ${line}`;
     }
-    flush();
+  }
+  return chomping === '+' ? text : text.replace(/\s+$/, '');
+}
+
+/** `- item` lines (at any shared indentation); deeper lines continue the previous item. */
+function blockList(lines: readonly string[]): string[] | undefined {
+  const items: string[] = [];
+  for (const line of dedent(lines)) {
+    if (line === '' || line.startsWith('#')) continue;
+    const item = YAML_ITEM.exec(line);
+    if (item !== null) items.push(item[1] ?? '');
+    else if (indentOf(line) > 0 && items.length > 0)
+      items.push(`${items.pop() ?? ''} ${line.trim()}`);
+    else return undefined;
+  }
+  return items.map((item) => unquote(item.trim()));
+}
+
+/** Parses a YAML mapping, or `undefined` when a line is something this parser does not handle. */
+function parseYamlFields(lines: readonly string[], depth = 0): MetadataField[] | undefined {
+  if (depth > MAX_DEPTH) return undefined;
+  const fields: MetadataField[] = [];
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index] ?? '';
+    index += 1;
+    if (isBlank(line) || line.trimStart().startsWith('#')) continue;
+    if (indentOf(line) > 0) return undefined;
     const match = YAML_KEY.exec(line);
     if (match === null) return undefined;
     const key = match[1] ?? '';
     const raw = (match[2] ?? '').trim();
-    if (raw === '') {
-      pending = { key, items: [] };
+    // The value's own lines: indented ones, or `- item` lines right under the key.
+    const own: string[] = [];
+    while (index < lines.length) {
+      const next = lines[index] ?? '';
+      const continues =
+        isBlank(next) ||
+        indentOf(next) > 0 ||
+        (raw === '' &&
+          YAML_ITEM.test(next) &&
+          own.every((ownLine) => !YAML_KEY.test(ownLine.trim())));
+      if (!continues) break;
+      own.push(next);
+      index += 1;
+    }
+    while (own.length > 0 && isBlank(own[own.length - 1] ?? '')) own.pop();
+    const block = BLOCK_SCALAR.exec(raw);
+    if (block !== null) {
+      const style = block[1] ?? '>';
+      fields.push({
+        key,
+        values: [blockScalar(style, block[2] ?? '', own)],
+        list: false,
+        ...(style === '|' ? { multiline: true } : {}),
+      });
+    } else if (raw === '') {
+      const first = own.find((ownLine) => !isBlank(ownLine))?.trim();
+      if (first === undefined) {
+        fields.push({ key, values: [''], list: false });
+      } else if (YAML_ITEM.test(first)) {
+        const items = blockList(own);
+        if (items === undefined) return undefined;
+        fields.push({ key, values: items, list: true });
+      } else if (!YAML_KEY.test(first)) {
+        // A scalar that starts on the next, indented line.
+        const text = own.map((ownLine) => ownLine.trim()).filter((part) => part !== '');
+        fields.push({ key, values: [unquote(text.join(' '))], list: false });
+      } else {
+        const children = parseYamlFields(dedent(own), depth + 1);
+        if (children === undefined) return undefined;
+        fields.push({ key, values: [], list: false, children });
+      }
     } else if (raw.startsWith('[') && raw.endsWith(']')) {
+      if (own.some((ownLine) => !isBlank(ownLine))) return undefined;
       fields.push({ key, values: splitFlowList(raw.slice(1, -1)), list: true });
     } else {
-      fields.push({ key, values: [unquote(raw)], list: false });
+      // A plain or quoted scalar may continue on indented lines, folded into one.
+      const text = [raw, ...own.map((ownLine) => ownLine.trim())].filter((part) => part !== '');
+      fields.push({ key, values: [unquote(text.join(' '))], list: false });
     }
   }
-  flush();
   return fields;
 }
 
@@ -176,6 +263,7 @@ function dependsOnHtml(value: string): string {
 }
 
 function valueHtml(field: MetadataField): string {
+  if (field.children !== undefined) return metadataTableHtml(field.children, true);
   if (field.list) {
     return field.values
       .map((value) => `<span class="fm-md-meta-chip">${escapeHtml(value)}</span>`)
@@ -186,16 +274,17 @@ function valueHtml(field: MetadataField): string {
     return `<span class="fm-md-meta-status fm-md-meta-status-${statusSlug(value)}">${escapeHtml(value)}</span>`;
   }
   if (field.key.toLowerCase() === 'depends on') return dependsOnHtml(value);
-  return escapeHtml(value);
+  return field.multiline === true ? escapeHtml(value).replace(/\n/g, '<br>') : escapeHtml(value);
 }
 
 /** The key/value table for a metadata block. Every key and value is HTML-escaped. */
-export function metadataTableHtml(fields: readonly MetadataField[]): string {
+export function metadataTableHtml(fields: readonly MetadataField[], nested = false): string {
   const rows = fields
     .map(
       (field) =>
         `<tr><th scope="row">${escapeHtml(field.key)}</th><td>${valueHtml(field)}</td></tr>`,
     )
     .join('');
-  return `<table class="fm-md-meta"><tbody>${rows}</tbody></table>`;
+  const className = nested ? 'fm-md-meta fm-md-meta-nested' : 'fm-md-meta';
+  return `<table class="${className}"><tbody>${rows}</tbody></table>`;
 }
