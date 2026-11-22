@@ -59,9 +59,11 @@ const MAX_COMMAND_OUTPUT_BYTES: usize = 8 * 1024;
 
 const ASK_INTRO: &str = "You are the assistant in the person's embedded terminal. The context \
      shows their system, folder, selection and recent commands. Answer briefly and use only what \
-     you can see or look up. To suggest a command for the person to review, write it on its own \
-     final line as `Command: <command>`. Prefer read-only commands and never chain several \
-     destructive steps.";
+     you can see or look up. A `Folder listing` in the context already names every file there: \
+     use it, and never list the folder again. Look files up and read them with your tools; \
+     never suggest a command (such as `ls` or `cat`) for something a tool can do. To suggest a \
+     command for the person to review, write it on its own final line as `Command: <command>`. \
+     Prefer read-only commands and never chain several destructive steps.";
 /// How the model calls tools when the endpoint has no native tool calling.
 const ASK_TEXT_TOOLS: &str = "\nYou may use tools. To use one, reply with exactly one line and \
      nothing else: `TOOL {json}`. Then wait for the result. Paths are relative to the working \
@@ -764,6 +766,12 @@ mod tests {
             allow_file_writes: false,
             workspace_id: None,
         }
+    }
+
+    #[test]
+    fn the_intro_points_at_the_listing_and_prefers_tools_over_ls() {
+        assert!(ASK_INTRO.contains("already names every file"));
+        assert!(ASK_INTRO.contains("never suggest a command"));
     }
 
     #[tokio::test]
