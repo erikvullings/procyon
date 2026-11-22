@@ -405,10 +405,14 @@ export const fr = {
     terminalAllowFileWrites: 'Autoriser l’assistant à créer des fichiers (après approbation)',
     terminalHideFunctionKeys:
       'Masquer la barre des touches de fonction quand le terminal est ouvert',
+    toolCalling: 'Appel natif d’outils',
+    toolCalling_pending: 'pas encore vérifié',
+    toolCalling_yes: 'oui',
+    toolCalling_no: 'non (protocole texte)',
+    toolCalling_noChat: 'aucun modèle de chat attribué',
+    toolCallingHelp:
+      'Déterminé par l’application elle-même en arrière-plan à chaque changement de point d’accès ou de modèle de chat. Sinon, les assistants appellent les outils via le protocole texte.',
     terminalApps: 'Terminaux externes',
-    skillFolders: 'Dossiers de skills supplémentaires',
-    skillFoldersHelp:
-      'Un dossier absolu par ligne. Chacun contient des dossiers de skills avec un SKILL.md, lus par les assistants en plus de ~/.claude/skills et ~/.agents/skills. Les scripts ne sont jamais exécutés.',
     terminalAppsHelp:
       'Un par ligne : Nom = commande (un nom d’application sur macOS, un exécutable sous Windows). Proposés par « Ouvrir un terminal avec… ».',
     fileTemplates: 'Modèles de fichier',
@@ -2016,6 +2020,7 @@ export const fr = {
     cloudHint:
       "Le contenu des documents est envoyé à ce point cloud pendant l'indexation. Activez-le seulement si vous l'acceptez.",
     save: 'Enregistrer le rôle',
+    unsaved: 'Pas encore enregistré',
     clear: 'Effacer',
     saved: 'Rôle enregistré.',
     loadFailed: "Les rôles n'ont pas pu être chargés.",

@@ -115,6 +115,44 @@ impl Documents {
     }
 }
 
+/// Documents inside a skill's folder, as text (task 0339): the folder is sandboxed like a working
+/// folder, so a document cannot be a way out of it, and secret-looking names are refused.
+pub(crate) struct SkillFolderDocuments {
+    documents: Documents,
+}
+
+impl SkillFolderDocuments {
+    pub(crate) fn new(providers: &ProviderRegistry) -> Self {
+        Self {
+            documents: Documents::new(providers),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl fm_agent::SkillDocuments for SkillFolderDocuments {
+    async fn read(
+        &self,
+        folder: &std::path::Path,
+        relative: &str,
+        offset: usize,
+    ) -> Option<Result<String, String>> {
+        if !is_document(relative) {
+            return None;
+        }
+        let Some(sandbox) = super::tools::Sandbox::new(folder) else {
+            return Some(Err("Error: the skill's folder cannot be read.".to_owned()));
+        };
+        let host = ToolHost::Local(sandbox);
+        Some(
+            self.documents
+                .read(&host, relative, offset)
+                .await
+                .map_err(|error| error_text(&error)),
+        )
+    }
+}
+
 /// The text of a converted document, or why there is none.
 fn converted_text(outcome: ConversionOutcome, name: &str) -> Result<String, ToolError> {
     let fail = |detail: &str| ToolError::Document(format!("{name}: {detail}"));

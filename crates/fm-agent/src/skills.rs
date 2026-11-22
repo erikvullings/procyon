@@ -333,6 +333,14 @@ impl Skill {
         }))
     }
 
+    /// The skill's folder, for a skill that lives in one (a note has none).
+    pub fn folder(&self) -> Option<&Path> {
+        match &self.location {
+            SkillLocation::Folder(folder) => Some(folder),
+            SkillLocation::Note(_) => None,
+        }
+    }
+
     /// A file inside the skill's folder. It cannot leave the folder, not even through a symlink or
     /// `..`, and secret-looking files are refused.
     pub fn read_file(&self, relative: &str) -> Result<String, SkillFileError> {

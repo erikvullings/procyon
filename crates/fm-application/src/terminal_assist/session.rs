@@ -264,6 +264,24 @@ impl Sessions {
         cancelled
     }
 
+    /// The person's latest question, which a continuation after an approval still belongs to.
+    pub(super) fn last_question(&self, id: &str) -> String {
+        let mut question = String::new();
+        self.with(id, |session| {
+            if let Some(Turn::Person {
+                question: asked, ..
+            }) = session
+                .turns
+                .iter()
+                .rev()
+                .find(|turn| matches!(turn, Turn::Person { .. }))
+            {
+                question.clone_from(asked);
+            }
+        });
+        question
+    }
+
     /// The conversation as the prompt body, newest turns kept within the size bound.
     pub(super) fn render(&self, id: &str) -> String {
         let state = self.lock();

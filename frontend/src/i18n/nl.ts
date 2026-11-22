@@ -399,10 +399,14 @@ export const nl = {
     terminalAutoRunReadOnly: 'Alleen-lezen opdrachten uitvoeren zonder te vragen',
     terminalAllowFileWrites: 'Assistent mag bestanden maken (na goedkeuring)',
     terminalHideFunctionKeys: 'Functietoetsenbalk verbergen zolang de terminal open is',
+    toolCalling: 'Native tool-aanroepen',
+    toolCalling_pending: 'nog niet gecontroleerd',
+    toolCalling_yes: 'ja',
+    toolCalling_no: 'nee (tekstprotocol)',
+    toolCalling_noChat: 'geen chatmodel toegewezen',
+    toolCallingHelp:
+      'De app zoekt dit zelf op de achtergrond uit zodra het chat-endpoint of -model verandert. Zonder gebruiken de assistenten tools via het tekstprotocol.',
     terminalApps: 'Externe terminals',
-    skillFolders: 'Extra skill-mappen',
-    skillFoldersHelp:
-      'Eén absolute map per regel. Elke map bevat skill-mappen met een SKILL.md, die de assistenten naast ~/.claude/skills en ~/.agents/skills lezen. Scripts worden nooit uitgevoerd.',
     terminalAppsHelp:
       'Eén per regel: Naam = commando (een toepassingsnaam op macOS, een uitvoerbaar bestand op Windows). Aangeboden door “Terminal openen met…”.',
     fileTemplates: 'Bestandssjablonen',
@@ -2413,6 +2417,7 @@ export const nl = {
     cloudHint:
       'Documentinhoud wordt tijdens het indexeren naar dit cloud-eindpunt gestuurd. Zet dit alleen aan als je dat accepteert.',
     save: 'Rol opslaan',
+    unsaved: 'Nog niet opgeslagen',
     clear: 'Wissen',
     saved: 'Rol opgeslagen.',
     loadFailed: 'Rollen konden niet worden geladen.',

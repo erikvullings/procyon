@@ -235,12 +235,14 @@ impl ChatService {
                     role: ChatRole::User,
                     content,
                     context,
+                    steps: Vec::new(),
                 },
             )?
         };
         let prompts = build_prompts(&saved);
         let cancellation = CancellationToken::new();
         self.lock().insert(request.request_id, cancellation.clone());
+        let mut steps = Vec::new();
         let outcome = match (tooling, request.tools_folder.as_deref()) {
             (Some(tooling), Some(folder)) => {
                 let question = saved
@@ -257,8 +259,12 @@ impl ChatService {
                     cancellation: &cancellation,
                 };
                 match crate::chat_agent::run(generator, tooling, run, on_event).await {
-                    Ok(AgentEnd::Answer(text)) => Ok(text),
-                    Ok(AgentEnd::Proposal(proposal)) => {
+                    Ok((AgentEnd::Answer(text), looked_up)) => {
+                        steps = looked_up;
+                        Ok(text)
+                    }
+                    Ok((AgentEnd::Proposal(proposal), looked_up)) => {
+                        steps = looked_up;
                         let title = proposal.draft.title.clone();
                         on_event(ChatReplyEventDto::NoteProposal { proposal });
                         Ok(format!("I drafted a note for you to review: {title}"))
@@ -310,6 +316,7 @@ impl ChatService {
                 role: ChatRole::Assistant,
                 content: text.to_owned(),
                 context: None,
+                steps,
             },
         )?;
         Ok(text.to_owned())
@@ -786,6 +793,7 @@ mod tests {
                 role: ChatRole::User,
                 content: format!("{index}:{}", "p".repeat(4 * 1024)),
                 context: None,
+                steps: Vec::new(),
             });
         }
         let conversation = ChatConversation {
@@ -1000,7 +1008,6 @@ mod tests {
             providers,
             notes: None,
             host_wide_skills: false,
-            skill_folders: &[],
         }
     }
 
@@ -1055,6 +1062,8 @@ mod tests {
         let saved = conversations.get(workspace, id).unwrap();
         assert_eq!(saved.messages.len(), 2);
         assert_eq!(saved.messages[1].content, "It says alpha beta.");
+        // The lookups stay with the reply, so they are still shown when the conversation reopens.
+        assert_eq!(saved.messages[1].steps, vec!["Read a.txt".to_owned()]);
     }
 
     #[tokio::test]

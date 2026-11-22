@@ -513,10 +513,6 @@ pub struct SettingsDto {
     /// Whether the function-key bar is hidden while the terminal is open.
     #[serde(default = "terminal_hide_function_keys_default")]
     pub terminal_hide_function_keys: bool,
-    /// Extra folders of agent skills beside `~/.claude/skills` and `~/.agents/skills` (task 0339):
-    /// absolute paths, read by the assistants on this machine only.
-    #[serde(default)]
-    pub skill_folders: Vec<String>,
 }
 
 const fn default_semantic_max_source_mib() -> u32 {

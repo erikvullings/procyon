@@ -17,7 +17,6 @@ export function cloneSettings(settings: Settings): Settings {
     pluginSettings: { ...settings.pluginSettings },
     defaultStartLocations: [...settings.defaultStartLocations],
     terminalApps: settings.terminalApps.map((app) => ({ ...app })),
-    skillFolders: [...settings.skillFolders],
     fileTemplates: settings.fileTemplates.map((template) => ({ ...template })),
     favouriteLocations: settings.favouriteLocations.map((favourite) => ({
       ...favourite,

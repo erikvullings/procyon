@@ -146,3 +146,13 @@ fn stored_turns_are_pruned_not_only_the_prompt() {
             .ends_with(&format!("Person: q{}\n\n", MAX_TURNS * 3 - 1))
     );
 }
+
+#[test]
+fn the_last_question_survives_the_answers_and_tool_results_after_it() {
+    let sessions = Sessions::default();
+    assert_eq!(sessions.last_question("t1"), "");
+    sessions.push_person("t1", "renew the certificate", "");
+    sessions.push_assistant("t1", "TOOL {}");
+    sessions.push_tool("t1", "output");
+    assert_eq!(sessions.last_question("t1"), "renew the certificate");
+}

@@ -16,12 +16,14 @@ use crate::chat::ChatGenerator;
 use crate::llm_profiles::{
     LlmChatGeneration, LlmImageAttachment, LlmProfileError, LlmRole, LlmToolSpec,
 };
-use crate::terminal_assist::{FolderTools, skills_for};
+use crate::terminal_assist::{FolderTools, SkillFolderDocuments, skills_for};
 
 /// Most transcript bytes kept while tools run; the oldest part drops out first.
 const MAX_TRANSCRIPT_BYTES: usize = 192 * 1024;
 /// Longest tool result added to the transcript, in bytes.
 const MAX_TOOL_BYTES: usize = 16 * 1024;
+/// Longest step line kept with a reply, in bytes.
+const MAX_STEP_BYTES: usize = 200;
 /// Upper bound on generated tokens for one model call.
 const MAX_REPLY_TOKENS: u32 = 4096;
 
@@ -41,8 +43,6 @@ pub(crate) struct ChatTooling<'a> {
     /// Whether the skills of the host's home folder and the folders above the working folder may
     /// be used. False for browser clients of a server.
     pub(crate) host_wide_skills: bool,
-    /// Extra skill folders from the settings; used only with `host_wide_skills`.
-    pub(crate) skill_folders: &'a [std::path::PathBuf],
 }
 
 /// How a chat turn with tools ended.
@@ -69,7 +69,7 @@ pub(crate) async fn run(
     tooling: &ChatTooling<'_>,
     input: AgentRun<'_>,
     on_event: &mut (dyn FnMut(ChatReplyEventDto) + Send),
-) -> Result<AgentEnd, ChatFailureDto> {
+) -> Result<(AgentEnd, Vec<String>), ChatFailureDto> {
     let registry = read_only_registry();
     let folder = FolderTools::open(tooling.providers, input.folder);
     let files = folder.files();
@@ -78,7 +78,6 @@ pub(crate) async fn run(
         input.folder,
         input.question,
         tooling.host_wide_skills,
-        tooling.skill_folders,
     )
     .await;
     let native = generator.native_tool_calling(LlmRole::Chat).await;
@@ -114,10 +113,12 @@ pub(crate) async fn run(
         images: input.images,
         cancellation: input.cancellation,
     };
+    let skill_documents = SkillFolderDocuments::new(tooling.providers);
     let ctx = ToolContext {
         skills: &catalogue,
         notes: tooling.notes,
         files: Some(&files),
+        documents: Some(&skill_documents),
     };
     let mut steps = Vec::new();
     let end = run_turn(&mut turn, &registry, &ctx, &mut steps, &mut |event| {
@@ -129,13 +130,19 @@ pub(crate) async fn run(
         });
     })
     .await?;
+    // Kept with the reply, short, so the lookups stay visible when the conversation is reopened.
+    let steps: Vec<String> = steps
+        .into_iter()
+        .map(|step| fm_agent::truncate_to_bytes(&step, MAX_STEP_BYTES).to_owned())
+        .collect();
     match end {
-        TurnEnd::Answer(text) => Ok(AgentEnd::Answer(text)),
+        TurnEnd::Answer(text) => Ok((AgentEnd::Answer(text), steps)),
         TurnEnd::Cancelled => Err(ChatFailureDto::Cancelled),
-        TurnEnd::StepLimit => Ok(AgentEnd::Answer(
-            "I stopped after many steps. Ask again to continue.".to_owned(),
+        TurnEnd::StepLimit => Ok((
+            AgentEnd::Answer("I stopped after many steps. Ask again to continue.".to_owned()),
+            steps,
         )),
-        TurnEnd::Proposal(proposal) => Ok(AgentEnd::Proposal(proposal)),
+        TurnEnd::Proposal(proposal) => Ok((AgentEnd::Proposal(proposal), steps)),
         // The read-only registry has no tool that needs approval.
         TurnEnd::NeedsApproval(_) => Err(ChatFailureDto::Unavailable),
     }

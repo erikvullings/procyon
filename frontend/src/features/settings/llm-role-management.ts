@@ -52,6 +52,16 @@ function modelOptions(
   return ids.filter((id) => id.trim() !== '').map((id) => ({ id, label: id }));
 }
 
+/** Whether the draft differs from what is saved; only then is there anything to save. */
+function isDirty(draft: RoleDraft, saved: LlmRoleAssignment | null | undefined): boolean {
+  const base = draftFrom(saved);
+  return (
+    draft.profileId !== base.profileId ||
+    draft.model.trim() !== base.model ||
+    draft.allowCloud !== base.allowCloud
+  );
+}
+
 function draftFrom(assignment: LlmRoleAssignment | null | undefined): RoleDraft {
   return assignment == null
     ? { profileId: '', model: '', allowCloud: false }
@@ -85,6 +95,8 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
   let busy = false;
   let loadedRevision: number | undefined;
   let message: string | undefined;
+  /** The role whose save the message is about. */
+  let messageRole: LlmRole | undefined;
   let error: string | undefined;
 
   /** Loads the models a profile offers; a profile that cannot discover offers its own model. */
@@ -130,10 +142,11 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
     }
   }
 
-  async function run(action: () => Promise<void>): Promise<void> {
+  async function run(role: LlmRole, action: () => Promise<void>): Promise<void> {
     busy = true;
     error = undefined;
     message = undefined;
+    messageRole = role;
     try {
       await action();
       message = t('llmRoles', 'saved');
@@ -151,6 +164,7 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
     const status = roleStatus(roles[role], role, profiles);
     const notice = NOTICE_KEYS[status];
     const savedRole = roles[role];
+    const dirty = isDirty(draft, savedRole);
     return m('.fm-llm-role', { 'aria-label': t('llmRoles', role) }, [
       m('header.fm-llm-role-heading', [
         m('h5.fm-llm-role-title', t('llmRoles', role)),
@@ -170,7 +184,6 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
         m(Select<string>, {
           className: 'fm-llm-field',
           label: t('llmRoles', 'provider'),
-          disabled: busy,
           options: [
             { id: '', label: t('llmRoles', 'unassigned') },
             ...profiles.map((profile) => ({
@@ -208,7 +221,7 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
               m(TextInput, {
                 className: 'fm-llm-field',
                 label: t('llmRoles', 'model'),
-                disabled: busy || draft.profileId === '',
+                disabled: draft.profileId === '',
                 value: draft.model,
                 placeholder:
                   role === 'image'
@@ -223,7 +236,6 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
                     'button.btn-flat.fm-llm-model-back',
                     {
                       type: 'button',
-                      disabled: busy,
                       onclick: () => {
                         typingModel.image = false;
                       },
@@ -236,7 +248,7 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
           return m(Select<string>, {
             className: 'fm-llm-field',
             label: t('llmRoles', 'model'),
-            disabled: busy || draft.profileId === '',
+            disabled: draft.profileId === '',
             options:
               role === 'image'
                 ? [...offered, { id: '__type__', label: t('llmRoles', 'modelOther') }]
@@ -263,7 +275,6 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
             // pane and gets the pictures back, so it says which of the two this permission covers.
             label: t('llmRoles', role === 'image' ? 'allowCloudImage' : 'allowCloud'),
             checked: draft.allowCloud,
-            disabled: busy,
             onchange: (checked: boolean) => {
               drafts = { ...drafts, [role]: { ...draft, allowCloud: checked } };
             },
@@ -283,20 +294,30 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
             type: 'button',
             disabled: busy || savedRole == null,
             onclick: () =>
-              void run(async () => {
+              void run(role, async () => {
                 roles = await attrs.client.clearLlmRole(role);
                 drafts = { ...drafts, [role]: draftFrom(null) };
               }),
           },
           t('llmRoles', 'clear'),
         ),
+        // Always present, so a saved or unsaved note never moves what is below it.
+        m(
+          'span.fm-llm-role-state',
+          { role: 'status' },
+          dirty
+            ? t('llmRoles', 'unsaved')
+            : messageRole === role && message !== undefined
+              ? message
+              : '',
+        ),
         m(
           'button.btn-flat.fm-primary-action',
           {
             type: 'button',
-            disabled: busy || draft.profileId === '' || draft.model.trim() === '',
+            disabled: busy || !dirty || draft.profileId === '' || draft.model.trim() === '',
             onclick: () =>
-              void run(async () => {
+              void run(role, async () => {
                 const model = draft.model.trim();
                 roles = await attrs.client.setLlmRole(role, {
                   profileId: draft.profileId,
@@ -347,7 +368,6 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
               ),
         ]),
         error ? m('p.fm-llm-role-error', { role: 'alert' }, error) : undefined,
-        message ? m('p.fm-llm-role-message', { role: 'status' }, message) : undefined,
       ]);
     },
   };

@@ -397,10 +397,14 @@ export const en = {
     terminalAutoRunReadOnly: 'Run read-only commands without asking',
     terminalAllowFileWrites: 'Let the assistant create files (after approval)',
     terminalHideFunctionKeys: 'Hide the function-key bar while the terminal is open',
+    toolCalling: 'Native tool calling',
+    toolCalling_pending: 'not checked yet',
+    toolCalling_yes: 'yes',
+    toolCalling_no: 'no (text protocol)',
+    toolCalling_noChat: 'no chat model assigned',
+    toolCallingHelp:
+      'Found by the app itself in the background whenever the chat endpoint or model changes. Without it the assistants call tools through the text protocol.',
     terminalApps: 'External terminals',
-    skillFolders: 'Extra skill folders',
-    skillFoldersHelp:
-      'One absolute folder per line. Each holds skill folders with a SKILL.md, read by the assistants beside ~/.claude/skills and ~/.agents/skills. Scripts are never run.',
     terminalAppsHelp:
       'One per line: Name = command (an application name on macOS, an executable on Windows). Offered by “Open Terminal With…”.',
     fileTemplates: 'File templates',
@@ -2371,6 +2375,7 @@ export const en = {
     cloudHint:
       'Document content is sent to this cloud endpoint while files are indexed. Turn this on only if you accept that.',
     save: 'Save role',
+    unsaved: 'Not saved yet',
     clear: 'Clear',
     saved: 'Role saved.',
     loadFailed: 'Could not load roles.',

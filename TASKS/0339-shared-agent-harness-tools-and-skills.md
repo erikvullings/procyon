@@ -1,6 +1,6 @@
 # 0339 Shared agent harness: tool registry, skills, notes as skills
 
-Status: in progress (steps 3 and 4 done; 1, 2 and 5 partly or not started)
+Status: done
 Priority: medium
 Subsystem: backend, frontend, settings
 Depends on: 0324, 0336, 0337, 0338
@@ -253,7 +253,15 @@ pub(crate) trait AgentTool: Send + Sync {
   (`LlmProfile.tool_calling {model, supported}`) is saved with the profile and kept until the
   endpoint, preset or model changes. Unreachable, unconsented or rejected probes record nothing and
   retry after 10 minutes at the earliest. Until a probe answered, the text protocol is used.
-- Not done (open): `read_skill_file` through the document reader (text only), multi-call batching,
-  structured tool-role messages, native tools for Ollama's chat API, note skills are not
-  re-searched on an approval continuation, chat steps are not saved with the conversation, a
-  visible "tool calling: yes/no" status in the endpoint editor.
+- 2026-11-22: Closed out. Also done: `skillFolders` was added and then removed again (the standard
+  folders cover it; a setting nobody needs); Settings | Terminal shows the probed tool-calling
+  status read-only (`LlmProfileDto.toolCalling`); Ollama takes native tools too (its `/api/show`
+  reports `tools` per model, so no probe request; `tools` replace `format: json` in the request);
+  several tool calls in one reply run in order (`ToolRegistry::parse_all`, max 8, a proposal or
+  approval stops the rest and tells the model); note skills are searched again on an approval
+  continuation (`Sessions::last_question`); chat steps are saved with the reply
+  (`ChatMessage.steps`); `read_skill_file` reads PDF/Word/PowerPoint/Excel/EPUB inside a skill
+  folder as text (`SkillDocuments`, sandboxed like a working folder).
+- Decided against: structured tool-role messages. The transcript stays text, which both protocols
+  and every endpoint accept; native calls already come back as `TOOL {json}` lines. Revisit only if
+  a model is found that ignores results given as text.

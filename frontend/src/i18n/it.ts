@@ -402,10 +402,14 @@ export const it = {
     terminalAutoRunReadOnly: 'Esegui senza chiedere i comandi di sola lettura',
     terminalAllowFileWrites: 'Consenti all’assistente di creare file (dopo approvazione)',
     terminalHideFunctionKeys: 'Nascondi la barra dei tasti funzione quando il terminale è aperto',
+    toolCalling: 'Chiamata nativa degli strumenti',
+    toolCalling_pending: 'non ancora verificato',
+    toolCalling_yes: 'sì',
+    toolCalling_no: 'no (protocollo di testo)',
+    toolCalling_noChat: 'nessun modello di chat assegnato',
+    toolCallingHelp:
+      'Rilevato dall’app in background a ogni modifica dell’endpoint o del modello di chat. Altrimenti gli assistenti usano gli strumenti tramite il protocollo di testo.',
     terminalApps: 'Terminali esterni',
-    skillFolders: 'Cartelle di skill aggiuntive',
-    skillFoldersHelp:
-      'Una cartella assoluta per riga. Ognuna contiene cartelle di skill con un SKILL.md, lette dagli assistenti oltre a ~/.claude/skills e ~/.agents/skills. Gli script non vengono mai eseguiti.',
     terminalAppsHelp:
       'Uno per riga: Nome = comando (un nome di applicazione su macOS, un eseguibile su Windows). Proposti da «Apri terminale con…».',
     fileTemplates: 'Modelli di file',
@@ -2005,6 +2009,7 @@ export const it = {
     cloudHint:
       "Il contenuto dei documenti viene inviato a questo endpoint cloud durante l'indicizzazione. Attivalo solo se lo accetti.",
     save: 'Salva ruolo',
+    unsaved: 'Non ancora salvato',
     clear: 'Cancella',
     saved: 'Ruolo salvato.',
     loadFailed: 'Impossibile caricare i ruoli.',

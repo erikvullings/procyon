@@ -17,4 +17,6 @@ export interface ChatMessageDto {
   context?: string | null;
   /** Author of the message. */
   role: ChatRoleDto;
+  /** What the tools looked up while the model wrote this reply, one line each. */
+  steps?: string[];
 }

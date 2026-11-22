@@ -64,6 +64,11 @@
   margin-top: var(--fm-space-4);
 }
 
+.fm-app-shell .fm-llm-role-state {
+  color: var(--fm-text-muted);
+  min-height: 1.25em;
+}
+
 .fm-app-shell .fm-form-actions > .fm-form-actions-leading {
   margin-right: auto;
 }

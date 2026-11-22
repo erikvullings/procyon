@@ -111,7 +111,12 @@ describe('chat wiring', () => {
     await wiring.send(client as unknown as FileManagerClient, entry.key, 'On');
 
     expect(requests[1]?.toolsFolder).toBe('file:///project/');
-    expect(entry.steps).toEqual(['Read a.txt']);
+    // The lookups move onto the reply, which shows them (and the backend saves them with it).
+    expect(entry.steps).toEqual([]);
+    expect(entry.messages[entry.messages.length - 1]).toMatchObject({
+      role: 'assistant',
+      steps: ['Read a.txt'],
+    });
     expect(showProposal).toHaveBeenCalledWith(proposal);
   });
 

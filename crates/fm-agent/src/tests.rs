@@ -47,6 +47,7 @@ fn context(skills: &SkillCatalogue) -> ToolContext<'_> {
         skills,
         notes: None,
         files: None,
+        documents: None,
     }
 }
 

@@ -262,6 +262,7 @@ async fn read_skill_loads_a_folder_skill_and_a_note_the_same_way() {
         skills: &catalogue,
         notes: Some(&FakeNotes),
         files: None,
+        documents: None,
     };
 
     let text = ReadSkill
@@ -304,6 +305,7 @@ async fn read_skill_file_is_sandboxed_and_redacts() {
         skills: &catalogue,
         notes: None,
         files: None,
+        documents: None,
     };
     let read = |path: &str| {
         let args =

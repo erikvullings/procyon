@@ -404,10 +404,14 @@ export const pt = {
     terminalAutoRunReadOnly: 'Executar sem perguntar os comandos só de leitura',
     terminalAllowFileWrites: 'Permitir que o assistente crie arquivos (após aprovação)',
     terminalHideFunctionKeys: 'Ocultar a barra de teclas de função enquanto o terminal está aberto',
+    toolCalling: 'Chamada nativa de ferramentas',
+    toolCalling_pending: 'ainda não verificado',
+    toolCalling_yes: 'sim',
+    toolCalling_no: 'não (protocolo de texto)',
+    toolCalling_noChat: 'nenhum modelo de chat atribuído',
+    toolCallingHelp:
+      'Detetado pela própria aplicação em segundo plano sempre que o endpoint ou o modelo de chat muda. Sem isso, os assistentes usam ferramentas através do protocolo de texto.',
     terminalApps: 'Terminais externos',
-    skillFolders: 'Pastas de skills adicionais',
-    skillFoldersHelp:
-      'Uma pasta absoluta por linha. Cada uma contém pastas de skills com um SKILL.md, lidas pelos assistentes além de ~/.claude/skills e ~/.agents/skills. Os scripts nunca são executados.',
     terminalAppsHelp:
       'Um por linha: Nome = comando (um nome de aplicação no macOS, um executável no Windows). Oferecidos por «Abrir terminal com…».',
     fileTemplates: 'Modelos de ficheiro',
@@ -2010,6 +2014,7 @@ export const pt = {
     cloudHint:
       'O conteúdo dos documentos é enviado para este endpoint na nuvem durante a indexação. Ative apenas se aceitar isso.',
     save: 'Guardar função',
+    unsaved: 'Ainda não guardado',
     clear: 'Limpar',
     saved: 'Função guardada.',
     loadFailed: 'Não foi possível carregar as funções.',

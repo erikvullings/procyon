@@ -409,10 +409,14 @@ export const de = {
     terminalAutoRunReadOnly: 'Schreibgeschützte Befehle ohne Nachfrage ausführen',
     terminalAllowFileWrites: 'Assistent darf Dateien erstellen (nach Freigabe)',
     terminalHideFunctionKeys: 'Funktionstastenleiste ausblenden, solange das Terminal offen ist',
+    toolCalling: 'Native Werkzeugaufrufe',
+    toolCalling_pending: 'noch nicht geprüft',
+    toolCalling_yes: 'ja',
+    toolCalling_no: 'nein (Textprotokoll)',
+    toolCalling_noChat: 'kein Chat-Modell zugewiesen',
+    toolCallingHelp:
+      'Wird von der App selbst im Hintergrund ermittelt, sobald sich Endpunkt oder Chat-Modell ändern. Ohne sie rufen die Assistenten Werkzeuge über das Textprotokoll auf.',
     terminalApps: 'Externe Terminals',
-    skillFolders: 'Weitere Skill-Ordner',
-    skillFoldersHelp:
-      'Ein absoluter Ordner pro Zeile. Jeder enthält Skill-Ordner mit einer SKILL.md, die die Assistenten zusätzlich zu ~/.claude/skills und ~/.agents/skills lesen. Skripte werden nie ausgeführt.',
     terminalAppsHelp:
       'Eine pro Zeile: Name = Befehl (unter macOS ein Anwendungsname, unter Windows eine ausführbare Datei). Angeboten von „Terminal öffnen mit…“.',
     fileTemplates: 'Dateivorlagen',
@@ -2029,6 +2033,7 @@ export const de = {
     cloudHint:
       'Dokumentinhalte werden beim Indizieren von Dateien an diesen Cloud-Endpunkt gesendet. Aktiviere dies nur, wenn du das akzeptierst.',
     save: 'Rolle speichern',
+    unsaved: 'Noch nicht gespeichert',
     clear: 'Leeren',
     saved: 'Rolle gespeichert.',
     loadFailed: 'Rollen konnten nicht geladen werden.',

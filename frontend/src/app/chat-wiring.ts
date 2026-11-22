@@ -280,8 +280,17 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
           } else if (event.type === 'done') {
             entry.messages = [
               ...entry.messages,
-              { role: 'assistant', content: event.text, context: null },
+              {
+                role: 'assistant',
+                content: event.text,
+                context: null,
+                ...(entry.steps !== undefined && entry.steps.length > 0
+                  ? { steps: entry.steps }
+                  : {}),
+              },
             ];
+            // They now belong to the reply, which shows them.
+            entry.steps = [];
             finish();
           } else {
             entry.failure = event.reason;

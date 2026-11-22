@@ -86,20 +86,35 @@ pub async fn run_turn(
         }
         let trimmed = truncate_to_bytes(trimmed, MAX_REPLY_BYTES);
         host.push_assistant(trimmed);
-        let Some(call) = registry.parse(trimmed) else {
+        let calls = registry.parse_all(trimmed);
+        if calls.is_empty() {
             return Ok(TurnEnd::Answer(trimmed.to_owned()));
-        };
-        if host.is_cancelled() {
-            return Ok(TurnEnd::Cancelled);
         }
-        match call.tool.run(ctx, call.args).await {
-            ToolOutcome::Output { step, text } => {
-                on_event(TurnEvent::Step(step.clone()));
-                steps.push(step);
-                host.push_tool(&text);
+        let total = calls.len();
+        for (index, call) in calls.into_iter().enumerate() {
+            if host.is_cancelled() {
+                return Ok(TurnEnd::Cancelled);
             }
-            ToolOutcome::Proposal(proposal) => return Ok(TurnEnd::Proposal(proposal)),
-            ToolOutcome::NeedsApproval(request) => return Ok(TurnEnd::NeedsApproval(request)),
+            match call.tool.run(ctx, call.args).await {
+                ToolOutcome::Output { step, text } => {
+                    on_event(TurnEvent::Step(step.clone()));
+                    steps.push(step);
+                    host.push_tool(&text);
+                }
+                outcome => {
+                    if index + 1 < total {
+                        host.push_tool(
+                            "The calls after this one were not run. Ask again for them if they \
+                             are still needed.",
+                        );
+                    }
+                    return Ok(match outcome {
+                        ToolOutcome::Proposal(proposal) => TurnEnd::Proposal(proposal),
+                        ToolOutcome::NeedsApproval(request) => TurnEnd::NeedsApproval(request),
+                        ToolOutcome::Output { .. } => unreachable!("handled above"),
+                    });
+                }
+            }
         }
     }
     Ok(TurnEnd::StepLimit)

@@ -332,6 +332,13 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
                       copyText(message.content),
                     ),
                   ]),
+                  message.steps && message.steps.length > 0
+                    ? m(
+                        '.fm-chat-steps',
+                        { 'aria-label': t('chat', 'steps') },
+                        message.steps.map((step) => m('span.fm-chat-step', step)),
+                      )
+                    : undefined,
                   message.role === 'assistant'
                     ? reply(message.content)
                     : m('pre.fm-chat-text', message.content),

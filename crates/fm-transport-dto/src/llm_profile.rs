@@ -90,6 +90,19 @@ pub struct LlmProfileDto {
     pub locality: LlmEndpointLocalityDto,
     pub consented_host: Option<String>,
     pub redact_filenames: bool,
+    /// What the background probe found about native tool calls; absent until it has answered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calling: Option<ToolCallingProbeDto>,
+}
+
+/// Whether a model answered the tool-calling probe with a tool call (task 0339).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCallingProbeDto {
+    /// The model that was asked.
+    pub model: String,
+    /// Whether it called the probe tool.
+    pub supported: bool,
 }
 
 /// Safe preset defaults returned to profile editors.
@@ -311,6 +324,7 @@ mod tests {
             locality: LlmEndpointLocalityDto::Loopback,
             consented_host: None,
             redact_filenames: false,
+            tool_calling: None,
         })
         .unwrap();
         let encoded = value.to_string();

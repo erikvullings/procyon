@@ -29,6 +29,9 @@ pub struct ChatMessageDto {
     /// Read-only context the person attached to this message, exactly as it was sent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
+    /// What the tools looked up while the model wrote this reply, one line each.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub steps: Vec<String>,
 }
 
 /// A saved conversation without its messages, for the conversation list.

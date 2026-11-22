@@ -6016,7 +6016,6 @@ describe('AppShell', () => {
       terminalAutoRunReadOnly: true,
       terminalAllowFileWrites: true,
       terminalHideFunctionKeys: true,
-      skillFolders: [],
       schemaVersion: 2,
       theme: 'auto',
       language: 'en',

@@ -3505,13 +3505,11 @@ impl FileManagerService {
         request: fm_transport_dto::TerminalAssistRequestDto,
     ) -> Result<fm_transport_dto::TerminalAssistReplyDto, fm_transport_dto::ChatFailureDto> {
         let notes = self.assistant_notes(access, request.workspace_id).await;
-        let skill_folders = self.skill_folders();
         crate::terminal_assist::reply(
             &self.llm_profiles,
             &self.providers,
             &self.terminal_sessions,
             Some(&notes),
-            &skill_folders,
             request,
         )
         .await
@@ -3526,13 +3524,11 @@ impl FileManagerService {
         on_event: &mut (dyn FnMut(fm_transport_dto::TerminalAssistEventDto) + Send),
     ) -> Result<fm_transport_dto::TerminalAssistReplyDto, fm_transport_dto::ChatFailureDto> {
         let notes = self.assistant_notes(access, request.workspace_id).await;
-        let skill_folders = self.skill_folders();
         crate::terminal_assist::reply_streaming(
             &self.llm_profiles,
             &self.providers,
             &self.terminal_sessions,
             Some(&notes),
-            &skill_folders,
             request,
             on_event,
         )
@@ -3682,7 +3678,6 @@ impl FileManagerService {
         request: fm_transport_dto::ChatReplyRequestDto,
         on_event: &mut (dyn FnMut(fm_transport_dto::ChatReplyEventDto) + Send),
     ) {
-        let skill_folders = self.skill_folders();
         let notes = match request.tools_folder {
             Some(_) => Some(
                 self.assistant_notes(access, Some(request.workspace_id))
@@ -3694,7 +3689,6 @@ impl FileManagerService {
             providers: &self.providers,
             notes: Some(notes as &dyn crate::terminal_assist::NotesAccess),
             host_wide_skills: matches!(access, SemanticAccessContext::Host),
-            skill_folders: &skill_folders,
         });
         self.chat
             .stream(
@@ -3946,17 +3940,6 @@ impl FileManagerService {
             &self.plugin_manager,
             &self.operations,
         )
-    }
-
-    /// The extra skill folders of the settings (task 0339).
-    fn skill_folders(&self) -> Vec<std::path::PathBuf> {
-        self.settings
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .skill_folders
-            .iter()
-            .map(std::path::PathBuf::from)
-            .collect()
     }
 
     /// Returns the current application-wide settings.

@@ -199,8 +199,6 @@ export interface Settings {
   readonly terminalAllowFileWrites: boolean;
   /** Whether the function-key bar is hidden while the terminal is open. */
   readonly terminalHideFunctionKeys: boolean;
-  /** Extra folders of agent skills beside the standard ones (task 0339); absolute paths. */
-  readonly skillFolders: readonly string[];
   /** Remembers and restores the view (sort, columns, mode) chosen for each folder (task 0270). */
   readonly rememberFolderViews: boolean;
   /** Basemap of the shared map component (task 0275). */

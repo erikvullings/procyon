@@ -386,6 +386,8 @@ pub struct LlmProbeResponse {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct LlmModelCapabilities {
     pub vision: bool,
+    /// The model takes native tool calls (Ollama reports this per model).
+    pub tools: bool,
 }
 
 /// Effective advertised limits; absent fields mean the provider did not disclose them.
@@ -1743,7 +1745,7 @@ impl LlmProfileService {
             return Err(LlmProfileError::InvalidConfiguration);
         }
         let bounded = LlmChatGeneration {
-            tools: if profile.takes_native_tools() && request.ollama_generation_url.is_none() {
+            tools: if profile.takes_native_tools() {
                 generation.tools.clone()
             } else {
                 Vec::new()
@@ -1865,8 +1867,7 @@ impl LlmProfileService {
         Ok(profile.capabilities.contains(&LlmApiCapability::Vision))
     }
 
-    /// Whether chat requests for `role` carry native tools: the profile says it takes them and the
-    /// endpoint is OpenAI-compatible (the Ollama chat API is asked for JSON and has no tools here).
+    /// Whether chat requests for `role` carry native tools: the probe found the model takes them.
     pub(crate) async fn role_uses_native_tools(&self, role: LlmRole) -> bool {
         let Ok(resolved) = self.resolve_role(role) else {
             return false;
@@ -1887,9 +1888,7 @@ impl LlmProfileService {
             }
             return false;
         }
-        self.probe_request(&profile)
-            .await
-            .is_ok_and(|request| request.ollama_generation_url.is_none())
+        true
     }
 
     /// Finds out in the background whether `model` takes native tool calls, and saves the answer on
@@ -1956,9 +1955,18 @@ impl LlmProfileService {
         let Ok(request) = self.probe_request(&profile).await else {
             return false;
         };
-        // The Ollama chat API is asked for JSON here and takes no tools.
         if request.ollama_generation_url.is_some() {
-            return false;
+            // Ollama reports it per model, so nothing needs to be tried.
+            return match self
+                .transport
+                .model_capabilities(&request, &CancellationToken::new())
+                .await
+            {
+                Ok(capabilities) => {
+                    self.record_tool_calling(id, model, &endpoint, capabilities.tools)
+                }
+                Err(_) => false,
+            };
         }
         let probe = LlmChatGeneration {
             tools: vec![LlmToolSpec {
@@ -1990,6 +1998,17 @@ impl LlmProfileService {
                 .any(|line| line.trim_start().starts_with("TOOL ") && line.contains("\"echo\"")),
             _ => return false,
         };
+        self.record_tool_calling(id, model, &endpoint, supported)
+    }
+
+    /// Saves what the probe found, unless the endpoint changed while it ran.
+    fn record_tool_calling(
+        &self,
+        id: Uuid,
+        model: &str,
+        endpoint: &NormalizedEndpoint,
+        supported: bool,
+    ) -> bool {
         let Ok(mut document) = self.lock() else {
             return false;
         };
@@ -2002,7 +2021,7 @@ impl LlmProfileService {
         };
         // The endpoint changed while the probe ran: the answer is about another server.
         if normalize_endpoint(&stored.base_url).map(|current| current.base_url)
-            != Ok(endpoint.base_url)
+            != Ok(endpoint.base_url.clone())
         {
             return false;
         }
@@ -2492,19 +2511,7 @@ fn openai_generation_body(
         body["temperature"] = json!(temperature);
     }
     if !generation.tools.is_empty() {
-        body["tools"] = Value::Array(
-            generation
-                .tools
-                .iter()
-                .map(|tool| {
-                    json!({"type": "function", "function": {
-                        "name": tool.name,
-                        "description": tool.description,
-                        "parameters": tool.schema,
-                    }})
-                })
-                .collect(),
-        );
+        body["tools"] = tool_definitions(&generation.tools);
     }
     if matches!(
         switch,
@@ -2516,6 +2523,22 @@ fn openai_generation_body(
         body["reasoning_effort"] = json!("none");
     }
     body
+}
+
+/// The `tools` list OpenAI-compatible endpoints and Ollama take.
+fn tool_definitions(tools: &[LlmToolSpec]) -> Value {
+    Value::Array(
+        tools
+            .iter()
+            .map(|tool| {
+                json!({"type": "function", "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.schema,
+                }})
+            })
+            .collect(),
+    )
 }
 
 /// The user message: plain text, or a content array with each image as a data URL after the text.
@@ -2559,7 +2582,7 @@ fn ollama_generation_body(request: &LlmProbeRequest, generation: &LlmChatGenerat
     if let Some(context_window) = generation.context_window {
         options["num_ctx"] = Value::from(context_window);
     }
-    json!({
+    let mut body = json!({
         "model": request.model,
         "messages": [
             {"role": "system", "content": generation.system_prompt},
@@ -2567,9 +2590,15 @@ fn ollama_generation_body(request: &LlmProbeRequest, generation: &LlmChatGenerat
         ],
         "stream": false,
         "think": false,
-        "format": "json",
         "options": options
-    })
+    });
+    if generation.tools.is_empty() {
+        body["format"] = json!("json");
+    } else {
+        // A JSON-only reply could not be a tool call, so tools replace the JSON constraint.
+        body["tools"] = tool_definitions(&generation.tools);
+    }
+    body
 }
 
 fn parse_ollama_model_capabilities(body: &[u8]) -> Result<LlmModelCapabilities, LlmProfileError> {
@@ -2583,6 +2612,9 @@ fn parse_ollama_model_capabilities(body: &[u8]) -> Result<LlmModelCapabilities, 
         vision: capabilities
             .iter()
             .any(|value| value.as_str() == Some("vision")),
+        tools: capabilities
+            .iter()
+            .any(|value| value.as_str() == Some("tools")),
     })
 }
 
@@ -2755,11 +2787,13 @@ fn parse_streaming_chat_detailed(bytes: &[u8]) -> Result<(String, bool), LlmProf
         }
     }
     if valid_event && terminated && !truncated {
-        // One call per step: the first named call becomes a `TOOL {json}` line.
-        if let Some(line) = tool_calls
+        // Every named call becomes a `TOOL {json}` line; the agent loop runs them in order.
+        let lines: Vec<String> = tool_calls
             .iter()
-            .find_map(|(name, arguments)| tool_call_line(name, arguments))
-        {
+            .filter_map(|(name, arguments)| tool_call_line(name, arguments))
+            .collect();
+        if !lines.is_empty() {
+            let line = lines.join("\n");
             if !content.is_empty() && !content.ends_with('\n') {
                 content.push('\n');
             }
@@ -2802,8 +2836,26 @@ fn parse_ollama_chat(bytes: &[u8]) -> Result<String, LlmProfileError> {
     {
         return Err(LlmProfileError::MalformedResponse);
     }
-    value
-        .get("message")
+    let message = value.get("message");
+    // A native tool call comes back as the text protocol's `TOOL {json}` line (task 0339).
+    if let Some(line) = message
+        .and_then(|message| message.get("tool_calls"))
+        .and_then(Value::as_array)
+        .and_then(|calls| {
+            calls.iter().find_map(|call| {
+                let function = call.get("function")?;
+                let name = function.get("name")?.as_str()?;
+                let arguments = function
+                    .get("arguments")
+                    .map(Value::to_string)
+                    .unwrap_or_default();
+                tool_call_line(name, &arguments)
+            })
+        })
+    {
+        return Ok(line);
+    }
+    message
         .and_then(|message| message.get("content"))
         .and_then(Value::as_str)
         .filter(|content| !content.trim().is_empty())
@@ -3017,6 +3069,12 @@ pub(crate) fn profile_to_dto(profile: LlmProfile) -> Result<LlmProfileDto, LlmPr
         locality: locality_to_dto(locality),
         consented_host: profile.consented_host,
         redact_filenames: profile.redact_filenames,
+        tool_calling: profile
+            .tool_calling
+            .map(|probe| fm_transport_dto::ToolCallingProbeDto {
+                model: probe.model,
+                supported: probe.supported,
+            }),
     })
 }
 
@@ -3256,6 +3314,19 @@ mod tests {
             Some("TOOL {\"tool\":\"list_dir\"}")
         );
         assert_eq!(tool_call_line("", "{}"), None);
+    }
+
+    #[test]
+    fn every_streamed_native_call_becomes_its_own_line() {
+        let stream = concat!(
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"name\":\"list_dir\",\"arguments\":\"{}\"}},{\"index\":1,\"function\":{\"name\":\"grep\",\"arguments\":\"{\\\"pattern\\\":\\\"x\\\"}\"}}]}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+        assert_eq!(
+            parse_streaming_chat(stream.as_bytes()).unwrap(),
+            "TOOL {\"tool\":\"list_dir\"}\nTOOL {\"pattern\":\"x\",\"tool\":\"grep\"}"
+        );
     }
 
     #[test]
@@ -5222,6 +5293,57 @@ mod tests {
         assert_eq!(
             *transport.attempts.lock().unwrap(),
             [ReasoningSwitch::Plain]
+        );
+    }
+
+    #[test]
+    fn ollama_takes_tools_in_place_of_the_json_constraint_and_returns_a_call_line() {
+        let request = LlmProbeRequest {
+            url: "http://localhost:11434/v1/chat/completions".into(),
+            ollama_generation_url: Some("http://localhost:11434/api/chat".into()),
+            model: "m".into(),
+            api_key: None,
+            api_key_header: "authorization",
+            headers: BTreeMap::new(),
+            timeout: Duration::from_secs(30),
+            reasoning_switch: ReasoningSwitch::Plain,
+        };
+        let tool = LlmToolSpec {
+            name: "read_file".into(),
+            description: "reads".into(),
+            schema: json!({"type": "object"}),
+        };
+        let with_tools = ollama_generation_body(
+            &request,
+            &LlmChatGeneration {
+                tools: vec![tool],
+                ..tiny_generation()
+            },
+        );
+        assert!(with_tools.get("format").is_none());
+        assert_eq!(with_tools["tools"][0]["function"]["name"], "read_file");
+        let plain = ollama_generation_body(&request, &tiny_generation());
+        assert_eq!(plain["format"], "json");
+        assert!(plain.get("tools").is_none());
+
+        let line = parse_ollama_chat(
+            br#"{"done":true,"message":{"content":"","tool_calls":[{"function":{"name":"read_file","arguments":{"path":"a.txt"}}}]}}"#,
+        )
+        .unwrap();
+        assert_eq!(line, r#"TOOL {"path":"a.txt","tool":"read_file"}"#);
+    }
+
+    #[test]
+    fn ollama_reports_tool_support_per_model() {
+        assert!(
+            parse_ollama_model_capabilities(br#"{"capabilities":["completion","tools"]}"#)
+                .unwrap()
+                .tools
+        );
+        assert!(
+            !parse_ollama_model_capabilities(br#"{"capabilities":["completion"]}"#)
+                .unwrap()
+                .tools
         );
     }
 }

@@ -105,6 +105,23 @@ pub struct ToolContext<'a> {
     pub notes: Option<&'a dyn NotesAccess>,
     /// The sandboxed working folder, when there is one.
     pub files: Option<&'a dyn FileTools>,
+    /// Converts documents (PDF, Word, ...) inside a skill's folder to text, when the host can.
+    pub documents: Option<&'a dyn SkillDocuments>,
+}
+
+/// Reads a document inside a skill's folder as text. The host implements it with its document
+/// converter; the folder and path have already been checked against the skill's sandbox rules by
+/// the host's own sandbox.
+#[async_trait]
+pub trait SkillDocuments: Send + Sync {
+    /// The text of `relative` inside `folder` from byte `offset`. `None` when the file is not a
+    /// document this host converts, so the plain text reader handles it.
+    async fn read(
+        &self,
+        folder: &std::path::Path,
+        relative: &str,
+        offset: usize,
+    ) -> Option<Result<String, String>>;
 }
 
 /// One tool the model may call.
@@ -185,6 +202,9 @@ pub struct ToolSpec {
     pub schema: Value,
 }
 
+/// Most tool calls run from one model reply.
+const MAX_CALLS_PER_REPLY: usize = 8;
+
 /// A call the model wrote: a registered tool and its raw arguments.
 pub struct ParsedCall {
     /// The tool that was named.
@@ -207,6 +227,23 @@ impl ToolRegistry {
         reply
             .match_indices('{')
             .find_map(|(start, _)| self.call_at(&reply[start..]))
+    }
+
+    /// Every tool call of a reply, in order: each `TOOL {json}` line is one call (a model or
+    /// endpoint may batch several in one step). A reply without such lines falls back to the first
+    /// call [`parse`](Self::parse) finds.
+    pub fn parse_all(&self, reply: &str) -> Vec<ParsedCall> {
+        let calls: Vec<ParsedCall> = reply
+            .lines()
+            .filter_map(|line| line.trim_start().strip_prefix("TOOL"))
+            .filter_map(|rest| self.call_at(rest.trim_start()))
+            .take(MAX_CALLS_PER_REPLY)
+            .collect();
+        if calls.is_empty() {
+            self.parse(reply).into_iter().collect()
+        } else {
+            calls
+        }
     }
 
     fn call_at(&self, text: &str) -> Option<ParsedCall> {

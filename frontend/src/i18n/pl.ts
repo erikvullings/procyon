@@ -402,10 +402,14 @@ export const pl = {
     terminalAutoRunReadOnly: 'Uruchamiaj polecenia tylko do odczytu bez pytania',
     terminalAllowFileWrites: 'Pozwól asystentowi tworzyć pliki (po zatwierdzeniu)',
     terminalHideFunctionKeys: 'Ukryj pasek klawiszy funkcyjnych, gdy terminal jest otwarty',
+    toolCalling: 'Natywne wywołania narzędzi',
+    toolCalling_pending: 'jeszcze nie sprawdzono',
+    toolCalling_yes: 'tak',
+    toolCalling_no: 'nie (protokół tekstowy)',
+    toolCalling_noChat: 'nie przypisano modelu czatu',
+    toolCallingHelp:
+      'Aplikacja ustala to sama w tle po każdej zmianie punktu końcowego lub modelu czatu. Bez tego asystenci wywołują narzędzia przez protokół tekstowy.',
     terminalApps: 'Zewnętrzne terminale',
-    skillFolders: 'Dodatkowe foldery skilli',
-    skillFoldersHelp:
-      'Jeden folder bezwzględny w wierszu. Każdy zawiera foldery skilli z plikiem SKILL.md, czytane przez asystentów obok ~/.claude/skills i ~/.agents/skills. Skrypty nigdy nie są uruchamiane.',
     terminalAppsHelp:
       'Po jednym w wierszu: Nazwa = polecenie (nazwa aplikacji w macOS, plik wykonywalny w Windows). Oferowane przez „Otwórz terminal za pomocą…”.',
     fileTemplates: 'Szablony plików',
@@ -2001,6 +2005,7 @@ export const pl = {
     cloudHint:
       'Treść dokumentów jest wysyłana do tego punktu w chmurze podczas indeksowania plików. Włącz tylko, jeśli to akceptujesz.',
     save: 'Zapisz rolę',
+    unsaved: 'Jeszcze nie zapisano',
     clear: 'Wyczyść',
     saved: 'Rola zapisana.',
     loadFailed: 'Nie udało się wczytać ról.',

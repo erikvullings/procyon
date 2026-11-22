@@ -11345,6 +11345,13 @@
           "role": {
             "$ref": "#/components/schemas/ChatRoleDto",
             "description": "Author of the message."
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What the tools looked up while the model wrote this reply, one line each."
           }
         }
       },
@@ -19551,6 +19558,17 @@
           },
           "redactFilenames": {
             "type": "boolean"
+          },
+          "toolCalling": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ToolCallingProbeDto",
+                "description": "What the background probe found about native tool calls; absent until it has answered."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -27907,13 +27925,6 @@
             "$ref": "#/components/schemas/SizeFormatDto",
             "description": "Size presentation."
           },
-          "skillFolders": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Extra folders of agent skills beside `~/.claude/skills` and `~/.agents/skills` (task 0339):\nabsolute paths, read by the assistants on this machine only."
-          },
           "syncProfiles": {
             "type": "array",
             "items": {
@@ -30300,6 +30311,24 @@
             "format": "int32",
             "description": "Theme id, or absent for the \"no theme\" bucket.",
             "minimum": 0
+          }
+        }
+      },
+      "ToolCallingProbeDto": {
+        "type": "object",
+        "description": "Whether a model answered the tool-calling probe with a tool call (task 0339).",
+        "required": [
+          "model",
+          "supported"
+        ],
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "The model that was asked."
+          },
+          "supported": {
+            "type": "boolean",
+            "description": "Whether it called the probe tool."
           }
         }
       },

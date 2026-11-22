@@ -95,6 +95,17 @@ describe('LlmRoleManagement', () => {
     expect(actions[1]?.classList.contains('fm-primary-action')).toBe(true);
   });
 
+  it('offers Save role only while the role differs from what is saved', async () => {
+    await mountLoaded(new MockFileManagerClient());
+    const save = (): HTMLButtonElement | null | undefined =>
+      root
+        .querySelector<HTMLElement>('[aria-label="Chat and summaries"]')
+        ?.querySelector<HTMLButtonElement>('.fm-primary-action');
+
+    expect(save()?.disabled).toBe(true);
+    expect(root.textContent).not.toContain('Not saved yet');
+  });
+
   it('explains managed embeddings without offering an unwired provider selector', async () => {
     await mountLoaded(new MockFileManagerClient());
 

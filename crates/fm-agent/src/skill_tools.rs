@@ -141,7 +141,8 @@ impl TypedTool for ReadSkillFile {
     }
 
     fn description(&self) -> &'static str {
-        "reads a text file inside a skill's folder (references, templates). The path is relative \
+        "reads a file inside a skill's folder (references, templates; text, or a PDF, Word, \
+         PowerPoint, Excel or EPUB document as text). The path is relative \
          to the skill and cannot leave it. Scripts in a skill are never run by this tool."
     }
 
@@ -162,6 +163,16 @@ impl TypedTool for ReadSkillFile {
             return ToolOutcome::output(step, not_found(ctx, &args.name));
         };
         let skill = skill.clone();
+        // Documents are converted by the host; everything else is read as text.
+        if let (Some(documents), Some(folder)) = (ctx.documents, skill.folder())
+            && let Some(result) = documents.read(folder, args.path.trim(), 0).await
+        {
+            let text = match result {
+                Ok(text) => redact_secrets(&text),
+                Err(error) => error,
+            };
+            return ToolOutcome::output(step, text);
+        }
         let path = args.path.clone();
         let result = tokio::task::spawn_blocking(move || skill.read_file(&path))
             .await

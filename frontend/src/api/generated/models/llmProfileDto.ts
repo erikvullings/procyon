@@ -6,6 +6,7 @@ import type { LlmAdvancedSettingsDto } from './llmAdvancedSettingsDto.ts';
 import type { LlmApiCapabilityDto } from './llmApiCapabilityDto.ts';
 import type { LlmEndpointLocalityDto } from './llmEndpointLocalityDto.ts';
 import type { LlmPresetDto } from './llmPresetDto.ts';
+import type { ToolCallingProbeDto } from './toolCallingProbeDto.ts';
 
 /**
  * A saved generation profile. Secret material and its opaque store ID are
@@ -28,4 +29,5 @@ export interface LlmProfileDto {
   name: string;
   preset: LlmPresetDto;
   redactFilenames: boolean;
+  toolCalling?: ToolCallingProbeDto | null;
 }

@@ -401,10 +401,14 @@ export const es = {
     terminalAllowFileWrites: 'Permitir que el asistente cree archivos (tras aprobación)',
     terminalHideFunctionKeys:
       'Ocultar la barra de teclas de función mientras el terminal está abierto',
+    toolCalling: 'Llamada nativa a herramientas',
+    toolCalling_pending: 'aún sin comprobar',
+    toolCalling_yes: 'sí',
+    toolCalling_no: 'no (protocolo de texto)',
+    toolCalling_noChat: 'sin modelo de chat asignado',
+    toolCallingHelp:
+      'La aplicación lo detecta sola en segundo plano cuando cambia el endpoint o el modelo de chat. Sin ello, los asistentes usan herramientas mediante el protocolo de texto.',
     terminalApps: 'Terminales externas',
-    skillFolders: 'Carpetas de habilidades adicionales',
-    skillFoldersHelp:
-      'Una carpeta absoluta por línea. Cada una contiene carpetas de habilidades con un SKILL.md que los asistentes leen junto a ~/.claude/skills y ~/.agents/skills. Los scripts nunca se ejecutan.',
     terminalAppsHelp:
       'Una por línea: Nombre = comando (un nombre de aplicación en macOS, un ejecutable en Windows). Se ofrecen en «Abrir terminal con…».',
     fileTemplates: 'Plantillas de archivo',
@@ -2008,6 +2012,7 @@ export const es = {
     cloudHint:
       'El contenido de los documentos se envía a este endpoint en la nube al indexar archivos. Actívalo solo si lo aceptas.',
     save: 'Guardar rol',
+    unsaved: 'Aún sin guardar',
     clear: 'Borrar',
     saved: 'Rol guardado.',
     loadFailed: 'No se pudieron cargar los roles.',

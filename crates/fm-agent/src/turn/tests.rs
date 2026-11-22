@@ -89,6 +89,7 @@ async fn turn(
         skills: &skills,
         notes: None,
         files: None,
+        documents: None,
     };
     let mut steps = Vec::new();
     let mut events = Vec::new();
@@ -115,6 +116,24 @@ async fn a_tool_result_goes_back_to_the_model_until_it_answers() {
         ]
     );
     assert!(host.log.contains(&"tool: HI".to_owned()));
+}
+
+#[tokio::test]
+async fn several_calls_in_one_reply_all_run_in_order_before_the_model_is_asked_again() {
+    let mut host = Scripted::new(&[
+        "TOOL {\"tool\":\"shout\",\"word\":\"a\"}\nTOOL {\"tool\":\"shout\",\"word\":\"b\"}",
+        "Done.",
+    ]);
+    let (end, steps, _) = turn(&mut host).await;
+
+    assert_eq!(end, Ok(TurnEnd::Answer("Done.".into())));
+    assert_eq!(steps, ["Shouted", "Shouted"]);
+    let results: Vec<&String> = host
+        .log
+        .iter()
+        .filter(|entry| entry.starts_with("tool:"))
+        .collect();
+    assert_eq!(results, ["tool: A", "tool: B"]);
 }
 
 #[tokio::test]

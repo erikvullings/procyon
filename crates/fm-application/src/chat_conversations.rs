@@ -71,6 +71,9 @@ pub(crate) struct ChatMessage {
     pub content: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
+    /// What the tools looked up while the model wrote this reply (task 0339).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub steps: Vec<String>,
 }
 
 /// One saved conversation.
@@ -383,6 +386,7 @@ pub(crate) fn conversation_to_dto(conversation: ChatConversation) -> ChatConvers
                 },
                 content: message.content,
                 context: message.context,
+                steps: message.steps,
             })
             .collect(),
     }
@@ -403,6 +407,7 @@ mod tests {
             role: ChatRole::User,
             content: content.to_owned(),
             context: None,
+            steps: Vec::new(),
         }
     }
 
@@ -508,6 +513,7 @@ mod tests {
                         role: ChatRole::User,
                         content: "What is large here?".to_owned(),
                         context: Some("Folder listing:\n- big.iso (4 GB)".to_owned()),
+                        steps: Vec::new(),
                     },
                 )
                 .unwrap();

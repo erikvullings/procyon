@@ -159,3 +159,31 @@ async fn plain_files_and_missing_documents_are_handled_apart() {
     let output = documents.run(&host, &outside).await.unwrap();
     assert!(output.text.starts_with("Error:"));
 }
+
+#[tokio::test]
+async fn a_document_inside_a_skill_folder_is_read_as_text_and_the_folder_stays_closed() {
+    use fm_agent::SkillDocuments as _;
+
+    let outer = tempfile::tempdir().unwrap();
+    std::fs::write(outer.path().join("secret.epub"), epub(3)).unwrap();
+    let skill = outer.path().join("skill");
+    std::fs::create_dir(&skill).unwrap();
+    std::fs::write(skill.join("guide.epub"), epub(3)).unwrap();
+    std::fs::write(skill.join("notes.txt"), "plain").unwrap();
+    let documents = super::SkillFolderDocuments::new(&registry());
+
+    let text = documents
+        .read(&skill, "guide.epub", 0)
+        .await
+        .expect("a document")
+        .unwrap();
+    assert!(text.contains("Paragraph number 0000"), "{text}");
+    // Plain files are the skill reader's business, and the folder cannot be left.
+    assert!(documents.read(&skill, "notes.txt", 0).await.is_none());
+    let escaped = documents
+        .read(&skill, "../secret.epub", 0)
+        .await
+        .expect("a document")
+        .unwrap_err();
+    assert!(escaped.starts_with("Error:"), "{escaped}");
+}
