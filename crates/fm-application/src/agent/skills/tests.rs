@@ -318,3 +318,35 @@ async fn read_skill_file_is_sandboxed_and_redacts() {
     assert!(!read("notes.txt").await.contains("ghp_abcdef"));
     drop(temp);
 }
+
+#[test]
+fn symlinked_and_copied_skill_folders_list_each_name_once() {
+    let temp = tempfile::tempdir().unwrap();
+    let claude = temp.path().join(".claude/skills");
+    let copy = temp.path().join(".agents/skills");
+    let linked = temp.path().join("linked/skills");
+    write_skill(
+        &claude,
+        "pdf",
+        "---\nname: pdf\ndescription: from claude\n---\n",
+    );
+    write_skill(&claude, "docx", "---\ndescription: d\n---\n");
+    write_skill(
+        &copy,
+        "pdf",
+        "---\nname: pdf\ndescription: from copy\n---\n",
+    );
+    fs::create_dir_all(linked.parent().unwrap()).unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&claude, &linked).unwrap();
+
+    let roots = SkillRoots {
+        project: vec![],
+        user: vec![claude, copy, linked],
+    };
+    let catalogue = SkillCatalogue::discover(&roots);
+
+    assert_eq!(catalogue.skills().len(), 2);
+    assert_eq!(catalogue.find("pdf").unwrap().description, "from claude");
+    assert_eq!(catalogue.prompt_section("").matches("- pdf:").count(), 1);
+}

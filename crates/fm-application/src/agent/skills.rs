@@ -135,11 +135,20 @@ impl SkillCatalogue {
     /// Reads every `<root>/<name>/SKILL.md`. Project skills win over user skills on a name clash.
     pub(crate) fn discover(roots: &SkillRoots) -> Self {
         let mut catalogue = Self::default();
-        for root in &roots.project {
-            catalogue.add_folder_skills(root, SkillSource::Project);
-        }
-        for root in &roots.user {
-            catalogue.add_folder_skills(root, SkillSource::User);
+        // `~/.agents/skills` is often a symlink to (or a copy of) `~/.claude/skills`: a folder
+        // is scanned once, and a name is listed once whichever folder it came from.
+        let mut scanned = Vec::new();
+        for (root, source) in roots
+            .project
+            .iter()
+            .map(|root| (root, SkillSource::Project))
+            .chain(roots.user.iter().map(|root| (root, SkillSource::User)))
+        {
+            let real = root.canonicalize().unwrap_or_else(|_| root.clone());
+            if !scanned.contains(&real) {
+                catalogue.add_folder_skills(root, source);
+                scanned.push(real);
+            }
         }
         catalogue
     }
