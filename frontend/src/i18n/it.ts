@@ -400,6 +400,7 @@ export const it = {
     terminalAssistant: 'Assistente del terminale (domande con #, Spiega e Correggi)',
     terminalFollowPane: 'Terminale e riquadro si seguono (stessa cartella)',
     terminalAutoRunReadOnly: 'Esegui senza chiedere i comandi di sola lettura',
+    terminalAllowFileWrites: 'Consenti all’assistente di creare file (dopo approvazione)',
     terminalHideFunctionKeys: 'Nascondi la barra dei tasti funzione quando il terminale è aperto',
     terminalApps: 'Terminali esterni',
     terminalAppsHelp:
@@ -2797,6 +2798,9 @@ export const it = {
       'Eseguire comandi richiede i blocchi di comandi. Inseriscilo invece nel prompt.',
     assistRun: 'Esegui',
     assistDecline: 'Rifiuta',
+    assistWriteAsk: 'Creare file in {folder}?',
+    assistWriteAllow: 'Consenti',
+    assistWriteSession: 'Questa sessione',
     assistStop: 'Ferma',
   },
   contextMenu: {

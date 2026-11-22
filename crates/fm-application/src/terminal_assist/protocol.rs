@@ -35,6 +35,12 @@ pub(super) enum ToolCall {
     ReadNote {
         path: String,
     },
+    /// Creates a new `.md` or `.txt` file in the output folder, after the person's approval
+    /// (task 0338). `path` is a plain file name.
+    WriteFile {
+        path: String,
+        content: String,
+    },
     /// Proposes a new note for the person to review.
     ProposeNote {
         #[serde(default)]
@@ -79,6 +85,7 @@ fn tool_call_at(text: &str) -> Option<ToolCall> {
         ToolCall::ListDir { path }
         | ToolCall::ReadFile { path, .. }
         | ToolCall::ReadNote { path }
+        | ToolCall::WriteFile { path, .. }
             if path.trim().is_empty() =>
         {
             None

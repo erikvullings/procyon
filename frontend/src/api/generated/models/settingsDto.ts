@@ -124,6 +124,8 @@ export interface SettingsDto {
      * @nullable
      */
   templateFolder?: string | null;
+  /** Whether the assistant may create files (after approval, task 0338). */
+  terminalAllowFileWrites?: boolean;
   /** External terminals offered by "Open Terminal With...". */
   terminalApps?: TerminalAppDto[];
   /** Whether the terminal assistant (`#` questions, Explain and Fix) is on (task 0336). */

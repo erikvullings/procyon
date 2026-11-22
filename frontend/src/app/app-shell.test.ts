@@ -6014,6 +6014,7 @@ describe('AppShell', () => {
       terminalAssistant: true,
       terminalFollowPane: true,
       terminalAutoRunReadOnly: true,
+      terminalAllowFileWrites: true,
       terminalHideFunctionKeys: true,
       schemaVersion: 2,
       theme: 'auto',

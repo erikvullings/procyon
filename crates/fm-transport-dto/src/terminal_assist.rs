@@ -76,6 +76,30 @@ pub struct TerminalToolResultDto {
     pub output: String,
 }
 
+/// The person's answer to a request to create files (task 0338).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TerminalWriteDecisionDto {
+    /// Allow files in the output folder for the rest of this question.
+    Question,
+    /// Allow files in the output folder for the rest of this terminal session.
+    Session,
+    /// Create nothing; the assistant stops.
+    Decline,
+}
+
+/// A file the assistant wants to create, waiting for the person's approval (task 0338).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalWriteRequestDto {
+    /// The output folder as shown to the person, for example `./summaries/`.
+    pub folder: String,
+    /// The first file's name.
+    pub name: String,
+    /// The first file's size in bytes.
+    pub bytes: u32,
+}
+
 /// One terminal assistance request. The transcript is the recent output as shown on screen.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -103,6 +127,12 @@ pub struct TerminalAssistRequestDto {
     /// The result of the command the previous reply asked to run. Only for `ask`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_result: Option<TerminalToolResultDto>,
+    /// The answer to a `writeRequest` of the previous reply (task 0338).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub write_decision: Option<TerminalWriteDecisionDto>,
+    /// Whether the assistant may offer to create files (the terminal setting, task 0338).
+    #[serde(default)]
+    pub allow_file_writes: bool,
     /// The active workspace, whose semantic consent lets `search_notes` use the notes index
     /// (task 0337). Without it notes are searched by text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -126,6 +156,10 @@ pub struct TerminalAssistReplyDto {
     /// the person reviews and saves it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note_proposal: Option<NoteProposalDto>,
+    /// Files the assistant wants to create (task 0338). Nothing is written until the person
+    /// answers with a `writeDecision`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub write_request: Option<TerminalWriteRequestDto>,
 }
 
 /// Something shown while an `ask` is answered, so the terminal can write it as it happens.

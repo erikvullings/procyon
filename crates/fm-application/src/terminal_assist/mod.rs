@@ -12,6 +12,7 @@ mod remote;
 mod session;
 mod stream;
 mod tools;
+mod write;
 
 pub(crate) use notes::{NoteToolCall, NoteToolOutcome, NotesAccess};
 pub(crate) use redact::redact_secrets;
@@ -20,7 +21,8 @@ pub(crate) use tools::{is_credential_folder, is_secret_name};
 
 use fm_transport_dto::{
     ChatFailureDto, TerminalAssistEventDto, TerminalAssistKindDto, TerminalAssistReplyDto,
-    TerminalAssistRequestDto, TerminalToolResultDto,
+    TerminalAssistRequestDto, TerminalToolResultDto, TerminalWriteDecisionDto,
+    TerminalWriteRequestDto,
 };
 use fm_vfs::ProviderRegistry;
 use tokio_util::sync::CancellationToken;
@@ -32,8 +34,12 @@ use crate::llm_profiles::{LlmChatGeneration, LlmProfileError, LlmRole};
 use self::context::{AttachedFile, render_activity, render_context, state_sections};
 use self::documents::{Documents, is_document};
 use self::protocol::{ToolCall, parse_tool_call};
+use self::session::PendingWrite;
 use self::stream::LineStreamer;
 use self::tools::{ToolHost, ToolOutput};
+use self::write::{
+    FileWriter, MAX_BYTES_PER_QUESTION, MAX_FILES_PER_QUESTION, OUTPUT_FOLDER, WriteError,
+};
 
 /// Longest natural-language request, in characters.
 const MAX_REQUEST_CHARS: usize = 2 * 1024;
@@ -76,6 +82,23 @@ const ASK_PROMPT: &str = "You are the assistant in the person's embedded termina
      Markdown note and {\"tool\":\"propose_note_update\",\"path\":\"ops/nginx.md\",\
      \"content\":\"...\"} proposes new text for a note. The person reviews a proposal before \
      anything is saved; propose only when they ask for a note or a note is clearly outdated.";
+
+/// Added to the prompt when the person allows the assistant to create files (task 0338).
+const WRITE_PROMPT: &str = "\nYou can create new files: \
+     {\"tool\":\"write_file\",\"path\":\"report.md\",\"content\":\"...\"} creates a Markdown \
+     or text file in the folder summaries/ next to the working folder, after the person approves. \
+     Use a short plain file name ending in .md or .txt, without folders. It only creates new \
+     files and never changes an existing one: a taken name gets a number, and the result tells \
+     you the final name. To summarise several documents, read one and then write its file, one \
+     file per document, with a factual summary. Use it only when the person asks for files.";
+
+fn ask_prompt(allow_file_writes: bool) -> String {
+    if allow_file_writes {
+        format!("{ASK_PROMPT}{WRITE_PROMPT}")
+    } else {
+        ASK_PROMPT.to_owned()
+    }
+}
 
 const COMMAND_PROMPT: &str = "You turn a request into one command for the person's shell. Reply \
      with exactly one line containing only the command: no explanation, no markdown, no code \
@@ -127,6 +150,7 @@ pub(crate) async fn reply_streaming(
         steps: Vec::new(),
         run_command: None,
         note_proposal: None,
+        write_request: None,
     })
 }
 
@@ -181,7 +205,38 @@ async fn ask(
     let documents = Documents::new(providers);
     let mut steps = Vec::new();
 
-    if let Some(result) = &request.tool_result {
+    let folder_key = format!("{}|{OUTPUT_FOLDER}", request.working_directory);
+    let writer = FileWriter::open(providers, &request.working_directory);
+    if let Some(decision) = request.write_decision {
+        let pending = sessions
+            .take_write(&id)
+            .ok_or(ChatFailureDto::InvalidRequest)?;
+        if decision == TerminalWriteDecisionDto::Decline {
+            sessions.push_tool(
+                &id,
+                "The person declined to create files. Do not try again. Stop and wait for their \
+                 next message.",
+            );
+            return Ok(stopped(String::new(), steps));
+        }
+        sessions.grant_writes(
+            &id,
+            &folder_key,
+            decision == TerminalWriteDecisionDto::Session,
+        );
+        create_file(
+            writer.as_ref(),
+            sessions,
+            &id,
+            pending,
+            on_event,
+            &mut steps,
+        )
+        .await;
+        if sessions.is_cancelled(&id) {
+            return Ok(stopped(String::new(), steps));
+        }
+    } else if let Some(result) = &request.tool_result {
         if sessions.render(&id).is_empty() {
             return Err(ChatFailureDto::InvalidRequest);
         }
@@ -226,7 +281,7 @@ async fn ask(
         let mut streamer = LineStreamer::new();
         let raw = generate(
             generator,
-            ASK_PROMPT.to_owned(),
+            ask_prompt(request.allow_file_writes),
             sessions.render(&id),
             &mut |delta: &str| {
                 streamer.push(delta, &mut |text| {
@@ -266,11 +321,45 @@ async fn ask(
                     steps,
                     run_command: Some(command.trim().to_owned()),
                     note_proposal: None,
+                    write_request: None,
                 });
             }
             Some(call) => {
                 if sessions.is_cancelled(&id) {
                     return Ok(stopped(String::new(), steps));
+                }
+                if let ToolCall::WriteFile { path, content } = call {
+                    let pending = PendingWrite {
+                        name: path.trim().to_owned(),
+                        content,
+                    };
+                    if !request.allow_file_writes {
+                        sessions.push_tool(&id, "Error: creating files is turned off.");
+                    } else if let Err(error) = write::check(&pending.name, &pending.content) {
+                        sessions.push_tool(&id, &format!("Error: {error}"));
+                    } else if sessions.writes_granted(&id, &folder_key) {
+                        create_file(
+                            writer.as_ref(),
+                            sessions,
+                            &id,
+                            pending,
+                            on_event,
+                            &mut steps,
+                        )
+                        .await;
+                    } else {
+                        let asked = TerminalWriteRequestDto {
+                            folder: format!("./{OUTPUT_FOLDER}/"),
+                            name: pending.name.clone(),
+                            bytes: u32::try_from(pending.content.len()).unwrap_or(u32::MAX),
+                        };
+                        sessions.hold_write(&id, pending);
+                        return Ok(TerminalAssistReplyDto {
+                            write_request: Some(asked),
+                            ..stopped(String::new(), steps)
+                        });
+                    }
+                    continue;
                 }
                 if let Some(note_call) = note_tool_call(&call) {
                     let outcome = match notes {
@@ -292,6 +381,7 @@ async fn ask(
                                 steps,
                                 run_command: None,
                                 note_proposal: Some(proposal),
+                                write_request: None,
                             });
                         }
                         NoteToolOutcome::Output { step, text } => {
@@ -322,6 +412,40 @@ async fn ask(
     }
 }
 
+/// Creates one approved file within the question's limits and tells the person and the model.
+async fn create_file(
+    writer: Option<&FileWriter>,
+    sessions: &Sessions,
+    id: &str,
+    pending: PendingWrite,
+    on_event: &mut (dyn FnMut(TerminalAssistEventDto) + Send),
+    steps: &mut Vec<String>,
+) {
+    let result = if !sessions.reserve_write(
+        id,
+        pending.content.len(),
+        MAX_FILES_PER_QUESTION,
+        MAX_BYTES_PER_QUESTION,
+    ) {
+        Err(WriteError::QuestionLimit)
+    } else {
+        match writer {
+            Some(writer) => writer.create(&pending.name, &pending.content).await,
+            None => Err(WriteError::Folder),
+        }
+    };
+    let (step, text) = match result {
+        Ok(created) => (created.step(), created.result()),
+        Err(error) => (
+            format!("Could not create {}", pending.name),
+            format!("Error: {error}"),
+        ),
+    };
+    on_event(TerminalAssistEventDto::Step { text: step.clone() });
+    steps.push(step);
+    sessions.push_tool(id, &text);
+}
+
 /// The notes tool behind a parsed tool call, when it is one.
 fn note_tool_call(call: &ToolCall) -> Option<NoteToolCall> {
     match call {
@@ -350,6 +474,7 @@ fn stopped(text: String, steps: Vec<String>) -> TerminalAssistReplyDto {
         steps,
         run_command: None,
         note_proposal: None,
+        write_request: None,
     }
 }
 
@@ -556,6 +681,8 @@ mod tests {
             session_id: None,
             context: TerminalContextDto::default(),
             tool_result: None,
+            write_decision: None,
+            allow_file_writes: false,
             workspace_id: None,
         }
     }
@@ -570,6 +697,8 @@ mod tests {
             session_id: None,
             context: TerminalContextDto::default(),
             tool_result: None,
+            write_decision: None,
+            allow_file_writes: false,
             workspace_id: None,
         }
     }
@@ -695,6 +824,8 @@ mod tests {
             session_id: Some(session.to_owned()),
             context: TerminalContextDto::default(),
             tool_result: None,
+            write_decision: None,
+            allow_file_writes: false,
             workspace_id: None,
         }
     }
@@ -1209,5 +1340,216 @@ mod tests {
                 limit: Some(3)
             })
         );
+    }
+
+    fn local_providers() -> ProviderRegistry {
+        let mut registry = ProviderRegistry::new();
+        registry.register(std::sync::Arc::new(
+            fm_vfs_local::LocalFileSystemProvider::new(),
+        ));
+        registry
+    }
+
+    fn writing_request(
+        session: &str,
+        question: &str,
+        directory: &std::path::Path,
+    ) -> TerminalAssistRequestDto {
+        TerminalAssistRequestDto {
+            allow_file_writes: true,
+            ..ask_request(session, question, directory)
+        }
+    }
+
+    fn decision(
+        session: &str,
+        directory: &std::path::Path,
+        decision: TerminalWriteDecisionDto,
+    ) -> TerminalAssistRequestDto {
+        TerminalAssistRequestDto {
+            request: None,
+            write_decision: Some(decision),
+            ..writing_request(session, "", directory)
+        }
+    }
+
+    async fn ask_local(
+        fake: &FakeGenerator,
+        sessions: &Sessions,
+        request: TerminalAssistRequestDto,
+    ) -> TerminalAssistReplyDto {
+        super::reply(fake, &local_providers(), sessions, None, request)
+            .await
+            .unwrap()
+    }
+
+    const WRITE_A: &str = r##"TOOL {"tool":"write_file","path":"a.md","content":"# A"}"##;
+    const WRITE_B: &str = r##"TOOL {"tool":"write_file","path":"b.md","content":"# B"}"##;
+
+    #[tokio::test]
+    async fn nothing_is_written_before_the_person_approves() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&[WRITE_A]);
+        let sessions = Sessions::default();
+        let reply = ask_local(
+            &fake,
+            &sessions,
+            writing_request("t", "summarise", dir.path()),
+        )
+        .await;
+        let asked = reply.write_request.unwrap();
+        assert_eq!(asked.folder, "./summaries/");
+        assert_eq!(asked.name, "a.md");
+        assert!(!dir.path().join("summaries").exists());
+    }
+
+    #[tokio::test]
+    async fn one_approval_covers_the_later_files_of_the_question() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&[WRITE_A, WRITE_B, "Done."]);
+        let sessions = Sessions::default();
+        ask_local(
+            &fake,
+            &sessions,
+            writing_request("t", "summarise", dir.path()),
+        )
+        .await;
+        let reply = ask_local(
+            &fake,
+            &sessions,
+            decision("t", dir.path(), TerminalWriteDecisionDto::Question),
+        )
+        .await;
+        assert_eq!(reply.text, "Done.");
+        assert_eq!(
+            reply.steps,
+            vec![
+                "Created summaries/a.md (3 B)",
+                "Created summaries/b.md (3 B)"
+            ]
+        );
+        assert!(dir.path().join("summaries/a.md").exists());
+        assert!(dir.path().join("summaries/b.md").exists());
+    }
+
+    #[tokio::test]
+    async fn a_question_grant_ends_with_the_question_but_a_session_grant_stays() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&[WRITE_A, "ok", WRITE_B]);
+        let sessions = Sessions::default();
+        ask_local(&fake, &sessions, writing_request("t", "one", dir.path())).await;
+        ask_local(
+            &fake,
+            &sessions,
+            decision("t", dir.path(), TerminalWriteDecisionDto::Question),
+        )
+        .await;
+        let next = ask_local(&fake, &sessions, writing_request("t", "two", dir.path())).await;
+        assert!(next.write_request.is_some());
+
+        let fake = scripted(&[WRITE_A, "ok", WRITE_B, "ok"]);
+        let sessions = Sessions::default();
+        ask_local(&fake, &sessions, writing_request("s", "one", dir.path())).await;
+        ask_local(
+            &fake,
+            &sessions,
+            decision("s", dir.path(), TerminalWriteDecisionDto::Session),
+        )
+        .await;
+        let next = ask_local(&fake, &sessions, writing_request("s", "two", dir.path())).await;
+        assert!(next.write_request.is_none());
+        assert!(dir.path().join("summaries/b.md").exists());
+    }
+
+    #[tokio::test]
+    async fn declining_writes_nothing_and_stops() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&[WRITE_A]);
+        let sessions = Sessions::default();
+        ask_local(&fake, &sessions, writing_request("t", "go", dir.path())).await;
+        let reply = ask_local(
+            &fake,
+            &sessions,
+            decision("t", dir.path(), TerminalWriteDecisionDto::Decline),
+        )
+        .await;
+        assert_eq!(reply.text, "");
+        assert!(reply.write_request.is_none());
+        assert!(!dir.path().join("summaries").exists());
+        assert!(sessions.render("t").contains("declined to create files"));
+    }
+
+    #[tokio::test]
+    async fn an_answer_without_a_waiting_file_is_invalid() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&[]);
+        let sessions = Sessions::default();
+        let result = super::reply(
+            &fake,
+            &local_providers(),
+            &sessions,
+            None,
+            decision("t", dir.path(), TerminalWriteDecisionDto::Session),
+        )
+        .await;
+        assert_eq!(result.unwrap_err(), ChatFailureDto::InvalidRequest);
+    }
+
+    #[tokio::test]
+    async fn a_bad_name_is_refused_to_the_model_without_asking() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&[
+            r#"TOOL {"tool":"write_file","path":"../../.zshrc","content":"x"}"#,
+            "Cannot.",
+        ]);
+        let sessions = Sessions::default();
+        let reply = ask_local(&fake, &sessions, writing_request("t", "go", dir.path())).await;
+        assert!(reply.write_request.is_none());
+        assert_eq!(reply.text, "Cannot.");
+        assert!(sessions.render("t").contains("not an allowed file name"));
+        assert!(!dir.path().join("summaries").exists());
+    }
+
+    #[tokio::test]
+    async fn the_tool_is_unavailable_when_the_setting_is_off() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&[WRITE_A, "No files."]);
+        let sessions = Sessions::default();
+        let reply = ask_local(&fake, &sessions, ask_request("t", "go", dir.path())).await;
+        assert!(reply.write_request.is_none());
+        assert!(sessions.render("t").contains("turned off"));
+        assert!(!ask_prompt(false).contains("write_file"));
+        assert!(ask_prompt(true).contains("write_file"));
+    }
+
+    #[tokio::test]
+    async fn the_file_count_per_question_is_limited() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut script = vec![WRITE_A];
+        let names: Vec<&'static str> = (0..MAX_FILES_PER_QUESTION)
+            .map(|index| {
+                &*Box::leak(
+                    format!(r#"TOOL {{"tool":"write_file","path":"f{index}.md","content":"x"}}"#)
+                        .into_boxed_str(),
+                )
+            })
+            .collect();
+        script.extend(names);
+        script.push("Stopped.");
+        let fake = scripted(&script);
+        let sessions = Sessions::default();
+        ask_local(&fake, &sessions, writing_request("t", "go", dir.path())).await;
+        let reply = ask_local(
+            &fake,
+            &sessions,
+            decision("t", dir.path(), TerminalWriteDecisionDto::Question),
+        )
+        .await;
+        assert_eq!(reply.text, "Stopped.");
+        let created = std::fs::read_dir(dir.path().join("summaries"))
+            .unwrap()
+            .count();
+        assert_eq!(created, MAX_FILES_PER_QUESTION);
+        assert!(sessions.render("t").contains("limit for this question"));
     }
 }

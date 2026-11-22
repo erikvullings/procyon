@@ -27816,6 +27816,10 @@
             ],
             "description": "Host folder whose text files are also offered as templates (task 0312); `None` disables."
           },
+          "terminalAllowFileWrites": {
+            "type": "boolean",
+            "description": "Whether the assistant may create files (after approval, task 0338)."
+          },
           "terminalApps": {
             "type": "array",
             "items": {

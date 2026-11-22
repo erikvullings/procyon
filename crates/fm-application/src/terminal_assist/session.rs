@@ -27,8 +27,28 @@ enum Turn {
     Tool(String),
 }
 
+/// A file the assistant wants to create, held until the person answers (task 0338).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct PendingWrite {
+    pub(super) name: String,
+    pub(super) content: String,
+}
+
+/// What the person allowed for file creation, and for which output folder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WriteGrant {
+    folder: String,
+    whole_session: bool,
+}
+
 #[derive(Debug, Default)]
 struct Session {
+    /// The file waiting for approval.
+    pending_write: Option<PendingWrite>,
+    write_grant: Option<WriteGrant>,
+    /// Files and bytes created for the current question.
+    written_files: usize,
+    written_bytes: usize,
     turns: Vec<Turn>,
     /// Set when the person stopped the running request; ends the tool loop.
     cancelled: bool,
@@ -142,11 +162,75 @@ impl Sessions {
     pub(super) fn push_person(&self, id: &str, question: &str, context: &str) {
         self.with(id, |session| {
             session.cancelled = false;
+            // A new question starts with fresh limits and only a session-wide grant survives.
+            session.pending_write = None;
+            session.written_files = 0;
+            session.written_bytes = 0;
+            if session
+                .write_grant
+                .as_ref()
+                .is_some_and(|g| !g.whole_session)
+            {
+                session.write_grant = None;
+            }
             session.turns.push(Turn::Person {
                 question: question.to_owned(),
                 context: context.to_owned(),
             });
         });
+    }
+
+    /// Holds a file until the person decides.
+    pub(super) fn hold_write(&self, id: &str, pending: PendingWrite) {
+        self.with(id, |session| session.pending_write = Some(pending));
+    }
+
+    /// The held file, which is no longer held.
+    pub(super) fn take_write(&self, id: &str) -> Option<PendingWrite> {
+        let mut taken = None;
+        self.with(id, |session| taken = session.pending_write.take());
+        taken
+    }
+
+    /// Allows creating files in `folder` for this question or the whole session.
+    pub(super) fn grant_writes(&self, id: &str, folder: &str, whole_session: bool) {
+        self.with(id, |session| {
+            session.write_grant = Some(WriteGrant {
+                folder: folder.to_owned(),
+                whole_session,
+            });
+        });
+    }
+
+    /// Whether files may be created in `folder` without asking.
+    pub(super) fn writes_granted(&self, id: &str, folder: &str) -> bool {
+        let mut granted = false;
+        self.with(id, |session| {
+            granted = session
+                .write_grant
+                .as_ref()
+                .is_some_and(|grant| grant.folder == folder);
+        });
+        granted
+    }
+
+    /// Counts a file of `bytes` against this question's limits; `false` when it would exceed them.
+    pub(super) fn reserve_write(
+        &self,
+        id: &str,
+        bytes: usize,
+        max_files: usize,
+        max_bytes: usize,
+    ) -> bool {
+        let mut allowed = false;
+        self.with(id, |session| {
+            if session.written_files < max_files && session.written_bytes + bytes <= max_bytes {
+                session.written_files += 1;
+                session.written_bytes += bytes;
+                allowed = true;
+            }
+        });
+        allowed
     }
 
     /// Records the assistant's reply.

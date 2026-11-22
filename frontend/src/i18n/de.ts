@@ -407,6 +407,7 @@ export const de = {
     terminalAssistant: 'Terminal-Assistent (#-Fragen, Erklären und Korrigieren)',
     terminalFollowPane: 'Terminal und Bereich folgen einander (gleicher Ordner)',
     terminalAutoRunReadOnly: 'Schreibgeschützte Befehle ohne Nachfrage ausführen',
+    terminalAllowFileWrites: 'Assistent darf Dateien erstellen (nach Freigabe)',
     terminalHideFunctionKeys: 'Funktionstastenleiste ausblenden, solange das Terminal offen ist',
     terminalApps: 'Externe Terminals',
     terminalAppsHelp:
@@ -2825,6 +2826,9 @@ export const de = {
       'Zum Ausführen von Befehlen sind Befehlsblöcke nötig. Fügen Sie ihn stattdessen am Prompt ein.',
     assistRun: 'Ausführen',
     assistDecline: 'Ablehnen',
+    assistWriteAsk: 'Dateien in {folder} erstellen?',
+    assistWriteAllow: 'Erlauben',
+    assistWriteSession: 'Diese Sitzung',
     assistStop: 'Stopp',
   },
   contextMenu: {

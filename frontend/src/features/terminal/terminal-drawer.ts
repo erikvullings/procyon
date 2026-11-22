@@ -26,6 +26,7 @@ import { highlightShell } from './shell-highlight';
 import { parseShellMark } from './shell-integration';
 import {
   assistContext,
+  byteSize,
   type ContextChip,
   cleanCommand,
   commandFromAnswer,
@@ -41,6 +42,7 @@ import {
   type TerminalAssistReply,
   type TerminalAssistSource,
   type TerminalToolResult,
+  type TerminalWriteDecision,
   transcriptTail,
 } from './terminal-assist';
 import type { TerminalClient } from './terminal-client';
@@ -79,6 +81,8 @@ export interface TerminalDrawerAttrs {
   readonly followPane?: boolean;
   /** Whether a strictly read-only command the assistant proposes runs without asking. */
   readonly autoRunReadOnly?: boolean;
+  /** Whether the assistant may offer to create files after approval (task 0338). */
+  readonly allowFileWrites?: boolean;
   /** The terminal's shell on `host` (see `terminalHost`) moved to this absolute folder; the pane follows. */
   readonly onFollowFolder?: (host: string, path: string) => void;
   readonly listFolder?: (location: Location) => Promise<readonly string[]>;
@@ -393,7 +397,14 @@ type AssistPanel =
   | { readonly status: 'busy'; readonly tabKey: string }
   | { readonly status: 'suggest'; readonly tabKey: string; readonly command: string }
   | { readonly status: 'approve'; readonly tabKey: string; readonly command: string }
-  | { readonly status: 'running'; readonly tabKey: string; readonly command: string };
+  | { readonly status: 'running'; readonly tabKey: string; readonly command: string }
+  | {
+      readonly status: 'write';
+      readonly tabKey: string;
+      readonly folder: string;
+      readonly name: string;
+      readonly bytes: number;
+    };
 
 /** A bottom drawer whose xterm instances remain mounted and keyed by backing location. */
 export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
@@ -550,6 +561,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       readonly question?: string;
       readonly context?: TerminalAssistContext;
       readonly toolResult?: TerminalToolResult;
+      readonly writeDecision?: TerminalWriteDecision;
     },
   ): void {
     const attrs = currentAttrs;
@@ -580,6 +592,8 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           ...(input.question === undefined ? {} : { request: input.question }),
           ...(input.context === undefined ? {} : { context: input.context }),
           ...(input.toolResult === undefined ? {} : { toolResult: input.toolResult }),
+          ...(input.writeDecision === undefined ? {} : { writeDecision: input.writeDecision }),
+          allowFileWrites: attrs.allowFileWrites !== false,
         },
         onEvent,
       )
@@ -605,7 +619,9 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       currentAttrs?.onNoteProposal?.(reply.noteProposal);
     }
     let autoRun: string | undefined;
-    if (reply.runCommand !== undefined) {
+    if (reply.writeRequest !== undefined) {
+      next = { status: 'write', tabKey: live.key, ...reply.writeRequest };
+    } else if (reply.runCommand !== undefined) {
       const command = cleanCommand(reply.runCommand);
       // A read-only command runs at once, unless the person has started typing meanwhile.
       if (
@@ -712,6 +728,25 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       workingDirectory: attrs.location.uri,
     });
     return true;
+  }
+
+  /** Answers the request to create files; declining makes the assistant stop. */
+  function answerWrite(live: LiveTerminal, decision: TerminalWriteDecision): void {
+    if (decision !== 'decline') {
+      sendToSession(live, { writeDecision: decision });
+      return;
+    }
+    panel = undefined;
+    void currentAttrs?.client
+      .assist({
+        kind: 'ask',
+        transcript: '',
+        workingDirectory: currentAttrs.location?.uri ?? '',
+        sessionId: live.assistSession,
+        writeDecision: 'decline',
+      })
+      .catch(() => undefined);
+    m.redraw();
   }
 
   /** Tells the session the person declined; the assistant stops. */
@@ -960,6 +995,16 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       }
       if ((plain && event.key === 'Escape') || (ctrl && name === 'c')) {
         declineApproved(live, shown.command);
+        return true;
+      }
+    }
+    if (shown?.status === 'write' && live !== undefined) {
+      if (plain && event.key === 'Enter' && lineEmpty) {
+        answerWrite(live, 'question');
+        return true;
+      }
+      if ((plain && event.key === 'Escape') || (ctrl && name === 'c')) {
+        answerWrite(live, 'decline');
         return true;
       }
     }
@@ -1548,6 +1593,27 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           ]),
         ]);
       }
+      case 'write':
+        return m('.fm-terminal-assist-row', [
+          m('span.fm-terminal-assist-status', [
+            t('terminal', 'assistWriteAsk', { folder: shown.folder }),
+            ' ',
+            m('code.fm-terminal-assist-command', `${shown.name} (${byteSize(shown.bytes)})`),
+          ]),
+          m('.fm-terminal-assist-buttons', [
+            shortcutButton(t('terminal', 'assistWriteAllow'), 'Enter', () =>
+              answerWrite(live, 'question'),
+            ),
+            m(
+              'button.fm-terminal-assist-action',
+              { type: 'button', onclick: () => answerWrite(live, 'session') },
+              t('terminal', 'assistWriteSession'),
+            ),
+            shortcutButton(t('terminal', 'assistDecline'), 'Ctrl+C', () =>
+              answerWrite(live, 'decline'),
+            ),
+          ]),
+        ]);
       case 'running':
         return m('.fm-terminal-assist-row', [
           command(shown.command),

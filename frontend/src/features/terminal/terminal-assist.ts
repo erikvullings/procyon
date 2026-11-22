@@ -34,6 +34,17 @@ export interface TerminalToolResult {
   readonly output?: string;
 }
 
+/** The person's answer to a request to create files (task 0338). */
+export type TerminalWriteDecision = 'question' | 'session' | 'decline';
+
+/** A file the assistant wants to create, waiting for approval (task 0338). */
+export interface TerminalWriteRequest {
+  /** The output folder as shown to the person, for example `./summaries/`. */
+  readonly folder: string;
+  readonly name: string;
+  readonly bytes: number;
+}
+
 /** One request to the assistant, as the desktop host receives it. */
 export interface TerminalAssistRequest {
   readonly kind: TerminalAssistKind;
@@ -44,6 +55,10 @@ export interface TerminalAssistRequest {
   readonly sessionId?: string;
   readonly context?: TerminalAssistContext;
   readonly toolResult?: TerminalToolResult;
+  /** The answer to the previous reply's `writeRequest`. */
+  readonly writeDecision?: TerminalWriteDecision;
+  /** Whether the assistant may offer to create files (the terminal setting). */
+  readonly allowFileWrites?: boolean;
   /** The active workspace, so `search_notes` may use the notes index (task 0337). */
   readonly workspaceId?: string;
 }
@@ -55,12 +70,19 @@ export interface TerminalAssistReply {
   readonly runCommand?: string;
   /** A note the assistant proposes; it is reviewed before anything is saved (task 0337). */
   readonly noteProposal?: NoteProposal;
+  /** Files the assistant wants to create; nothing is written until the person answers. */
+  readonly writeRequest?: TerminalWriteRequest;
 }
 
 /** Something shown while an answer is written: a finished line of it, or a step taken. */
 export type TerminalAssistEvent =
   | { readonly kind: 'line'; readonly text: string }
   | { readonly kind: 'step'; readonly text: string };
+
+/** A byte count for people: `812 B`, `1.2 KiB`. */
+export function byteSize(bytes: number): string {
+  return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KiB`;
+}
 
 /** Most terminal lines sent with one request; the newest lines are kept. */
 export const MAX_TRANSCRIPT_LINES = 200;

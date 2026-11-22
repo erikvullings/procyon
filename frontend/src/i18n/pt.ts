@@ -402,6 +402,7 @@ export const pt = {
     terminalAssistant: 'Assistente do terminal (perguntas com #, Explicar e Corrigir)',
     terminalFollowPane: 'Terminal e painel acompanham-se (mesma pasta)',
     terminalAutoRunReadOnly: 'Executar sem perguntar os comandos só de leitura',
+    terminalAllowFileWrites: 'Permitir que o assistente crie arquivos (após aprovação)',
     terminalHideFunctionKeys: 'Ocultar a barra de teclas de função enquanto o terminal está aberto',
     terminalApps: 'Terminais externos',
     terminalAppsHelp:
@@ -2810,6 +2811,9 @@ export const pt = {
     assistNeedsBlocks: 'Executar comandos requer blocos de comandos. Insira-o no prompt.',
     assistRun: 'Executar',
     assistDecline: 'Recusar',
+    assistWriteAsk: 'Criar arquivos em {folder}?',
+    assistWriteAllow: 'Permitir',
+    assistWriteSession: 'Esta sessão',
     assistStop: 'Parar',
   },
   contextMenu: {

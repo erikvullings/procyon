@@ -16,6 +16,8 @@ fn request(context: TerminalContextDto) -> TerminalAssistRequestDto {
         session_id: Some("t1".into()),
         context,
         tool_result: None,
+        write_decision: None,
+        allow_file_writes: false,
         workspace_id: None,
     }
 }

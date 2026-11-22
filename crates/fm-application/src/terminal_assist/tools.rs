@@ -45,7 +45,7 @@ pub(super) enum ToolError {
     Unreadable(String),
     #[error("{0}")]
     Document(String),
-    #[error("run_command needs the person's approval.")]
+    #[error("This tool needs the person's approval and is handled by the assistant.")]
     NeedsApproval,
     #[error("notes tools only work on the notes folder.")]
     NotesTool,
@@ -96,6 +96,7 @@ impl Sandbox {
             ToolCall::RunCommand { .. } => {
                 ("Run command".to_owned(), Err(ToolError::NeedsApproval))
             }
+            ToolCall::WriteFile { .. } => ("Create file".to_owned(), Err(ToolError::NeedsApproval)),
             ToolCall::SearchNotes { .. }
             | ToolCall::ReadNote { .. }
             | ToolCall::ProposeNote { .. }

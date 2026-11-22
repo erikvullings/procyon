@@ -48,6 +48,7 @@ impl RemoteSandbox {
             ToolCall::RunCommand { .. } => {
                 ("Run command".to_owned(), Err(ToolError::NeedsApproval))
             }
+            ToolCall::WriteFile { .. } => ("Create file".to_owned(), Err(ToolError::NeedsApproval)),
             ToolCall::SearchNotes { .. }
             | ToolCall::ReadNote { .. }
             | ToolCall::ProposeNote { .. }

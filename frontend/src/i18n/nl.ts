@@ -397,6 +397,7 @@ export const nl = {
     terminalAssistant: 'Terminalassistent (#-vragen, Uitleggen en Oplossen)',
     terminalFollowPane: 'Terminal en paneel volgen elkaar (zelfde map)',
     terminalAutoRunReadOnly: 'Alleen-lezen opdrachten uitvoeren zonder te vragen',
+    terminalAllowFileWrites: 'Assistent mag bestanden maken (na goedkeuring)',
     terminalHideFunctionKeys: 'Functietoetsenbalk verbergen zolang de terminal open is',
     terminalApps: 'Externe terminals',
     terminalAppsHelp:
@@ -2795,6 +2796,9 @@ export const nl = {
       'Commando’s uitvoeren vereist commandoblokken. Voeg het in plaats daarvan in bij de prompt.',
     assistRun: 'Uitvoeren',
     assistDecline: 'Weigeren',
+    assistWriteAsk: 'Bestanden maken in {folder}?',
+    assistWriteAllow: 'Toestaan',
+    assistWriteSession: 'Deze sessie',
     assistStop: 'Stoppen',
   },
   contextMenu: {

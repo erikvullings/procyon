@@ -1299,6 +1299,63 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     await vi.waitFor(() => expect(button('Suggest a fix')).toBeDefined());
   });
 
+  it('asks once before creating files and sends the choice back', async () => {
+    assist.mockResolvedValueOnce({
+      text: '',
+      writeRequest: { folder: './summaries/', name: 'a.md', bytes: 1300 },
+    });
+    await mount();
+    await markPrompt();
+    ask('# summarise the documents');
+
+    await vi.waitFor(() => expect(root.textContent).toContain('Create files in ./summaries/?'));
+    expect(root.textContent).toContain('a.md (1.3 KiB)');
+    expect(sentAt(0)?.allowFileWrites).toBe(true);
+
+    button('Allow')?.click();
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
+    expect(sentAt(1)?.writeDecision).toBe('question');
+    expect(sentAt(1)?.sessionId).toBe(sentAt(0)?.sessionId);
+  });
+
+  it('can allow file creation for the session', async () => {
+    assist.mockResolvedValueOnce({
+      text: '',
+      writeRequest: { folder: './summaries/', name: 'a.md', bytes: 10 },
+    });
+    await mount();
+    await markPrompt();
+    ask('# summarise');
+
+    await vi.waitFor(() => expect(button('This session')).toBeDefined());
+    button('This session')?.click();
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
+    expect(sentAt(1)?.writeDecision).toBe('session');
+  });
+
+  it('declining file creation tells the session and shows nothing more', async () => {
+    assist.mockResolvedValueOnce({
+      text: '',
+      writeRequest: { folder: './summaries/', name: 'a.md', bytes: 10 },
+    });
+    await mount();
+    await markPrompt();
+    ask('# summarise');
+
+    await vi.waitFor(() => expect(button('Decline')).toBeDefined());
+    button('Decline')?.click();
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
+    expect(sentAt(1)?.writeDecision).toBe('decline');
+    await vi.waitFor(() => expect(button('Decline')).toBeUndefined());
+  });
+
+  it('tells the host not to offer file creation when the setting is off', async () => {
+    await mount({ allowFileWrites: false });
+    ask('# summarise');
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledOnce());
+    expect(sentAt(0)?.allowFileWrites).toBe(false);
+  });
+
   it('tells the session when a command is declined and shows nothing more', async () => {
     assist.mockResolvedValueOnce({ text: '', runCommand: 'rm -rf build' });
     await mount();

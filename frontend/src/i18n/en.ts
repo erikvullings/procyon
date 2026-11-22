@@ -395,6 +395,7 @@ export const en = {
     terminalAssistant: 'Terminal assistant (# questions, Explain and Fix)',
     terminalFollowPane: 'Terminal and pane follow each other (same folder)',
     terminalAutoRunReadOnly: 'Run read-only commands without asking',
+    terminalAllowFileWrites: 'Let the assistant create files (after approval)',
     terminalHideFunctionKeys: 'Hide the function-key bar while the terminal is open',
     terminalApps: 'External terminals',
     terminalAppsHelp:
@@ -2742,6 +2743,9 @@ export const en = {
     assistNeedsBlocks: 'Running commands needs command blocks. Insert it at the prompt instead.',
     assistRun: 'Run',
     assistDecline: 'Decline',
+    assistWriteAsk: 'Create files in {folder}?',
+    assistWriteAllow: 'Allow',
+    assistWriteSession: 'This session',
     assistStop: 'Stop',
   },
   contextMenu: {

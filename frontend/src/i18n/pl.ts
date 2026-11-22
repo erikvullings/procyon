@@ -400,6 +400,7 @@ export const pl = {
     terminalAssistant: 'Asystent terminala (pytania z #, Wyjaśnij i Napraw)',
     terminalFollowPane: 'Terminal i panel podążają za sobą (ten sam folder)',
     terminalAutoRunReadOnly: 'Uruchamiaj polecenia tylko do odczytu bez pytania',
+    terminalAllowFileWrites: 'Pozwól asystentowi tworzyć pliki (po zatwierdzeniu)',
     terminalHideFunctionKeys: 'Ukryj pasek klawiszy funkcyjnych, gdy terminal jest otwarty',
     terminalApps: 'Zewnętrzne terminale',
     terminalAppsHelp:
@@ -2797,6 +2798,9 @@ export const pl = {
       'Uruchamianie poleceń wymaga bloków poleceń. Wstaw je zamiast tego w wierszu poleceń.',
     assistRun: 'Uruchom',
     assistDecline: 'Odrzuć',
+    assistWriteAsk: 'Utworzyć pliki w {folder}?',
+    assistWriteAllow: 'Zezwól',
+    assistWriteSession: 'Ta sesja',
     assistStop: 'Zatrzymaj',
   },
   contextMenu: {

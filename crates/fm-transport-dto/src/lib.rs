@@ -286,6 +286,7 @@ pub use system_location::{SystemLocationDto, SystemLocationKindDto, VolumeDto};
 pub use terminal_assist::{
     TerminalAssistEventDto, TerminalAssistKindDto, TerminalAssistReplyDto,
     TerminalAssistRequestDto, TerminalBlockDto, TerminalContextDto, TerminalToolResultDto,
+    TerminalWriteDecisionDto, TerminalWriteRequestDto,
 };
 pub use transfer_recovery::{
     InterruptedTransferDto, InterruptedTransfersDto, TransferRecoveryClassDto,

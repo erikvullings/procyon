@@ -1,6 +1,6 @@
 # 0338 Terminal assistant: create files (summaries, reports) with a batch approval
 
-Status: todo
+Status: done (unverified in the Tauri app and with a live LLM)
 Priority: medium
 Subsystem: backend, frontend, settings
 Depends on: 0336, 0337
@@ -85,11 +85,21 @@ write one file per document and to keep summaries factual.
 - `pnpm run lint` clean; Rust and frontend tests added; behaviour in the Tauri app and with a live
   LLM reported as verified or not.
 
-## Open questions
-- Default output folder: `./summaries` in the terminal's folder, or the notes folder (0337)?
-  Recommended: `./summaries` for batch work, notes folder only for real notes.
-- Should "Allow for this session" survive folder changes? Recommended: no, the output folder is
-  part of the approval.
+## Decisions
+- Output folder is fixed to `./summaries/` under the terminal's folder (user, 2026-11-22). The model
+  passes only a plain file name.
+- Notes: not covered by this tool. Real notes keep `propose_note` (reviewed one by one, indexed).
+  A batch of notes is created in `summaries/` and moved/imported by the person; a later task may add
+  a `destination: notes` that writes through the notes service after the same batch approval.
+- "Allow for this session" is keyed by working folder + output folder, so a folder change asks
+  again.
 
 ## Agent Notes
-(empty)
+Built 2026-11-22: `terminal_assist/write.rs` (`FileWriter` over the VFS provider, so local and SFTP
+are the same; create-new with `-2`, `-3` suffix; symlinked/non-directory output folder refused;
+name allow-list; redaction count), `ToolCall::WriteFile`, session pending write + grant + per-question
+counters (50 files, 1 MiB), DTO `writeDecision`/`allowFileWrites`/`writeRequest`, setting
+`terminalAllowFileWrites` (default on; off removes the tool from the prompt), strip "Create files in
+./summaries/?" with Allow (Enter) / This session / Decline (Ctrl+C or Esc). Tests: Rust writer and
+loop flow (approve, per-question vs session grant, decline, bad name, setting off, count limit),
+frontend drawer flow. Not done: SFTP test against a real server, Tauri/LLM run.

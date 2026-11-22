@@ -402,6 +402,7 @@ export const fr = {
     terminalAssistant: 'Assistant de terminal (questions avec #, Expliquer et Corriger)',
     terminalFollowPane: 'Terminal et panneau se suivent (même dossier)',
     terminalAutoRunReadOnly: 'Exécuter sans demander les commandes en lecture seule',
+    terminalAllowFileWrites: 'Autoriser l’assistant à créer des fichiers (après approbation)',
     terminalHideFunctionKeys:
       'Masquer la barre des touches de fonction quand le terminal est ouvert',
     terminalApps: 'Terminaux externes',
@@ -2821,6 +2822,9 @@ export const fr = {
       "L'exécution de commandes nécessite les blocs de commandes. Insérez-la plutôt dans l'invite.",
     assistRun: 'Exécuter',
     assistDecline: 'Refuser',
+    assistWriteAsk: 'Créer des fichiers dans {folder} ?',
+    assistWriteAllow: 'Autoriser',
+    assistWriteSession: 'Cette session',
     assistStop: 'Arrêter',
   },
   contextMenu: {

@@ -596,6 +596,15 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                       }),
                       m(Switch, {
                         className: 'col s12 m6',
+                        label: t('settings', 'terminalAllowFileWrites'),
+                        checked: activeDraft.terminalAllowFileWrites,
+                        left: t('settings', 'off'),
+                        right: t('settings', 'on'),
+                        onchange: (checked: boolean) =>
+                          update(current, { terminalAllowFileWrites: checked }),
+                      }),
+                      m(Switch, {
+                        className: 'col s12 m6',
                         label: t('settings', 'terminalHideFunctionKeys'),
                         checked: activeDraft.terminalHideFunctionKeys,
                         left: t('settings', 'off'),
