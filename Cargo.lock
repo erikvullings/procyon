@@ -2801,6 +2801,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "fm-agent"
+version = "0.7.0"
+dependencies = [
+ "async-trait",
+ "fm-transport-dto",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
 name = "fm-application"
 version = "0.7.0"
 dependencies = [
@@ -2813,6 +2826,7 @@ dependencies = [
  "dirs",
  "ed25519-dalek",
  "ferrodoc",
+ "fm-agent",
  "fm-archive",
  "fm-auth-oauth",
  "fm-checksum",

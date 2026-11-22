@@ -50,6 +50,9 @@ const CRATE_LAYERS: &[(&str, u8)] = &[
     ("fm-vfs", 1),
     // Layer 2 - implementations of those contracts, including the primitive
     // engines a higher engine may be composed from.
+    // `fm-agent` is the agent harness (tool registry, turn loop, skills). It knows only the wire
+    // contracts, so the application hosts it without growing.
+    ("fm-agent", 2),
     ("fm-archive", 2),
     // `fm-checksum` cannot sit beside `fm-vfs`: it consumes the `fm-vfs`
     // provider contract to stream bytes, so it must be strictly above it. It

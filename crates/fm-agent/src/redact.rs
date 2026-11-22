@@ -18,7 +18,7 @@ const SECRET_NAMES: &[&str] = &[
 
 /// Replaces private-key blocks, `name=value` and `name: value` pairs whose name suggests a secret,
 /// secret-looking flags and well-known token shapes with `[redacted]`.
-pub(crate) fn redact_secrets(text: &str) -> String {
+pub fn redact_secrets(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut in_key = false;
     for raw in text.split_inclusive('\n') {

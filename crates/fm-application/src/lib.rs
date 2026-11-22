@@ -7,7 +7,6 @@
 
 mod action;
 mod action_invoker;
-mod agent;
 pub mod app_data;
 mod archive_summary;
 mod attribute_change;

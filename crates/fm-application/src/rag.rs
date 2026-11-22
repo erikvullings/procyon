@@ -996,6 +996,7 @@ impl RagCoordinator {
             .generate(
                 profile_id,
                 LlmChatGeneration {
+                    tools: Vec::new(),
                     system_prompt,
                     user_prompt,
                     images: Vec::new(),
@@ -1076,6 +1077,7 @@ impl RagCoordinator {
             .generate(
                 request.profile_id,
                 LlmChatGeneration {
+                    tools: Vec::new(),
                     system_prompt,
                     user_prompt,
                     images: Vec::new(),

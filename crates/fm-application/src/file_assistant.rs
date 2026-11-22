@@ -135,6 +135,7 @@ impl FileAssistantService {
             .generate_streamed(
                 request.profile_id,
                 LlmChatGeneration {
+                    tools: Vec::new(),
                     system_prompt: prompts.system,
                     user_prompt: prompts.user,
                     images: Vec::new(),
@@ -292,17 +293,7 @@ fn unwrap_single_fence(text: &str) -> String {
     text.to_owned()
 }
 
-/// The longest prefix of `text` that fits in `max_bytes`, cut on a character boundary.
-pub(crate) fn truncate_to_bytes(text: &str, max_bytes: usize) -> &str {
-    if text.len() <= max_bytes {
-        return text;
-    }
-    let mut end = max_bytes;
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    &text[..end]
-}
+pub(crate) use fm_agent::truncate_to_bytes;
 
 #[cfg(test)]
 mod tests {

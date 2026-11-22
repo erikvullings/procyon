@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::*;
-use crate::agent::{SkillCatalogue, Typed, TypedTool};
+use crate::{SkillCatalogue, Typed, TypedTool};
 
 struct Scripted {
     replies: VecDeque<String>,

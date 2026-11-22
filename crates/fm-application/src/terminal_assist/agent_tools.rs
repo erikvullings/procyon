@@ -8,17 +8,16 @@ use serde_json::{Value, json};
 
 use super::documents::Documents;
 use super::tools::{FileCall, ToolHost, ToolOutput};
-use crate::agent::{
-    ApprovalRequest, FileTools, RunCommand, ToolContext, ToolOutcome, ToolRegistry, Typed,
-    TypedTool, read_only_registry,
+use fm_agent::{
+    ApprovalRequest, FileTools, ToolContext, ToolOutcome, ToolRegistry, Typed, TypedTool,
+    command_registry,
 };
 
 /// The registry of the terminal assistant: the shared read-only tools, `run_command`, and
 /// `write_file`. `write_file` is only described to the model when the person allows file
 /// creation; a call to it is still understood and answered when it is not allowed.
 pub(super) fn registry(describe_write_file: bool) -> ToolRegistry {
-    let mut registry = read_only_registry();
-    registry.register(Typed(RunCommand));
+    let mut registry = command_registry();
     if describe_write_file {
         registry.register(Typed(WriteFile));
     }

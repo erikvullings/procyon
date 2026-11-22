@@ -2420,11 +2420,21 @@ pub(crate) fn build_workspace_window<R: Runtime>(
 /// closed window had already been deleted (correctly, per that window's own close).
 pub(crate) async fn open_startup_windows<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let service = app.state::<AppState>().service.clone();
-    let surviving_ephemeral_ids: Vec<Uuid> = service
-        .list_workspaces()
-        .await
-        .map(|summaries| ephemeral_workspace_ids(&summaries))
-        .unwrap_or_default();
+    let summaries = service.list_workspaces().await.unwrap_or_default();
+    // Prefer the workspace each window was actually showing when the app last ran (named or
+    // ephemeral); fall back to surviving ephemeral workspaces for sessions saved before windows
+    // were tracked.
+    let saved_ids: Vec<Uuid> = app
+        .state::<crate::window_session::WindowSession>()
+        .take_saved()
+        .into_iter()
+        .filter(|id| summaries.iter().any(|summary| summary.id == *id))
+        .collect();
+    let surviving_ephemeral_ids = if saved_ids.is_empty() {
+        ephemeral_workspace_ids(&summaries)
+    } else {
+        saved_ids
+    };
 
     if surviving_ephemeral_ids.is_empty() {
         let _window = build_default_window(app)?;
@@ -2554,15 +2564,30 @@ pub(crate) async fn list_workspaces(
 /// `POST /api/v1/workspaces/start`: opens `workspace_id` if given, otherwise
 /// the last-active workspace, otherwise creates a default.
 #[tauri::command]
-pub(crate) async fn start_workspace(
+pub(crate) async fn start_workspace<R: Runtime>(
+    window: Window<R>,
     state: State<'_, AppState>,
+    session: State<'_, crate::window_session::WindowSession>,
     workspace_id: Option<Uuid>,
 ) -> Result<WorkspaceDto, ApplicationErrorDto> {
-    state
+    let workspace = state
         .service
         .start_workspace(workspace_id)
         .await
-        .map_err(|error| error.into_dto(Uuid::new_v4()))
+        .map_err(|error| error.into_dto(Uuid::new_v4()))?;
+    record_window_workspace(&window, &session, workspace.id);
+    Ok(workspace)
+}
+
+/// Remembers which workspace `window` shows so the next launch restores it there.
+fn record_window_workspace<R: Runtime>(
+    window: &Window<R>,
+    session: &crate::window_session::WindowSession,
+    workspace_id: Uuid,
+) {
+    if crate::window_session::is_workspace_window(window.label()) {
+        session.record(window.label(), workspace_id);
+    }
 }
 
 /// Creates and persists a new workspace, identical in shape to
@@ -2611,15 +2636,19 @@ pub(crate) async fn delete_workspace(
 /// Selects an existing workspace as the last-active workspace, identical in
 /// shape to `POST /api/v1/workspaces/{workspaceId}/open`.
 #[tauri::command]
-pub(crate) async fn open_workspace(
+pub(crate) async fn open_workspace<R: Runtime>(
+    window: Window<R>,
     state: State<'_, AppState>,
+    session: State<'_, crate::window_session::WindowSession>,
     workspace_id: Uuid,
 ) -> Result<WorkspaceDto, ApplicationErrorDto> {
-    state
+    let workspace = state
         .service
         .open_workspace(workspace_id)
         .await
-        .map_err(|error| error.into_dto(Uuid::new_v4()))
+        .map_err(|error| error.into_dto(Uuid::new_v4()))?;
+    record_window_workspace(&window, &session, workspace.id);
+    Ok(workspace)
 }
 
 /// Applies a workspace command, identical in shape to

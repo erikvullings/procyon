@@ -12,8 +12,8 @@ use thiserror::Error;
 use tokio::io::AsyncWriteExt as _;
 use tokio_util::sync::CancellationToken;
 
-use super::redact::redact_secrets;
 use super::tools::is_secret_name;
+use fm_agent::redact_secrets;
 
 /// The folder under the working folder where files are created.
 pub(super) const OUTPUT_FOLDER: &str = "summaries";

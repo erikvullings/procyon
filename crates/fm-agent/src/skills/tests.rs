@@ -3,9 +3,9 @@ use std::fs;
 use async_trait::async_trait;
 
 use super::*;
-use crate::agent::{ReadSkill, ReadSkillFile};
-use crate::agent::{ToolContext, TypedTool};
-use crate::terminal_assist::{NoteToolCall, NoteToolOutcome, NotesAccess};
+use crate::notes::{NoteToolCall, NoteToolOutcome, NotesAccess};
+use crate::{ReadSkill, ReadSkillFile};
+use crate::{ToolContext, TypedTool};
 
 fn write_skill(root: &Path, folder: &str, text: &str) -> PathBuf {
     let dir = root.join(folder);

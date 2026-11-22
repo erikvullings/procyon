@@ -10,9 +10,9 @@ use tokio_util::sync::CancellationToken;
 use super::format::{NoteMeta, note_title, render_note, slugify, split_note};
 use super::search::{DEFAULT_HITS, SearchStrategy, SemanticNotes, search_notes};
 use super::store::NotesStore;
-use crate::agent::NoteSkill;
 use crate::file_assistant::truncate_to_bytes;
 use crate::terminal_assist::{NoteToolCall, NoteToolOutcome, NotesAccess, redact_secrets};
+use fm_agent::NoteSkill;
 
 /// Most bytes of one note shown to the model.
 const MAX_NOTE_TEXT_BYTES: usize = 16 * 1024;

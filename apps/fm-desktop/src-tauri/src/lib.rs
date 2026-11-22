@@ -24,6 +24,7 @@ mod semantic_production;
 mod shell_integration;
 mod terminal;
 mod tile_protocol;
+mod window_session;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -498,6 +499,7 @@ pub fn run() {
         .manage(native_menu::NativeMenuActionChannel::default())
         .manage(app_update::PendingAppUpdate::default())
         .manage(QuittingFlag::default())
+        .manage(window_session::WindowSession::default())
         .manage(ExitWarning::default())
         .manage(WindowStateSaveDebouncer::default())
         .on_window_event(|window, event| {
@@ -566,6 +568,11 @@ pub fn run() {
                 // window's `Destroyed` fired as part of the whole app quitting (see
                 // `QuittingFlag`'s doc comment). `"main"`/non-`workspace-<id>` labels have no id to
                 // parse and are never ephemeral, so this is a no-op for them.
+                if !window.state::<QuittingFlag>().is_quitting() {
+                    window
+                        .state::<window_session::WindowSession>()
+                        .forget(window.label());
+                }
                 if !window.state::<QuittingFlag>().is_quitting()
                     && let Some(workspace_id) = commands::workspace_id_from_label(window.label())
                 {

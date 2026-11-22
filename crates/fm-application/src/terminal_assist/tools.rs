@@ -10,8 +10,9 @@ use fm_vfs::ProviderRegistry;
 use thiserror::Error;
 
 use super::context::path_from_location;
-use super::redact::redact_secrets;
 use super::remote::RemoteSandbox;
+use fm_agent::redact_secrets;
+pub(super) use fm_agent::{is_credential_folder, is_secret_name};
 
 /// Most bytes of one file returned.
 pub(super) const MAX_READ_BYTES: usize = 32 * 1024;
@@ -268,42 +269,6 @@ impl Sandbox {
             }
         }
     }
-}
-
-/// Names that usually hold secrets; never read.
-pub(crate) fn is_secret_name(name: &str) -> bool {
-    let lower = name.to_ascii_lowercase();
-    const EXACT: &[&str] = &[
-        ".env",
-        ".netrc",
-        ".npmrc",
-        ".pgpass",
-        ".pypirc",
-        ".htpasswd",
-        ".git-credentials",
-    ];
-    const PREFIXES: &[&str] = &[".env.", "id_rsa", "id_dsa", "id_ed25519", "id_ecdsa"];
-    const SUFFIXES: &[&str] = &[
-        ".pem",
-        ".key",
-        ".p12",
-        ".pfx",
-        ".p8",
-        ".keystore",
-        ".jks",
-        ".tfstate",
-    ];
-    EXACT.contains(&lower.as_str())
-        || PREFIXES.iter().any(|prefix| lower.starts_with(prefix))
-        || SUFFIXES.iter().any(|suffix| lower.ends_with(suffix))
-}
-
-/// Folders that hold credentials; nothing under them is read or searched.
-pub(crate) fn is_credential_folder(name: &str) -> bool {
-    matches!(
-        name,
-        ".ssh" | ".aws" | ".kube" | ".gnupg" | ".docker" | ".azure"
-    )
 }
 
 /// A bounded regular text file. Special files (a FIFO would block), binary files and

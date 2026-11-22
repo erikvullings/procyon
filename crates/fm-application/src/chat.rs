@@ -224,6 +224,7 @@ impl ChatService {
             .generate_for_role(
                 LlmRole::Chat,
                 LlmChatGeneration {
+                    tools: Vec::new(),
                     system_prompt: SYSTEM_PROMPT.to_owned(),
                     user_prompt: prompts,
                     images,

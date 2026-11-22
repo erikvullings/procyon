@@ -6,8 +6,6 @@
 mod agent_tools;
 mod context;
 mod documents;
-mod notes;
-mod redact;
 mod remote;
 mod session;
 mod tools;
@@ -15,15 +13,14 @@ mod write;
 
 use async_trait::async_trait;
 
-use crate::agent::{
+use fm_agent::{
     ApprovalRequest, MAX_REPLY_BYTES, SkillCatalogue, SkillRoots, ToolContext, ToolRegistry,
     TurnEnd, TurnEvent, TurnHost, run_turn,
 };
 
-pub(crate) use notes::{NoteToolCall, NoteToolOutcome, NotesAccess};
-pub(crate) use redact::redact_secrets;
+pub(crate) use fm_agent::{NoteToolCall, NoteToolOutcome, NotesAccess, redact_secrets};
+pub(crate) use fm_agent::{is_credential_folder, is_secret_name};
 pub(crate) use session::Sessions;
-pub(crate) use tools::{is_credential_folder, is_secret_name};
 
 use fm_transport_dto::{
     ChatFailureDto, TerminalAssistEventDto, TerminalAssistKindDto, TerminalAssistReplyDto,
@@ -167,6 +164,7 @@ async fn generate(
         .generate_for_role(
             LlmRole::Chat,
             LlmChatGeneration {
+                tools: Vec::new(),
                 system_prompt,
                 user_prompt,
                 images: Vec::new(),
@@ -1518,8 +1516,8 @@ mod tests {
             }
         }
 
-        async fn skills(&self, _query: &str) -> Vec<crate::agent::NoteSkill> {
-            vec![crate::agent::NoteSkill {
+        async fn skills(&self, _query: &str) -> Vec<fm_agent::NoteSkill> {
+            vec![fm_agent::NoteSkill {
                 name: "nginx-cert".to_owned(),
                 description: "Use when replacing a certificate".to_owned(),
                 path: "ops/nginx.md".to_owned(),

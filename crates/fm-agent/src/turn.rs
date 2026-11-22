@@ -8,29 +8,32 @@ use fm_transport_dto::{ChatFailureDto, NoteProposalDto};
 
 use super::stream::LineStreamer;
 use super::{ApprovalRequest, ToolContext, ToolOutcome, ToolRegistry};
-use crate::file_assistant::truncate_to_bytes;
+use crate::text::truncate_to_bytes;
 
 /// Most tool calls in one turn.
 pub(crate) const MAX_STEPS: usize = 24;
 /// Longest answer kept, in bytes.
-pub(crate) const MAX_REPLY_BYTES: usize = 8 * 1024;
+pub const MAX_REPLY_BYTES: usize = 8 * 1024;
 
 /// The model and the conversation of one agent.
 #[async_trait]
-pub(crate) trait TurnHost: Send {
+pub trait TurnHost: Send {
     /// The model's next reply to the conversation so far, reported piece by piece to `on_delta`.
     async fn generate(
         &mut self,
         on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
     ) -> Result<String, ChatFailureDto>;
+    /// Records the model's reply in the conversation.
     fn push_assistant(&mut self, text: &str);
+    /// Records a tool result in the conversation.
     fn push_tool(&mut self, text: &str);
+    /// Whether the person stopped the request.
     fn is_cancelled(&self) -> bool;
 }
 
 /// Progress the person sees while the turn runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum TurnEvent {
+pub enum TurnEvent {
     /// A finished line of the answer.
     Line(String),
     /// A tool ran.
@@ -39,10 +42,12 @@ pub(crate) enum TurnEvent {
 
 /// How a turn ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum TurnEnd {
+pub enum TurnEnd {
     /// The model answered in plain text.
     Answer(String),
+    /// The person stopped the request.
     Cancelled,
+    /// The model kept calling tools until the step limit.
     StepLimit,
     /// A note waits for the person's review.
     Proposal(NoteProposalDto),
@@ -52,7 +57,7 @@ pub(crate) enum TurnEnd {
 }
 
 /// Runs tool calls until the turn ends. Every tool run adds its step to `steps`.
-pub(crate) async fn run_turn(
+pub async fn run_turn(
     host: &mut impl TurnHost,
     registry: &ToolRegistry,
     ctx: &ToolContext<'_>,

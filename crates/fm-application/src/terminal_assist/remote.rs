@@ -11,12 +11,12 @@ use fm_vfs::{EntryRef, FileSystemProvider, ListOptions, ProviderRegistry};
 use tokio::io::AsyncReadExt as _;
 use tokio_util::sync::CancellationToken;
 
-use super::redact::redact_secrets;
 use super::tools::FileCall;
 use super::tools::{
     MAX_LISTED, MAX_READ_BYTES, ToolError, ToolOutput, error_text, is_credential_folder,
     is_secret_name, text_from_bytes,
 };
+use fm_agent::redact_secrets;
 
 /// A working folder on a provider other than the local disk.
 #[derive(Clone)]

@@ -10,7 +10,7 @@ use std::path::{Component, Path, PathBuf};
 use thiserror::Error;
 
 use super::frontmatter::split_front_matter;
-use crate::terminal_assist::{is_credential_folder, is_secret_name};
+use crate::paths::{is_credential_folder, is_secret_name};
 
 /// Most skills listed in the prompt.
 const MAX_PROMPT_SKILLS: usize = 40;
@@ -33,14 +33,14 @@ const MAX_NAME_CHARS: usize = 64;
 
 /// Where a skill comes from. The order is the precedence when names collide.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum SkillSource {
+pub enum SkillSource {
     Project,
     User,
     Note,
 }
 
 impl SkillSource {
-    pub(crate) fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             Self::Project => "project",
             Self::User => "user",
@@ -51,7 +51,7 @@ impl SkillSource {
 
 /// Where a skill's text is read from.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum SkillLocation {
+pub enum SkillLocation {
     /// The folder that holds `SKILL.md`.
     Folder(PathBuf),
     /// A note, by its path in the notes folder.
@@ -59,24 +59,27 @@ pub(crate) enum SkillLocation {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Skill {
-    pub(crate) name: String,
-    pub(crate) description: String,
-    pub(crate) source: SkillSource,
-    pub(crate) location: SkillLocation,
+pub struct Skill {
+    pub name: String,
+    pub description: String,
+    pub source: SkillSource,
+    pub location: SkillLocation,
 }
 
 /// A note offered as a skill.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct NoteSkill {
-    pub(crate) name: String,
-    pub(crate) description: String,
-    pub(crate) path: String,
+pub struct NoteSkill {
+    /// The skill name.
+    pub name: String,
+    /// When to use it.
+    pub description: String,
+    /// The note's path in the notes folder.
+    pub path: String,
 }
 
 /// Why a skill file could not be read. A missing path and one outside the skill read the same.
 #[derive(Debug, Error, PartialEq, Eq)]
-pub(crate) enum SkillFileError {
+pub enum SkillFileError {
     #[error("{0} is not available.")]
     NotAvailable(String),
     #[error("{0} may hold secrets and is not read.")]
@@ -89,16 +92,17 @@ pub(crate) enum SkillFileError {
 
 /// The folders skills are looked for in.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct SkillRoots {
+pub struct SkillRoots {
     /// Nearest first.
-    pub(crate) project: Vec<PathBuf>,
-    pub(crate) user: Vec<PathBuf>,
+    pub project: Vec<PathBuf>,
+    /// The person's folders.
+    pub user: Vec<PathBuf>,
 }
 
 impl SkillRoots {
     /// The standard folders: `~/.claude/skills` and `~/.agents/skills`, the same two folders in
     /// the project (the working folder up to the nearest git root), and extra user folders.
-    pub(crate) fn standard(
+    pub fn standard(
         working_directory: Option<&Path>,
         home: Option<&Path>,
         extra: &[PathBuf],
@@ -127,13 +131,13 @@ impl SkillRoots {
 
 /// The skills one request can use.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct SkillCatalogue {
+pub struct SkillCatalogue {
     skills: Vec<Skill>,
 }
 
 impl SkillCatalogue {
     /// Reads every `<root>/<name>/SKILL.md`. Project skills win over user skills on a name clash.
-    pub(crate) fn discover(roots: &SkillRoots) -> Self {
+    pub fn discover(roots: &SkillRoots) -> Self {
         let mut catalogue = Self::default();
         // `~/.agents/skills` is often a symlink to (or a copy of) `~/.claude/skills`: a folder
         // is scanned once, and a name is listed once whichever folder it came from.
@@ -154,7 +158,7 @@ impl SkillCatalogue {
     }
 
     /// Adds notes as skills, below folder skills when a name is taken.
-    pub(crate) fn add_notes(&mut self, notes: Vec<NoteSkill>) {
+    pub fn add_notes(&mut self, notes: Vec<NoteSkill>) {
         for note in notes {
             self.push(Skill {
                 name: note.name,
@@ -170,7 +174,7 @@ impl SkillCatalogue {
     }
 
     /// The skill called `name`, ignoring case.
-    pub(crate) fn find(&self, name: &str) -> Option<&Skill> {
+    pub fn find(&self, name: &str) -> Option<&Skill> {
         let name = name.trim();
         self.skills
             .iter()
@@ -206,7 +210,7 @@ impl SkillCatalogue {
 
     /// The catalogue for the prompt: at most [`MAX_PROMPT_SKILLS`] skills within
     /// [`MAX_CATALOGUE_BYTES`], notes first, then the skills that match `request` best.
-    pub(crate) fn prompt_section(&self, request: &str) -> String {
+    pub fn prompt_section(&self, request: &str) -> String {
         if self.skills.is_empty() {
             return String::new();
         }
@@ -319,7 +323,7 @@ fn bounded_description(description: &str) -> String {
 
 impl Skill {
     /// The `SKILL.md` body (without front matter), bounded. Only for folder skills.
-    pub(crate) fn read_body(&self) -> Option<Result<String, SkillFileError>> {
+    pub fn read_body(&self) -> Option<Result<String, SkillFileError>> {
         let SkillLocation::Folder(folder) = &self.location else {
             return None;
         };
@@ -331,7 +335,7 @@ impl Skill {
 
     /// A file inside the skill's folder. It cannot leave the folder, not even through a symlink or
     /// `..`, and secret-looking files are refused.
-    pub(crate) fn read_file(&self, relative: &str) -> Result<String, SkillFileError> {
+    pub fn read_file(&self, relative: &str) -> Result<String, SkillFileError> {
         match &self.location {
             SkillLocation::Folder(folder) => read_inside(folder, relative),
             SkillLocation::Note(_) => Err(SkillFileError::NoteHasNoFiles),
@@ -339,7 +343,7 @@ impl Skill {
     }
 
     /// The files inside the skill's folder worth reading, relative, bounded.
-    pub(crate) fn list_files(&self) -> Vec<String> {
+    pub fn list_files(&self) -> Vec<String> {
         let SkillLocation::Folder(folder) = &self.location else {
             return Vec::new();
         };

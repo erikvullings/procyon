@@ -47,7 +47,7 @@ One harness in `fm-application`, used by the terminal assistant and the chat:
 
 ## Design
 
-### Tool trait and registry (`crates/fm-application/src/agent/`)
+### Tool trait and registry (`crates/fm-agent/` (own crate, layer 2; moved out of `fm-application` on request))
 ```rust
 #[async_trait]
 pub(crate) trait AgentTool: Send + Sync {

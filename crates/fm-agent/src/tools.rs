@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::{ApprovalRequest, ToolContext, ToolOutcome, TypedTool};
-use crate::terminal_assist::{NoteToolCall, NoteToolOutcome};
+use crate::notes::{NoteToolCall, NoteToolOutcome};
 
 fn unavailable(step: &str, what: &str) -> ToolOutcome {
     ToolOutcome::output(step, format!("Error: {what} are not available here."))

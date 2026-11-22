@@ -9,9 +9,9 @@ use fm_vfs::ProviderRegistry;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
-use super::redact::redact_secrets;
 use super::tools::{FileCall, MAX_READ_BYTES, ToolError, ToolHost, ToolOutput, error_text};
 use crate::document_conversion::DocumentConversionService;
+use fm_agent::redact_secrets;
 
 /// File name extensions read as documents.
 const EXTENSIONS: &[&str] = &["epub", "docx", "pdf", "pptx", "xlsx"];

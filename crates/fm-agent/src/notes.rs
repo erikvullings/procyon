@@ -6,38 +6,52 @@
 use async_trait::async_trait;
 use fm_transport_dto::NoteProposalDto;
 
-use crate::agent::NoteSkill;
+use crate::skills::NoteSkill;
 
 /// One notes tool the model asked for.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum NoteToolCall {
+pub enum NoteToolCall {
+    /// Searches the notes.
     Search {
+        /// What to look for.
         query: String,
+        /// Most hits wanted.
         limit: Option<u32>,
     },
+    /// Reads one note.
     Read {
+        /// The note's path in the notes folder.
         path: String,
     },
     /// A new note (`path` is `None`) or a replacement for an existing one.
     Propose {
+        /// The note to replace, or `None` for a new note.
         path: Option<String>,
+        /// The title for a new note.
         title: Option<String>,
+        /// The proposed Markdown.
         content: String,
     },
 }
 
 /// What a notes tool produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum NoteToolOutcome {
+pub enum NoteToolOutcome {
     /// A line for the person and the text for the model.
-    Output { step: String, text: String },
+    Output {
+        /// A line for the person.
+        step: String,
+        /// The text for the model.
+        text: String,
+    },
     /// A note waiting for the person's review.
     Proposal(NoteProposalDto),
 }
 
 /// The notes folder as the assistant may use it.
 #[async_trait]
-pub(crate) trait NotesAccess: Send + Sync {
+pub trait NotesAccess: Send + Sync {
+    /// Runs one notes tool.
     async fn run(&self, call: NoteToolCall) -> NoteToolOutcome;
 
     /// The notes that best match `query`, as skills (task 0339). None without notes.

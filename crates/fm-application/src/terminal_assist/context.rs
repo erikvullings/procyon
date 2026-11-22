@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 
 use fm_transport_dto::{TerminalAssistRequestDto, TerminalBlockDto};
 
-use super::redact::redact_secrets;
 use super::{newest_bytes, truncate_to_bytes};
+use fm_agent::redact_secrets;
 
 /// Most folder names listed.
 const MAX_LISTED_NAMES: usize = 1000;

@@ -72,6 +72,7 @@ pub(crate) async fn draft_note(
         .generate_for_role(
             LlmRole::Chat,
             LlmChatGeneration {
+                tools: Vec::new(),
                 system_prompt: CAPTURE_PROMPT.to_owned(),
                 user_prompt: capture_prompt(&input),
                 images: Vec::new(),

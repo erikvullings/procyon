@@ -124,6 +124,9 @@ pub enum LlmApiCapability {
     /// The model reads images sent in chat messages. Set by the person; providers do not disclose it
     /// reliably, so the endpoint is never sent image bytes without it.
     Vision,
+    /// The endpoint takes a `tools` list in chat requests and answers with `tool_calls`. Set by the
+    /// person, as providers do not disclose it reliably; without it tools use the text protocol.
+    ToolCalling,
 }
 
 /// Network locality visible wherever a profile is selected. `Loopback` is the local class: the
@@ -378,9 +381,21 @@ pub struct LlmImageAttachment {
     pub data: Vec<u8>,
 }
 
+/// One tool offered to the model for native calling: a JSON Schema for its arguments.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LlmToolSpec {
+    pub name: String,
+    pub description: String,
+    pub schema: Value,
+}
+
 /// Bounded host-owned generation request using a saved profile.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LlmChatGeneration {
+    /// Tools the model may call natively (task 0339). Sent only to OpenAI-compatible endpoints
+    /// whose profile has [`LlmApiCapability::ToolCalling`]; a call comes back as a `TOOL {json}`
+    /// line in the reply text, the same form the text protocol uses.
+    pub tools: Vec<LlmToolSpec>,
     /// Trusted system instruction.
     pub system_prompt: String,
     /// User-role evidence payload.
@@ -1694,6 +1709,15 @@ impl LlmProfileService {
             return Err(LlmProfileError::InvalidConfiguration);
         }
         let bounded = LlmChatGeneration {
+            tools: if profile
+                .capabilities
+                .contains(&LlmApiCapability::ToolCalling)
+                && request.ollama_generation_url.is_none()
+            {
+                generation.tools.clone()
+            } else {
+                Vec::new()
+            },
             maximum_tokens: generation
                 .maximum_tokens
                 .min(profile.advanced.maximum_answer_tokens)
@@ -2287,6 +2311,21 @@ fn openai_generation_body(
     if let Some(temperature) = generation.temperature {
         body["temperature"] = json!(temperature);
     }
+    if !generation.tools.is_empty() {
+        body["tools"] = Value::Array(
+            generation
+                .tools
+                .iter()
+                .map(|tool| {
+                    json!({"type": "function", "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": tool.schema,
+                    }})
+                })
+                .collect(),
+        );
+    }
     if matches!(
         switch,
         ReasoningSwitch::Both | ReasoningSwitch::TemplateKwargs
@@ -2455,6 +2494,8 @@ fn parse_streaming_chat_detailed(bytes: &[u8]) -> Result<(String, bool), LlmProf
     let mut truncated = false;
     let mut content = String::new();
     let mut reasoning_seen = false;
+    // Native tool calls arrive in pieces: a name, then argument fragments, by call index.
+    let mut tool_calls: Vec<(String, String)> = Vec::new();
     for line in text.lines() {
         let Some(data) = line.strip_prefix("data:") else {
             continue;
@@ -2491,6 +2532,39 @@ fn parse_streaming_chat_detailed(bytes: &[u8]) -> Result<(String, bool), LlmProf
             }
         }
         for choice in choices {
+            let Some(calls) = choice
+                .get("delta")
+                .and_then(|delta| delta.get("tool_calls"))
+                .and_then(Value::as_array)
+            else {
+                continue;
+            };
+            for call in calls {
+                let index = call
+                    .get("index")
+                    .and_then(Value::as_u64)
+                    .and_then(|index| usize::try_from(index).ok())
+                    .unwrap_or(0)
+                    .min(MAX_TOOL_CALLS_PER_REPLY);
+                if tool_calls.len() <= index {
+                    tool_calls.resize(index + 1, (String::new(), String::new()));
+                }
+                let function = call.get("function");
+                if let Some(name) = function.and_then(|f| f.get("name")).and_then(Value::as_str) {
+                    tool_calls[index].0.push_str(name);
+                }
+                if let Some(arguments) = function
+                    .and_then(|f| f.get("arguments"))
+                    .and_then(Value::as_str)
+                {
+                    tool_calls[index].1.push_str(arguments);
+                    if tool_calls[index].1.len() > MAX_STREAM_BYTES {
+                        return Err(LlmProfileError::MalformedResponse);
+                    }
+                }
+            }
+        }
+        for choice in choices {
             if let Some(reason) = choice
                 .get("finish_reason")
                 .filter(|reason| !reason.is_null())
@@ -2501,11 +2575,40 @@ fn parse_streaming_chat_detailed(bytes: &[u8]) -> Result<(String, bool), LlmProf
         }
     }
     if valid_event && terminated && !truncated {
+        // One call per step: the first named call becomes a `TOOL {json}` line.
+        if let Some(line) = tool_calls
+            .iter()
+            .find_map(|(name, arguments)| tool_call_line(name, arguments))
+        {
+            if !content.is_empty() && !content.ends_with('\n') {
+                content.push('\n');
+            }
+            content.push_str(&line);
+        }
         reasoning_seen |= content.contains("<think>") || content.contains("</think>");
         Ok((content, reasoning_seen))
     } else {
         Err(LlmProfileError::MalformedResponse)
     }
+}
+
+/// Most tool calls looked at in one streamed reply.
+const MAX_TOOL_CALLS_PER_REPLY: usize = 16;
+
+/// `TOOL {"tool":"<name>", ...arguments}`: a native tool call in the text protocol's form.
+fn tool_call_line(name: &str, arguments: &str) -> Option<String> {
+    if name.is_empty() {
+        return None;
+    }
+    let mut object = match serde_json::from_str::<Value>(arguments.trim()) {
+        Ok(Value::Object(object)) => object,
+        _ if arguments.trim().is_empty() => serde_json::Map::new(),
+        // Arguments that are not a JSON object stay a call with no arguments: the tool then
+        // reports what is missing.
+        _ => serde_json::Map::new(),
+    };
+    object.insert("tool".to_owned(), Value::String(name.to_owned()));
+    Some(format!("TOOL {}", Value::Object(object)))
 }
 
 fn parse_ollama_chat(bytes: &[u8]) -> Result<String, LlmProfileError> {
@@ -2837,6 +2940,7 @@ fn capability_from_dto(value: LlmApiCapabilityDto) -> LlmApiCapability {
         LlmApiCapabilityDto::ImageGenerations => LlmApiCapability::ImageGenerations,
         LlmApiCapabilityDto::DashscopeTasks => LlmApiCapability::DashscopeTasks,
         LlmApiCapabilityDto::Vision => LlmApiCapability::Vision,
+        LlmApiCapabilityDto::ToolCalling => LlmApiCapability::ToolCalling,
     }
 }
 
@@ -2848,6 +2952,7 @@ fn capability_to_dto(value: LlmApiCapability) -> LlmApiCapabilityDto {
         LlmApiCapability::ImageGenerations => LlmApiCapabilityDto::ImageGenerations,
         LlmApiCapability::DashscopeTasks => LlmApiCapabilityDto::DashscopeTasks,
         LlmApiCapability::Vision => LlmApiCapabilityDto::Vision,
+        LlmApiCapability::ToolCalling => LlmApiCapabilityDto::ToolCalling,
     }
 }
 
@@ -2916,6 +3021,7 @@ mod tests {
             reasoning_switch: ReasoningSwitch::Both,
         };
         let generation = LlmChatGeneration {
+            tools: Vec::new(),
             system_prompt: "s".into(),
             user_prompt: "u".into(),
             images: Vec::new(),
@@ -3388,6 +3494,7 @@ mod tests {
         let body = ollama_generation_body(
             &request,
             &LlmChatGeneration {
+                tools: Vec::new(),
                 system_prompt: "Summarize.".into(),
                 user_prompt: "Evidence".into(),
                 images: vec![LlmImageAttachment {
@@ -3418,6 +3525,7 @@ mod tests {
             reasoning_switch: ReasoningSwitch::Plain,
         };
         let generation = |temperature| LlmChatGeneration {
+            tools: Vec::new(),
             system_prompt: "s".into(),
             user_prompt: "u".into(),
             images: Vec::new(),
@@ -3434,6 +3542,7 @@ mod tests {
     #[test]
     fn openai_user_content_puts_each_image_after_the_text() {
         let text_only = openai_user_content(&LlmChatGeneration {
+            tools: Vec::new(),
             system_prompt: "s".into(),
             user_prompt: "Describe".into(),
             images: Vec::new(),
@@ -3444,6 +3553,7 @@ mod tests {
         assert_eq!(text_only, json!("Describe"));
 
         let with_image = openai_user_content(&LlmChatGeneration {
+            tools: Vec::new(),
             system_prompt: "s".into(),
             user_prompt: "Describe".into(),
             images: vec![LlmImageAttachment {
@@ -4354,6 +4464,7 @@ mod tests {
         let body = ollama_generation_body(
             &request,
             &LlmChatGeneration {
+                tools: Vec::new(),
                 system_prompt: "Answer from evidence.".into(),
                 user_prompt: "Question".into(),
                 images: Vec::new(),
@@ -4452,6 +4563,7 @@ mod tests {
             .await
             .unwrap();
         let generation = LlmChatGeneration {
+            tools: Vec::new(),
             system_prompt: "Summarize grounded evidence.".into(),
             user_prompt: "Evidence".into(),
             images: Vec::new(),
@@ -4517,6 +4629,7 @@ mod tests {
 
     fn tiny_generation() -> LlmChatGeneration {
         LlmChatGeneration {
+            tools: Vec::new(),
             system_prompt: "Answer.".into(),
             user_prompt: "Question".into(),
             images: Vec::new(),

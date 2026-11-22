@@ -8,7 +8,8 @@ use serde_json::{Value, json};
 
 use super::skills::{Skill, SkillFileError, SkillLocation};
 use super::{ToolContext, ToolOutcome, TypedTool};
-use crate::terminal_assist::{NoteToolCall, NoteToolOutcome, redact_secrets};
+use crate::notes::{NoteToolCall, NoteToolOutcome};
+use crate::redact::redact_secrets;
 
 /// Names listed when a skill is not found.
 const SUGGESTED_NAMES: usize = 20;

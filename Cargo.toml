@@ -29,6 +29,7 @@ debug = "line-tables-only"
 
 # Internal crates, versioned together with the rest of the workspace.
 fm-application = {path = "crates/fm-application"}
+fm-agent = {path = "crates/fm-agent"}
 fm-archive = {path = "crates/fm-archive"}
 fm-auth-oauth = {path = "crates/fm-auth-oauth"}
 fm-checksum = {path = "crates/fm-checksum"}
