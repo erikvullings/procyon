@@ -237,6 +237,7 @@ import {
 } from '../utilities/perf';
 import type { RuntimeKind } from '../utilities/runtime';
 import { createWindowTitleSink, dedupeWindowTitleSink } from '../utilities/window-title-sink';
+import { openAcknowledgedJobsChannel } from './acknowledged-jobs-channel';
 import { createActionsWiring } from './actions-wiring';
 import { createAssistantWiring } from './assistant-wiring';
 import { createBasketWiring } from './basket-wiring';
@@ -280,6 +281,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
   /** Unlocks encrypted archive entries before they are streamed (task 0269). */
   const prepareMedia: PrepareMedia = (location, signal) =>
     createMediaAccess({ client: shellState.client, requestArchivePassword })(location, signal);
+  let acknowledgedJobs: ReturnType<typeof openAcknowledgedJobsChannel>;
   let opsWiring: ReturnType<typeof createOperationsWiring>;
   let basketWiring: ReturnType<typeof createBasketWiring>;
   let imageMapWiring: ReturnType<typeof createImageMapWiring>;
@@ -358,6 +360,13 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     refreshKnowledgeSearchAvailability: () => knowledgeWiring.refreshKnowledgeSearchAvailability(),
     refreshImageRoleAvailability: () => imageWiring.refreshRoles(shellState.client),
   };
+  acknowledgedJobs = openAcknowledgedJobsChannel((jobId) => {
+    // Acknowledged in another window: only failed warnings are removed, never a running job.
+    if (shellState.semanticJobs.get(jobId)?.stage === 'failed') {
+      shellState.semanticJobs.delete(jobId);
+      m.redraw();
+    }
+  });
   opsWiring = createOperationsWiring(shellState, core);
   basketWiring = createBasketWiring(shellState, core);
   imageMapWiring = createImageMapWiring(shellState, core);
@@ -4209,8 +4218,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                               key: job.jobId,
                               onclick: () => {
                                 shellState.activityOpen = false;
-                                if (job.stage === 'failed')
+                                if (job.stage === 'failed') {
                                   shellState.semanticJobs.delete(job.jobId);
+                                  acknowledgedJobs.acknowledge(job.jobId);
+                                }
                                 settingsWiring.openSettingsDialog('semantic');
                               },
                             },
