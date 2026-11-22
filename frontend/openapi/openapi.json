@@ -11372,6 +11372,46 @@
           },
           {
             "type": "object",
+            "description": "A tool ran while the model worked toward its reply (task 0339).",
+            "required": [
+              "text",
+              "type"
+            ],
+            "properties": {
+              "text": {
+                "type": "string",
+                "description": "One line saying what was looked up, such as `Read notes.md`."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "step"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The model drafted a note for the person to review. Nothing is saved unless they save it.",
+            "required": [
+              "proposal",
+              "type"
+            ],
+            "properties": {
+              "proposal": {
+                "$ref": "#/components/schemas/NoteProposalDto",
+                "description": "The proposed note."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "noteProposal"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
             "description": "The whole reply, saved with the conversation. It replaces the fragments.",
             "required": [
               "text",
@@ -11454,6 +11494,13 @@
           "retry": {
             "type": "boolean",
             "description": "Asks again for the reply to the conversation's last message, which must be the person's.\nThe message is not saved a second time, and `content` and `context` are not used."
+          },
+          "toolsFolder": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A folder (a location URL) the model may look into with read-only tools, together with the\nperson's notes and skills (task 0339). It cannot leave the folder or change anything.\nWithout it the model only answers from the conversation."
           },
           "workspaceId": {
             "type": "string",
@@ -19361,8 +19408,7 @@
           "modelDiscovery",
           "imageGenerations",
           "dashscopeTasks",
-          "vision",
-          "toolCalling"
+          "vision"
         ]
       },
       "LlmCredentialInputDto": {
@@ -20472,6 +20518,44 @@
           }
         }
       },
+      "NoteDraftDto": {
+        "type": "object",
+        "description": "A note proposed for review. Nothing is written until the person saves it.",
+        "required": [
+          "title",
+          "fileName",
+          "tags",
+          "content",
+          "redactions"
+        ],
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "The complete Markdown file, front matter included."
+          },
+          "fileName": {
+            "type": "string",
+            "description": "Suggested file name inside the notes folder, ending in `.md`."
+          },
+          "redactions": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many values were replaced by a `[redacted…]` mark; the person should check them.",
+            "minimum": 0
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Front-matter tags."
+          },
+          "title": {
+            "type": "string",
+            "description": "The note's title."
+          }
+        }
+      },
       "NoteDto": {
         "type": "object",
         "description": "One note's text, with the revision the editor save expects.",
@@ -20539,6 +20623,26 @@
           "title": {
             "type": "string",
             "description": "The front-matter title, the first heading, or the file name."
+          }
+        }
+      },
+      "NoteProposalDto": {
+        "type": "object",
+        "description": "A note the terminal assistant proposes to create or change (task 0337).",
+        "required": [
+          "draft"
+        ],
+        "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/NoteDraftDto",
+            "description": "The proposed note, as a draft."
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The existing note to replace, inside the notes folder; `None` for a new note."
           }
         }
       },
@@ -27802,6 +27906,13 @@
           "sizeFormat": {
             "$ref": "#/components/schemas/SizeFormatDto",
             "description": "Size presentation."
+          },
+          "skillFolders": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Extra folders of agent skills beside `~/.claude/skills` and `~/.agents/skills` (task 0339):\nabsolute paths, read by the assistants on this machine only."
           },
           "syncProfiles": {
             "type": "array",

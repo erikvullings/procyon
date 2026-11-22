@@ -373,6 +373,23 @@ pub fn default_terminal_apps() -> Vec<TerminalApp> {
     }
 }
 
+/// Most extra skill folders kept.
+pub const MAX_SKILL_FOLDERS: usize = 16;
+
+/// Keeps absolute, distinct, non-blank skill folders, and bounds the list.
+fn sanitize_skill_folders(folders: &mut Vec<String>) {
+    let mut seen: Vec<String> = Vec::new();
+    folders.retain_mut(|folder| {
+        *folder = folder.trim().chars().take(1024).collect();
+        let keep = std::path::Path::new(folder.as_str()).is_absolute() && !seen.contains(folder);
+        if keep {
+            seen.push(folder.clone());
+        }
+        keep
+    });
+    folders.truncate(MAX_SKILL_FOLDERS);
+}
+
 /// Trims text, drops entries with a blank name or command or a duplicate (case-insensitive)
 /// name, and bounds the list.
 fn sanitize_terminal_apps(apps: &mut Vec<TerminalApp>) {
@@ -716,6 +733,9 @@ pub struct Settings {
     pub terminal_allow_file_writes: bool,
     /// Whether the function-key bar is hidden while the terminal is open.
     pub terminal_hide_function_keys: bool,
+    /// Extra folders of agent skills (`<folder>/<name>/SKILL.md`) beside the standard ones (task
+    /// 0339): absolute paths, at most [`MAX_SKILL_FOLDERS`].
+    pub skill_folders: Vec<String>,
 }
 
 impl Settings {
@@ -814,6 +834,7 @@ impl Default for Settings {
             terminal_shell_integration: TerminalShellIntegration::default(),
             notes_root: None,
             terminal_assistant: true,
+            skill_folders: Vec::new(),
             terminal_follow_pane: true,
             terminal_auto_run_read_only: true,
             terminal_allow_file_writes: true,
@@ -904,6 +925,7 @@ impl SettingsStore {
                 settings.normalise_folder_views();
                 sanitize_filter_presets(&mut settings.filter_presets);
                 sanitize_terminal_apps(&mut settings.terminal_apps);
+                sanitize_skill_folders(&mut settings.skill_folders);
                 sanitize_file_templates(&mut settings.file_templates);
                 sanitize_template_folder(&mut settings.template_folder);
                 sync_profile::sanitize_sync_profiles(&mut settings.sync_profiles);
@@ -959,6 +981,7 @@ impl SettingsStore {
         current.normalise_folder_views();
         sanitize_filter_presets(&mut current.filter_presets);
         sanitize_terminal_apps(&mut current.terminal_apps);
+        sanitize_skill_folders(&mut current.skill_folders);
         sanitize_file_templates(&mut current.file_templates);
         sanitize_template_folder(&mut current.template_folder);
         sync_profile::sanitize_sync_profiles(&mut current.sync_profiles);
@@ -2251,5 +2274,20 @@ mod tests {
         let loaded = store.load().expect("load legacy").settings;
         assert!(loaded.remember_folder_views);
         assert!(loaded.folder_views.is_empty());
+    }
+
+    #[test]
+    fn skill_folders_keep_only_distinct_absolute_paths_within_the_limit() {
+        let mut folders = vec![
+            " /skills/a ".to_owned(),
+            "/skills/a".to_owned(),
+            "relative/skills".to_owned(),
+            "   ".to_owned(),
+        ];
+        folders.extend((0..MAX_SKILL_FOLDERS + 4).map(|n| format!("/skills/n{n}")));
+        sanitize_skill_folders(&mut folders);
+        assert_eq!(folders[0], "/skills/a");
+        assert_eq!(folders[1], "/skills/n0");
+        assert_eq!(folders.len(), MAX_SKILL_FOLDERS);
     }
 }

@@ -50,6 +50,7 @@ describe('ChatTab header', () => {
         onSend: noop,
         onStop: noop,
         onRetry: noop,
+        onToggleTools: noop,
         onAttachFolder: () => undefined,
         onAttachSelection: () => undefined,
         onAttachFileContents: noop,

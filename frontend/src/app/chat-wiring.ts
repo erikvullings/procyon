@@ -241,8 +241,11 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
       entry.pendingRequestId = undefined;
       entry.streamedText = undefined;
     };
+    // The folder the tools may look into is read when the request is made, never remembered.
+    const toolsFolder = entry.useTools === true ? folderOf(key)?.view?.location?.uri : undefined;
     entry.attachments = [];
     entry.images = [];
+    entry.steps = [];
     entry.pendingRequestId = requestId;
     entry.streamedText = undefined;
     entry.partialReply = undefined;
@@ -258,12 +261,22 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
           content: request.content,
           context: request.context ?? null,
           retry: request.retry,
+          ...(toolsFolder === undefined ? {} : { toolsFolder }),
           ...(images.length > 0 ? { images: images.map(({ data }) => ({ data })) } : {}),
         },
         (event) => {
           if (!isCurrent()) return;
           if (event.type === 'delta') {
             entry.streamedText = (entry.streamedText ?? '') + event.text;
+          } else if (event.type === 'step') {
+            entry.steps = [...(entry.steps ?? []), event.text];
+          } else if (event.type === 'noteProposal') {
+            // The same review as the terminal assistant's: nothing is saved unless they save it.
+            const { path, draft } = event.proposal;
+            void shellState.notesController?.showProposal({
+              ...(path == null ? {} : { path }),
+              draft,
+            });
           } else if (event.type === 'done') {
             entry.messages = [
               ...entry.messages,
@@ -298,6 +311,14 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
 
   function lastIsPersonsMessage(entry: ChatTabEntry): boolean {
     return entry.messages[entry.messages.length - 1]?.role === 'user';
+  }
+
+  /** Turns the read-only tools on or off for this chat tab. */
+  function toggleTools(key: string): void {
+    const entry = entryOf(key);
+    if (entry === undefined) return;
+    entry.useTools = entry.useTools !== true;
+    m.redraw();
   }
 
   /** Stops the reply in flight. The person's message stays; no reply is saved. */
@@ -495,6 +516,7 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
     retry: (client: FileManagerClient, key: string) => void retry(client, key),
     stop,
     attachFolder,
+    toggleTools,
     attachSelection,
     attachFileContents: (client: FileManagerClient, key: string) =>
       void attachFileContents(client, key),

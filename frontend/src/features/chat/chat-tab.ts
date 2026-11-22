@@ -54,6 +54,8 @@ export interface ChatTabAttrs {
   readonly onSend: (draft: string) => void;
   readonly onStop: () => void;
   readonly onRetry: () => void;
+  /** Lets the model look into the folder pane's folder, notes and skills, or stops it. */
+  readonly onToggleTools: () => void;
   /** Returns the listing as text for the draft; the chat inserts it at the caret. */
   readonly onAttachFolder: () => ChatAttachment | undefined;
   /** Returns the selection as text for the draft; the chat inserts it at the caret. */
@@ -118,11 +120,20 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
   const chromeButton = (
     label: string,
     onclick: () => void,
-    options: { readonly type?: 'button' | 'submit'; readonly disabled?: boolean } = {},
+    options: {
+      readonly type?: 'button' | 'submit';
+      readonly disabled?: boolean;
+      readonly pressed?: boolean;
+    } = {},
   ) =>
     m(
       'button.btn-flat.fm-chat-chrome',
-      { type: options.type ?? 'button', disabled: options.disabled ?? false, onclick },
+      {
+        type: options.type ?? 'button',
+        disabled: options.disabled ?? false,
+        'aria-pressed': options.pressed === undefined ? undefined : String(options.pressed),
+        onclick,
+      },
       label,
     );
 
@@ -235,6 +246,11 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
       chromeButton(t('chat', 'attachFileContents'), () => attrs.onAttachFileContents(), {
         disabled: pending || selectedFiles !== 1 || fileTooLarge || fileAttached,
       }),
+      // What the model looks up goes to the chat endpoint, so it is the person's choice per tab.
+      chromeButton(t('chat', 'lookInFolder'), () => attrs.onToggleTools(), {
+        disabled: pending || !attrs.folderAvailable,
+        pressed: attrs.entry.useTools === true,
+      }),
     ];
   };
 
@@ -327,6 +343,13 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
                     : undefined,
                 ]),
               ),
+              entry.steps && entry.steps.length > 0
+                ? m(
+                    '.fm-chat-steps',
+                    { 'aria-label': t('chat', 'steps') },
+                    entry.steps.map((step) => m('span.fm-chat-step', step)),
+                  )
+                : undefined,
               entry.streamedText
                 ? m('.fm-chat-message.fm-chat-message-assistant.fm-chat-streaming', [
                     m('span.fm-chat-author', t('chat', 'assistant')),

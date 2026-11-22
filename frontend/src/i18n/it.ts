@@ -403,6 +403,9 @@ export const it = {
     terminalAllowFileWrites: 'Consenti all’assistente di creare file (dopo approvazione)',
     terminalHideFunctionKeys: 'Nascondi la barra dei tasti funzione quando il terminale è aperto',
     terminalApps: 'Terminali esterni',
+    skillFolders: 'Cartelle di skill aggiuntive',
+    skillFoldersHelp:
+      'Una cartella assoluta per riga. Ognuna contiene cartelle di skill con un SKILL.md, lette dagli assistenti oltre a ~/.claude/skills e ~/.agents/skills. Gli script non vengono mai eseguiti.',
     terminalAppsHelp:
       'Uno per riga: Nome = comando (un nome di applicazione su macOS, un eseguibile su Windows). Proposti da «Apri terminale con…».',
     fileTemplates: 'Modelli di file',
@@ -1249,6 +1252,8 @@ export const it = {
     attachFolder: 'Allega elenco cartella',
     attachSelection: 'Allega selezione',
     attachFileContents: 'Allega contenuto del file',
+    lookInFolder: 'Lascia che l’assistente consulti',
+    steps: 'Consultato',
     oneFileOnly: 'Seleziona un solo file per allegarne il contenuto.',
     fileTooLarge: 'Il file selezionato è troppo grande per essere allegato.',
     attachFailed: 'Impossibile leggere il file selezionato.',
@@ -2072,8 +2077,6 @@ export const it = {
     modelDiscovery: 'Rileva e convalida i modelli',
     responsesCapability: 'Segnala la futura funzionalità Responses API',
     visionCapability: 'Accetta immagini nella chat',
-    toolCallingCapability:
-      'Chiama gli strumenti in modo nativo (agenti del terminale e della chat)',
     imagesApi: 'API Immagini',
     imagesApiOpenAi: 'Stile OpenAI (una risposta)',
     imagesApiDashscope: 'API attività di Alibaba Cloud (Qwen-Image, Wan)',

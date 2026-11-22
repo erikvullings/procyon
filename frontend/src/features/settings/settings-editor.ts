@@ -132,6 +132,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
   let draft: Settings | undefined;
   let startLocationsText = '';
   let terminalAppsText = '';
+  let skillFoldersText = '';
   let saving = false;
   let saveError: string | undefined;
   let activeSection: SettingsSection = 'appearance';
@@ -155,6 +156,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
     draft = cloneSettings(current.settings);
     startLocationsText = formatListInput(draft.defaultStartLocations);
     terminalAppsText = formatTerminalApps(draft.terminalApps);
+    skillFoldersText = draft.skillFolders.join('\n');
     saveError = undefined;
   }
 
@@ -631,6 +633,31 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                           },
                         }),
                         m('p.helper-text', t('settings', 'terminalAppsHelp')),
+                      ]),
+                    ]),
+
+                    m('.row', [
+                      m('.col.s12.fm-settings-skill-folders', [
+                        m(
+                          'label',
+                          { for: 'settings-skill-folders' },
+                          t('settings', 'skillFolders'),
+                        ),
+                        m('textarea#settings-skill-folders.browser-default', {
+                          rows: 3,
+                          spellcheck: false,
+                          value: skillFoldersText,
+                          oninput: (event: InputEvent) => {
+                            skillFoldersText = (event.currentTarget as HTMLTextAreaElement).value;
+                            update(current, {
+                              skillFolders: skillFoldersText
+                                .split('\n')
+                                .map((line) => line.trim())
+                                .filter((line) => line !== ''),
+                            });
+                          },
+                        }),
+                        m('p.helper-text', t('settings', 'skillFoldersHelp')),
                       ]),
                     ]),
 

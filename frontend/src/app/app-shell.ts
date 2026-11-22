@@ -2663,6 +2663,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       send: (key, draft) => chatWiring.send(shellState.client, key, draft),
       retry: (key) => chatWiring.retry(shellState.client, key),
       stop: (key) => chatWiring.stop(shellState.client, key),
+      toggleTools: (key) => chatWiring.toggleTools(key),
       attachFolder: (key) => chatWiring.attachFolder(key),
       attachSelection: (key) => chatWiring.attachSelection(key),
       attachFileContents: (key) => chatWiring.attachFileContents(shellState.client, key),

@@ -30,6 +30,13 @@ export interface ChatReplyRequestDto {
      * The message is not saved a second time, and `content` and `context` are not used.
      */
   retry?: boolean;
+  /**
+     * A folder (a location URL) the model may look into with read-only tools, together with the
+     * person's notes and skills (task 0339). It cannot leave the folder or change anything.
+     * Without it the model only answers from the conversation.
+     * @nullable
+     */
+  toolsFolder?: string | null;
   /** Workspace that owns the conversation. */
   workspaceId: string;
 }

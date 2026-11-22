@@ -126,7 +126,7 @@ pub struct DraftNoteRequestDto {
 }
 
 /// A note proposed for review. Nothing is written until the person saves it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct NoteDraftDto {
     /// The note's title.
@@ -142,7 +142,7 @@ pub struct NoteDraftDto {
 }
 
 /// A note the terminal assistant proposes to create or change (task 0337).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct NoteProposalDto {
     /// The existing note to replace, inside the notes folder; `None` for a new note.

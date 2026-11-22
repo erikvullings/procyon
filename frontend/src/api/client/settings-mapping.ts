@@ -58,6 +58,7 @@ export function settingsFromDto(settings: SettingsDto): Settings {
     terminalAutoRunReadOnly: settings.terminalAutoRunReadOnly ?? true,
     terminalAllowFileWrites: settings.terminalAllowFileWrites ?? true,
     terminalHideFunctionKeys: settings.terminalHideFunctionKeys ?? true,
+    skillFolders: settings.skillFolders ?? [],
     map: settings.map ?? DEFAULT_MAP_SETTINGS,
   };
 }
@@ -137,6 +138,7 @@ export function settingsToDto(settings: Settings): SettingsDto {
   return {
     ...settings,
     defaultColumns: [...settings.defaultColumns],
+    skillFolders: [...settings.skillFolders],
     defaultStartLocations: [...settings.defaultStartLocations],
     terminalApps: settings.terminalApps.map((app) => ({ ...app })),
     fileTemplates: settings.fileTemplates.map((template) => ({ ...template })),

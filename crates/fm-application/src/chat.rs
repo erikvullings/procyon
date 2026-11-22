@@ -16,6 +16,7 @@ use fm_transport_dto::{
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::chat_agent::{AgentEnd, AgentRun, ChatTooling};
 use crate::chat_conversations::{
     ChatConversation, ChatConversationError, ChatConversationService, ChatMessage, ChatRole,
 };
@@ -93,6 +94,21 @@ impl From<ChatReplyError> for ChatFailureDto {
     }
 }
 
+impl From<ChatFailureDto> for ChatReplyError {
+    fn from(failure: ChatFailureDto) -> Self {
+        match failure {
+            ChatFailureDto::InvalidRequest => Self::InvalidRequest("the request is not valid"),
+            ChatFailureDto::NotFound => Self::NotFound,
+            ChatFailureDto::RoleNotAssigned => Self::RoleNotAssigned,
+            ChatFailureDto::ConsentRequired => Self::ConsentRequired,
+            ChatFailureDto::Unavailable => Self::Unavailable,
+            ChatFailureDto::Empty => Self::Empty,
+            ChatFailureDto::Cancelled => Self::Cancelled,
+            ChatFailureDto::ImagesNotSupported => Self::ImagesNotSupported,
+        }
+    }
+}
+
 impl From<ChatConversationError> for ChatReplyError {
     fn from(error: ChatConversationError) -> Self {
         match error {
@@ -159,18 +175,13 @@ impl ChatService {
         &self,
         generator: &impl ChatGenerator,
         conversations: &ChatConversationService,
+        tooling: Option<&ChatTooling<'_>>,
         request: ChatReplyRequestDto,
         on_event: &mut (dyn FnMut(ChatReplyEventDto) + Send),
     ) {
-        let outcome = {
-            let mut forward = |fragment: &str| {
-                on_event(ChatReplyEventDto::Delta {
-                    text: fragment.to_owned(),
-                });
-            };
-            self.reply(generator, conversations, request, &mut forward)
-                .await
-        };
+        let outcome = self
+            .reply(generator, conversations, tooling, request, on_event)
+            .await;
         on_event(match outcome {
             Ok(text) => ChatReplyEventDto::Done { text },
             Err(error) => ChatReplyEventDto::Failed {
@@ -183,8 +194,9 @@ impl ChatService {
         &self,
         generator: &impl ChatGenerator,
         conversations: &ChatConversationService,
+        tooling: Option<&ChatTooling<'_>>,
         request: ChatReplyRequestDto,
-        on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
+        on_event: &mut (dyn FnMut(ChatReplyEventDto) + Send),
     ) -> Result<String, ChatReplyError> {
         let images = validate_images(&request.images)?;
         let (content, context) = if request.retry {
@@ -229,33 +241,64 @@ impl ChatService {
         let prompts = build_prompts(&saved);
         let cancellation = CancellationToken::new();
         self.lock().insert(request.request_id, cancellation.clone());
-        let mut visible = VisibleText::new(on_delta);
-        let outcome = generator
-            .generate_for_role(
-                LlmRole::Chat,
-                LlmChatGeneration {
-                    tools: Vec::new(),
-                    system_prompt: SYSTEM_PROMPT.to_owned(),
-                    user_prompt: prompts,
+        let outcome = match (tooling, request.tools_folder.as_deref()) {
+            (Some(tooling), Some(folder)) => {
+                let question = saved
+                    .messages
+                    .last()
+                    .map(|message| message.content.as_str())
+                    .unwrap_or_default();
+                let run = AgentRun {
+                    system_prompt: SYSTEM_PROMPT,
+                    folder,
+                    question,
+                    transcript: prompts,
                     images,
-                    maximum_tokens: MAX_REPLY_TOKENS,
-                    context_window: None,
-                    temperature: None,
-                },
-                &cancellation,
-                &mut |fragment: &str| visible.push(fragment),
-            )
-            .await;
-        self.lock().remove(&request.request_id);
-        let text = match outcome {
-            Ok(text) => text,
-            Err(LlmProfileError::Cancelled) => return Err(ChatReplyError::Cancelled),
-            Err(LlmProfileError::ConsentRequired(_)) => {
-                return Err(ChatReplyError::ConsentRequired);
+                    cancellation: &cancellation,
+                };
+                match crate::chat_agent::run(generator, tooling, run, on_event).await {
+                    Ok(AgentEnd::Answer(text)) => Ok(text),
+                    Ok(AgentEnd::Proposal(proposal)) => {
+                        let title = proposal.draft.title.clone();
+                        on_event(ChatReplyEventDto::NoteProposal { proposal });
+                        Ok(format!("I drafted a note for you to review: {title}"))
+                    }
+                    Err(failure) => Err(ChatReplyError::from(failure)),
+                }
             }
-            Err(LlmProfileError::RoleNotAssigned) => return Err(ChatReplyError::RoleNotAssigned),
-            Err(_) => return Err(ChatReplyError::Unavailable),
+            _ => {
+                let mut forward = |fragment: &str| {
+                    on_event(ChatReplyEventDto::Delta {
+                        text: fragment.to_owned(),
+                    });
+                };
+                let mut visible = VisibleText::new(&mut forward);
+                generator
+                    .generate_for_role(
+                        LlmRole::Chat,
+                        LlmChatGeneration {
+                            tools: Vec::new(),
+                            system_prompt: SYSTEM_PROMPT.to_owned(),
+                            user_prompt: prompts,
+                            images,
+                            maximum_tokens: MAX_REPLY_TOKENS,
+                            context_window: None,
+                            temperature: None,
+                        },
+                        &cancellation,
+                        &mut |fragment: &str| visible.push(fragment),
+                    )
+                    .await
+                    .map_err(|error| match error {
+                        LlmProfileError::Cancelled => ChatReplyError::Cancelled,
+                        LlmProfileError::ConsentRequired(_) => ChatReplyError::ConsentRequired,
+                        LlmProfileError::RoleNotAssigned => ChatReplyError::RoleNotAssigned,
+                        _ => ChatReplyError::Unavailable,
+                    })
+            }
         };
+        self.lock().remove(&request.request_id);
+        let text = outcome?;
         let text = truncate_to_bytes(text.trim(), MAX_REPLY_BYTES).trim_end();
         if text.is_empty() {
             return Err(ChatReplyError::Empty);
@@ -486,6 +529,7 @@ mod tests {
             context: context.map(str::to_owned),
             images: Vec::new(),
             retry: false,
+            tools_folder: None,
         }
     }
 
@@ -497,7 +541,7 @@ mod tests {
     ) -> Vec<ChatReplyEventDto> {
         let mut seen = Vec::new();
         service
-            .stream(generator, conversations, request, &mut |event| {
+            .stream(generator, conversations, None, request, &mut |event| {
                 seen.push(event)
             })
             .await;
@@ -589,7 +633,7 @@ mod tests {
         let run = async {
             let mut seen = Vec::new();
             service
-                .stream(&generator, &conversations, req, &mut |event| {
+                .stream(&generator, &conversations, None, req, &mut |event| {
                     seen.push(event)
                 })
                 .await;
@@ -911,5 +955,155 @@ mod tests {
         .await;
         assert_eq!(events, vec![failed(ChatFailureDto::InvalidRequest)]);
         assert!(generator.seen.lock().unwrap().is_empty());
+    }
+
+    /// Hands out scripted answers, one per call, and records every request.
+    struct Scripted {
+        answers: StdMutex<std::collections::VecDeque<&'static str>>,
+        seen: StdMutex<Vec<LlmChatGeneration>>,
+    }
+
+    #[async_trait]
+    impl ChatGenerator for Scripted {
+        async fn accepts_images(&self, _role: LlmRole) -> Result<bool, LlmProfileError> {
+            Ok(false)
+        }
+
+        async fn generate_for_role(
+            &self,
+            _role: LlmRole,
+            generation: LlmChatGeneration,
+            _cancellation: &CancellationToken,
+            on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
+        ) -> Result<String, LlmProfileError> {
+            self.seen.lock().unwrap().push(generation);
+            let text = self
+                .answers
+                .lock()
+                .unwrap()
+                .pop_front()
+                .ok_or(LlmProfileError::Transport)?;
+            on_delta(text);
+            Ok(text.to_owned())
+        }
+    }
+
+    fn scripted(answers: &[&'static str]) -> Scripted {
+        Scripted {
+            answers: StdMutex::new(answers.iter().copied().collect()),
+            seen: StdMutex::new(Vec::new()),
+        }
+    }
+
+    fn local_tooling(providers: &fm_vfs::ProviderRegistry) -> ChatTooling<'_> {
+        ChatTooling {
+            providers,
+            notes: None,
+            host_wide_skills: false,
+            skill_folders: &[],
+        }
+    }
+
+    fn folder_request(
+        workspace: Uuid,
+        conversation: Uuid,
+        folder: &std::path::Path,
+    ) -> ChatReplyRequestDto {
+        let mut request = request(workspace, conversation, "What is in a.txt?", None);
+        request.tools_folder = Some(url::Url::from_directory_path(folder).unwrap().to_string());
+        request
+    }
+
+    #[tokio::test]
+    async fn with_a_folder_the_model_reads_a_file_and_the_steps_are_reported() {
+        let (_directory, conversations) = store();
+        let workspace = Uuid::new_v4();
+        let id = conversations.create(workspace).unwrap().id;
+        let folder = tempdir().unwrap();
+        std::fs::write(folder.path().join("a.txt"), "alpha beta").unwrap();
+        let mut providers = fm_vfs::ProviderRegistry::new();
+        providers.register(std::sync::Arc::new(
+            fm_vfs_local::LocalFileSystemProvider::new(),
+        ));
+        let generator = scripted(&[
+            r#"TOOL {"tool":"read_file","path":"a.txt"}"#,
+            "It says alpha beta.",
+        ]);
+        let mut seen = Vec::new();
+        ChatService::default()
+            .stream(
+                &generator,
+                &conversations,
+                Some(&local_tooling(&providers)),
+                folder_request(workspace, id, folder.path()),
+                &mut |event| seen.push(event),
+            )
+            .await;
+
+        assert!(seen.contains(&ChatReplyEventDto::Step {
+            text: "Read a.txt".into()
+        }));
+        assert_eq!(
+            seen.last(),
+            Some(&ChatReplyEventDto::Done {
+                text: "It says alpha beta.".into()
+            })
+        );
+        let requests = generator.seen.lock().unwrap();
+        assert!(requests[0].system_prompt.contains("read_file"));
+        assert!(requests[1].user_prompt.contains("alpha beta"));
+        let saved = conversations.get(workspace, id).unwrap();
+        assert_eq!(saved.messages.len(), 2);
+        assert_eq!(saved.messages[1].content, "It says alpha beta.");
+    }
+
+    #[tokio::test]
+    async fn the_model_cannot_leave_the_folder() {
+        let (_directory, conversations) = store();
+        let workspace = Uuid::new_v4();
+        let id = conversations.create(workspace).unwrap().id;
+        let outer = tempdir().unwrap();
+        std::fs::write(outer.path().join("secret.txt"), "top secret").unwrap();
+        let folder = outer.path().join("inner");
+        std::fs::create_dir(&folder).unwrap();
+        let mut providers = fm_vfs::ProviderRegistry::new();
+        providers.register(std::sync::Arc::new(
+            fm_vfs_local::LocalFileSystemProvider::new(),
+        ));
+        let generator = scripted(&[r#"TOOL {"tool":"read_file","path":"../secret.txt"}"#, "No."]);
+        ChatService::default()
+            .stream(
+                &generator,
+                &conversations,
+                Some(&local_tooling(&providers)),
+                folder_request(workspace, id, &folder),
+                &mut |_| {},
+            )
+            .await;
+
+        assert!(
+            !generator.seen.lock().unwrap()[1]
+                .user_prompt
+                .contains("top secret")
+        );
+    }
+
+    #[tokio::test]
+    async fn without_a_folder_no_tools_are_offered() {
+        let (_directory, conversations) = store();
+        let workspace = Uuid::new_v4();
+        let id = conversations.create(workspace).unwrap().id;
+        let generator = fake(Outcome::Text("Hi".into()));
+        run(
+            &ChatService::default(),
+            &generator,
+            &conversations,
+            request(workspace, id, "Hello", None),
+        )
+        .await;
+
+        let seen = generator.seen.lock().unwrap();
+        assert!(!seen[0].1.system_prompt.contains("TOOL"));
+        assert!(seen[0].1.tools.is_empty());
     }
 }

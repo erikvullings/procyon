@@ -403,6 +403,9 @@ export const pl = {
     terminalAllowFileWrites: 'Pozwól asystentowi tworzyć pliki (po zatwierdzeniu)',
     terminalHideFunctionKeys: 'Ukryj pasek klawiszy funkcyjnych, gdy terminal jest otwarty',
     terminalApps: 'Zewnętrzne terminale',
+    skillFolders: 'Dodatkowe foldery skilli',
+    skillFoldersHelp:
+      'Jeden folder bezwzględny w wierszu. Każdy zawiera foldery skilli z plikiem SKILL.md, czytane przez asystentów obok ~/.claude/skills i ~/.agents/skills. Skrypty nigdy nie są uruchamiane.',
     terminalAppsHelp:
       'Po jednym w wierszu: Nazwa = polecenie (nazwa aplikacji w macOS, plik wykonywalny w Windows). Oferowane przez „Otwórz terminal za pomocą…”.',
     fileTemplates: 'Szablony plików',
@@ -1249,6 +1252,8 @@ export const pl = {
     attachFolder: 'Dołącz listę folderu',
     attachSelection: 'Dołącz zaznaczenie',
     attachFileContents: 'Dołącz zawartość pliku',
+    lookInFolder: 'Pozwól asystentowi sprawdzać',
+    steps: 'Sprawdzono',
     oneFileOnly: 'Zaznacz jeden plik, aby dołączyć jego zawartość.',
     fileTooLarge: 'Wybrany plik jest za duży, aby go dołączyć.',
     attachFailed: 'Nie udało się odczytać wybranego pliku.',
@@ -2068,7 +2073,6 @@ export const pl = {
     modelDiscovery: 'Wykrywaj i weryfikuj modele',
     responsesCapability: 'Deklaruj przyszłą obsługę interfejsu Responses API',
     visionCapability: 'Przyjmuje obrazy w czacie',
-    toolCallingCapability: 'Wywołuje narzędzia natywnie (agenci w terminalu i czacie)',
     imagesApi: 'API obrazów',
     imagesApiOpenAi: 'Styl OpenAI (jedna odpowiedź)',
     imagesApiDashscope: 'API zadań Alibaba Cloud (Qwen-Image, Wan)',

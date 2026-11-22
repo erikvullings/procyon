@@ -3,6 +3,7 @@
  * Run `pnpm api:generate` (or `pnpm api:check`) to regenerate.
  */
 import type { ChatFailureDto } from './chatFailureDto.ts';
+import type { NoteProposalDto } from './noteProposalDto.ts';
 
 /**
  * One event of a streamed chat reply: fragments as they arrive, then exactly one final event.
@@ -11,6 +12,14 @@ export type ChatReplyEventDto = {
   /** Text to append to what has arrived so far. */
   text: string;
   type: 'delta';
+} | {
+  /** One line saying what was looked up, such as `Read notes.md`. */
+  text: string;
+  type: 'step';
+} | {
+  /** The proposed note. */
+  proposal: NoteProposalDto;
+  type: 'noteProposal';
 } | {
   /** Reply text. */
   text: string;

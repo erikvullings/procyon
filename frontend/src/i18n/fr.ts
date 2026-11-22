@@ -406,6 +406,9 @@ export const fr = {
     terminalHideFunctionKeys:
       'Masquer la barre des touches de fonction quand le terminal est ouvert',
     terminalApps: 'Terminaux externes',
+    skillFolders: 'Dossiers de skills supplémentaires',
+    skillFoldersHelp:
+      'Un dossier absolu par ligne. Chacun contient des dossiers de skills avec un SKILL.md, lus par les assistants en plus de ~/.claude/skills et ~/.agents/skills. Les scripts ne sont jamais exécutés.',
     terminalAppsHelp:
       'Un par ligne : Nom = commande (un nom d’application sur macOS, un exécutable sous Windows). Proposés par « Ouvrir un terminal avec… ».',
     fileTemplates: 'Modèles de fichier',
@@ -1256,6 +1259,8 @@ export const fr = {
     attachFolder: 'Joindre la liste du dossier',
     attachSelection: 'Joindre la sélection',
     attachFileContents: 'Joindre le contenu du fichier',
+    lookInFolder: 'Laisser l’assistant consulter',
+    steps: 'Consulté',
     oneFileOnly: 'Sélectionnez un seul fichier pour joindre son contenu.',
     fileTooLarge: 'Le fichier sélectionné est trop volumineux pour être joint.',
     attachFailed: 'Impossible de lire le fichier sélectionné.',
@@ -2083,7 +2088,6 @@ export const fr = {
     modelDiscovery: 'Découvrir et valider les modèles',
     responsesCapability: "Annoncer la future prise en charge de l'API Responses",
     visionCapability: 'Accepte les images dans le chat',
-    toolCallingCapability: 'Appelle les outils nativement (agents du terminal et du chat)',
     imagesApi: 'API Images',
     imagesApiOpenAi: 'Style OpenAI (une réponse)',
     imagesApiDashscope: 'API de tâches Alibaba Cloud (Qwen-Image, Wan)',

@@ -400,6 +400,9 @@ export const nl = {
     terminalAllowFileWrites: 'Assistent mag bestanden maken (na goedkeuring)',
     terminalHideFunctionKeys: 'Functietoetsenbalk verbergen zolang de terminal open is',
     terminalApps: 'Externe terminals',
+    skillFolders: 'Extra skill-mappen',
+    skillFoldersHelp:
+      'Eén absolute map per regel. Elke map bevat skill-mappen met een SKILL.md, die de assistenten naast ~/.claude/skills en ~/.agents/skills lezen. Scripts worden nooit uitgevoerd.',
     terminalAppsHelp:
       'Eén per regel: Naam = commando (een toepassingsnaam op macOS, een uitvoerbaar bestand op Windows). Aangeboden door “Terminal openen met…”.',
     fileTemplates: 'Bestandssjablonen',
@@ -1662,6 +1665,8 @@ export const nl = {
     attachFolder: 'Maplijst toevoegen',
     attachSelection: 'Selectie toevoegen',
     attachFileContents: 'Bestandsinhoud toevoegen',
+    lookInFolder: 'Assistent laten opzoeken',
+    steps: 'Opgezocht',
     oneFileOnly: 'Selecteer één bestand om de inhoud toe te voegen.',
     fileTooLarge: 'Het geselecteerde bestand is te groot om toe te voegen.',
     attachFailed: 'Het geselecteerde bestand kon niet worden gelezen.',
@@ -2480,7 +2485,6 @@ export const nl = {
     modelDiscovery: 'Modellen ontdekken en valideren',
     responsesCapability: 'Toekomstige Responses API-mogelijkheid aangeven',
     visionCapability: 'Accepteert afbeeldingen in de chat',
-    toolCallingCapability: 'Roept tools native aan (agents in terminal en chat)',
     imagesApi: 'Afbeeldingen-API',
     imagesApiOpenAi: 'OpenAI-stijl (één antwoord)',
     imagesApiDashscope: 'Alibaba Cloud-taak-API (Qwen-Image, Wan)',

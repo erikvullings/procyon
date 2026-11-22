@@ -859,17 +859,6 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                         capabilities: withCapability(request.capabilities, 'vision', checked),
                       }),
                   }),
-              // Ollama's chat API is asked for JSON here, so its tools use the text protocol.
-              request.preset === 'ollama'
-                ? undefined
-                : m(Switch, {
-                    label: t('llmProfiles', 'toolCallingCapability'),
-                    checked: request.capabilities.includes('toolCalling'),
-                    onchange: (checked: boolean) =>
-                      updateRequest({
-                        capabilities: withCapability(request.capabilities, 'toolCalling', checked),
-                      }),
-                  }),
               m(Select<string>, {
                 label: t('llmProfiles', 'imagesApi'),
                 options: [

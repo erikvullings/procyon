@@ -25,7 +25,7 @@ pub(super) fn registry(describe_write_file: bool) -> ToolRegistry {
 }
 
 /// The working folder as the file tools see it.
-pub(super) struct TerminalFiles<'a> {
+pub(crate) struct TerminalFiles<'a> {
     pub(super) host: Option<&'a ToolHost>,
     pub(super) documents: &'a Documents,
 }

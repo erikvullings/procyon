@@ -124,9 +124,6 @@ pub enum LlmApiCapability {
     /// The model reads images sent in chat messages. Set by the person; providers do not disclose it
     /// reliably, so the endpoint is never sent image bytes without it.
     Vision,
-    /// The endpoint takes a `tools` list in chat requests and answers with `tool_calls`. Set by the
-    /// person, as providers do not disclose it reliably; without it tools use the text protocol.
-    ToolCalling,
 }
 
 /// Network locality visible wherever a profile is selected. `Loopback` is the local class: the
@@ -192,6 +189,29 @@ pub struct LlmProfile {
     /// The thinking-off variant this server and model accepted last time (learned, not user-set).
     #[serde(default)]
     pub reasoning_switch: Option<ReasoningSwitch>,
+    /// Whether the model takes native tool calls, found by a background probe after the endpoint or
+    /// model changed (learned, not user-set). `None` until the probe has answered.
+    #[serde(default)]
+    pub tool_calling: Option<ToolCallingProbe>,
+}
+
+/// What the tool-calling probe found for one model of an endpoint.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCallingProbe {
+    /// The model the probe asked; a role may use another model than the profile's.
+    pub model: String,
+    /// Whether the model answered the probe with a tool call.
+    pub supported: bool,
+}
+
+impl LlmProfile {
+    /// Whether the probe found that this profile's model takes native tool calls.
+    fn takes_native_tools(&self) -> bool {
+        self.tool_calling
+            .as_ref()
+            .is_some_and(|probe| probe.supported && probe.model == self.model)
+    }
 }
 
 /// User-editable profile values and an optional write-only API key.
@@ -393,8 +413,8 @@ pub struct LlmToolSpec {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LlmChatGeneration {
     /// Tools the model may call natively (task 0339). Sent only to OpenAI-compatible endpoints
-    /// whose profile has [`LlmApiCapability::ToolCalling`]; a call comes back as a `TOOL {json}`
-    /// line in the reply text, the same form the text protocol uses.
+    /// whose model was found to take them (see [`ToolCallingProbe`]); a call comes back as a
+    /// `TOOL {json}` line in the reply text, the same form the text protocol uses.
     pub tools: Vec<LlmToolSpec>,
     /// Trusted system instruction.
     pub system_prompt: String,
@@ -1055,9 +1075,12 @@ impl VersionedDocument for LlmProfilesDocument {
 }
 
 /// Thread-safe profile lifecycle and test capability.
+#[derive(Clone)]
 pub struct LlmProfileService {
     settings: SettingsStore,
-    profiles: Mutex<LlmProfilesDocument>,
+    profiles: Arc<Mutex<LlmProfilesDocument>>,
+    /// Tool-calling probes in flight or recently unanswered, with the time the next may start.
+    probing: Arc<Mutex<std::collections::HashMap<(Uuid, String), Instant>>>,
     credentials: Arc<dyn CredentialStore>,
     transport: Arc<dyn LlmProbeTransport>,
     host_policy: LlmHostPolicy,
@@ -1078,7 +1101,8 @@ impl LlmProfileService {
         profiles.prune_dangling_roles();
         Ok(Self {
             settings,
-            profiles: Mutex::new(profiles),
+            profiles: Arc::new(Mutex::new(profiles)),
+            probing: Arc::default(),
             credentials,
             transport,
             host_policy,
@@ -1097,7 +1121,8 @@ impl LlmProfileService {
     ) -> Self {
         Self {
             settings,
-            profiles: Mutex::new(LlmProfilesDocument::default()),
+            profiles: Arc::new(Mutex::new(LlmProfilesDocument::default())),
+            probing: Arc::default(),
             credentials,
             transport,
             host_policy,
@@ -1202,6 +1227,7 @@ impl LlmProfileService {
             }
             return Err(error);
         }
+        self.schedule_tool_probe(profile.id, profile.model.clone());
         Ok(profile)
     }
 
@@ -1229,6 +1255,7 @@ impl LlmProfileService {
             && old.model == profile.model
         {
             profile.reasoning_switch = old.reasoning_switch;
+            profile.tool_calling = old.tool_calling.clone();
         }
         validate_profile(&profile)?;
         let replacement_ref = match api_key {
@@ -1273,6 +1300,9 @@ impl LlmProfileService {
             && let Some(reference) = old.credential_ref
         {
             let _ = self.credentials.delete(&reference).await;
+        }
+        if profile.tool_calling.is_none() {
+            self.schedule_tool_probe(profile.id, profile.model.clone());
         }
         Ok(profile)
     }
@@ -1367,6 +1397,8 @@ impl LlmProfileService {
         };
         document.active_profile_id = Some(id);
         self.persist(&document)?;
+        drop(document);
+        self.schedule_tool_probe(profile.id, profile.model.clone());
         Ok(profile)
     }
 
@@ -1384,6 +1416,8 @@ impl LlmProfileService {
         }
         let saved = profile.clone();
         self.persist(&document)?;
+        drop(document);
+        self.schedule_tool_probe(saved.id, saved.model.clone());
         Ok(saved)
     }
 
@@ -1709,11 +1743,7 @@ impl LlmProfileService {
             return Err(LlmProfileError::InvalidConfiguration);
         }
         let bounded = LlmChatGeneration {
-            tools: if profile
-                .capabilities
-                .contains(&LlmApiCapability::ToolCalling)
-                && request.ollama_generation_url.is_none()
-            {
+            tools: if profile.takes_native_tools() && request.ollama_generation_url.is_none() {
                 generation.tools.clone()
             } else {
                 Vec::new()
@@ -1841,20 +1871,147 @@ impl LlmProfileService {
         let Ok(resolved) = self.resolve_role(role) else {
             return false;
         };
-        if !resolved
-            .profile
-            .capabilities
-            .contains(&LlmApiCapability::ToolCalling)
-        {
-            return false;
-        }
         let profile = LlmProfile {
             model: resolved.model,
             ..resolved.profile
         };
+        if !profile.takes_native_tools() {
+            // Not probed yet for this model (an older profile, or a role's own model): find out in
+            // the background; this request uses the text protocol.
+            if profile
+                .tool_calling
+                .as_ref()
+                .is_none_or(|probe| probe.model != profile.model)
+            {
+                self.schedule_tool_probe(profile.id, profile.model.clone());
+            }
+            return false;
+        }
         self.probe_request(&profile)
             .await
             .is_ok_and(|request| request.ollama_generation_url.is_none())
+    }
+
+    /// Finds out in the background whether `model` takes native tool calls, and saves the answer on
+    /// the profile. Runs when an endpoint or model is new or changed, never blocks the caller, and
+    /// asks again only after [`TOOL_PROBE_RETRY`] when the endpoint could not be reached or has not
+    /// consented. Does nothing outside a Tokio runtime.
+    fn schedule_tool_probe(&self, id: Uuid, model: String) {
+        // Tests call `probe_tool_calling` themselves: a background probe would race their fakes.
+        if cfg!(test) {
+            return;
+        }
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        {
+            let mut probing = self
+                .probing
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let now = Instant::now();
+            if probing
+                .get(&(id, model.clone()))
+                .is_some_and(|not_before| *not_before > now)
+            {
+                return;
+            }
+            // Held until the probe finishes; the retry time replaces it on failure.
+            probing.insert((id, model.clone()), now + TOOL_PROBE_RETRY);
+        }
+        let service = self.clone();
+        runtime.spawn(async move {
+            let key = (id, model.clone());
+            let recorded = service.probe_tool_calling(id, &model).await;
+            let mut probing = service
+                .probing
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            if recorded {
+                probing.remove(&key);
+            } else {
+                probing.insert(key, Instant::now() + TOOL_PROBE_RETRY);
+            }
+        });
+    }
+
+    /// Asks the model to call a harmless tool and records whether it did. Returns whether an answer
+    /// was recorded: an unreachable endpoint, a missing consent or a rejected request record nothing.
+    async fn probe_tool_calling(&self, id: Uuid, model: &str) -> bool {
+        let Ok(mut profile) = self.profile(id) else {
+            return false;
+        };
+        profile.model = model.to_owned();
+        let Ok(endpoint) = normalize_endpoint(&profile.base_url) else {
+            return false;
+        };
+        if self
+            .enforce_policy(&endpoint, profile.advanced.tls_policy)
+            .is_err()
+            || (endpoint.locality == EndpointLocality::Cloud
+                && profile.consented_host.as_deref() != Some(endpoint.base_url.as_str()))
+        {
+            return false;
+        }
+        let Ok(request) = self.probe_request(&profile).await else {
+            return false;
+        };
+        // The Ollama chat API is asked for JSON here and takes no tools.
+        if request.ollama_generation_url.is_some() {
+            return false;
+        }
+        let probe = LlmChatGeneration {
+            tools: vec![LlmToolSpec {
+                name: "echo".to_owned(),
+                description: "Repeats the given text.".to_owned(),
+                schema: json!({
+                    "type": "object",
+                    "properties": {"text": {"type": "string"}},
+                    "required": ["text"],
+                }),
+            }],
+            system_prompt: "You are checking that tool calls work. Always answer by calling the \
+                            echo tool."
+                .to_owned(),
+            user_prompt: "Call the echo tool with the text ping.".to_owned(),
+            images: Vec::new(),
+            maximum_tokens: 256,
+            context_window: None,
+            temperature: Some(0.0),
+        };
+        let cancellation = CancellationToken::new();
+        let outcome = self
+            .transport
+            .generate_chat_streamed(&request, &probe, &cancellation, &mut |_: &str| {})
+            .await;
+        let supported = match outcome {
+            Ok(ChatOutcome::Generated { text, .. }) => text
+                .lines()
+                .any(|line| line.trim_start().starts_with("TOOL ") && line.contains("\"echo\"")),
+            _ => return false,
+        };
+        let Ok(mut document) = self.lock() else {
+            return false;
+        };
+        let Some(stored) = document
+            .profiles
+            .iter_mut()
+            .find(|candidate| candidate.id == id)
+        else {
+            return false;
+        };
+        // The endpoint changed while the probe ran: the answer is about another server.
+        if normalize_endpoint(&stored.base_url).map(|current| current.base_url)
+            != Ok(endpoint.base_url)
+        {
+            return false;
+        }
+        stored.tool_calling = Some(ToolCallingProbe {
+            model: model.to_owned(),
+            supported,
+        });
+        let _ = self.persist(&document);
+        true
     }
 
     pub(crate) async fn model_capabilities(
@@ -2104,6 +2261,7 @@ fn profile_from_draft(
         consented_host: None,
         redact_filenames: draft.redact_filenames,
         reasoning_switch: None,
+        tool_calling: None,
     }
 }
 
@@ -2614,6 +2772,9 @@ fn parse_streaming_chat_detailed(bytes: &[u8]) -> Result<(String, bool), LlmProf
     }
 }
 
+/// How long after a probe that recorded nothing the next one may start.
+const TOOL_PROBE_RETRY: Duration = Duration::from_secs(10 * 60);
+
 /// Most tool calls looked at in one streamed reply.
 const MAX_TOOL_CALLS_PER_REPLY: usize = 16;
 
@@ -2962,7 +3123,6 @@ fn capability_from_dto(value: LlmApiCapabilityDto) -> LlmApiCapability {
         LlmApiCapabilityDto::ImageGenerations => LlmApiCapability::ImageGenerations,
         LlmApiCapabilityDto::DashscopeTasks => LlmApiCapability::DashscopeTasks,
         LlmApiCapabilityDto::Vision => LlmApiCapability::Vision,
-        LlmApiCapabilityDto::ToolCalling => LlmApiCapability::ToolCalling,
     }
 }
 
@@ -2974,7 +3134,6 @@ fn capability_to_dto(value: LlmApiCapability) -> LlmApiCapabilityDto {
         LlmApiCapability::ImageGenerations => LlmApiCapabilityDto::ImageGenerations,
         LlmApiCapability::DashscopeTasks => LlmApiCapabilityDto::DashscopeTasks,
         LlmApiCapability::Vision => LlmApiCapabilityDto::Vision,
-        LlmApiCapability::ToolCalling => LlmApiCapabilityDto::ToolCalling,
     }
 }
 
@@ -3128,6 +3287,8 @@ mod tests {
         generate_calls: std::sync::atomic::AtomicUsize,
         /// The tools each generation carried.
         generated_tools: Mutex<Vec<Vec<LlmToolSpec>>>,
+        /// Whether a generation offered the `echo` probe tool is answered with a call to it.
+        script_tool_call: std::sync::atomic::AtomicBool,
     }
 
     #[async_trait]
@@ -3181,6 +3342,13 @@ mod tests {
                 return Err(failure);
             }
             self.captured.lock().unwrap().push(request.clone());
+            if self
+                .script_tool_call
+                .load(std::sync::atomic::Ordering::Relaxed)
+                && generation.tools.iter().any(|tool| tool.name == "echo")
+            {
+                return Ok(r#"TOOL {"tool":"echo","text":"ping"}"#.to_owned());
+            }
             parse_streaming_chat(&self.response.body)
         }
     }
@@ -3208,6 +3376,7 @@ mod tests {
             generate_failures: Mutex::new(std::collections::VecDeque::new()),
             generate_calls: std::sync::atomic::AtomicUsize::new(0),
             generated_tools: Mutex::new(Vec::new()),
+            script_tool_call: std::sync::atomic::AtomicBool::new(false),
         });
         (
             LlmProfileService::new(
@@ -4708,38 +4877,127 @@ mod tests {
         }
     }
 
+    /// Runs the probe the way the background task does and waits for it.
+    async fn probe(service: &LlmProfileService, id: Uuid) -> bool {
+        let model = service.profile(id).unwrap().model;
+        service.probe_tool_calling(id, &model).await
+    }
+
     #[tokio::test]
-    async fn tools_reach_the_endpoint_only_when_the_profile_takes_them_natively() {
+    async fn tools_reach_the_endpoint_only_after_the_probe_found_the_model_takes_them() {
         let tool = || LlmToolSpec {
             name: "read_file".into(),
             description: "reads".into(),
             schema: json!({"type": "object"}),
         };
         let (service, _, transport) = service(LlmHostPolicy::desktop());
-        let plain = service
+        let profile = service
             .create(draft(LlmPreset::OpenAiCompatible, "http://127.0.0.1:8000"))
             .await
             .unwrap();
-        let mut capable_draft = draft(LlmPreset::OpenAiCompatible, "http://127.0.0.1:8001");
-        capable_draft
-            .capabilities
-            .insert(LlmApiCapability::ToolCalling);
-        let capable = service.create(capable_draft).await.unwrap();
-
-        for id in [plain.id, capable.id] {
-            let generation = LlmChatGeneration {
-                tools: vec![tool()],
-                ..tiny_generation()
-            };
+        let generate = || async {
             service
-                .generate(id, generation, &CancellationToken::new())
+                .generate(
+                    profile.id,
+                    LlmChatGeneration {
+                        tools: vec![tool()],
+                        ..tiny_generation()
+                    },
+                    &CancellationToken::new(),
+                )
                 .await
                 .unwrap();
-        }
+        };
+
+        // Before any probe answered, tools use the text protocol.
+        generate().await;
+        // The fake endpoint answers the probe with a tool call.
+        transport
+            .script_tool_call
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        assert!(probe(&service, profile.id).await);
+        generate().await;
 
         let seen = transport.generated_tools.lock().unwrap();
+        assert!(
+            seen.iter()
+                .any(|tools| tools.iter().any(|t| t.name == "echo"))
+        );
         assert!(seen[0].is_empty());
-        assert_eq!(seen[1], vec![tool()]);
+        assert_eq!(seen.last().unwrap(), &vec![tool()]);
+        assert_eq!(
+            service.profile(profile.id).unwrap().tool_calling,
+            Some(ToolCallingProbe {
+                model: profile.model.clone(),
+                supported: true
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn a_model_that_answers_the_probe_in_text_is_recorded_as_not_taking_tools() {
+        let (service, _, transport) = service(LlmHostPolicy::desktop());
+        let profile = service
+            .create(draft(LlmPreset::OpenAiCompatible, "http://127.0.0.1:8000"))
+            .await
+            .unwrap();
+
+        assert!(probe(&service, profile.id).await);
+
+        assert_eq!(
+            service
+                .profile(profile.id)
+                .unwrap()
+                .tool_calling
+                .map(|p| p.supported),
+            Some(false)
+        );
+        assert!(
+            !service
+                .generation_profile(profile.id)
+                .unwrap()
+                .takes_native_tools()
+        );
+        drop(transport);
+    }
+
+    #[tokio::test]
+    async fn an_unreachable_endpoint_records_nothing() {
+        let (service, _, transport) = service(LlmHostPolicy::desktop());
+        let profile = service
+            .create(draft(LlmPreset::OpenAiCompatible, "http://127.0.0.1:8000"))
+            .await
+            .unwrap();
+        transport
+            .generate_failures
+            .lock()
+            .unwrap()
+            .push_back(LlmProfileError::Transport);
+
+        assert!(!probe(&service, profile.id).await);
+        assert_eq!(service.profile(profile.id).unwrap().tool_calling, None);
+    }
+
+    #[tokio::test]
+    async fn the_answer_is_kept_until_the_endpoint_or_model_changes() {
+        let (service, _, transport) = service(LlmHostPolicy::desktop());
+        transport
+            .script_tool_call
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        let profile = service
+            .create(draft(LlmPreset::OpenAiCompatible, "http://127.0.0.1:8000"))
+            .await
+            .unwrap();
+        assert!(probe(&service, profile.id).await);
+
+        let mut same = draft(LlmPreset::OpenAiCompatible, "http://127.0.0.1:8000");
+        same.name = "Renamed".into();
+        let kept = service.update(profile.id, same).await.unwrap();
+        assert!(kept.tool_calling.is_some());
+
+        let other = draft(LlmPreset::OpenAiCompatible, "http://127.0.0.1:9000");
+        let reset = service.update(profile.id, other).await.unwrap();
+        assert_eq!(reset.tool_calling, None);
     }
 
     #[tokio::test]

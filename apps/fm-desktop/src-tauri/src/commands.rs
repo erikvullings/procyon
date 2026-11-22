@@ -3053,7 +3053,7 @@ pub(crate) async fn stream_chat_reply(
 ) -> Result<(), ApplicationErrorDto> {
     state
         .service
-        .stream_chat_reply(request, &mut |event| {
+        .stream_chat_reply(&desktop_semantic_access(), request, &mut |event| {
             // A closed channel means the window is gone; there is no one left to tell.
             let _ = events.send(event);
         })

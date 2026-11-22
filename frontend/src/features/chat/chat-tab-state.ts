@@ -29,6 +29,14 @@ export interface ChatTabEntry {
   attachments: ChatAttachment[];
   /** Images pasted for the next message; sent with it, never saved in the conversation. */
   images: PastedImage[];
+  /**
+   * Whether the model may look into the folder pane's folder, the notes and the skills with
+   * read-only tools (task 0339). Off until the person turns it on: what it reads goes to the chat
+   * endpoint.
+   */
+  useTools?: boolean | undefined;
+  /** What the tools looked up for the reply in progress, or the last reply; shown as pills. */
+  steps?: string[] | undefined;
   pendingRequestId?: string | undefined;
   streamedText?: string | undefined;
   /** The text a failed reply had streamed before it stopped; kept on screen for the person. */

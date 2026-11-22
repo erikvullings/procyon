@@ -1382,6 +1382,10 @@ export class MockSemanticClient implements SemanticClient {
         onEvent({ type: 'failed', reason: 'consentRequired' });
         return;
       }
+      // With a folder the mock behaves like the backend's read-only tools: one lookup step.
+      if (request.toolsFolder != null) {
+        onEvent({ type: 'step', text: 'Listed .' });
+      }
       const text = `Mock reply to: ${request.content}`;
       for (const fragment of text.match(/[\s\S]{1,12}/gu) ?? []) {
         onEvent({ type: 'delta', text: fragment });

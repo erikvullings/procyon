@@ -11,6 +11,7 @@ pub mod app_data;
 mod archive_summary;
 mod attribute_change;
 mod chat;
+mod chat_agent;
 mod chat_conversations;
 mod checksum_coordinator;
 mod connection_facade;

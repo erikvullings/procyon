@@ -411,6 +411,12 @@ its folder with `read_skill_file`. Scripts in a skill are never run; a command a
 only reaches your terminal as a proposal you approve. Your notes count as skills too: the notes
 that match your question appear in the same list, marked `note`, and new captures get a
 `description: Use when …` line. Project skills win over user skills, and both win over notes.
+Settings → Terminal lists extra skill folders, read beside the standard ones.
+
+The chat uses the same tools: switch on "Let the assistant look things up" in a chat tab and the
+model may list, read and search the other pane's folder, your notes and skills, and propose a note
+for review. It cannot write or run anything. What it reads goes to the chat endpoint, so the switch
+is off by default and a cloud endpoint still needs your consent first.
 
 ## Architecture
 

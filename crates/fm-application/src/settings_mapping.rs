@@ -195,6 +195,7 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
             TerminalShellIntegration::Disabled => TerminalShellIntegrationDto::Disabled,
         },
         terminal_assistant: settings.terminal_assistant,
+        skill_folders: settings.skill_folders,
         terminal_follow_pane: settings.terminal_follow_pane,
         terminal_auto_run_read_only: settings.terminal_auto_run_read_only,
         terminal_allow_file_writes: settings.terminal_allow_file_writes,
@@ -379,6 +380,7 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
         // Backend-owned (task 0337): `update_settings` keeps the configured notes folder.
         notes_root: None,
         terminal_assistant: settings.terminal_assistant,
+        skill_folders: settings.skill_folders,
         terminal_follow_pane: settings.terminal_follow_pane,
         terminal_auto_run_read_only: settings.terminal_auto_run_read_only,
         terminal_allow_file_writes: settings.terminal_allow_file_writes,

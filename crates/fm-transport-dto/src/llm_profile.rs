@@ -40,8 +40,6 @@ pub enum LlmApiCapabilityDto {
     DashscopeTasks,
     /// Reads images sent in chat messages.
     Vision,
-    /// Takes a `tools` list in chat requests and answers with `tool_calls`.
-    ToolCalling,
 }
 
 #[allow(missing_docs)]

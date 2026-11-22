@@ -405,6 +405,9 @@ export const pt = {
     terminalAllowFileWrites: 'Permitir que o assistente crie arquivos (após aprovação)',
     terminalHideFunctionKeys: 'Ocultar a barra de teclas de função enquanto o terminal está aberto',
     terminalApps: 'Terminais externos',
+    skillFolders: 'Pastas de skills adicionais',
+    skillFoldersHelp:
+      'Uma pasta absoluta por linha. Cada uma contém pastas de skills com um SKILL.md, lidas pelos assistentes além de ~/.claude/skills e ~/.agents/skills. Os scripts nunca são executados.',
     terminalAppsHelp:
       'Um por linha: Nome = comando (um nome de aplicação no macOS, um executável no Windows). Oferecidos por «Abrir terminal com…».',
     fileTemplates: 'Modelos de ficheiro',
@@ -1254,6 +1257,8 @@ export const pt = {
     attachFolder: 'Anexar lista da pasta',
     attachSelection: 'Anexar seleção',
     attachFileContents: 'Anexar conteúdo do ficheiro',
+    lookInFolder: 'Deixar o assistente consultar',
+    steps: 'Consultado',
     oneFileOnly: 'Selecione um único ficheiro para anexar o conteúdo.',
     fileTooLarge: 'O ficheiro selecionado é demasiado grande para o anexar.',
     attachFailed: 'Não foi possível ler o ficheiro selecionado.',
@@ -2077,7 +2082,6 @@ export const pt = {
     modelDiscovery: 'Descobrir e validar modelos',
     responsesCapability: 'Anunciar a futura capacidade da API Responses',
     visionCapability: 'Aceita imagens no chat',
-    toolCallingCapability: 'Chama ferramentas nativamente (agentes do terminal e do chat)',
     imagesApi: 'API de imagens',
     imagesApiOpenAi: 'Estilo OpenAI (uma resposta)',
     imagesApiDashscope: 'API de tarefas do Alibaba Cloud (Qwen-Image, Wan)',

@@ -230,6 +230,8 @@ export interface PaneContentContext {
     send(key: string, draft: string): void;
     stop(key: string): void;
     retry(key: string): void;
+    /** Lets the model look into the folder pane's folder, notes and skills, or stops it. */
+    toggleTools(key: string): void;
     /** Returns the listing or selection as text for the draft; the chat inserts it at the caret. */
     attachFolder(key: string): ChatAttachment | undefined;
     attachSelection(key: string): ChatAttachment | undefined;
@@ -1254,6 +1256,7 @@ export function createPaneContentBuilder(
                 onSend: (draft: string) => context.chatActions?.send(chat.key, draft),
                 onStop: () => context.chatActions?.stop(chat.key),
                 onRetry: () => context.chatActions?.retry(chat.key),
+                onToggleTools: () => context.chatActions?.toggleTools(chat.key),
                 onAttachFolder: () => context.chatActions?.attachFolder(chat.key),
                 onAttachSelection: () => context.chatActions?.attachSelection(chat.key),
                 onAttachFileContents: () => context.chatActions?.attachFileContents(chat.key),

@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::NoteProposalDto;
+
 /// Who wrote one chat message.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -96,6 +98,11 @@ pub struct ChatReplyRequestDto {
     /// The message is not saved a second time, and `content` and `context` are not used.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub retry: bool,
+    /// A folder (a location URL) the model may look into with read-only tools, together with the
+    /// person's notes and skills (task 0339). It cannot leave the folder or change anything.
+    /// Without it the model only answers from the conversation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tools_folder: Option<String>,
 }
 
 /// One image sent with a chat message. The format is detected from the bytes (PNG, JPEG or WebP).
@@ -136,6 +143,16 @@ pub enum ChatReplyEventDto {
     Delta {
         /// Text to append to what has arrived so far.
         text: String,
+    },
+    /// A tool ran while the model worked toward its reply (task 0339).
+    Step {
+        /// One line saying what was looked up, such as `Read notes.md`.
+        text: String,
+    },
+    /// The model drafted a note for the person to review. Nothing is saved unless they save it.
+    NoteProposal {
+        /// The proposed note.
+        proposal: NoteProposalDto,
     },
     /// The whole reply, saved with the conversation. It replaces the fragments.
     Done {

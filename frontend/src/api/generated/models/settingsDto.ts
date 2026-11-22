@@ -117,6 +117,11 @@ export interface SettingsDto {
   showHiddenFiles: boolean;
   /** Size presentation. */
   sizeFormat: SizeFormatDto;
+  /**
+     * Extra folders of agent skills beside `~/.claude/skills` and `~/.agents/skills` (task 0339):
+     * absolute paths, read by the assistants on this machine only.
+     */
+  skillFolders?: string[];
   /** Saved synchronization profiles. */
   syncProfiles?: SyncProfileDto[];
   /**

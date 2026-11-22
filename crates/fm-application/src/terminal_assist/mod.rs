@@ -101,16 +101,28 @@ fn ask_prompt(
 }
 
 /// The skills for one question: skill folders of the person and the project, and the notes that
-/// match the question (task 0339).
-async fn skills_for(
+/// match the question (task 0339). With `host_wide` false (a browser client of a server) only the
+/// working folder's own skill folders are read, never the host's home or the folders above.
+pub(crate) async fn skills_for(
     notes: Option<&dyn NotesAccess>,
     working_directory: &str,
     question: &str,
+    host_wide: bool,
+    extra_folders: &[std::path::PathBuf],
 ) -> SkillCatalogue {
     let directory = context::path_from_location(working_directory);
-    // Tests never read the real home folder.
-    let home = if cfg!(test) { None } else { dirs::home_dir() };
-    let roots = SkillRoots::standard(directory.as_deref(), home.as_deref(), &[]);
+    let roots = if host_wide {
+        // Tests never read the real home folder.
+        let home = if cfg!(test) { None } else { dirs::home_dir() };
+        SkillRoots::standard(directory.as_deref(), home.as_deref(), extra_folders)
+    } else {
+        let mut roots = SkillRoots::default();
+        if let Some(folder) = &directory {
+            roots.project.push(folder.join(".claude").join("skills"));
+            roots.project.push(folder.join(".agents").join("skills"));
+        }
+        roots
+    };
     let mut catalogue = tokio::task::spawn_blocking(move || SkillCatalogue::discover(&roots))
         .await
         .unwrap_or_default();
@@ -118,6 +130,31 @@ async fn skills_for(
         catalogue.add_notes(notes.skills(question).await);
     }
     catalogue
+}
+
+/// The read-only file tools over one working folder (local, or over SSH, with documents read as
+/// text), shared by the terminal assistant and the chat (task 0339).
+pub(crate) struct FolderTools {
+    host: Option<ToolHost>,
+    documents: Documents,
+}
+
+impl FolderTools {
+    /// Opens the folder named by `location`; the tools answer with an error when it cannot be used.
+    pub(crate) fn open(providers: &ProviderRegistry, location: &str) -> Self {
+        Self {
+            host: ToolHost::open(providers, location),
+            documents: Documents::new(providers),
+        }
+    }
+
+    /// The tools, as the shared registry calls them.
+    pub(crate) fn files(&self) -> TerminalFiles<'_> {
+        TerminalFiles {
+            host: self.host.as_ref(),
+            documents: &self.documents,
+        }
+    }
 }
 
 const COMMAND_PROMPT: &str = "You turn a request into one command for the person's shell. Reply \
@@ -137,9 +174,19 @@ pub(crate) async fn reply(
     providers: &ProviderRegistry,
     sessions: &Sessions,
     notes: Option<&dyn NotesAccess>,
+    skill_folders: &[std::path::PathBuf],
     request: TerminalAssistRequestDto,
 ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
-    reply_streaming(generator, providers, sessions, notes, request, &mut |_| {}).await
+    reply_streaming(
+        generator,
+        providers,
+        sessions,
+        notes,
+        skill_folders,
+        request,
+        &mut |_| {},
+    )
+    .await
 }
 
 /// Like [`reply`], and for an `ask` also reports each finished line of the answer, and each step,
@@ -149,11 +196,21 @@ pub(crate) async fn reply_streaming(
     providers: &ProviderRegistry,
     sessions: &Sessions,
     notes: Option<&dyn NotesAccess>,
+    skill_folders: &[std::path::PathBuf],
     request: TerminalAssistRequestDto,
     on_event: &mut (dyn FnMut(TerminalAssistEventDto) + Send),
 ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
     if request.kind == TerminalAssistKindDto::Ask {
-        return ask(generator, providers, sessions, notes, request, on_event).await;
+        return ask(
+            generator,
+            providers,
+            sessions,
+            notes,
+            skill_folders,
+            request,
+            on_event,
+        )
+        .await;
     }
     let (system_prompt, user_prompt) = prompts(&request)?;
     let raw = generate(
@@ -215,6 +272,7 @@ async fn ask(
     providers: &ProviderRegistry,
     sessions: &Sessions,
     notes: Option<&dyn NotesAccess>,
+    skill_folders: &[std::path::PathBuf],
     request: TerminalAssistRequestDto,
     on_event: &mut (dyn FnMut(TerminalAssistEventDto) + Send),
 ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
@@ -316,7 +374,14 @@ async fn ask(
     }
 
     let native_tools = generator.native_tool_calling(LlmRole::Chat).await;
-    let catalogue = skills_for(notes, &request.working_directory, &question_text).await;
+    let catalogue = skills_for(
+        notes,
+        &request.working_directory,
+        &question_text,
+        true,
+        skill_folders,
+    )
+    .await;
     let mut turn = TerminalTurn {
         generator,
         sessions,
@@ -685,7 +750,17 @@ mod tests {
     ) -> impl std::future::Future<Output = Result<TerminalAssistReplyDto, ChatFailureDto>> + '_
     {
         let sessions = Sessions::default();
-        async move { super::reply(fake, &ProviderRegistry::new(), &sessions, None, request).await }
+        async move {
+            super::reply(
+                fake,
+                &ProviderRegistry::new(),
+                &sessions,
+                None,
+                &[],
+                request,
+            )
+            .await
+        }
     }
 
     fn command(request: &str) -> TerminalAssistRequestDto {
@@ -852,7 +927,7 @@ mod tests {
         sessions: &Sessions,
         request: TerminalAssistRequestDto,
     ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
-        super::reply(fake, &ProviderRegistry::new(), sessions, None, request).await
+        super::reply(fake, &ProviderRegistry::new(), sessions, None, &[], request).await
     }
 
     #[tokio::test]
@@ -1130,6 +1205,7 @@ mod tests {
             &ProviderRegistry::new(),
             &sessions,
             None,
+            &[],
             ask_request("t1", "what is here?", dir.path()),
             &mut |event| events.push(event),
         )
@@ -1164,6 +1240,7 @@ mod tests {
             &ProviderRegistry::new(),
             &sessions,
             None,
+            &[],
             ask_request("t1", "show", dir.path()),
             &mut |event| events.push(event),
         )
@@ -1228,7 +1305,15 @@ mod tests {
         notes: Option<&dyn NotesAccess>,
         request: TerminalAssistRequestDto,
     ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
-        super::reply(fake, &ProviderRegistry::new(), sessions, notes, request).await
+        super::reply(
+            fake,
+            &ProviderRegistry::new(),
+            sessions,
+            notes,
+            &[],
+            request,
+        )
+        .await
     }
 
     #[tokio::test]
@@ -1371,7 +1456,7 @@ mod tests {
         sessions: &Sessions,
         request: TerminalAssistRequestDto,
     ) -> TerminalAssistReplyDto {
-        super::reply(fake, &local_providers(), sessions, None, request)
+        super::reply(fake, &local_providers(), sessions, None, &[], request)
             .await
             .unwrap()
     }
@@ -1482,6 +1567,7 @@ mod tests {
             &local_providers(),
             &sessions,
             None,
+            &[],
             decision("t", dir.path(), TerminalWriteDecisionDto::Session),
         )
         .await;
@@ -1604,6 +1690,7 @@ mod tests {
             &ProviderRegistry::new(),
             &sessions,
             Some(&SkillNotes),
+            &[],
             ask_request("t", "cut a release and renew the certificate", dir.path()),
         )
         .await

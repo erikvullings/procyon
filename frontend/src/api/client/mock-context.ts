@@ -256,6 +256,7 @@ export class MockContext {
     terminalFollowPane: true,
     terminalAutoRunReadOnly: true,
     terminalAllowFileWrites: true,
+    skillFolders: [],
     terminalHideFunctionKeys: true,
     semanticMaxSourceMib: 64,
     semanticThemeRootIds: [],

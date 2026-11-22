@@ -169,10 +169,18 @@ pub(crate) async fn stream_chat_reply(
     let (sender, receiver) = mpsc::unbounded_channel::<ChatReplyEventDto>();
     let service = state.service.clone();
     let request_id = request.request_id;
+    let access = state.semantic_access.clone();
+    let allowed = tools_folder_allowed(request.tools_folder.as_deref(), &state.accessible_roots);
     tokio::spawn(async move {
+        if !allowed {
+            let _ = sender.send(ChatReplyEventDto::Failed {
+                reason: fm_transport_dto::ChatFailureDto::InvalidRequest,
+            });
+            return;
+        }
         let canceller = service.clone();
         service
-            .stream_chat_reply(request, &mut |event| {
+            .stream_chat_reply(&access, request, &mut |event| {
                 // The client went away: stop the reply instead of paying for an unread one.
                 if sender.send(event).is_err() {
                     canceller.cancel_chat_reply(CancelChatReplyRequestDto { request_id });
@@ -190,6 +198,22 @@ pub(crate) async fn stream_chat_reply(
         .header(header::CONTENT_TYPE, "application/x-ndjson")
         .body(Body::from_stream(lines))
         .unwrap_or_default()
+}
+
+/// Whether the folder the tools may look into is inside the accessible roots. A request without
+/// tools always passes; a folder that is not a local `file:` location is only checked by the
+/// provider that serves it, like every other file route.
+fn tools_folder_allowed(folder: Option<&str>, roots: &[std::path::PathBuf]) -> bool {
+    let Some(folder) = folder else {
+        return true;
+    };
+    match url::Url::parse(folder) {
+        Ok(url) if url.scheme() == "file" => url.to_file_path().is_ok_and(|path| {
+            crate::accessible_roots::validate_within_accessible_roots(&path, roots).is_ok()
+        }),
+        Ok(_) => true,
+        Err(_) => false,
+    }
 }
 
 /// Stops one running chat reply. The person's message stays saved; no reply is saved.

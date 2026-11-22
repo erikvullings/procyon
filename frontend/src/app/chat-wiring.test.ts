@@ -76,6 +76,45 @@ describe('chat wiring', () => {
     expect(entry.pendingRequestId).toBeUndefined();
   });
 
+  it('sends the folder only when tools are on, shows the steps, and reviews a proposed note', async () => {
+    const requests: ChatReplyRequest[] = [];
+    const proposal = { draft: { title: 'T', content: 'C' } };
+    const client = {
+      streamChatReply: vi.fn(
+        (request: ChatReplyRequest, onEvent: (event: ChatReplyEvent) => void) => {
+          requests.push(request);
+          onEvent({ type: 'step', text: 'Read a.txt' });
+          onEvent({ type: 'noteProposal', proposal } as unknown as ChatReplyEvent);
+          onEvent({ type: 'done', text: 'Drafted.' });
+          return Promise.resolve();
+        },
+      ),
+      listChatConversations: vi.fn(() => Promise.resolve([])),
+    };
+    const { shell, entry } = fakeShell(client);
+    const showProposal = vi.fn(() => Promise.resolve());
+    Object.assign(shell, {
+      notesController: { showProposal },
+      workspace: {
+        paneOrder: ['left', 'right'],
+        panesById: { right: { activeTabId: 'r1' } },
+      },
+      directories: new Map([['right:r1', { location: { uri: 'file:///project/' }, entries: [] }]]),
+    });
+    const wiring = createChatWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.send(client as unknown as FileManagerClient, entry.key, 'Off');
+    expect(requests[0]?.toolsFolder).toBeUndefined();
+
+    wiring.toggleTools(entry.key);
+    expect(entry.useTools).toBe(true);
+    await wiring.send(client as unknown as FileManagerClient, entry.key, 'On');
+
+    expect(requests[1]?.toolsFolder).toBe('file:///project/');
+    expect(entry.steps).toEqual(['Read a.txt']);
+    expect(showProposal).toHaveBeenCalledWith(proposal);
+  });
+
   it('reports a cloud endpoint without consent and never retries or prompts', async () => {
     const client = {
       streamChatReply: vi.fn(

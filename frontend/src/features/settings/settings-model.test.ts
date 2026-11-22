@@ -23,6 +23,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     terminalAutoRunReadOnly: true,
     terminalAllowFileWrites: true,
     terminalHideFunctionKeys: true,
+    skillFolders: [],
     schemaVersion: 2,
     theme: 'auto',
     language: 'en',

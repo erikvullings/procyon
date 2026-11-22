@@ -258,6 +258,20 @@
   margin: 0;
 }
 
+.fm-chat-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.fm-chat-step {
+  border: 1px solid var(--fm-border);
+  border-radius: 999px;
+  color: var(--fm-text-muted);
+  font-size: 0.8125rem;
+  padding: 1px 8px;
+}
+
 .fm-chat-message {
   display: flex;
   flex-direction: column;

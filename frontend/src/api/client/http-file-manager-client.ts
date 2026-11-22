@@ -2915,6 +2915,8 @@ export class HttpFileManagerClient implements FileManagerClient {
         content: request.content,
         context: request.context,
         images: request.images,
+        retry: request.retry,
+        toolsFolder: request.toolsFolder,
       },
       onEvent,
       signal,

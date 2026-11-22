@@ -230,13 +230,30 @@ pub(crate) trait AgentTool: Send + Sync {
   cancellation, streaming without tool-call lines, steps. The host implements `TurnHost`
   (terminal: `TerminalTurn`); approvals and proposals end the turn and the caller may run it again.
   `LineStreamer` moved to `agent/`.
-- 2026-11-22: Native tool calling (hybrid): `ToolCalling` capability (settings switch, not for
+- 2026-11-22: Native tool calling (hybrid): found by a background probe (see below), not a setting (not for
   Ollama's JSON chat API), `LlmChatGeneration.tools`, OpenAI-compatible `tools` in the request, and
   streamed `tool_calls` come back as a `TOOL {json}` line so the transcript and loop stay text.
   The prompt omits the tool list when native. Multi-call batching and structured tool-role
   messages are not done.
-- Not done (open): shared loop, native tool calling + `ToolCalling` capability, `skillsRoots`
-  setting, server-mode accessible-roots filtering for skill folders (user-home skills are read in
-  both hosts today), `read_skill_file` through the document reader, chat parity (backend, routes,
-  Tauri, frontend, mock fixtures). Note skills found for the first step of a question are not
-  re-searched on an approval continuation.
+- 2026-11-22: Chat parity. `chat_agent.rs` runs `fm_agent::run_turn` with `read_only_registry()`
+  when the request has `toolsFolder` (the folder pane's folder; per-tab switch "Let the assistant
+  look things up", off by default because what is read goes to the chat endpoint). The terminal's
+  `FolderTools`/`TerminalFiles` give the same sandbox (local or SSH, documents as text). New events:
+  `step` (shown as pills, not persisted) and `noteProposal` (same review as the terminal). Consent:
+  unchanged rule, the existing endpoint consent gates the first model call, so nothing (catalogue
+  included) is sent to an unconsented cloud endpoint. Server route fails closed with
+  `invalidRequest` when `toolsFolder` is outside the accessible roots; browser clients read only the
+  folder's own `.claude/.agents` skills, never the host's home or parent folders
+  (`host_wide_skills`). `skillFolders` setting (absolute paths, max 16, textarea in Settings) adds
+  skill folders for host clients.
+- 2026-11-22: Native tool calling is probed, not configured (the `ToolCalling` capability and its
+  switch are gone). `LlmProfileService::schedule_tool_probe` runs in the background after a profile
+  is created, its endpoint/model changes, consent is granted or it is activated, and lazily when a
+  role's model has no answer yet: one trivial `echo` tool, answered with a call or not. The result
+  (`LlmProfile.tool_calling {model, supported}`) is saved with the profile and kept until the
+  endpoint, preset or model changes. Unreachable, unconsented or rejected probes record nothing and
+  retry after 10 minutes at the earliest. Until a probe answered, the text protocol is used.
+- Not done (open): `read_skill_file` through the document reader (text only), multi-call batching,
+  structured tool-role messages, native tools for Ollama's chat API, note skills are not
+  re-searched on an approval continuation, chat steps are not saved with the conversation, a
+  visible "tool calling: yes/no" status in the endpoint editor.
