@@ -11,30 +11,29 @@ use fm_vfs::{EntryRef, FileSystemProvider, ListOptions, ProviderRegistry};
 use tokio::io::AsyncReadExt as _;
 use tokio_util::sync::CancellationToken;
 
-use super::tools::FileCall;
-use super::tools::{
-    MAX_LISTED, MAX_READ_BYTES, ToolError, ToolOutput, error_text, is_credential_folder,
-    is_secret_name, text_from_bytes,
+use super::sandbox::FileCall;
+use super::sandbox::{
+    MAX_LISTED, MAX_READ_BYTES, ToolError, ToolOutput, error_text, text_from_bytes,
 };
-use fm_agent::redact_secrets;
+use fm_agent::{is_credential_folder, is_secret_name, redact_secrets};
 
 /// A working folder on a provider other than the local disk.
 #[derive(Clone)]
-pub(super) struct RemoteSandbox {
+pub(crate) struct RemoteSandbox {
     provider: Arc<dyn FileSystemProvider>,
     root: Location,
 }
 
 impl RemoteSandbox {
     /// `None` when no provider serves the location.
-    pub(super) fn new(providers: &ProviderRegistry, working_directory: &str) -> Option<Self> {
+    pub(crate) fn new(providers: &ProviderRegistry, working_directory: &str) -> Option<Self> {
         let root = providers.parse(working_directory).ok()?;
         let provider = providers.resolve(&root).ok()?;
         Some(Self { provider, root })
     }
 
     /// Runs a read-only tool: a one-line description for the person, and the text for the model.
-    pub(super) async fn run(&self, call: &FileCall) -> ToolOutput {
+    pub(crate) async fn run(&self, call: &FileCall) -> ToolOutput {
         let (step, result) = match call {
             FileCall::ListDir { path } => (format!("Listed {path}"), self.list_dir(path).await),
             FileCall::ReadFile { path, offset } => (
@@ -53,7 +52,7 @@ impl RemoteSandbox {
     }
 
     /// The text of a file inside the folder, for `@path` mentions.
-    pub(super) async fn read_text(&self, relative: &str) -> Option<String> {
+    pub(crate) async fn read_text(&self, relative: &str) -> Option<String> {
         self.read_file_text(relative, 0).await.ok()
     }
 
@@ -131,7 +130,7 @@ impl RemoteSandbox {
     }
 
     /// The location of a regular, non-secret file inside the folder.
-    pub(super) async fn document_location(&self, relative: &str) -> Result<Location, ToolError> {
+    pub(crate) async fn document_location(&self, relative: &str) -> Result<Location, ToolError> {
         let (location, summary) = self.locate(relative).await?;
         if is_secret_name(&summary.name) {
             return Err(ToolError::Secret(summary.name));

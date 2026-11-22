@@ -1,31 +1,35 @@
-//! One turn of an agent (task 0339): ask the model, stream the answer, run the tool it calls,
-//! tell it the result, and ask again, until it answers in plain text or a tool needs the person.
-//! The host supplies the model and the conversation; the loop owns the bounds, the streaming of
-//! the answer without the tool-call lines, and the steps shown to the person.
+//! One turn of an agent: ask the model, stream the answer, run the tools it calls, give it the
+//! results, and ask again, until it answers in plain text or a tool stops the turn for the person.
+//!
+//! The host supplies the model and owns the conversation ([`TurnHost`]); the loop owns the bounds
+//! ([`TurnOptions`]), the streaming of the answer without the tool-call lines, the order and
+//! concurrency of tool runs, and the steps shown to the person.
+
+use std::borrow::Cow;
 
 use async_trait::async_trait;
-use fm_transport_dto::{ChatFailureDto, NoteProposalDto};
+use futures::StreamExt;
+use futures::stream;
 
-use super::stream::LineStreamer;
-use super::{ApprovalRequest, ToolContext, ToolOutcome, ToolRegistry};
+use crate::registry::{ParsedCall, ToolRegistry};
+use crate::stream::LineStreamer;
 use crate::text::truncate_to_bytes;
-
-/// Most tool calls in one turn.
-pub(crate) const MAX_STEPS: usize = 24;
-/// Longest answer kept, in bytes.
-pub const MAX_REPLY_BYTES: usize = 8 * 1024;
+use crate::tool::{ToolContext, ToolEffect, ToolOutcome, ToolOutput};
 
 /// The model and the conversation of one agent.
 #[async_trait]
 pub trait TurnHost: Send {
+    /// Why the model could not answer (the host's own error type).
+    type Error: Send;
+
     /// The model's next reply to the conversation so far, reported piece by piece to `on_delta`.
     async fn generate(
         &mut self,
         on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
-    ) -> Result<String, ChatFailureDto>;
+    ) -> Result<String, Self::Error>;
     /// Records the model's reply in the conversation.
     fn push_assistant(&mut self, text: &str);
-    /// Records a tool result in the conversation.
+    /// Records a tool result (or a message from the loop) in the conversation.
     fn push_tool(&mut self, text: &str);
     /// Whether the person stopped the request.
     fn is_cancelled(&self) -> bool;
@@ -36,31 +40,89 @@ pub trait TurnHost: Send {
 pub enum TurnEvent {
     /// A finished line of the answer.
     Line(String),
-    /// A tool ran.
+    /// A tool ran; its step line.
     Step(String),
 }
 
 /// How a turn ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TurnEnd {
+pub enum TurnEnd<I> {
     /// The model answered in plain text.
     Answer(String),
+    /// The model replied with nothing.
+    EmptyReply,
     /// The person stopped the request.
     Cancelled,
-    /// The model kept calling tools until the step limit.
+    /// The model kept calling tools until [`TurnOptions::max_steps`].
     StepLimit,
-    /// A note waits for the person's review.
-    Proposal(NoteProposalDto),
-    /// A tool needs the person's approval. The call is not yet in the conversation's result: the
-    /// caller records what happened and may run the turn again.
-    NeedsApproval(ApprovalRequest),
+    /// A tool stopped the turn for the person. Its call has no result in the conversation yet: the
+    /// host records what happened and may run the turn again.
+    Interrupted(I),
 }
 
-/// Most times a reply that only promises more work is sent back to the model in one turn.
-const MAX_NUDGES: usize = 3;
+/// Asks a model that announced more work without calling a tool to go on.
+#[derive(Debug, Clone)]
+pub struct ContinueNudge {
+    /// Whether a reply promises more work.
+    pub promises_more: fn(&str) -> bool,
+    /// What the model is told.
+    pub message: Cow<'static, str>,
+    /// Most nudges in one turn.
+    pub max: usize,
+}
+
+impl Default for ContinueNudge {
+    fn default() -> Self {
+        Self {
+            promises_more: announces_more_work,
+            message: Cow::Borrowed(
+                "You said you would continue, but you made no tool call, so nothing happened. \
+                 Call the next tool now. Only if the whole task is complete, give the final result.",
+            ),
+            max: 3,
+        }
+    }
+}
+
+/// The bounds and messages of a turn.
+#[derive(Debug, Clone)]
+pub struct TurnOptions {
+    /// Most model replies with tool calls in one turn.
+    pub max_steps: usize,
+    /// Most calls run from one reply; later ones are ignored.
+    pub max_calls_per_reply: usize,
+    /// Most read-only calls of one reply running at the same time.
+    pub max_concurrent_calls: usize,
+    /// Longest answer kept, in bytes; `None` keeps it whole.
+    pub max_answer_bytes: Option<usize>,
+    /// Applied to every tool result before the model sees it (for example secret redaction).
+    pub filter_result: Option<fn(&str) -> String>,
+    /// Asks a model that only announced more work to go on; `None` takes such a reply as the answer.
+    pub nudge: Option<ContinueNudge>,
+    /// Told to the model when a call stopped the turn and later calls of the reply did not run.
+    pub skipped_calls_message: Cow<'static, str>,
+}
+
+impl Default for TurnOptions {
+    fn default() -> Self {
+        Self {
+            max_steps: 24,
+            max_calls_per_reply: 8,
+            max_concurrent_calls: 4,
+            max_answer_bytes: None,
+            filter_result: None,
+            nudge: Some(ContinueNudge::default()),
+            skipped_calls_message: Cow::Borrowed(
+                "The calls after this one were not run. Ask again for them if they are still \
+                 needed.",
+            ),
+        }
+    }
+}
 
 /// Whether the end of a reply promises further work ("I will continue with the remaining files").
-fn announces_more_work(reply: &str) -> bool {
+/// English phrases only; hosts for other languages supply their own [`ContinueNudge`].
+pub fn announces_more_work(reply: &str) -> bool {
     const PROMISES: [&str; 9] = [
         "i will continue",
         "i'll continue",
@@ -72,29 +134,34 @@ fn announces_more_work(reply: &str) -> bool {
         "i will read the",
         "i will start",
     ];
-    let tail: String = reply
-        .chars()
+    let start = reply
+        .char_indices()
         .rev()
-        .take(240)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .collect();
-    let tail = tail.to_lowercase().replace('\u{2019}', "'");
+        .nth(239)
+        .map_or(0, |(index, _)| index);
+    let tail = reply[start..].to_lowercase().replace('\u{2019}', "'");
     PROMISES.iter().any(|promise| tail.contains(promise))
 }
 
-/// Runs tool calls until the turn ends. Every tool run adds its step to `steps`.
-pub async fn run_turn(
-    host: &mut impl TurnHost,
-    registry: &ToolRegistry,
+/// Runs model replies and tool calls until the turn ends. `on_event` sees every answer line and
+/// every step.
+pub async fn run_turn<H, I>(
+    host: &mut H,
+    registry: &ToolRegistry<I>,
     ctx: &ToolContext<'_>,
-    steps: &mut Vec<String>,
+    options: &TurnOptions,
     on_event: &mut (dyn FnMut(TurnEvent) + Send),
-) -> Result<TurnEnd, ChatFailureDto> {
+) -> Result<TurnEnd<I>, H::Error>
+where
+    H: TurnHost,
+    I: Send + 'static,
+{
     let mut worked = false;
     let mut nudges = 0;
-    for _ in 0..MAX_STEPS {
+    for _ in 0..options.max_steps {
+        if host.is_cancelled() {
+            return Ok(TurnEnd::Cancelled);
+        }
         let mut streamer = LineStreamer::new();
         let raw = host
             .generate(&mut |delta: &str| {
@@ -104,62 +171,94 @@ pub async fn run_turn(
             })
             .await?;
         streamer.finish(&mut |text| on_event(TurnEvent::Line(text.to_owned())));
-        // A reply that looked like a tool call but was not one is shown after all.
-        if registry.parse(&raw).is_some() {
-            streamer.discard_held();
-        } else {
-            streamer.release_held(&mut |text| on_event(TurnEvent::Line(text.to_owned())));
-        }
-        let trimmed = raw.trim();
-        if trimmed.is_empty() {
-            return Err(ChatFailureDto::Empty);
-        }
-        let trimmed = truncate_to_bytes(trimmed, MAX_REPLY_BYTES);
-        host.push_assistant(trimmed);
-        let calls = registry.parse_all(trimmed);
+        let reply = raw.trim();
+        let calls = registry.parse(reply, options.max_calls_per_reply);
+        // Held lines looked like a call; they are shown after all when the reply had none.
         if calls.is_empty() {
-            // A model that has been using tools may announce more work and then stop; ask it to
-            // go on instead of ending the task on a promise.
-            if worked && nudges < MAX_NUDGES && announces_more_work(trimmed) {
+            streamer.release_held(&mut |text| on_event(TurnEvent::Line(text.to_owned())));
+        } else {
+            streamer.discard_held();
+        }
+        if reply.is_empty() {
+            return Ok(TurnEnd::EmptyReply);
+        }
+        let kept = match options.max_answer_bytes {
+            Some(max) if calls.is_empty() => truncate_to_bytes(reply, max),
+            _ => reply,
+        };
+        host.push_assistant(kept);
+        if calls.is_empty() {
+            if let Some(nudge) = &options.nudge
+                && worked
+                && nudges < nudge.max
+                && (nudge.promises_more)(kept)
+            {
                 nudges += 1;
-                host.push_tool(
-                    "You said you would continue, but you made no tool call, so nothing happened. \
-                     Call the next tool now. Only if the whole task is complete, give the final \
-                     result.",
-                );
+                host.push_tool(&nudge.message);
                 continue;
             }
-            return Ok(TurnEnd::Answer(trimmed.to_owned()));
+            return Ok(TurnEnd::Answer(kept.to_owned()));
         }
         worked = true;
-        let total = calls.len();
-        for (index, call) in calls.into_iter().enumerate() {
-            if host.is_cancelled() {
-                return Ok(TurnEnd::Cancelled);
+        if let Some(end) = run_calls(host, ctx, options, calls, on_event).await {
+            return Ok(end);
+        }
+    }
+    Ok(TurnEnd::StepLimit)
+}
+
+/// Runs the calls of one reply: consecutive read-only calls together (bounded), the others alone,
+/// results recorded in call order. `Some` when the turn ends.
+async fn run_calls<H, I>(
+    host: &mut H,
+    ctx: &ToolContext<'_>,
+    options: &TurnOptions,
+    calls: Vec<ParsedCall<I>>,
+    on_event: &mut (dyn FnMut(TurnEvent) + Send),
+) -> Option<TurnEnd<I>>
+where
+    H: TurnHost,
+    I: Send + 'static,
+{
+    let total = calls.len();
+    let mut done = 0;
+    let mut calls = calls.into_iter().peekable();
+    while let Some(first) = calls.next() {
+        if host.is_cancelled() {
+            return Some(TurnEnd::Cancelled);
+        }
+        let mut batch = vec![first];
+        if batch[0].tool.effect() == ToolEffect::ReadOnly {
+            while let Some(next) = calls.next_if(|call| call.tool.effect() == ToolEffect::ReadOnly)
+            {
+                batch.push(next);
             }
-            match call.tool.run(ctx, call.args).await {
-                ToolOutcome::Output { step, text } => {
-                    on_event(TurnEvent::Step(step.clone()));
-                    steps.push(step);
-                    host.push_tool(&text);
-                }
-                outcome => {
-                    if index + 1 < total {
-                        host.push_tool(
-                            "The calls after this one were not run. Ask again for them if they \
-                             are still needed.",
-                        );
+        }
+        let outcomes: Vec<ToolOutcome<I>> = stream::iter(batch)
+            .map(|call| async move { call.tool.run(ctx, call.args).await })
+            .buffered(options.max_concurrent_calls.max(1))
+            .collect()
+            .await;
+        for outcome in outcomes {
+            done += 1;
+            match outcome {
+                ToolOutcome::Output(ToolOutput { step, text }) => {
+                    on_event(TurnEvent::Step(step));
+                    match options.filter_result {
+                        Some(filter) => host.push_tool(&filter(&text)),
+                        None => host.push_tool(&text),
                     }
-                    return Ok(match outcome {
-                        ToolOutcome::Proposal(proposal) => TurnEnd::Proposal(proposal),
-                        ToolOutcome::NeedsApproval(request) => TurnEnd::NeedsApproval(request),
-                        ToolOutcome::Output { .. } => unreachable!("handled above"),
-                    });
+                }
+                ToolOutcome::Interrupt(interrupt) => {
+                    if done < total {
+                        host.push_tool(&options.skipped_calls_message);
+                    }
+                    return Some(TurnEnd::Interrupted(interrupt));
                 }
             }
         }
     }
-    Ok(TurnEnd::StepLimit)
+    None
 }
 
 #[cfg(test)]

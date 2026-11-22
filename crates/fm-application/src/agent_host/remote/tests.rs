@@ -5,8 +5,8 @@ use fm_vfs::ProviderRegistry;
 use fm_vfs_local::LocalFileSystemProvider;
 
 use super::RemoteSandbox;
-use crate::terminal_assist::tools::FileCall;
-use crate::terminal_assist::tools::ToolOutput;
+use crate::agent_host::sandbox::FileCall;
+use crate::agent_host::sandbox::ToolOutput;
 
 /// The local provider stands in for any provider: the tools only use the provider interface.
 fn remote() -> (tempfile::TempDir, RemoteSandbox) {

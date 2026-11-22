@@ -12,7 +12,7 @@ use thiserror::Error;
 use tokio::io::AsyncWriteExt as _;
 use tokio_util::sync::CancellationToken;
 
-use super::tools::is_secret_name;
+use fm_agent::is_secret_name;
 use fm_agent::redact_secrets;
 
 /// The folder under the working folder where files are created.

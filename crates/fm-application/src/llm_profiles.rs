@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
+use fm_agent::ToolSpec;
 use fm_credentials::{CredentialRef, CredentialStore, SecretMaterial, StoreCredentialRequest};
 use fm_settings::{SettingsStore, VersionedDocument};
 use fm_transport_dto::{
@@ -403,21 +404,13 @@ pub struct LlmImageAttachment {
     pub data: Vec<u8>,
 }
 
-/// One tool offered to the model for native calling: a JSON Schema for its arguments.
-#[derive(Debug, Clone, PartialEq)]
-pub struct LlmToolSpec {
-    pub name: String,
-    pub description: String,
-    pub schema: Value,
-}
-
 /// Bounded host-owned generation request using a saved profile.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LlmChatGeneration {
     /// Tools the model may call natively (task 0339). Sent only to OpenAI-compatible endpoints
     /// whose model was found to take them (see [`ToolCallingProbe`]); a call comes back as a
     /// `TOOL {json}` line in the reply text, the same form the text protocol uses.
-    pub tools: Vec<LlmToolSpec>,
+    pub tools: Vec<ToolSpec>,
     /// Trusted system instruction.
     pub system_prompt: String,
     /// User-role evidence payload.
@@ -1976,9 +1969,9 @@ impl LlmProfileService {
             };
         }
         let probe = LlmChatGeneration {
-            tools: vec![LlmToolSpec {
-                name: "echo".to_owned(),
-                description: "Repeats the given text.".to_owned(),
+            tools: vec![ToolSpec {
+                name: "echo",
+                description: "Repeats the given text.",
                 schema: json!({
                     "type": "object",
                     "properties": {"text": {"type": "string"}},
@@ -2533,7 +2526,7 @@ fn openai_generation_body(
 }
 
 /// The `tools` list OpenAI-compatible endpoints and Ollama take.
-fn tool_definitions(tools: &[LlmToolSpec]) -> Value {
+fn tool_definitions(tools: &[ToolSpec]) -> Value {
     Value::Array(
         tools
             .iter()
@@ -2819,20 +2812,18 @@ const TOOL_PROBE_RETRY: Duration = Duration::from_secs(10 * 60);
 /// Most tool calls looked at in one streamed reply.
 const MAX_TOOL_CALLS_PER_REPLY: usize = 16;
 
-/// `TOOL {"tool":"<name>", ...arguments}`: a native tool call in the text protocol's form.
+/// A native tool call as a text-protocol line (`TOOL {"name":..,"arguments":{..}}`), so the agent
+/// loop reads native and text calls the same way. Arguments that are not a JSON object become a
+/// call without arguments: the tool then reports what is missing.
 fn tool_call_line(name: &str, arguments: &str) -> Option<String> {
     if name.is_empty() {
         return None;
     }
-    let mut object = match serde_json::from_str::<Value>(arguments.trim()) {
-        Ok(Value::Object(object)) => object,
-        _ if arguments.trim().is_empty() => serde_json::Map::new(),
-        // Arguments that are not a JSON object stay a call with no arguments: the tool then
-        // reports what is missing.
-        _ => serde_json::Map::new(),
+    let arguments = match serde_json::from_str::<Value>(arguments.trim()) {
+        Ok(Value::Object(object)) => Value::Object(object),
+        _ => Value::Object(serde_json::Map::new()),
     };
-    object.insert("tool".to_owned(), Value::String(name.to_owned()));
-    Some(format!("TOOL {}", Value::Object(object)))
+    Some(fm_agent::tool_call_line(name, &arguments))
 }
 
 fn parse_ollama_chat(bytes: &[u8]) -> Result<String, LlmProfileError> {
@@ -2844,23 +2835,28 @@ fn parse_ollama_chat(bytes: &[u8]) -> Result<String, LlmProfileError> {
         return Err(LlmProfileError::MalformedResponse);
     }
     let message = value.get("message");
-    // A native tool call comes back as the text protocol's `TOOL {json}` line (task 0339).
-    if let Some(line) = message
+    // Native tool calls come back as text-protocol lines, one per call (task 0339).
+    let lines: Vec<String> = message
         .and_then(|message| message.get("tool_calls"))
         .and_then(Value::as_array)
-        .and_then(|calls| {
-            calls.iter().find_map(|call| {
-                let function = call.get("function")?;
-                let name = function.get("name")?.as_str()?;
-                let arguments = function
-                    .get("arguments")
-                    .map(Value::to_string)
-                    .unwrap_or_default();
-                tool_call_line(name, &arguments)
-            })
+        .map(|calls| {
+            calls
+                .iter()
+                .take(MAX_TOOL_CALLS_PER_REPLY)
+                .filter_map(|call| {
+                    let function = call.get("function")?;
+                    let name = function.get("name")?.as_str()?;
+                    let arguments = function
+                        .get("arguments")
+                        .map(Value::to_string)
+                        .unwrap_or_default();
+                    tool_call_line(name, &arguments)
+                })
+                .collect()
         })
-    {
-        return Ok(line);
+        .unwrap_or_default();
+    if !lines.is_empty() {
+        return Ok(lines.join("\n"));
     }
     message
         .and_then(|message| message.get("content"))
@@ -3284,9 +3280,9 @@ mod tests {
         assert!(plain.get("tools").is_none());
 
         let with_tools = LlmChatGeneration {
-            tools: vec![LlmToolSpec {
-                name: "read_file".into(),
-                description: "reads a file".into(),
+            tools: vec![ToolSpec {
+                name: "read_file",
+                description: "reads a file",
                 schema: json!({"type": "object", "properties": {"path": {"type": "string"}}}),
             }],
             ..generation
@@ -3313,12 +3309,12 @@ mod tests {
         let text = parse_streaming_chat(stream.as_bytes()).unwrap();
         assert_eq!(
             text,
-            "Let me look.\nTOOL {\"path\":\"a.txt\",\"tool\":\"read_file\"}"
+            "Let me look.\nTOOL {\"name\":\"read_file\",\"arguments\":{\"path\":\"a.txt\"}}"
         );
         // Arguments that are not an object still name the tool, so it can say what is missing.
         assert_eq!(
             tool_call_line("list_dir", "not json").as_deref(),
-            Some("TOOL {\"tool\":\"list_dir\"}")
+            Some("TOOL {\"name\":\"list_dir\",\"arguments\":{}}")
         );
         assert_eq!(tool_call_line("", "{}"), None);
     }
@@ -3332,7 +3328,7 @@ mod tests {
         );
         assert_eq!(
             parse_streaming_chat(stream.as_bytes()).unwrap(),
-            "TOOL {\"tool\":\"list_dir\"}\nTOOL {\"pattern\":\"x\",\"tool\":\"grep\"}"
+            "TOOL {\"name\":\"list_dir\",\"arguments\":{}}\nTOOL {\"name\":\"grep\",\"arguments\":{\"pattern\":\"x\"}}"
         );
     }
 
@@ -3364,7 +3360,7 @@ mod tests {
         generate_failures: Mutex<std::collections::VecDeque<LlmProfileError>>,
         generate_calls: std::sync::atomic::AtomicUsize,
         /// The tools each generation carried.
-        generated_tools: Mutex<Vec<Vec<LlmToolSpec>>>,
+        generated_tools: Mutex<Vec<Vec<ToolSpec>>>,
         /// Whether a generation offered the `echo` probe tool is answered with a call to it.
         script_tool_call: std::sync::atomic::AtomicBool,
     }
@@ -4963,9 +4959,9 @@ mod tests {
 
     #[tokio::test]
     async fn tools_reach_the_endpoint_only_after_the_probe_found_the_model_takes_them() {
-        let tool = || LlmToolSpec {
-            name: "read_file".into(),
-            description: "reads".into(),
+        let tool = || ToolSpec {
+            name: "read_file",
+            description: "reads",
             schema: json!({"type": "object"}),
         };
         let (service, _, transport) = service(LlmHostPolicy::desktop());
@@ -5315,9 +5311,9 @@ mod tests {
             timeout: Duration::from_secs(30),
             reasoning_switch: ReasoningSwitch::Plain,
         };
-        let tool = LlmToolSpec {
-            name: "read_file".into(),
-            description: "reads".into(),
+        let tool = ToolSpec {
+            name: "read_file",
+            description: "reads",
             schema: json!({"type": "object"}),
         };
         let with_tools = ollama_generation_body(
@@ -5337,7 +5333,10 @@ mod tests {
             br#"{"done":true,"message":{"content":"","tool_calls":[{"function":{"name":"read_file","arguments":{"path":"a.txt"}}}]}}"#,
         )
         .unwrap();
-        assert_eq!(line, r#"TOOL {"path":"a.txt","tool":"read_file"}"#);
+        assert_eq!(
+            line,
+            r#"TOOL {"name":"read_file","arguments":{"path":"a.txt"}}"#
+        );
     }
 
     #[test]

@@ -5,8 +5,8 @@ use fm_vfs::ProviderRegistry;
 use fm_vfs_local::LocalFileSystemProvider;
 
 use super::{Documents, is_document, window};
-use crate::terminal_assist::tools::FileCall;
-use crate::terminal_assist::tools::{MAX_READ_BYTES, ToolHost};
+use crate::agent_host::sandbox::FileCall;
+use crate::agent_host::sandbox::{MAX_READ_BYTES, ToolHost};
 
 fn registry() -> ProviderRegistry {
     let mut providers = ProviderRegistry::new();
@@ -161,11 +161,10 @@ async fn plain_files_and_missing_documents_are_handled_apart() {
 }
 
 #[tokio::test]
-async fn a_document_inside_a_skill_folder_is_read_as_text_and_the_folder_stays_closed() {
+async fn a_document_inside_a_skill_folder_is_read_as_text() {
     use fm_agent::SkillDocuments as _;
 
     let outer = tempfile::tempdir().unwrap();
-    std::fs::write(outer.path().join("secret.epub"), epub(3)).unwrap();
     let skill = outer.path().join("skill");
     std::fs::create_dir(&skill).unwrap();
     std::fs::write(skill.join("guide.epub"), epub(3)).unwrap();
@@ -173,17 +172,12 @@ async fn a_document_inside_a_skill_folder_is_read_as_text_and_the_folder_stays_c
     let documents = super::SkillFolderDocuments::new(&registry());
 
     let text = documents
-        .read(&skill, "guide.epub", 0)
+        .read(&skill.join("guide.epub"), 0)
         .await
         .expect("a document")
         .unwrap();
     assert!(text.contains("Paragraph number 0000"), "{text}");
-    // Plain files are the skill reader's business, and the folder cannot be left.
-    assert!(documents.read(&skill, "notes.txt", 0).await.is_none());
-    let escaped = documents
-        .read(&skill, "../secret.epub", 0)
-        .await
-        .expect("a document")
-        .unwrap_err();
-    assert!(escaped.starts_with("Error:"), "{escaped}");
+    // Plain files are the skill reader's business. (The path itself was checked by the harness;
+    // fm-agent's tests cover that a path outside the skill never reaches the converter.)
+    assert!(documents.read(&skill.join("notes.txt"), 0).await.is_none());
 }

@@ -16,10 +16,14 @@ impl LineStreamer {
 
     /// Adds streamed text; each line it completes is passed to `emit`.
     pub(crate) fn push(&mut self, delta: &str, emit: &mut dyn FnMut(&str)) {
+        // Only the new text can hold a line break: a long line is not scanned again per delta.
+        let mut scan_from = self.line.len();
         self.line.push_str(delta);
-        while let Some(end) = self.line.find('\n') {
+        while let Some(found) = self.line[scan_from..].find('\n') {
+            let end = scan_from + found;
             let line: String = self.line.drain(..=end).collect();
             self.handle(line.trim_end_matches(['\n', '\r']), emit);
+            scan_from = 0;
         }
     }
 

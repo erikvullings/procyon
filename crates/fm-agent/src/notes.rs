@@ -1,12 +1,11 @@
-//! The assistant's notes tools (task 0337), behind an interface the notes capability implements.
-//! Searching and reading run without approval and stay inside the notes folder, also for an SSH
-//! terminal. A proposed note ends the turn: the person reviews it and nothing is written before
-//! they save it.
+//! The notes tools, behind an interface the host's notes store implements. Searching and reading
+//! run without approval and stay inside the notes folder. A proposed note stops the turn: the
+//! person reviews it, and nothing is written before they save it.
 
 use async_trait::async_trait;
-use fm_transport_dto::NoteProposalDto;
 
 use crate::skills::NoteSkill;
+use crate::tool::ToolOutcome;
 
 /// One notes tool the model asked for.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,27 +33,30 @@ pub enum NoteToolCall {
     },
 }
 
-/// What a notes tool produced.
+/// A note waiting for the person's review.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum NoteToolOutcome {
-    /// A line for the person and the text for the model.
-    Output {
-        /// A line for the person.
-        step: String,
-        /// The text for the model.
-        text: String,
-    },
-    /// A note waiting for the person's review.
-    Proposal(NoteProposalDto),
+pub struct NoteProposal {
+    /// The existing note to replace, inside the notes folder; `None` for a new note.
+    pub path: Option<String>,
+    /// The note's title.
+    pub title: String,
+    /// Suggested file name inside the notes folder.
+    pub file_name: String,
+    /// Front-matter tags.
+    pub tags: Vec<String>,
+    /// The complete Markdown file, front matter included.
+    pub content: String,
+    /// How many values were replaced by a redaction mark; the person should check them.
+    pub redactions: u32,
 }
 
-/// The notes folder as the assistant may use it.
+/// The notes folder as the agent may use it.
 #[async_trait]
 pub trait NotesAccess: Send + Sync {
-    /// Runs one notes tool.
-    async fn run(&self, call: NoteToolCall) -> NoteToolOutcome;
+    /// Runs one notes tool. A proposal is the interrupt.
+    async fn run(&self, call: NoteToolCall) -> ToolOutcome<NoteProposal>;
 
-    /// The notes that best match `query`, as skills (task 0339). None without notes.
+    /// The notes that best match `query`, offered as skills. None by default.
     async fn skills(&self, _query: &str) -> Vec<NoteSkill> {
         Vec::new()
     }

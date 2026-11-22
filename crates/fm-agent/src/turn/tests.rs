@@ -1,11 +1,19 @@
 use std::collections::VecDeque;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 
+use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_json::json;
 
 use super::*;
 use crate::{SkillCatalogue, Typed, TypedTool};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Failure;
+
+/// A model that replies from a script; it can also answer as if the endpoint called tools
+/// natively (the host writes native calls back as `TOOL {"name":..,"arguments":..}` lines).
 struct Scripted {
     replies: VecDeque<String>,
     log: Vec<String>,
@@ -20,18 +28,24 @@ impl Scripted {
             cancelled: false,
         }
     }
+
+    fn results(&self) -> Vec<&str> {
+        self.log
+            .iter()
+            .filter_map(|entry| entry.strip_prefix("tool: "))
+            .collect()
+    }
 }
 
 #[async_trait]
 impl TurnHost for Scripted {
+    type Error = Failure;
+
     async fn generate(
         &mut self,
         on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
-    ) -> Result<String, ChatFailureDto> {
-        let reply = self
-            .replies
-            .pop_front()
-            .unwrap_or_else(|| "again".to_owned());
+    ) -> Result<String, Failure> {
+        let reply = self.replies.pop_front().ok_or(Failure)?;
         for piece in reply.as_bytes().chunks(4) {
             on_delta(std::str::from_utf8(piece).unwrap_or(""));
         }
@@ -51,15 +65,20 @@ impl TurnHost for Scripted {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct Word {
+    /// The word.
     word: String,
 }
 
-struct Shout;
+/// A read-only tool that takes a while, counting how many runs overlap.
+struct Shout {
+    running: Arc<AtomicUsize>,
+    most: Arc<AtomicUsize>,
+}
 
 #[async_trait]
-impl TypedTool for Shout {
+impl TypedTool<Approval> for Shout {
     type Args = Word;
 
     fn name(&self) -> &'static str {
@@ -67,55 +86,181 @@ impl TypedTool for Shout {
     }
 
     fn description(&self) -> &'static str {
-        "shouts."
+        "Shouts."
     }
 
-    fn input_schema(&self) -> serde_json::Value {
-        json!({"type": "object", "properties": {"word": {"type": "string"}}, "required": ["word"]})
+    fn effect(&self) -> ToolEffect {
+        ToolEffect::ReadOnly
     }
 
-    async fn run_typed(&self, _ctx: &ToolContext<'_>, args: Word) -> ToolOutcome {
+    async fn run_typed(&self, _ctx: &ToolContext<'_>, args: Word) -> ToolOutcome<Approval> {
+        let now = self.running.fetch_add(1, Ordering::SeqCst) + 1;
+        self.most.fetch_max(now, Ordering::SeqCst);
+        // Later words finish first, so an unordered collector would scramble the results.
+        let delay = 30u64.saturating_sub(args.word.len() as u64 * 10);
+        tokio::time::sleep(Duration::from_millis(delay)).await;
+        self.running.fetch_sub(1, Ordering::SeqCst);
         ToolOutcome::output("Shouted", args.word.to_uppercase())
     }
 }
 
-async fn turn(
-    host: &mut Scripted,
-) -> (Result<TurnEnd, ChatFailureDto>, Vec<String>, Vec<TurnEvent>) {
-    let mut registry = ToolRegistry::default();
-    registry.register(Typed(Shout));
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Approval(String);
+
+/// A tool that stops the turn for the person.
+struct Ask;
+
+#[async_trait]
+impl TypedTool<Approval> for Ask {
+    type Args = Word;
+
+    fn name(&self) -> &'static str {
+        "ask"
+    }
+
+    fn description(&self) -> &'static str {
+        "Asks the person."
+    }
+
+    async fn run_typed(&self, _ctx: &ToolContext<'_>, args: Word) -> ToolOutcome<Approval> {
+        ToolOutcome::Interrupt(Approval(args.word))
+    }
+}
+
+struct Harness {
+    registry: ToolRegistry<Approval>,
+    most_concurrent: Arc<AtomicUsize>,
+}
+
+fn harness() -> Harness {
+    let most = Arc::new(AtomicUsize::new(0));
+    let mut registry = ToolRegistry::new();
+    registry
+        .register(Typed(Shout {
+            running: Arc::new(AtomicUsize::new(0)),
+            most: Arc::clone(&most),
+        }))
+        .register(Typed(Ask));
+    Harness {
+        registry,
+        most_concurrent: most,
+    }
+}
+
+struct Run {
+    end: Result<TurnEnd<Approval>, Failure>,
+    steps: Vec<String>,
+    events: Vec<TurnEvent>,
+}
+
+async fn turn_with(host: &mut Scripted, harness: &Harness, options: &TurnOptions) -> Run {
     let skills = SkillCatalogue::default();
-    let ctx = ToolContext {
-        skills: &skills,
-        notes: None,
-        files: None,
-        documents: None,
-    };
-    let mut steps = Vec::new();
+    let ctx = ToolContext::new(&skills);
     let mut events = Vec::new();
-    let end = run_turn(host, &registry, &ctx, &mut steps, &mut |event| {
+    let end = run_turn(host, &harness.registry, &ctx, options, &mut |event| {
         events.push(event)
     })
     .await;
-    (end, steps, events)
+    let steps = events
+        .iter()
+        .filter_map(|event| match event {
+            TurnEvent::Step(step) => Some(step.clone()),
+            TurnEvent::Line(_) => None,
+        })
+        .collect();
+    Run { end, steps, events }
+}
+
+async fn turn(host: &mut Scripted) -> Run {
+    turn_with(host, &harness(), &TurnOptions::default()).await
 }
 
 #[tokio::test]
 async fn a_tool_result_goes_back_to_the_model_until_it_answers() {
     let mut host = Scripted::new(&[r#"TOOL {"tool":"shout","word":"hi"}"#, "Done.\nBye."]);
-    let (end, steps, events) = turn(&mut host).await;
+    let run = turn(&mut host).await;
 
-    assert_eq!(end, Ok(TurnEnd::Answer("Done.\nBye.".into())));
-    assert_eq!(steps, ["Shouted"]);
+    assert_eq!(run.end, Ok(TurnEnd::Answer("Done.\nBye.".into())));
     assert_eq!(
-        events,
+        run.events,
         [
             TurnEvent::Step("Shouted".into()),
             TurnEvent::Line("Done.".into()),
             TurnEvent::Line("Bye.".into()),
         ]
     );
-    assert!(host.log.contains(&"tool: HI".to_owned()));
+    assert_eq!(host.results(), ["HI"]);
+}
+
+#[tokio::test]
+async fn a_native_call_written_back_as_a_line_runs_the_same_tool() {
+    let line = crate::tool_call_line("shout", &serde_json::json!({"word": "hey"}));
+    let mut host = Scripted::new(&[line.as_str(), "Done."]);
+    let run = turn(&mut host).await;
+    assert_eq!(run.end, Ok(TurnEnd::Answer("Done.".into())));
+    assert_eq!(host.results(), ["HEY"]);
+}
+
+#[tokio::test]
+async fn read_only_calls_of_one_reply_run_together_and_report_in_call_order() {
+    let harness = harness();
+    let mut host = Scripted::new(&[
+        "TOOL {\"tool\":\"shout\",\"word\":\"a\"}\nTOOL {\"tool\":\"shout\",\"word\":\"bb\"}\n\
+         TOOL {\"tool\":\"shout\",\"word\":\"ccc\"}",
+        "Done.",
+    ]);
+    let run = turn_with(&mut host, &harness, &TurnOptions::default()).await;
+
+    assert_eq!(run.end, Ok(TurnEnd::Answer("Done.".into())));
+    assert_eq!(host.results(), ["A", "BB", "CCC"]);
+    assert_eq!(run.steps.len(), 3);
+    assert!(harness.most_concurrent.load(Ordering::SeqCst) > 1);
+}
+
+#[tokio::test]
+async fn the_concurrency_limit_is_kept() {
+    let harness = harness();
+    let calls = (0..6)
+        .map(|n| {
+            format!(
+                "TOOL {{\"tool\":\"shout\",\"word\":\"{}\"}}",
+                "x".repeat(n % 3 + 1)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut host = Scripted::new(&[calls.as_str(), "Done."]);
+    let options = TurnOptions {
+        max_concurrent_calls: 2,
+        ..TurnOptions::default()
+    };
+    turn_with(&mut host, &harness, &options).await;
+    assert_eq!(harness.most_concurrent.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn an_interrupt_ends_the_turn_and_says_later_calls_did_not_run() {
+    let mut host = Scripted::new(&[
+        "TOOL {\"tool\":\"shout\",\"word\":\"a\"}\nTOOL {\"tool\":\"ask\",\"word\":\"ok?\"}\n\
+         TOOL {\"tool\":\"shout\",\"word\":\"b\"}",
+    ]);
+    let run = turn(&mut host).await;
+    assert_eq!(run.end, Ok(TurnEnd::Interrupted(Approval("ok?".into()))));
+    let results = host.results();
+    assert_eq!(results[0], "A");
+    assert!(results[1].contains("were not run"));
+    assert_eq!(results.len(), 2);
+}
+
+#[tokio::test]
+async fn the_result_filter_sees_every_tool_result() {
+    let mut host = Scripted::new(&[r#"TOOL {"tool":"shout","word":"secret"}"#, "ok"]);
+    let options = TurnOptions {
+        filter_result: Some(|text| text.replace("SECRET", "[redacted]")),
+        ..TurnOptions::default()
+    };
+    turn_with(&mut host, &harness(), &options).await;
+    assert_eq!(host.results(), ["[redacted]"]);
 }
 
 #[tokio::test]
@@ -126,22 +271,24 @@ async fn a_promise_of_more_work_without_a_call_is_sent_back_to_the_model() {
         r#"TOOL {"tool":"shout","word":"b"}"#,
         "All done.",
     ]);
-    let (end, steps, _) = turn(&mut host).await;
+    let run = turn(&mut host).await;
 
-    assert_eq!(end, Ok(TurnEnd::Answer("All done.".into())));
-    assert_eq!(steps, ["Shouted", "Shouted"]);
+    assert_eq!(run.end, Ok(TurnEnd::Answer("All done.".into())));
+    assert_eq!(run.steps, ["Shouted", "Shouted"]);
     assert!(
-        host.log
+        host.results()
             .iter()
-            .any(|entry| entry.contains("made no tool call"))
+            .any(|text| text.contains("made no tool call"))
     );
 }
 
 #[tokio::test]
 async fn a_promise_before_any_tool_use_or_forever_is_not_nudged_endlessly() {
-    let mut host = Scripted::new(&["I will continue later."]);
-    let (end, _, _) = turn(&mut host).await;
-    assert_eq!(end, Ok(TurnEnd::Answer("I will continue later.".into())));
+    let run = turn(&mut Scripted::new(&["I will continue later."])).await;
+    assert_eq!(
+        run.end,
+        Ok(TurnEnd::Answer("I will continue later.".into()))
+    );
 
     let mut host = Scripted::new(&[
         r#"TOOL {"tool":"shout","word":"a"}"#,
@@ -150,32 +297,25 @@ async fn a_promise_before_any_tool_use_or_forever_is_not_nudged_endlessly() {
         "I will continue.",
         "I will continue.",
     ]);
-    let (end, _, _) = turn(&mut host).await;
-    assert_eq!(end, Ok(TurnEnd::Answer("I will continue.".into())));
+    let run = turn(&mut host).await;
+    assert_eq!(run.end, Ok(TurnEnd::Answer("I will continue.".into())));
     let nudges = host
-        .log
+        .results()
         .iter()
-        .filter(|entry| entry.contains("made no tool call"))
+        .filter(|text| text.contains("made no tool call"))
         .count();
     assert_eq!(nudges, 3);
 }
 
 #[tokio::test]
-async fn several_calls_in_one_reply_all_run_in_order_before_the_model_is_asked_again() {
-    let mut host = Scripted::new(&[
-        "TOOL {\"tool\":\"shout\",\"word\":\"a\"}\nTOOL {\"tool\":\"shout\",\"word\":\"b\"}",
-        "Done.",
-    ]);
-    let (end, steps, _) = turn(&mut host).await;
-
-    assert_eq!(end, Ok(TurnEnd::Answer("Done.".into())));
-    assert_eq!(steps, ["Shouted", "Shouted"]);
-    let results: Vec<&String> = host
-        .log
-        .iter()
-        .filter(|entry| entry.starts_with("tool:"))
-        .collect();
-    assert_eq!(results, ["tool: A", "tool: B"]);
+async fn without_a_nudge_a_promise_is_the_answer() {
+    let mut host = Scripted::new(&[r#"TOOL {"tool":"shout","word":"a"}"#, "I will continue."]);
+    let options = TurnOptions {
+        nudge: None,
+        ..TurnOptions::default()
+    };
+    let run = turn_with(&mut host, &harness(), &options).await;
+    assert_eq!(run.end, Ok(TurnEnd::Answer("I will continue.".into())));
 }
 
 #[tokio::test]
@@ -184,49 +324,85 @@ async fn tool_call_lines_are_not_streamed_to_the_person() {
         "Let me look.\nTOOL {\"tool\":\"shout\",\"word\":\"x\"}",
         "ok",
     ]);
-    let (_, _, events) = turn(&mut host).await;
+    let run = turn(&mut host).await;
     assert!(
-        events
+        run.events
             .iter()
             .all(|event| !matches!(event, TurnEvent::Line(line) if line.contains("TOOL")))
     );
+    assert!(run.events.contains(&TurnEvent::Line("Let me look.".into())));
+}
+
+#[tokio::test]
+async fn a_held_line_that_was_no_call_is_shown_after_all() {
+    let mut host = Scripted::new(&["{\"name\": \"Ada\", \"age\": 36} is the record."]);
+    let run = turn(&mut host).await;
+    assert!(run.events.contains(&TurnEvent::Line(
+        "{\"name\": \"Ada\", \"age\": 36} is the record.".into()
+    )));
 }
 
 #[tokio::test]
 async fn bad_arguments_are_an_error_for_the_model_not_the_end() {
     let mut host = Scripted::new(&[r#"TOOL {"tool":"shout"}"#, "Sorry."]);
-    let (end, _, _) = turn(&mut host).await;
-    assert_eq!(end, Ok(TurnEnd::Answer("Sorry.".into())));
+    let run = turn(&mut host).await;
+    assert_eq!(run.end, Ok(TurnEnd::Answer("Sorry.".into())));
     assert!(
-        host.log
+        host.results()
             .iter()
-            .any(|entry| entry.contains("invalid arguments for shout"))
+            .any(|text| text.contains("invalid arguments for shout") && text.contains("word"))
     );
 }
 
 #[tokio::test]
 async fn a_turn_stops_after_the_step_limit() {
-    let calls = vec![r#"TOOL {"tool":"shout","word":"a"}"#; MAX_STEPS + 5];
+    let options = TurnOptions::default();
+    let calls = vec![r#"TOOL {"tool":"shout","word":"a"}"#; options.max_steps + 5];
     let mut host = Scripted::new(&calls);
-    let (end, steps, _) = turn(&mut host).await;
-    assert_eq!(end, Ok(TurnEnd::StepLimit));
-    assert_eq!(steps.len(), MAX_STEPS);
+    let run = turn_with(&mut host, &harness(), &options).await;
+    assert_eq!(run.end, Ok(TurnEnd::StepLimit));
+    assert_eq!(run.steps.len(), options.max_steps);
 }
 
 #[tokio::test]
-async fn cancelling_stops_before_the_tool_runs() {
+async fn cancelling_stops_before_the_model_is_asked() {
     let mut host = Scripted::new(&[r#"TOOL {"tool":"shout","word":"a"}"#]);
     host.cancelled = true;
-    let (end, steps, _) = turn(&mut host).await;
-    assert_eq!(end, Ok(TurnEnd::Cancelled));
-    assert!(steps.is_empty());
+    let run = turn(&mut host).await;
+    assert_eq!(run.end, Ok(TurnEnd::Cancelled));
+    assert!(run.steps.is_empty());
+    assert_eq!(host.replies.len(), 1);
 }
 
 #[tokio::test]
-async fn an_empty_reply_fails_and_a_long_answer_is_cut() {
-    let (end, _, _) = turn(&mut Scripted::new(&["  \n"])).await;
-    assert_eq!(end, Err(ChatFailureDto::Empty));
-    let long = "a".repeat(MAX_REPLY_BYTES * 2);
-    let (end, _, _) = turn(&mut Scripted::new(&[long.as_str()])).await;
-    assert_eq!(end, Ok(TurnEnd::Answer("a".repeat(MAX_REPLY_BYTES))));
+async fn an_empty_reply_and_a_host_error_end_the_turn() {
+    let run = turn(&mut Scripted::new(&["  \n"])).await;
+    assert_eq!(run.end, Ok(TurnEnd::EmptyReply));
+    let run = turn(&mut Scripted::new(&[])).await;
+    assert_eq!(run.end, Err(Failure));
+}
+
+#[tokio::test]
+async fn a_long_answer_is_kept_whole_unless_the_host_caps_it() {
+    let long = "a".repeat(64 * 1024);
+    let run = turn(&mut Scripted::new(&[long.as_str()])).await;
+    assert_eq!(run.end, Ok(TurnEnd::Answer(long.clone())));
+
+    let options = TurnOptions {
+        max_answer_bytes: Some(1024),
+        ..TurnOptions::default()
+    };
+    let run = turn_with(&mut Scripted::new(&[long.as_str()]), &harness(), &options).await;
+    assert_eq!(run.end, Ok(TurnEnd::Answer("a".repeat(1024))));
+}
+
+#[test]
+fn a_promise_is_found_only_at_the_end_of_a_reply() {
+    assert!(announces_more_work(
+        "Read one. I’ll continue with the next."
+    ));
+    assert!(!announces_more_work(&format!(
+        "I will continue. {}",
+        "x".repeat(400)
+    )));
 }

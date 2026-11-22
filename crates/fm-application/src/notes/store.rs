@@ -12,7 +12,7 @@ use thiserror::Error;
 use tokio::io::AsyncReadExt as _;
 use tokio_util::sync::CancellationToken;
 
-use crate::terminal_assist::{is_credential_folder, is_secret_name};
+use fm_agent::{is_credential_folder, is_secret_name};
 
 /// Largest note read, in bytes; the editor's limit.
 pub(crate) const MAX_NOTE_BYTES: u64 = crate::file_editor::MAX_EDITABLE_FILE_BYTES;

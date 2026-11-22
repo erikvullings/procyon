@@ -1,59 +1,61 @@
-//! The tools shared by the agents (task 0339): looking at files, the notes, and the person's
-//! terminal. Each is one definition: its name, what it does for the prompt, its arguments, and
-//! its run. File and notes access come through the [`ToolContext`], so each host decides what a
-//! path means and what is allowed.
+//! The built-in tools: looking at files, the notes, and asking the person to run a command. File
+//! and notes access come through the [`ToolContext`], so each host decides what a path means and
+//! what is allowed.
 
 use async_trait::async_trait;
+use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_json::{Value, json};
 
-use super::{ApprovalRequest, ToolContext, ToolOutcome, TypedTool};
-use crate::notes::{NoteToolCall, NoteToolOutcome};
+use crate::notes::{NoteProposal, NoteToolCall};
+use crate::tool::{ToolContext, ToolEffect, ToolOutcome, TypedTool};
 
-fn unavailable(step: &str, what: &str) -> ToolOutcome {
-    ToolOutcome::output(step, format!("Error: {what} are not available here."))
+fn unavailable<I>(step: &str, what: &str) -> ToolOutcome<I> {
+    ToolOutcome::error(step, format!("{what} are not available here."))
 }
 
-fn blank(step: &str, what: &str) -> ToolOutcome {
-    ToolOutcome::output(step, format!("Error: {what} must not be empty."))
+fn blank<I>(step: &str, what: &str) -> ToolOutcome<I> {
+    ToolOutcome::error(step, format!("{what} must not be empty."))
 }
 
-#[derive(Debug, Deserialize)]
-pub(crate) struct PathArgs {
+#[derive(Debug, Deserialize, JsonSchema)]
+pub(crate) struct ListDirArgs {
+    /// Folder relative to the working folder; `.` for the working folder itself.
     path: String,
 }
 
 pub(crate) struct ListDir;
 
 #[async_trait]
-impl TypedTool for ListDir {
-    type Args = PathArgs;
+impl<I: Send + 'static> TypedTool<I> for ListDir {
+    type Args = ListDirArgs;
 
     fn name(&self) -> &'static str {
         "list_dir"
     }
 
     fn description(&self) -> &'static str {
-        "lists a folder. Paths are relative to the working folder and cannot leave it."
+        "Lists a folder. Paths are relative to the working folder and cannot leave it."
     }
 
-    fn input_schema(&self) -> Value {
-        json!({"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]})
+    fn effect(&self) -> ToolEffect {
+        ToolEffect::ReadOnly
     }
 
-    async fn run_typed(&self, ctx: &ToolContext<'_>, args: PathArgs) -> ToolOutcome {
+    async fn run_typed(&self, ctx: &ToolContext<'_>, args: ListDirArgs) -> ToolOutcome<I> {
+        const STEP: &str = "Listed a folder";
         if args.path.trim().is_empty() {
-            return blank("Listed a folder", "path");
+            return blank(STEP, "path");
         }
         match ctx.files {
-            Some(files) => files.list_dir(&args.path).await,
-            None => unavailable("Looked up a file", "file tools"),
+            Some(files) => files.list_dir(&args.path).await.into(),
+            None => unavailable(STEP, "file tools"),
         }
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct ReadFileArgs {
+    /// File relative to the working folder.
     path: String,
     /// Byte offset to continue a file that an earlier read cut off.
     offset: Option<usize>,
@@ -62,7 +64,7 @@ pub(crate) struct ReadFileArgs {
 pub(crate) struct ReadFile;
 
 #[async_trait]
-impl TypedTool for ReadFile {
+impl<I: Send + 'static> TypedTool<I> for ReadFile {
     type Args = ReadFileArgs;
 
     fn name(&self) -> &'static str {
@@ -70,39 +72,41 @@ impl TypedTool for ReadFile {
     }
 
     fn description(&self) -> &'static str {
-        "reads a text file, or the text of an EPUB, Word, PDF, PowerPoint or Excel document. A \
-         long file is cut off with a note: continue with the offset it names."
+        "Reads a text file, or the text of a document the host can convert. A long file is cut \
+         off with a note: continue with the offset it names."
     }
 
-    fn input_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {"path": {"type": "string"}, "offset": {"type": "integer"}},
-            "required": ["path"],
-        })
+    fn effect(&self) -> ToolEffect {
+        ToolEffect::ReadOnly
     }
 
-    async fn run_typed(&self, ctx: &ToolContext<'_>, args: ReadFileArgs) -> ToolOutcome {
+    async fn run_typed(&self, ctx: &ToolContext<'_>, args: ReadFileArgs) -> ToolOutcome<I> {
+        const STEP: &str = "Read a file";
         if args.path.trim().is_empty() {
-            return blank("Read a file", "path");
+            return blank(STEP, "path");
         }
         match ctx.files {
-            Some(files) => files.read_file(&args.path, args.offset.unwrap_or(0)).await,
-            None => unavailable("Looked up a file", "file tools"),
+            Some(files) => files
+                .read_file(&args.path, args.offset.unwrap_or(0))
+                .await
+                .into(),
+            None => unavailable(STEP, "file tools"),
         }
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct GrepArgs {
+    /// The text to find (not a regular expression).
     pattern: String,
+    /// Folder or file to search, relative to the working folder; the working folder when left out.
     path: Option<String>,
 }
 
 pub(crate) struct Grep;
 
 #[async_trait]
-impl TypedTool for Grep {
+impl<I: Send + 'static> TypedTool<I> for Grep {
     type Args = GrepArgs;
 
     fn name(&self) -> &'static str {
@@ -110,38 +114,43 @@ impl TypedTool for Grep {
     }
 
     fn description(&self) -> &'static str {
-        "finds lines containing text, in a folder or file (path defaults to the working folder)."
+        "Finds lines containing text, in a folder or a file."
     }
 
-    fn input_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {"pattern": {"type": "string"}, "path": {"type": "string"}},
-            "required": ["pattern"],
-        })
+    fn effect(&self) -> ToolEffect {
+        ToolEffect::ReadOnly
     }
 
-    async fn run_typed(&self, ctx: &ToolContext<'_>, args: GrepArgs) -> ToolOutcome {
+    async fn run_typed(&self, ctx: &ToolContext<'_>, args: GrepArgs) -> ToolOutcome<I> {
+        const STEP: &str = "Searched files";
         if args.pattern.is_empty() {
-            return blank("Searched files", "pattern");
+            return blank(STEP, "pattern");
         }
         match ctx.files {
-            Some(files) => files.grep(&args.pattern, args.path.as_deref()).await,
-            None => unavailable("Looked up a file", "file tools"),
+            Some(files) => files.grep(&args.pattern, args.path.as_deref()).await.into(),
+            None => unavailable(STEP, "file tools"),
         }
     }
 }
 
-#[derive(Debug, Deserialize)]
+/// A command the model wants the person to run: the interrupt of `run_command`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandRequest {
+    /// The one line to run, trimmed.
+    pub command: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct RunCommandArgs {
+    /// One shell command line.
     command: String,
 }
 
-/// Asks the person to run one command; the loop does the asking.
+/// Asks the person to run one command; the host does the asking.
 pub(crate) struct RunCommand;
 
 #[async_trait]
-impl TypedTool for RunCommand {
+impl<I: From<CommandRequest> + Send + 'static> TypedTool<I> for RunCommand {
     type Args = RunCommandArgs;
 
     fn name(&self) -> &'static str {
@@ -149,49 +158,48 @@ impl TypedTool for RunCommand {
     }
 
     fn description(&self) -> &'static str {
-        "asks the person to run a command in their terminal. They may decline, and the result \
+        "Asks the person to run a command in their terminal. They may decline, and the result \
          returns with its exit status and output."
     }
 
-    fn input_schema(&self) -> Value {
-        json!({"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]})
-    }
-
-    async fn run_typed(&self, _ctx: &ToolContext<'_>, args: RunCommandArgs) -> ToolOutcome {
+    async fn run_typed(&self, _ctx: &ToolContext<'_>, args: RunCommandArgs) -> ToolOutcome<I> {
         // One approval must run exactly one line: a newline or control byte would run more.
         if args.command.trim().is_empty() || args.command.chars().any(char::is_control) {
-            return ToolOutcome::output(
+            return ToolOutcome::error(
                 "Run command",
-                "Error: the command must be one non-empty line without control characters.",
+                "the command must be one non-empty line without control characters.",
             );
         }
-        ToolOutcome::NeedsApproval(ApprovalRequest::RunCommand {
+        ToolOutcome::Interrupt(I::from(CommandRequest {
             command: args.command.trim().to_owned(),
-        })
+        }))
     }
 }
 
 /// Runs a notes call through the notes capability, or explains that there is none.
-async fn notes(ctx: &ToolContext<'_>, step: &str, call: NoteToolCall) -> ToolOutcome {
-    let Some(notes) = ctx.notes else {
-        return ToolOutcome::output(step, "Error: notes are not available here.");
-    };
-    match notes.run(call).await {
-        NoteToolOutcome::Output { step, text } => ToolOutcome::Output { step, text },
-        NoteToolOutcome::Proposal(proposal) => ToolOutcome::Proposal(proposal),
+async fn notes<I: From<NoteProposal>>(
+    ctx: &ToolContext<'_>,
+    step: &str,
+    call: NoteToolCall,
+) -> ToolOutcome<I> {
+    match ctx.notes {
+        Some(notes) => notes.run(call).await.map_interrupt(I::from),
+        None => unavailable(step, "notes"),
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct SearchNotesArgs {
+    /// What to look for, in a few words.
     query: String,
+    /// Most notes wanted.
     limit: Option<u32>,
 }
 
 pub(crate) struct SearchNotes;
 
 #[async_trait]
-impl TypedTool for SearchNotes {
+impl<I: From<NoteProposal> + Send + 'static> TypedTool<I> for SearchNotes {
     type Args = SearchNotesArgs;
 
     fn name(&self) -> &'static str {
@@ -199,66 +207,72 @@ impl TypedTool for SearchNotes {
     }
 
     fn description(&self) -> &'static str {
-        "searches the person's notes (runbooks for tasks they do rarely). Search them before \
+        "Searches the person's notes (runbooks for tasks they do rarely). Search them before \
          answering a how-to question."
     }
 
-    fn input_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}},
-            "required": ["query"],
-        })
+    fn effect(&self) -> ToolEffect {
+        ToolEffect::ReadOnly
     }
 
-    async fn run_typed(&self, ctx: &ToolContext<'_>, args: SearchNotesArgs) -> ToolOutcome {
+    async fn run_typed(&self, ctx: &ToolContext<'_>, args: SearchNotesArgs) -> ToolOutcome<I> {
+        const STEP: &str = "Looked in the notes";
         if args.query.trim().is_empty() {
-            return blank("Looked in the notes", "query");
+            return blank(STEP, "query");
         }
         let call = NoteToolCall::Search {
             query: args.query,
             limit: args.limit,
         };
-        notes(ctx, "Looked in the notes", call).await
+        notes(ctx, STEP, call).await
     }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub(crate) struct ReadNoteArgs {
+    /// The note's path, as search_notes gave it.
+    path: String,
 }
 
 pub(crate) struct ReadNote;
 
 #[async_trait]
-impl TypedTool for ReadNote {
-    type Args = PathArgs;
+impl<I: From<NoteProposal> + Send + 'static> TypedTool<I> for ReadNote {
+    type Args = ReadNoteArgs;
 
     fn name(&self) -> &'static str {
         "read_note"
     }
 
     fn description(&self) -> &'static str {
-        "reads one note by the path search_notes gave."
+        "Reads one note by the path search_notes gave."
     }
 
-    fn input_schema(&self) -> Value {
-        json!({"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]})
+    fn effect(&self) -> ToolEffect {
+        ToolEffect::ReadOnly
     }
 
-    async fn run_typed(&self, ctx: &ToolContext<'_>, args: PathArgs) -> ToolOutcome {
+    async fn run_typed(&self, ctx: &ToolContext<'_>, args: ReadNoteArgs) -> ToolOutcome<I> {
+        const STEP: &str = "Read a note";
         if args.path.trim().is_empty() {
-            return blank("Read a note", "path");
+            return blank(STEP, "path");
         }
-        notes(ctx, "Read a note", NoteToolCall::Read { path: args.path }).await
+        notes(ctx, STEP, NoteToolCall::Read { path: args.path }).await
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct ProposeNoteArgs {
+    /// The note's title.
     title: Option<String>,
+    /// The note as Markdown.
     content: String,
 }
 
 pub(crate) struct ProposeNote;
 
 #[async_trait]
-impl TypedTool for ProposeNote {
+impl<I: From<NoteProposal> + Send + 'static> TypedTool<I> for ProposeNote {
     type Args = ProposeNoteArgs;
 
     fn name(&self) -> &'static str {
@@ -266,41 +280,36 @@ impl TypedTool for ProposeNote {
     }
 
     fn description(&self) -> &'static str {
-        "proposes a new Markdown note. The person reviews it before anything is saved; propose \
+        "Proposes a new Markdown note. The person reviews it before anything is saved; propose \
          only when they ask for a note."
     }
 
-    fn input_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {"title": {"type": "string"}, "content": {"type": "string"}},
-            "required": ["content"],
-        })
-    }
-
-    async fn run_typed(&self, ctx: &ToolContext<'_>, args: ProposeNoteArgs) -> ToolOutcome {
+    async fn run_typed(&self, ctx: &ToolContext<'_>, args: ProposeNoteArgs) -> ToolOutcome<I> {
+        const STEP: &str = "Proposed a note";
         if args.content.trim().is_empty() {
-            return blank("Proposed a note", "content");
+            return blank(STEP, "content");
         }
         let call = NoteToolCall::Propose {
             path: None,
             title: args.title,
             content: args.content,
         };
-        notes(ctx, "Proposed a note", call).await
+        notes(ctx, STEP, call).await
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct ProposeNoteUpdateArgs {
+    /// The note's path, as search_notes gave it.
     path: String,
+    /// The complete new Markdown of the note.
     content: String,
 }
 
 pub(crate) struct ProposeNoteUpdate;
 
 #[async_trait]
-impl TypedTool for ProposeNoteUpdate {
+impl<I: From<NoteProposal> + Send + 'static> TypedTool<I> for ProposeNoteUpdate {
     type Args = ProposeNoteUpdateArgs;
 
     fn name(&self) -> &'static str {
@@ -308,30 +317,27 @@ impl TypedTool for ProposeNoteUpdate {
     }
 
     fn description(&self) -> &'static str {
-        "proposes new text for an existing note. The person reviews it as a diff before anything \
+        "Proposes new text for an existing note. The person reviews it as a diff before anything \
          is saved; propose only when they ask or the note is clearly outdated."
     }
 
-    fn input_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {"path": {"type": "string"}, "content": {"type": "string"}},
-            "required": ["path", "content"],
-        })
-    }
-
-    async fn run_typed(&self, ctx: &ToolContext<'_>, args: ProposeNoteUpdateArgs) -> ToolOutcome {
+    async fn run_typed(
+        &self,
+        ctx: &ToolContext<'_>,
+        args: ProposeNoteUpdateArgs,
+    ) -> ToolOutcome<I> {
+        const STEP: &str = "Proposed a note update";
         if args.path.trim().is_empty() {
-            return blank("Proposed a note update", "path");
+            return blank(STEP, "path");
         }
         if args.content.trim().is_empty() {
-            return blank("Proposed a note update", "content");
+            return blank(STEP, "content");
         }
         let call = NoteToolCall::Propose {
             path: Some(args.path),
             title: None,
             content: args.content,
         };
-        notes(ctx, "Proposed a note update", call).await
+        notes(ctx, STEP, call).await
     }
 }

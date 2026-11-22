@@ -234,6 +234,8 @@ pub struct FileManagerService {
     file_assistant: crate::file_assistant::FileAssistantService,
     chat: crate::chat::ChatService,
     terminal_sessions: crate::terminal_assist::Sessions,
+    /// Skill headers remembered between agent requests (task 0339).
+    skill_index: Arc<fm_agent::SkillIndex>,
     notes: crate::notes::NotesService,
     chat_conversations: crate::chat_conversations::ChatConversationService,
     image_prompts: crate::image_prompts::ImagePromptService,
@@ -657,6 +659,7 @@ impl FileManagerService {
             file_assistant: crate::file_assistant::FileAssistantService::default(),
             chat: crate::chat::ChatService::default(),
             terminal_sessions: crate::terminal_assist::Sessions::default(),
+            skill_index: Arc::new(fm_agent::SkillIndex::new()),
             chat_conversations,
             image_prompts,
             image_generation: crate::image_generation::ImageGenerationService::new(),
@@ -3505,14 +3508,8 @@ impl FileManagerService {
         request: fm_transport_dto::TerminalAssistRequestDto,
     ) -> Result<fm_transport_dto::TerminalAssistReplyDto, fm_transport_dto::ChatFailureDto> {
         let notes = self.assistant_notes(access, request.workspace_id).await;
-        crate::terminal_assist::reply(
-            &self.llm_profiles,
-            &self.providers,
-            &self.terminal_sessions,
-            Some(&notes),
-            request,
-        )
-        .await
+        crate::terminal_assist::reply(&self.llm_profiles, &self.terminal_host(&notes), request)
+            .await
     }
 
     /// Like [`terminal_assist`](Self::terminal_assist), and for an `ask` reports each finished line
@@ -3526,13 +3523,23 @@ impl FileManagerService {
         let notes = self.assistant_notes(access, request.workspace_id).await;
         crate::terminal_assist::reply_streaming(
             &self.llm_profiles,
-            &self.providers,
-            &self.terminal_sessions,
-            Some(&notes),
+            &self.terminal_host(&notes),
             request,
             on_event,
         )
         .await
+    }
+
+    fn terminal_host<'a>(
+        &'a self,
+        notes: &'a crate::notes::AssistantNotes<'_>,
+    ) -> crate::terminal_assist::TerminalHost<'a> {
+        crate::terminal_assist::TerminalHost {
+            providers: &self.providers,
+            sessions: &self.terminal_sessions,
+            notes: Some(notes),
+            skills: &self.skill_index,
+        }
     }
 
     /// Forgets one terminal tab's assistant session, when the tab closes.
@@ -3687,8 +3694,13 @@ impl FileManagerService {
         };
         let tooling = notes.as_ref().map(|notes| crate::chat_agent::ChatTooling {
             providers: &self.providers,
-            notes: Some(notes as &dyn crate::terminal_assist::NotesAccess),
-            host_wide_skills: matches!(access, SemanticAccessContext::Host),
+            notes: Some(notes as &dyn fm_agent::NotesAccess),
+            skill_scope: if matches!(access, SemanticAccessContext::Host) {
+                crate::agent_host::SkillScope::HostWide
+            } else {
+                crate::agent_host::SkillScope::WorkingFolder
+            },
+            skills: &self.skill_index,
         });
         self.chat
             .stream(

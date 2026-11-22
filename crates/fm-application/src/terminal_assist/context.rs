@@ -2,7 +2,7 @@
 //! selection and the recent commands, rendered as text and with secrets removed.
 
 use std::fmt::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use fm_transport_dto::{TerminalAssistRequestDto, TerminalBlockDto};
 
@@ -28,9 +28,7 @@ pub(super) struct AttachedFile {
 }
 
 /// The local path a `file://` location URI names. `None` for any other kind of location.
-pub(super) fn path_from_location(uri: &str) -> Option<PathBuf> {
-    url::Url::parse(uri).ok()?.to_file_path().ok()
-}
+pub(super) use crate::agent_host::path_from_location;
 
 /// The request's whole context as prompt text: the state, then the activity. Used by the one-shot
 /// kinds; a session sends the two separately.

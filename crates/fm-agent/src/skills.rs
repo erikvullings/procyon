@@ -1,11 +1,14 @@
-//! Skills (task 0339): Agent Skills folders (`<name>/SKILL.md`) from the person's skill
+//! Skills: Agent Skills folders (`<name>/SKILL.md`) from the person's skill
 //! folders and the project, plus notes as virtual skills. The prompt carries a short, bounded
 //! catalogue (name and description); the body is loaded on demand. Everything here is read-only:
 //! scripts in a skill are never run by the harness.
 
+use std::collections::HashMap;
 use std::fs;
-use std::io::Read as _;
+use std::io::{Read as _, Seek as _, SeekFrom};
 use std::path::{Component, Path, PathBuf};
+use std::sync::Mutex;
+use std::time::SystemTime;
 
 use thiserror::Error;
 
@@ -34,12 +37,16 @@ const MAX_NAME_CHARS: usize = 64;
 /// Where a skill comes from. The order is the precedence when names collide.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SkillSource {
+    /// A skills folder of the project (the working folder up to its git root).
     Project,
+    /// One of the person's skills folders.
     User,
+    /// One of the person's notes.
     Note,
 }
 
 impl SkillSource {
+    /// The label shown in the catalogue.
     pub fn label(self) -> &'static str {
         match self {
             Self::Project => "project",
@@ -58,11 +65,16 @@ pub enum SkillLocation {
     Note(String),
 }
 
+/// One skill of the catalogue.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Skill {
+    /// Its name, unique in the catalogue (ignoring case).
     pub name: String,
+    /// When to use it.
     pub description: String,
+    /// Where it comes from.
     pub source: SkillSource,
+    /// Where its text is read from.
     pub location: SkillLocation,
 }
 
@@ -80,12 +92,16 @@ pub struct NoteSkill {
 /// Why a skill file could not be read. A missing path and one outside the skill read the same.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum SkillFileError {
+    /// Missing, outside the skill, or in a credential folder.
     #[error("{0} is not available.")]
     NotAvailable(String),
+    /// A file name that usually holds secrets.
     #[error("{0} may hold secrets and is not read.")]
     Secret(String),
+    /// A folder, a device, or binary content.
     #[error("{0} is not a regular text file.")]
     NotText(String),
+    /// Notes are single files.
     #[error("Notes have no extra files; read the note with read_skill.")]
     NoteHasNoFiles,
 }
@@ -133,11 +149,18 @@ impl SkillRoots {
 #[derive(Debug, Clone, Default)]
 pub struct SkillCatalogue {
     skills: Vec<Skill>,
+    /// Lower-case name to position in `skills`.
+    by_name: HashMap<String, usize>,
 }
 
 impl SkillCatalogue {
     /// Reads every `<root>/<name>/SKILL.md`. Project skills win over user skills on a name clash.
+    /// Blocking: call it off the async threads. [`SkillIndex::discover`] does the same with a cache.
     pub fn discover(roots: &SkillRoots) -> Self {
+        Self::discover_with(roots, None)
+    }
+
+    fn discover_with(roots: &SkillRoots, cache: Option<&SkillIndex>) -> Self {
         let mut catalogue = Self::default();
         // `~/.agents/skills` is often a symlink to (or a copy of) `~/.claude/skills`: a folder
         // is scanned once, and a name is listed once whichever folder it came from.
@@ -150,7 +173,7 @@ impl SkillCatalogue {
         {
             let real = root.canonicalize().unwrap_or_else(|_| root.clone());
             if !scanned.contains(&real) {
-                catalogue.add_folder_skills(root, source);
+                catalogue.add_folder_skills(root, source, cache);
                 scanned.push(real);
             }
         }
@@ -169,25 +192,37 @@ impl SkillCatalogue {
         }
     }
 
-    pub(crate) fn skills(&self) -> &[Skill] {
+    /// Every skill, in precedence order.
+    pub fn skills(&self) -> &[Skill] {
         &self.skills
+    }
+
+    /// How many skills there are.
+    pub fn len(&self) -> usize {
+        self.skills.len()
+    }
+
+    /// Whether there are none.
+    pub fn is_empty(&self) -> bool {
+        self.skills.is_empty()
     }
 
     /// The skill called `name`, ignoring case.
     pub fn find(&self, name: &str) -> Option<&Skill> {
-        let name = name.trim();
-        self.skills
-            .iter()
-            .find(|skill| skill.name.eq_ignore_ascii_case(name))
+        let index = *self.by_name.get(&name.trim().to_lowercase())?;
+        self.skills.get(index)
     }
 
-    fn push(&mut self, skill: Skill) {
-        if self.find(&skill.name).is_none() {
+    /// Adds a skill unless its name is taken (the earlier one has precedence).
+    pub fn push(&mut self, skill: Skill) {
+        let key = skill.name.to_lowercase();
+        if !self.by_name.contains_key(&key) {
+            self.by_name.insert(key, self.skills.len());
             self.skills.push(skill);
         }
     }
 
-    fn add_folder_skills(&mut self, root: &Path, source: SkillSource) {
+    fn add_folder_skills(&mut self, root: &Path, source: SkillSource, cache: Option<&SkillIndex>) {
         let Ok(entries) = fs::read_dir(root) else {
             return;
         };
@@ -202,8 +237,17 @@ impl SkillCatalogue {
             .collect();
         folders.sort();
         for folder in folders.into_iter().take(MAX_FOLDERS_PER_ROOT) {
-            if let Some(skill) = read_skill_header(&folder, source) {
-                self.push(skill);
+            let header = match cache {
+                Some(cache) => cache.header(&folder),
+                None => read_skill_header(&folder),
+            };
+            if let Some(header) = header {
+                self.push(Skill {
+                    name: header.name,
+                    description: header.description,
+                    source,
+                    location: SkillLocation::Folder(folder),
+                });
             }
         }
     }
@@ -236,8 +280,7 @@ impl SkillCatalogue {
             (skill.source != SkillSource::Note, std::cmp::Reverse(*hits))
         });
         let mut text = String::from(
-            "Skills you can load with {\"tool\":\"read_skill\",\"name\":\"<name>\"}; load one \
-             when the request matches its description:",
+            "Skills (load one with the read_skill tool when the request matches its description):",
         );
         let header = text.len();
         for (_, skill) in ranked.into_iter().take(MAX_PROMPT_SKILLS) {
@@ -259,8 +302,75 @@ impl SkillCatalogue {
     }
 }
 
+/// The name and description of a skill folder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SkillHeader {
+    name: String,
+    description: String,
+}
+
+/// Remembers the headers of `SKILL.md` files between requests: a header is read again only when
+/// its file's size or modification time changed, so a request costs one `stat` per skill instead
+/// of one read. Share one index for the life of the host.
+#[derive(Debug, Default)]
+pub struct SkillIndex {
+    headers: Mutex<HashMap<PathBuf, CachedHeader>>,
+}
+
+#[derive(Debug, Clone)]
+struct CachedHeader {
+    modified: Option<SystemTime>,
+    len: u64,
+    header: Option<SkillHeader>,
+}
+
+impl SkillIndex {
+    /// An empty index.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// [`SkillCatalogue::discover`], reading only the `SKILL.md` files that changed since the last
+    /// call. Blocking: call it off the async threads.
+    pub fn discover(&self, roots: &SkillRoots) -> SkillCatalogue {
+        SkillCatalogue::discover_with(roots, Some(self))
+    }
+
+    fn header(&self, folder: &Path) -> Option<SkillHeader> {
+        let manifest = folder.join("SKILL.md");
+        let metadata = fs::metadata(&manifest).ok()?;
+        let (modified, len) = (metadata.modified().ok(), metadata.len());
+        let mut headers = self
+            .headers
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if let Some(cached) = headers.get(&manifest)
+            && cached.modified.is_some()
+            && cached.modified == modified
+            && cached.len == len
+        {
+            return cached.header.clone();
+        }
+        drop(headers);
+        let header = read_skill_header(folder);
+        headers = self
+            .headers
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        headers.insert(
+            manifest,
+            CachedHeader {
+                modified,
+                len,
+                header: header.clone(),
+            },
+        );
+        header
+    }
+}
+
 /// The skill in `folder`, from the front matter of its `SKILL.md`.
-fn read_skill_header(folder: &Path, source: SkillSource) -> Option<Skill> {
+fn read_skill_header(folder: &Path) -> Option<SkillHeader> {
     let manifest = folder.join("SKILL.md");
     if !fs::metadata(&manifest).ok()?.is_file() || !fs::metadata(folder).ok()?.is_dir() {
         return None;
@@ -286,12 +396,7 @@ fn read_skill_header(folder: &Path, source: SkillSource) -> Option<Skill> {
         .map(str::to_owned)
         .or_else(|| first_paragraph(body))
         .unwrap_or_default();
-    Some(Skill {
-        name,
-        description,
-        source,
-        location: SkillLocation::Folder(folder.to_path_buf()),
-    })
+    Some(SkillHeader { name, description })
 }
 
 fn is_valid_name(name: &str) -> bool {
@@ -322,12 +427,12 @@ fn bounded_description(description: &str) -> String {
 }
 
 impl Skill {
-    /// The `SKILL.md` body (without front matter), bounded. Only for folder skills.
+    /// The `SKILL.md` body (without front matter), bounded. `None` for a note.
     pub fn read_body(&self) -> Option<Result<String, SkillFileError>> {
-        let SkillLocation::Folder(folder) = &self.location else {
+        let SkillLocation::Folder(_) = &self.location else {
             return None;
         };
-        Some(read_inside(folder, "SKILL.md").map(|text| {
+        Some(self.read_file("SKILL.md").map(|text| {
             let (_, body) = split_front_matter(&text);
             body.trim_start().to_owned()
         }))
@@ -341,13 +446,27 @@ impl Skill {
         }
     }
 
-    /// A file inside the skill's folder. It cannot leave the folder, not even through a symlink or
-    /// `..`, and secret-looking files are refused.
-    pub fn read_file(&self, relative: &str) -> Result<String, SkillFileError> {
+    /// The real path of a file inside the skill's folder. It cannot leave the folder, not even
+    /// through a symlink or `..`; credential folders and secret-looking names are refused; it must
+    /// be a regular file.
+    pub fn resolve_file(&self, relative: &str) -> Result<PathBuf, SkillFileError> {
         match &self.location {
-            SkillLocation::Folder(folder) => read_inside(folder, relative),
+            SkillLocation::Folder(folder) => resolve_inside(folder, relative),
             SkillLocation::Note(_) => Err(SkillFileError::NoteHasNoFiles),
         }
+    }
+
+    /// The text of a file inside the skill's folder (see [`resolve_file`](Self::resolve_file)),
+    /// bounded; binary files are refused.
+    pub fn read_file(&self, relative: &str) -> Result<String, SkillFileError> {
+        let path = self.resolve_file(relative)?;
+        self.read_checked(&path, 0)
+    }
+
+    /// The text of a path [`resolve_file`](Self::resolve_file) returned, from byte `offset`,
+    /// bounded; a cut-off text ends with the offset to continue from.
+    pub fn read_checked(&self, path: &Path, offset: usize) -> Result<String, SkillFileError> {
+        read_text(path, offset)
     }
 
     /// The files inside the skill's folder worth reading, relative, bounded.
@@ -399,11 +518,12 @@ fn list_into(base: &Path, folder: &Path, depth: usize, files: &mut Vec<String>) 
     }
 }
 
-/// The text of `relative` inside `folder`, bounded; binary files are refused.
-fn read_inside(folder: &Path, relative: &str) -> Result<String, SkillFileError> {
+/// The real path of `relative` inside `folder`, checked (see [`Skill::resolve_file`]).
+fn resolve_inside(folder: &Path, relative: &str) -> Result<PathBuf, SkillFileError> {
+    let relative = relative.trim();
     let unavailable = || SkillFileError::NotAvailable(relative.to_owned());
-    let candidate = Path::new(relative.trim());
-    if relative.trim().is_empty()
+    let candidate = Path::new(relative);
+    if relative.is_empty()
         || candidate.is_absolute()
         || candidate
             .components()
@@ -433,21 +553,40 @@ fn read_inside(folder: &Path, relative: &str) -> Result<String, SkillFileError> 
     if !fs::metadata(&real).is_ok_and(|metadata| metadata.is_file()) {
         return Err(SkillFileError::NotText(name));
     }
+    Ok(real)
+}
+
+/// The text of a checked file from byte `offset`, at most [`MAX_SKILL_BYTES`]; binary is refused.
+fn read_text(path: &Path, offset: usize) -> Result<String, SkillFileError> {
+    let name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let not_text = || SkillFileError::NotText(name.clone());
+    let mut file = fs::File::open(path).map_err(|_| not_text())?;
+    file.seek(SeekFrom::Start(offset as u64))
+        .map_err(|_| not_text())?;
     let mut buffer = Vec::new();
-    fs::File::open(&real)
-        .and_then(|file| {
-            file.take(MAX_SKILL_BYTES as u64 + 1)
-                .read_to_end(&mut buffer)
-        })
-        .map_err(|_| SkillFileError::NotText(name.clone()))?;
+    file.take(MAX_SKILL_BYTES as u64 + 1)
+        .read_to_end(&mut buffer)
+        .map_err(|_| not_text())?;
     if buffer.contains(&0) {
-        return Err(SkillFileError::NotText(name));
+        return Err(not_text());
     }
     let truncated = buffer.len() > MAX_SKILL_BYTES;
     buffer.truncate(MAX_SKILL_BYTES);
-    let mut text = String::from_utf8_lossy(&buffer).into_owned();
+    // Cut at a character boundary so the next read starts on one.
+    let text = match std::str::from_utf8(&buffer) {
+        Ok(text) => text.to_owned(),
+        Err(error) if truncated && error.error_len().is_none() => {
+            buffer.truncate(error.valid_up_to());
+            String::from_utf8_lossy(&buffer).into_owned()
+        }
+        Err(_) => String::from_utf8_lossy(&buffer).into_owned(),
+    };
     if truncated {
-        text.push_str("\n[truncated]");
+        let next = offset + buffer.len();
+        return Ok(format!("{text}\n[truncated: continue with offset {next}]"));
     }
     Ok(text)
 }

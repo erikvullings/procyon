@@ -3,7 +3,7 @@ use std::fs;
 use crate::notes::format::split_note;
 use crate::notes::store::NotesStore;
 use crate::notes::store::tests::{location_of, registry};
-use crate::terminal_assist::{NoteToolCall, NoteToolOutcome, NotesAccess};
+use fm_agent::{NoteProposal, NoteToolCall, NotesAccess, ToolOutcome};
 
 use super::AssistantNotes;
 
@@ -28,10 +28,10 @@ async fn notes() -> (tempfile::TempDir, AssistantNotes<'static>) {
     )
 }
 
-fn text_of(outcome: NoteToolOutcome) -> (String, String) {
+fn text_of(outcome: ToolOutcome<NoteProposal>) -> (String, String) {
     match outcome {
-        NoteToolOutcome::Output { step, text } => (step, text),
-        NoteToolOutcome::Proposal(proposal) => panic!("unexpected proposal {proposal:?}"),
+        ToolOutcome::Output(output) => (output.step, output.text),
+        ToolOutcome::Interrupt(proposal) => panic!("unexpected proposal {proposal:?}"),
     }
 }
 
@@ -113,15 +113,15 @@ async fn a_new_note_proposal_gets_front_matter_and_redaction() {
             content: "Run openssl.\npassword=hunter2\n".into(),
         })
         .await;
-    let NoteToolOutcome::Proposal(proposal) = outcome else {
+    let ToolOutcome::Interrupt(proposal) = outcome else {
         panic!("expected a proposal");
     };
     assert_eq!(proposal.path, None);
-    assert_eq!(proposal.draft.title, "Create a CSR");
-    assert_eq!(proposal.draft.file_name, "create-a-csr.md");
-    assert_eq!(proposal.draft.redactions, 1);
-    assert!(!proposal.draft.content.contains("hunter2"));
-    let (meta, body) = split_note(&proposal.draft.content);
+    assert_eq!(proposal.title, "Create a CSR");
+    assert_eq!(proposal.file_name, "create-a-csr.md");
+    assert_eq!(proposal.redactions, 1);
+    assert!(!proposal.content.contains("hunter2"));
+    let (meta, body) = split_note(&proposal.content);
     let meta = meta.expect("front matter");
     assert_eq!(meta.title.as_deref(), Some("Create a CSR"));
     assert_eq!(meta.source.as_deref(), Some("terminal-assistant"));
@@ -144,7 +144,7 @@ async fn an_update_must_name_an_existing_note_and_keeps_the_text_as_written() {
 
     let replacement =
         "---\ntitle: Replace nginx certificate\naliases: [tls]\n---\n# Replace\nNew steps";
-    let NoteToolOutcome::Proposal(proposal) = notes
+    let ToolOutcome::Interrupt(proposal) = notes
         .run(NoteToolCall::Propose {
             path: Some("./ops//nginx.md".into()),
             title: None,
@@ -155,8 +155,8 @@ async fn an_update_must_name_an_existing_note_and_keeps_the_text_as_written() {
         panic!("expected a proposal");
     };
     assert_eq!(proposal.path.as_deref(), Some("ops/nginx.md"));
-    assert_eq!(proposal.draft.content, format!("{replacement}\n"));
-    assert_eq!(proposal.draft.title, "Replace nginx certificate");
+    assert_eq!(proposal.content, format!("{replacement}\n"));
+    assert_eq!(proposal.title, "Replace nginx certificate");
 }
 
 #[tokio::test]

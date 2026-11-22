@@ -417,6 +417,12 @@ model may list, read and search the other pane's folder, your notes and skills, 
 for review. It cannot write or run anything. What it reads goes to the chat endpoint, so the switch
 is off by default and a cloud endpoint still needs your consent first.
 
+Both assistants run on the `fm-agent` crate, a small agent harness with no Procyon dependencies:
+a tool is one Rust type with typed arguments (its JSON Schema is derived), the registry generates
+either the text-protocol prompt or the native tool list, and one turn loop runs the calls (the
+read-only ones of a reply side by side) until the model answers or a tool needs you. Skill headers
+are cached between requests and read again only when a `SKILL.md` changes.
+
 ## Architecture
 
 ```text

@@ -3,9 +3,33 @@ use std::fs;
 use async_trait::async_trait;
 
 use super::*;
-use crate::notes::{NoteToolCall, NoteToolOutcome, NotesAccess};
-use crate::{ReadSkill, ReadSkillFile};
-use crate::{ToolContext, TypedTool};
+use crate::notes::{NoteProposal, NoteToolCall, NotesAccess};
+use crate::skill_tools::{ReadSkill, ReadSkillFile};
+use crate::tool::{DocumentError, SkillDocuments, ToolContext, ToolOutcome, TypedTool};
+
+type Outcome = ToolOutcome<NoteProposal>;
+
+async fn read_skill(ctx: &ToolContext<'_>, args: serde_json::Value) -> String {
+    let args = serde_json::from_value(args).unwrap();
+    let outcome: Outcome = ReadSkill.run_typed(ctx, args).await;
+    outcome.expect_text()
+}
+
+async fn read_skill_file(ctx: &ToolContext<'_>, args: serde_json::Value) -> String {
+    let args = serde_json::from_value(args).unwrap();
+    let outcome: Outcome = ReadSkillFile.run_typed(ctx, args).await;
+    outcome.expect_text()
+}
+
+fn folder_skill(dir: &Path) -> Skill {
+    let header = read_skill_header(dir).unwrap();
+    Skill {
+        name: header.name,
+        description: header.description,
+        source: SkillSource::User,
+        location: SkillLocation::Folder(dir.to_path_buf()),
+    }
+}
 
 fn write_skill(root: &Path, folder: &str, text: &str) -> PathBuf {
     let dir = root.join(folder);
@@ -150,7 +174,7 @@ fn skill_with_files() -> (tempfile::TempDir, Skill) {
     fs::write(dir.join("server.key"), "private").unwrap();
     fs::write(dir.join("image.bin"), [0u8, 1, 2]).unwrap();
     fs::write(temp.path().join("outside.txt"), "outside").unwrap();
-    let skill = read_skill_header(&dir, SkillSource::User).unwrap();
+    let skill = folder_skill(&dir);
     (temp, skill)
 }
 
@@ -234,16 +258,12 @@ struct FakeNotes;
 
 #[async_trait]
 impl NotesAccess for FakeNotes {
-    async fn run(&self, call: NoteToolCall) -> NoteToolOutcome {
+    async fn run(&self, call: NoteToolCall) -> Outcome {
         match call {
-            NoteToolCall::Read { path } => NoteToolOutcome::Output {
-                step: "Read note".into(),
-                text: format!("Note {path}:\nsteps"),
-            },
-            _ => NoteToolOutcome::Output {
-                step: "Notes".into(),
-                text: "unused".into(),
-            },
+            NoteToolCall::Read { path } => {
+                ToolOutcome::output("Read note", format!("Note {path}:\nsteps"))
+            }
+            _ => ToolOutcome::output("Notes", "unused"),
         }
     }
 }
@@ -259,32 +279,18 @@ async fn read_skill_loads_a_folder_skill_and_a_note_the_same_way() {
     }]);
     catalogue.push(skill);
     let ctx = ToolContext {
-        skills: &catalogue,
         notes: Some(&FakeNotes),
-        files: None,
-        documents: None,
+        ..ToolContext::new(&catalogue)
     };
 
-    let text = ReadSkill
-        .run_typed(&ctx, serde_json::from_str(r#"{"name":"DOCS"}"#).unwrap())
-        .await
-        .expect_text();
+    let text = read_skill(&ctx, serde_json::json!({"name": "DOCS"})).await;
     assert!(text.contains("Use the template."));
     assert!(text.contains("references/guide.md"));
 
-    let text = ReadSkill
-        .run_typed(
-            &ctx,
-            serde_json::from_str(r#"{"name":"nginx-cert"}"#).unwrap(),
-        )
-        .await
-        .expect_text();
+    let text = read_skill(&ctx, serde_json::json!({"name": "nginx-cert"})).await;
     assert_eq!(text, "Note ops/nginx.md:\nsteps");
 
-    let text = ReadSkill
-        .run_typed(&ctx, serde_json::from_str(r#"{"name":"nope"}"#).unwrap())
-        .await
-        .expect_text();
+    let text = read_skill(&ctx, serde_json::json!({"name": "nope"})).await;
     assert!(text.starts_with("Error: there is no skill called nope. Available: nginx-cert, docs"));
 }
 
@@ -301,17 +307,11 @@ async fn read_skill_file_is_sandboxed_and_redacts() {
     .unwrap();
     let mut catalogue = SkillCatalogue::default();
     catalogue.push(skill.clone());
-    let ctx = ToolContext {
-        skills: &catalogue,
-        notes: None,
-        files: None,
-        documents: None,
-    };
+    let ctx = ToolContext::new(&catalogue);
     let read = |path: &str| {
-        let args =
-            serde_json::from_value(serde_json::json!({"name": "docs", "path": path})).unwrap();
+        let args = serde_json::json!({"name": "docs", "path": path});
         let ctx = &ctx;
-        async move { ReadSkillFile.run_typed(ctx, args).await.expect_text() }
+        async move { read_skill_file(ctx, args).await }
     };
     assert_eq!(read("references/guide.md").await, "the guide");
     assert!(
@@ -353,4 +353,121 @@ fn symlinked_and_copied_skill_folders_list_each_name_once() {
     assert_eq!(catalogue.skills().len(), 2);
     assert_eq!(catalogue.find("pdf").unwrap().description, "from claude");
     assert_eq!(catalogue.prompt_section("").matches("- pdf:").count(), 1);
+}
+
+/// A converter that records the paths it was given.
+struct RecordingDocuments {
+    seen: std::sync::Mutex<Vec<PathBuf>>,
+}
+
+#[async_trait]
+impl SkillDocuments for RecordingDocuments {
+    async fn read(&self, path: &Path, offset: usize) -> Option<Result<String, DocumentError>> {
+        self.seen.lock().unwrap().push(path.to_path_buf());
+        path.extension()
+            .is_some_and(|extension| extension == "pdf")
+            .then(|| Ok(format!("pdf text from {offset}")))
+    }
+}
+
+#[tokio::test]
+async fn documents_reach_the_host_converter_only_after_the_sandbox() {
+    let (temp, skill) = skill_with_files();
+    let SkillLocation::Folder(dir) = &skill.location else {
+        unreachable!()
+    };
+    fs::write(dir.join("manual.pdf"), "%PDF").unwrap();
+    fs::write(temp.path().join("outside.pdf"), "%PDF").unwrap();
+    let mut catalogue = SkillCatalogue::default();
+    catalogue.push(skill.clone());
+    let documents = RecordingDocuments {
+        seen: std::sync::Mutex::new(Vec::new()),
+    };
+    let ctx = ToolContext {
+        documents: Some(&documents),
+        ..ToolContext::new(&catalogue)
+    };
+    let args = |path: &str, offset: usize| serde_json::json!({"name": "docs", "path": path, "offset": offset});
+
+    assert_eq!(
+        read_skill_file(&ctx, args("manual.pdf", 7)).await,
+        "pdf text from 7"
+    );
+    for refused in ["../outside.pdf", "server.key", "/etc/hosts"] {
+        assert!(
+            read_skill_file(&ctx, args(refused, 0))
+                .await
+                .starts_with("Error:")
+        );
+    }
+    let seen = documents.seen.lock().unwrap().clone();
+    assert_eq!(seen.len(), 1, "{seen:?}");
+    assert!(seen[0].ends_with("manual.pdf"));
+}
+
+#[test]
+fn a_long_skill_file_is_continued_from_the_offset_it_names() {
+    let (_temp, skill) = skill_with_files();
+    let SkillLocation::Folder(dir) = &skill.location else {
+        unreachable!()
+    };
+    let text = "é".repeat(MAX_SKILL_BYTES); // two bytes each: twice the limit
+    fs::write(dir.join("long.md"), &text).unwrap();
+    let first = skill.read_file("long.md").unwrap();
+    let marker = "[truncated: continue with offset ";
+    let at = first.find(marker).expect("a continuation note");
+    let offset: usize = first[at + marker.len()..]
+        .trim_end_matches(']')
+        .parse()
+        .unwrap();
+    assert_eq!(offset, MAX_SKILL_BYTES);
+    let path = skill.resolve_file("long.md").unwrap();
+    let rest = skill.read_checked(&path, offset).unwrap();
+    assert!(rest.starts_with('é'));
+    assert_eq!(
+        first[..at].trim_end().len() + rest.find('\n').unwrap_or(rest.len()),
+        text.len()
+    );
+}
+
+#[test]
+fn the_index_reads_a_skill_again_only_when_it_changed() {
+    let temp = tempfile::tempdir().unwrap();
+    let user = temp.path().join("user");
+    let dir = write_skill(
+        &user,
+        "pdf",
+        "---
+description: first
+---
+",
+    );
+    let roots = SkillRoots {
+        project: vec![],
+        user: vec![user],
+    };
+    let index = SkillIndex::new();
+    assert_eq!(
+        index.discover(&roots).find("pdf").unwrap().description,
+        "first"
+    );
+    // Same size and time: the cached header is used.
+    assert_eq!(
+        index.discover(&roots).find("pdf").unwrap().description,
+        "first"
+    );
+    fs::write(
+        dir.join("SKILL.md"),
+        "---
+description: second, longer
+---
+",
+    )
+    .unwrap();
+    assert_eq!(
+        index.discover(&roots).find("pdf").unwrap().description,
+        "second, longer"
+    );
+    fs::remove_dir_all(&dir).unwrap();
+    assert!(index.discover(&roots).find("pdf").is_none());
 }

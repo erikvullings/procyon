@@ -9,7 +9,9 @@ use fm_vfs::ProviderRegistry;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
-use super::tools::{FileCall, MAX_READ_BYTES, ToolError, ToolHost, ToolOutput, error_text};
+use super::sandbox::{
+    FileCall, MAX_READ_BYTES, Sandbox, ToolError, ToolHost, ToolOutput, error_text,
+};
 use crate::document_conversion::DocumentConversionService;
 use fm_agent::redact_secrets;
 
@@ -17,7 +19,7 @@ use fm_agent::redact_secrets;
 const EXTENSIONS: &[&str] = &["epub", "docx", "pdf", "pptx", "xlsx"];
 
 /// Whether a path names a document rather than a plain text file.
-pub(super) fn is_document(path: &str) -> bool {
+pub(crate) fn is_document(path: &str) -> bool {
     path.rsplit_once('.').is_some_and(|(_, extension)| {
         EXTENSIONS
             .iter()
@@ -30,7 +32,7 @@ const CACHED_DOCUMENTS: usize = 4;
 
 /// Converts documents inside the working folder. A converted text is kept for the life of this
 /// value (one question), so reading a long document window by window converts it once.
-pub(super) struct Documents {
+pub(crate) struct Documents {
     service: DocumentConversionService,
     providers: ProviderRegistry,
     cache: Mutex<Vec<(String, Arc<str>)>>,
@@ -40,7 +42,7 @@ pub(super) struct Documents {
 }
 
 impl Documents {
-    pub(super) fn new(providers: &ProviderRegistry) -> Self {
+    pub(crate) fn new(providers: &ProviderRegistry) -> Self {
         Self {
             service: DocumentConversionService::new(providers.clone()),
             providers: providers.clone(),
@@ -51,7 +53,7 @@ impl Documents {
     }
 
     #[cfg(test)]
-    pub(super) fn conversions(&self) -> usize {
+    pub(crate) fn conversions(&self) -> usize {
         self.conversions.load(std::sync::atomic::Ordering::Relaxed)
     }
 
@@ -86,7 +88,7 @@ impl Documents {
 
     /// Runs `read_file` on a document. `None` when the call is not a read of a document, so the
     /// plain tools handle it.
-    pub(super) async fn run(&self, host: &ToolHost, call: &FileCall) -> Option<ToolOutput> {
+    pub(crate) async fn run(&self, host: &ToolHost, call: &FileCall) -> Option<ToolOutput> {
         let FileCall::ReadFile { path, offset } = call else {
             return None;
         };
@@ -104,7 +106,7 @@ impl Documents {
     }
 
     /// The text of a document from byte `offset` of its converted text, bounded and redacted.
-    pub(super) async fn read(
+    pub(crate) async fn read(
         &self,
         host: &ToolHost,
         relative: &str,
@@ -133,22 +135,31 @@ impl SkillFolderDocuments {
 impl fm_agent::SkillDocuments for SkillFolderDocuments {
     async fn read(
         &self,
-        folder: &std::path::Path,
-        relative: &str,
+        path: &std::path::Path,
         offset: usize,
-    ) -> Option<Result<String, String>> {
-        if !is_document(relative) {
+    ) -> Option<Result<String, fm_agent::DocumentError>> {
+        let name = path.file_name()?.to_string_lossy().into_owned();
+        if !is_document(&name) {
             return None;
         }
-        let Some(sandbox) = super::tools::Sandbox::new(folder) else {
-            return Some(Err("Error: the skill's folder cannot be read.".to_owned()));
+        // The harness has checked the path against the skill's sandbox; the file's own folder is
+        // sandboxed again here, so the converter reads exactly that file.
+        let folder = path.parent()?.to_path_buf();
+        let sandbox = tokio::task::spawn_blocking(move || Sandbox::new(&folder))
+            .await
+            .ok()
+            .flatten();
+        let Some(sandbox) = sandbox else {
+            return Some(Err(fm_agent::DocumentError(
+                "the skill's folder cannot be read.".to_owned(),
+            )));
         };
         let host = ToolHost::Local(sandbox);
         Some(
             self.documents
-                .read(&host, relative, offset)
+                .read(&host, &name, offset)
                 .await
-                .map_err(|error| error_text(&error)),
+                .map_err(|error| fm_agent::DocumentError(error.to_string())),
         )
     }
 }

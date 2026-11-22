@@ -4,15 +4,16 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, SecondsFormat, Utc};
-use fm_transport_dto::{NoteDraftDto, NoteProposalDto};
+use fm_transport_dto::NoteDraftDto;
 use tokio_util::sync::CancellationToken;
 
 use super::format::{NoteMeta, note_title, render_note, slugify, split_note};
 use super::search::{DEFAULT_HITS, SearchStrategy, SemanticNotes, search_notes};
 use super::store::NotesStore;
+use crate::agent_host::note_proposal;
 use crate::file_assistant::truncate_to_bytes;
-use crate::terminal_assist::{NoteToolCall, NoteToolOutcome, NotesAccess, redact_secrets};
 use fm_agent::NoteSkill;
+use fm_agent::{NoteProposal, NoteToolCall, NotesAccess, ToolOutcome, redact_secrets};
 
 /// Most bytes of one note shown to the model.
 const MAX_NOTE_TEXT_BYTES: usize = 16 * 1024;
@@ -38,7 +39,7 @@ impl NotesAccess for AssistantNotes<'_> {
         }
     }
 
-    async fn run(&self, call: NoteToolCall) -> NoteToolOutcome {
+    async fn run(&self, call: NoteToolCall) -> ToolOutcome<NoteProposal> {
         let Some(store) = &self.store else {
             return output(
                 "Looked in the notes",
@@ -78,7 +79,7 @@ impl NotesAccess for AssistantNotes<'_> {
                     None => None,
                 };
                 let draft = proposed_draft(title.as_deref(), &content, path.is_some(), Utc::now());
-                NoteToolOutcome::Proposal(NoteProposalDto { path, draft })
+                ToolOutcome::Interrupt(note_proposal(path, draft))
             }
         }
     }
@@ -123,7 +124,12 @@ impl AssistantNotes<'_> {
         skills
     }
 
-    async fn search(&self, store: &NotesStore, query: &str, limit: Option<u32>) -> NoteToolOutcome {
+    async fn search(
+        &self,
+        store: &NotesStore,
+        query: &str,
+        limit: Option<u32>,
+    ) -> ToolOutcome<NoteProposal> {
         let limit = limit.map_or(DEFAULT_HITS, |limit| limit as usize);
         let (strategy, hits) = search_notes(
             store,
@@ -160,11 +166,8 @@ impl AssistantNotes<'_> {
     }
 }
 
-fn output(step: &str, text: String) -> NoteToolOutcome {
-    NoteToolOutcome::Output {
-        step: step.to_owned(),
-        text,
-    }
+fn output(step: &str, text: String) -> ToolOutcome<NoteProposal> {
+    ToolOutcome::output(step, text)
 }
 
 /// The note the model proposed, as a draft for review. A new note without front matter gets it;

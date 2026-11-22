@@ -1013,11 +1013,18 @@ mod tests {
         }
     }
 
+    fn skill_index() -> &'static std::sync::Arc<fm_agent::SkillIndex> {
+        static INDEX: std::sync::OnceLock<std::sync::Arc<fm_agent::SkillIndex>> =
+            std::sync::OnceLock::new();
+        INDEX.get_or_init(|| std::sync::Arc::new(fm_agent::SkillIndex::new()))
+    }
+
     fn local_tooling(providers: &fm_vfs::ProviderRegistry) -> ChatTooling<'_> {
         ChatTooling {
             providers,
             notes: None,
-            host_wide_skills: false,
+            skill_scope: crate::agent_host::SkillScope::WorkingFolder,
+            skills: skill_index(),
         }
     }
 

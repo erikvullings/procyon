@@ -1,28 +1,29 @@
-//! The tools that load skills (task 0339): `read_skill` for the body of a skill or a note, and
+//! The tools that load skills: `read_skill` for the instructions of a skill or a note, and
 //! `read_skill_file` for a file inside a skill's folder. Both are read-only and never run
 //! anything.
 
 use async_trait::async_trait;
+use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_json::{Value, json};
 
-use super::skills::{Skill, SkillFileError, SkillLocation};
-use super::{ToolContext, ToolOutcome, TypedTool};
-use crate::notes::{NoteToolCall, NoteToolOutcome};
+use crate::notes::NoteToolCall;
 use crate::redact::redact_secrets;
+use crate::skills::{Skill, SkillFileError, SkillLocation};
+use crate::tool::{ToolContext, ToolEffect, ToolOutcome, ToolOutput, TypedTool};
 
 /// Names listed when a skill is not found.
 const SUGGESTED_NAMES: usize = 20;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct ReadSkillArgs {
+    /// The skill's name, as the catalogue lists it.
     name: String,
 }
 
 pub(crate) struct ReadSkill;
 
 #[async_trait]
-impl TypedTool for ReadSkill {
+impl<I: Send + 'static> TypedTool<I> for ReadSkill {
     type Args = ReadSkillArgs;
 
     fn name(&self) -> &'static str {
@@ -30,75 +31,63 @@ impl TypedTool for ReadSkill {
     }
 
     fn description(&self) -> &'static str {
-        "loads a skill from the catalogue (a skill folder or one of the person's notes) and \
+        "Loads a skill from the catalogue (a skill folder or one of the person's notes) and \
          returns its instructions."
     }
 
-    fn input_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": { "name": { "type": "string" } },
-            "required": ["name"],
-        })
+    fn effect(&self) -> ToolEffect {
+        ToolEffect::ReadOnly
     }
 
-    async fn run_typed(&self, ctx: &ToolContext<'_>, args: ReadSkillArgs) -> ToolOutcome {
-        let step = format!("Loaded skill {}", args.name.trim());
-        let Some(skill) = ctx.skills.find(&args.name) else {
-            return ToolOutcome::output(step, not_found(ctx, &args.name));
+    async fn run_typed(&self, ctx: &ToolContext<'_>, args: ReadSkillArgs) -> ToolOutcome<I> {
+        let name = args.name.trim();
+        let step = format!("Loaded skill {name}");
+        let Some(skill) = ctx.skills.find(name) else {
+            return ToolOutcome::output(step, not_found(ctx, name));
         };
-        match &skill.location {
-            SkillLocation::Note(path) => read_note_skill(ctx, skill, path, step).await,
-            SkillLocation::Folder(_) => {
-                let skill = skill.clone();
-                let loaded = tokio::task::spawn_blocking(move || {
-                    let body = skill.read_body()?;
-                    Some((body, skill.list_files()))
-                })
-                .await
-                .ok()
-                .flatten();
-                let text = match loaded {
-                    Some((Ok(body), files)) => {
-                        let mut text =
-                            format!("Skill {}:\n{}", args.name.trim(), redact_secrets(&body));
-                        if !files.is_empty() {
-                            text.push_str(&format!(
-                                "\n\nFiles in this skill (read one with read_skill_file): {}",
-                                files.join(", ")
-                            ));
-                        }
-                        text
-                    }
-                    Some((Err(error), _)) => format!("Error: {error}"),
-                    None => "Error: the skill cannot be read.".to_owned(),
-                };
-                ToolOutcome::output(step, text)
-            }
-        }
+        let output = match &skill.location {
+            SkillLocation::Note(path) => read_note_skill(ctx, path, step).await,
+            SkillLocation::Folder(_) => read_folder_skill(skill.clone(), step).await,
+        };
+        output.into()
     }
 }
 
-async fn read_note_skill(
-    ctx: &ToolContext<'_>,
-    skill: &Skill,
-    path: &str,
-    step: String,
-) -> ToolOutcome {
+async fn read_folder_skill(skill: Skill, step: String) -> ToolOutput {
+    let name = skill.name.clone();
+    let loaded = tokio::task::spawn_blocking(move || {
+        let body = skill.read_body()?;
+        Some((body, skill.list_files()))
+    })
+    .await
+    .ok()
+    .flatten();
+    match loaded {
+        Some((Ok(body), files)) => {
+            let mut text = format!("Skill {name}:\n{}", redact_secrets(&body));
+            if !files.is_empty() {
+                text.push_str(&format!(
+                    "\n\nFiles in this skill (read one with read_skill_file): {}",
+                    files.join(", ")
+                ));
+            }
+            ToolOutput::new(step, text)
+        }
+        Some((Err(error), _)) => ToolOutput::error(step, error),
+        None => ToolOutput::error(step, "the skill cannot be read."),
+    }
+}
+
+async fn read_note_skill(ctx: &ToolContext<'_>, path: &str, step: String) -> ToolOutput {
     let Some(notes) = ctx.notes else {
-        return ToolOutcome::output(step, "Error: notes are not available here.");
+        return ToolOutput::error(step, "notes are not available here.");
     };
-    match notes
-        .run(NoteToolCall::Read {
-            path: path.to_owned(),
-        })
-        .await
-    {
-        NoteToolOutcome::Output { text, .. } => ToolOutcome::output(step, text),
-        NoteToolOutcome::Proposal(_) => ToolOutcome::output(
-            step,
-            format!("Error: the note {} cannot be read.", skill.name),
-        ),
+    let call = NoteToolCall::Read {
+        path: path.to_owned(),
+    };
+    match notes.run(call).await {
+        ToolOutcome::Output(output) => ToolOutput::new(step, output.text),
+        ToolOutcome::Interrupt(_) => ToolOutput::error(step, "the note cannot be read."),
     }
 }
 
@@ -111,29 +100,29 @@ fn not_found(ctx: &ToolContext<'_>, name: &str) -> String {
         .map(|skill| skill.name.as_str())
         .collect();
     if names.is_empty() {
-        format!(
-            "Error: there is no skill called {}. No skills are available.",
-            name.trim()
-        )
+        format!("Error: there is no skill called {name}. No skills are available.")
     } else {
         format!(
-            "Error: there is no skill called {}. Available: {}.",
-            name.trim(),
+            "Error: there is no skill called {name}. Available: {}.",
             names.join(", ")
         )
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct ReadSkillFileArgs {
+    /// The skill's name, as the catalogue lists it.
     name: String,
+    /// The file, relative to the skill's folder.
     path: String,
+    /// Byte offset to continue a file that an earlier read cut off.
+    offset: Option<usize>,
 }
 
 pub(crate) struct ReadSkillFile;
 
 #[async_trait]
-impl TypedTool for ReadSkillFile {
+impl<I: Send + 'static> TypedTool<I> for ReadSkillFile {
     type Args = ReadSkillFileArgs;
 
     fn name(&self) -> &'static str {
@@ -141,46 +130,51 @@ impl TypedTool for ReadSkillFile {
     }
 
     fn description(&self) -> &'static str {
-        "reads a file inside a skill's folder (references, templates; text, or a PDF, Word, \
-         PowerPoint, Excel or EPUB document as text). The path is relative \
-         to the skill and cannot leave it. Scripts in a skill are never run by this tool."
+        "Reads a file inside a skill's folder (references, templates, documents as text). The path \
+         is relative to the skill and cannot leave it. A long file is cut off with a note: continue \
+         with the offset it names. Scripts in a skill are never run by this tool."
     }
 
-    fn input_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "name": { "type": "string" },
-                "path": { "type": "string" },
-            },
-            "required": ["name", "path"],
-        })
+    fn effect(&self) -> ToolEffect {
+        ToolEffect::ReadOnly
     }
 
-    async fn run_typed(&self, ctx: &ToolContext<'_>, args: ReadSkillFileArgs) -> ToolOutcome {
-        let step = format!("Read {} in skill {}", args.path.trim(), args.name.trim());
+    async fn run_typed(&self, ctx: &ToolContext<'_>, args: ReadSkillFileArgs) -> ToolOutcome<I> {
+        let relative = args.path.trim().to_owned();
+        let step = format!("Read {relative} in skill {}", args.name.trim());
         let Some(skill) = ctx.skills.find(&args.name) else {
             return ToolOutcome::output(step, not_found(ctx, &args.name));
         };
         let skill = skill.clone();
-        // Documents are converted by the host; everything else is read as text.
-        if let (Some(documents), Some(folder)) = (ctx.documents, skill.folder())
-            && let Some(result) = documents.read(folder, args.path.trim(), 0).await
-        {
-            let text = match result {
-                Ok(text) => redact_secrets(&text),
-                Err(error) => error,
-            };
-            return ToolOutcome::output(step, text);
-        }
-        let path = args.path.clone();
-        let result = tokio::task::spawn_blocking(move || skill.read_file(&path))
+        let offset = args.offset.unwrap_or(0);
+        // The sandbox runs first, for documents too: the host converter only sees checked paths.
+        let checked = {
+            let wanted = relative.clone();
+            tokio::task::spawn_blocking(move || {
+                let path = skill.resolve_file(&wanted)?;
+                Ok::<_, SkillFileError>((skill, path))
+            })
             .await
-            .unwrap_or_else(|_| Err(SkillFileError::NotAvailable(args.path.clone())));
-        let text = match result {
-            Ok(text) => redact_secrets(&text),
-            Err(error) => format!("Error: {error}"),
+            .unwrap_or_else(|_| Err(SkillFileError::NotAvailable(relative.clone())))
         };
-        ToolOutcome::output(step, text)
+        let (skill, path) = match checked {
+            Ok(found) => found,
+            Err(error) => return ToolOutcome::error(step, error),
+        };
+        if let Some(documents) = ctx.documents
+            && let Some(result) = documents.read(&path, offset).await
+        {
+            return match result {
+                Ok(text) => ToolOutcome::output(step, redact_secrets(&text)),
+                Err(error) => ToolOutcome::error(step, error),
+            };
+        }
+        let result = tokio::task::spawn_blocking(move || skill.read_checked(&path, offset))
+            .await
+            .unwrap_or(Err(SkillFileError::NotAvailable(relative)));
+        match result {
+            Ok(text) => ToolOutcome::output(step, redact_secrets(&text)),
+            Err(error) => ToolOutcome::error(step, error),
+        }
     }
 }

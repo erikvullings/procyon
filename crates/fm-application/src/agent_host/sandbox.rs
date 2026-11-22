@@ -9,15 +9,15 @@ use std::path::{Path, PathBuf};
 use fm_vfs::ProviderRegistry;
 use thiserror::Error;
 
-use super::context::path_from_location;
+use super::path_from_location;
 use super::remote::RemoteSandbox;
 use fm_agent::redact_secrets;
-pub(super) use fm_agent::{is_credential_folder, is_secret_name};
+use fm_agent::{is_credential_folder, is_secret_name};
 
 /// Most bytes of one file returned.
-pub(super) const MAX_READ_BYTES: usize = 32 * 1024;
+pub(crate) const MAX_READ_BYTES: usize = 32 * 1024;
 /// Most folder entries listed.
-pub(super) const MAX_LISTED: usize = 200;
+pub(crate) const MAX_LISTED: usize = 200;
 /// Most matching lines returned.
 const MAX_MATCHES: usize = 50;
 /// Most files a search looks into.
@@ -31,7 +31,7 @@ const SKIPPED_FOLDERS: &[&str] = &[".git", "node_modules", "target", ".venv", "d
 
 /// One read-only file tool call, after the registry has checked the arguments.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum FileCall {
+pub(crate) enum FileCall {
     ListDir {
         path: String,
     },
@@ -49,7 +49,7 @@ pub(super) enum FileCall {
 /// Why a tool could not do what the model asked. Shown to the model as `Error: ...`; a missing
 /// path and one outside the folder read the same, so the model learns nothing about other paths.
 #[derive(Debug, Error)]
-pub(super) enum ToolError {
+pub(crate) enum ToolError {
     #[error("{0} is not available.")]
     NotAvailable(String),
     #[error("{0} is not a folder.")]
@@ -68,33 +68,28 @@ pub(super) enum ToolError {
     RemoteGrep,
 }
 
-pub(super) fn error_text(error: &ToolError) -> String {
+pub(crate) fn error_text(error: &ToolError) -> String {
     format!("Error: {error}")
 }
 
-/// What a tool run produced: a line for the person and the text for the model.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct ToolOutput {
-    pub(super) step: String,
-    pub(super) text: String,
-}
+pub(crate) use fm_agent::ToolOutput;
 
 /// A working folder the tools may look into.
 #[derive(Debug, Clone)]
-pub(super) struct Sandbox {
+pub(crate) struct Sandbox {
     root: PathBuf,
 }
 
 impl Sandbox {
     /// `None` when the folder does not exist.
-    pub(super) fn new(root: &Path) -> Option<Self> {
+    pub(crate) fn new(root: &Path) -> Option<Self> {
         Some(Self {
             root: root.canonicalize().ok()?,
         })
     }
 
     /// Runs a read-only tool: a one-line description for the person, and the text for the model.
-    pub(super) fn run(&self, call: &FileCall) -> ToolOutput {
+    pub(crate) fn run(&self, call: &FileCall) -> ToolOutput {
         let (step, result) = match call {
             FileCall::ListDir { path } => (format!("Listed {path}"), self.list_dir(path)),
             FileCall::ReadFile { path, offset } => (
@@ -113,7 +108,7 @@ impl Sandbox {
     }
 
     /// The text of a file inside the folder, for `@path` mentions. `None` when it cannot be read.
-    pub(super) fn read_text(&self, relative: &str) -> Option<String> {
+    pub(crate) fn read_text(&self, relative: &str) -> Option<String> {
         let path = self.resolve(relative).ok()?;
         read_text_file(&path, 0).ok()
     }
@@ -299,7 +294,7 @@ fn read_text_file(path: &Path, offset: usize) -> Result<String, ToolError> {
 
 /// The text of at most `MAX_READ_BYTES + 1` bytes read from a file: binary content is refused and
 /// anything past the limit is cut with a marker.
-pub(super) fn text_from_bytes(
+pub(crate) fn text_from_bytes(
     mut buffer: Vec<u8>,
     name: &str,
     offset: usize,
@@ -322,14 +317,14 @@ pub(super) fn text_from_bytes(
 
 /// Where the tools look: a local folder, or one on another machine through its provider.
 #[derive(Clone)]
-pub(super) enum ToolHost {
+pub(crate) enum ToolHost {
     Local(Sandbox),
     Remote(RemoteSandbox),
 }
 
 impl ToolHost {
     /// The location of a document file the tools may read, checked like `read_file`.
-    pub(super) async fn document_location(
+    pub(crate) async fn document_location(
         &self,
         providers: &ProviderRegistry,
         relative: &str,
@@ -346,7 +341,7 @@ impl ToolHost {
     }
 
     /// `None` when the working folder cannot be reached.
-    pub(super) fn open(providers: &ProviderRegistry, working_directory: &str) -> Option<Self> {
+    pub(crate) fn open(providers: &ProviderRegistry, working_directory: &str) -> Option<Self> {
         match path_from_location(working_directory) {
             Some(path) => Sandbox::new(&path).map(Self::Local),
             None => RemoteSandbox::new(providers, working_directory).map(Self::Remote),
@@ -354,7 +349,7 @@ impl ToolHost {
     }
 
     /// Runs one read-only tool.
-    pub(super) async fn run(&self, call: FileCall) -> ToolOutput {
+    pub(crate) async fn run(&self, call: FileCall) -> ToolOutput {
         match self {
             Self::Local(sandbox) => {
                 let sandbox = sandbox.clone();
@@ -370,7 +365,7 @@ impl ToolHost {
     }
 
     /// The text of a file inside the working folder, for `@path` mentions.
-    pub(super) async fn read_text(&self, relative: &str) -> Option<String> {
+    pub(crate) async fn read_text(&self, relative: &str) -> Option<String> {
         match self {
             Self::Local(sandbox) => {
                 let sandbox = sandbox.clone();

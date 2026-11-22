@@ -5,21 +5,19 @@
 
 mod agent_tools;
 mod context;
-mod documents;
-mod remote;
 mod session;
-mod tools;
 mod write;
+
+use std::sync::Arc;
 
 use async_trait::async_trait;
 
 use fm_agent::{
-    ApprovalRequest, MAX_REPLY_BYTES, SkillCatalogue, SkillRoots, ToolContext, ToolRegistry,
-    TurnEnd, TurnEvent, TurnHost, run_turn,
+    SkillCatalogue, SkillIndex, ToolCalling, ToolContext, ToolRegistry, ToolSpec, TurnEnd,
+    TurnEvent, TurnHost, TurnOptions, compose_system_prompt, run_turn,
 };
 
-pub(crate) use fm_agent::{NoteToolCall, NoteToolOutcome, NotesAccess, redact_secrets};
-pub(crate) use fm_agent::{is_credential_folder, is_secret_name};
+pub(crate) use fm_agent::{NotesAccess, redact_secrets};
 pub(crate) use session::Sessions;
 
 use fm_transport_dto::{
@@ -30,20 +28,24 @@ use fm_transport_dto::{
 use fm_vfs::ProviderRegistry;
 use tokio_util::sync::CancellationToken;
 
-use crate::chat::ChatGenerator;
-use crate::file_assistant::truncate_to_bytes;
-use crate::llm_profiles::{LlmChatGeneration, LlmProfileError, LlmRole, LlmToolSpec};
+use fm_agent::{newest_bytes, truncate_to_bytes};
 
-use self::agent_tools::TerminalFiles;
+use crate::agent_host::{
+    Documents, FolderTools, SkillFolderDocuments, SkillScope, ToolHost, chat_failure, is_document,
+    note_proposal_dto, skills_for, tool_calling,
+};
+use crate::chat::ChatGenerator;
+use crate::llm_profiles::{LlmChatGeneration, LlmRole};
+
+use self::agent_tools::TerminalInterrupt;
 use self::context::{AttachedFile, render_activity, render_context, state_sections};
-pub(crate) use self::documents::SkillFolderDocuments;
-use self::documents::{Documents, is_document};
 use self::session::PendingWrite;
-use self::tools::ToolHost;
 use self::write::{
     FileWriter, MAX_BYTES_PER_QUESTION, MAX_FILES_PER_QUESTION, OUTPUT_FOLDER, WriteError,
 };
 
+/// Longest one-shot answer (explain, fix) and longest `ask` answer kept, in bytes.
+const MAX_REPLY_BYTES: usize = 8 * 1024;
 /// Longest natural-language request, in characters.
 const MAX_REQUEST_CHARS: usize = 2 * 1024;
 /// Most transcript bytes sent; the newest output is kept.
@@ -85,85 +87,27 @@ const ASK_NATIVE_TOOLS: &str = "\nYou may use the tools you are given, and call 
 /// The ask prompt: the fixed text, the tools generated from the registry (task 0339), and the
 /// skills catalogue for this question.
 fn ask_prompt(
-    registry: &ToolRegistry,
+    registry: &ToolRegistry<TerminalInterrupt>,
     catalogue: &SkillCatalogue,
     request: &str,
-    native_tools: bool,
+    calling: ToolCalling,
 ) -> String {
-    let mut prompt = ASK_INTRO.to_owned();
-    prompt.push_str(if native_tools {
-        ASK_NATIVE_TOOLS
-    } else {
-        ASK_TEXT_TOOLS
-    });
-    // Natively, the endpoint gets the tools as a list, so the prompt does not repeat them.
-    let tools = if native_tools {
-        String::new()
-    } else {
-        registry.prompt_section()
-    };
-    for section in [tools, catalogue.prompt_section(request)] {
-        if !section.is_empty() {
-            prompt.push('\n');
-            prompt.push_str(&section);
+    let intro = format!(
+        "{ASK_INTRO}{}",
+        match calling {
+            ToolCalling::Native => ASK_NATIVE_TOOLS,
+            ToolCalling::Text => ASK_TEXT_TOOLS,
         }
-    }
-    prompt
+    );
+    compose_system_prompt(&intro, registry, calling, catalogue, request)
 }
 
-/// The skills for one question: skill folders of the person and the project, and the notes that
-/// match the question (task 0339). With `host_wide` false (a browser client of a server) only the
-/// working folder's own skill folders are read, never the host's home or the folders above.
-pub(crate) async fn skills_for(
-    notes: Option<&dyn NotesAccess>,
-    working_directory: &str,
-    question: &str,
-    host_wide: bool,
-) -> SkillCatalogue {
-    let directory = context::path_from_location(working_directory);
-    let roots = if host_wide {
-        // Tests never read the real home folder.
-        let home = if cfg!(test) { None } else { dirs::home_dir() };
-        SkillRoots::standard(directory.as_deref(), home.as_deref(), &[])
-    } else {
-        let mut roots = SkillRoots::default();
-        if let Some(folder) = &directory {
-            roots.project.push(folder.join(".claude").join("skills"));
-            roots.project.push(folder.join(".agents").join("skills"));
-        }
-        roots
-    };
-    let mut catalogue = tokio::task::spawn_blocking(move || SkillCatalogue::discover(&roots))
-        .await
-        .unwrap_or_default();
-    if let Some(notes) = notes {
-        catalogue.add_notes(notes.skills(question).await);
-    }
-    catalogue
-}
-
-/// The read-only file tools over one working folder (local, or over SSH, with documents read as
-/// text), shared by the terminal assistant and the chat (task 0339).
-pub(crate) struct FolderTools {
-    host: Option<ToolHost>,
-    documents: Documents,
-}
-
-impl FolderTools {
-    /// Opens the folder named by `location`; the tools answer with an error when it cannot be used.
-    pub(crate) fn open(providers: &ProviderRegistry, location: &str) -> Self {
-        Self {
-            host: ToolHost::open(providers, location),
-            documents: Documents::new(providers),
-        }
-    }
-
-    /// The tools, as the shared registry calls them.
-    pub(crate) fn files(&self) -> TerminalFiles<'_> {
-        TerminalFiles {
-            host: self.host.as_ref(),
-            documents: &self.documents,
-        }
+/// How an `ask` turn runs: the answer cap, and secret redaction of every tool result.
+fn turn_options() -> TurnOptions {
+    TurnOptions {
+        max_answer_bytes: Some(MAX_REPLY_BYTES),
+        filter_result: Some(redact_secrets),
+        ..TurnOptions::default()
     }
 }
 
@@ -181,26 +125,34 @@ const FIX_PROMPT: &str = "The recent terminal output ends with a failed command.
 /// Answers one terminal assistance request through the chat role.
 pub(crate) async fn reply(
     generator: &impl ChatGenerator,
-    providers: &ProviderRegistry,
-    sessions: &Sessions,
-    notes: Option<&dyn NotesAccess>,
+    host: &TerminalHost<'_>,
     request: TerminalAssistRequestDto,
 ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
-    reply_streaming(generator, providers, sessions, notes, request, &mut |_| {}).await
+    reply_streaming(generator, host, request, &mut |_| {}).await
+}
+
+/// What the terminal assistant needs from the application.
+pub(crate) struct TerminalHost<'a> {
+    /// The providers its working folder is opened through.
+    pub(crate) providers: &'a ProviderRegistry,
+    /// The per-tab sessions.
+    pub(crate) sessions: &'a Sessions,
+    /// The notes folder, when set up.
+    pub(crate) notes: Option<&'a dyn NotesAccess>,
+    /// The skill headers remembered between requests.
+    pub(crate) skills: &'a Arc<SkillIndex>,
 }
 
 /// Like [`reply`], and for an `ask` also reports each finished line of the answer, and each step,
 /// to `on_event` while the model is still writing.
 pub(crate) async fn reply_streaming(
     generator: &impl ChatGenerator,
-    providers: &ProviderRegistry,
-    sessions: &Sessions,
-    notes: Option<&dyn NotesAccess>,
+    host: &TerminalHost<'_>,
     request: TerminalAssistRequestDto,
     on_event: &mut (dyn FnMut(TerminalAssistEventDto) + Send),
 ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
     if request.kind == TerminalAssistKindDto::Ask {
-        return ask(generator, providers, sessions, notes, request, on_event).await;
+        return ask(generator, host, request, on_event).await;
     }
     let (system_prompt, user_prompt) = prompts(&request)?;
     let raw = generate(
@@ -232,7 +184,7 @@ async fn generate(
     generator: &impl ChatGenerator,
     system_prompt: String,
     user_prompt: String,
-    tools: Vec<LlmToolSpec>,
+    tools: Vec<ToolSpec>,
     on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
 ) -> Result<String, ChatFailureDto> {
     let cancellation = CancellationToken::new();
@@ -252,19 +204,18 @@ async fn generate(
             on_delta,
         )
         .await
-        .map_err(failure)
+        .map_err(chat_failure)
 }
 
 /// A session question: remembers the turn, lets the model use read-only tools, and stops at a
 /// command that needs the person's approval.
 async fn ask(
     generator: &impl ChatGenerator,
-    providers: &ProviderRegistry,
-    sessions: &Sessions,
-    notes: Option<&dyn NotesAccess>,
+    terminal: &TerminalHost<'_>,
     request: TerminalAssistRequestDto,
     on_event: &mut (dyn FnMut(TerminalAssistEventDto) + Send),
 ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
+    let (providers, sessions, notes) = (terminal.providers, terminal.sessions, terminal.notes);
     let id = request
         .session_id
         .as_deref()
@@ -277,15 +228,11 @@ async fn ask(
         })
         .ok_or(ChatFailureDto::InvalidRequest)?
         .to_owned();
-    let host = ToolHost::open(providers, &request.working_directory);
-    let documents = Documents::new(providers);
+    let files = FolderTools::open(providers, &request.working_directory);
+    let (host, documents) = (files.host(), files.documents());
     // Calls are understood for every tool; the prompt describes `write_file` only when allowed.
     let registry = agent_tools::registry(true);
     let prompt_registry = agent_tools::registry(request.allow_file_writes);
-    let files = TerminalFiles {
-        host: host.as_ref(),
-        documents: &documents,
-    };
     let mut steps = Vec::new();
     let mut question_text = String::new();
 
@@ -346,7 +293,7 @@ async fn ask(
             .filter(|text| !text.is_empty() && text.chars().count() <= MAX_REQUEST_CHARS)
             .ok_or(ChatFailureDto::InvalidRequest)?;
         question_text = question.to_owned();
-        let files = attached_files(host.as_ref(), &documents, &request.context.files).await;
+        let files = attached_files(host, documents, &request.context.files).await;
         // The state goes in with the first question, and later only the parts that changed are
         // added: what was sent stays as it was, so a cached prompt prefix still matches and an
         // old command is never taken to have run in the new folder. Commands already sent in an
@@ -362,7 +309,7 @@ async fn ask(
         sessions.push_person(&id, question, &context);
     }
 
-    let native_tools = generator.native_tool_calling(LlmRole::Chat).await;
+    let calling = tool_calling(generator).await;
     // A continuation after an approval has no new question: the notes that matched the last one
     // still apply.
     let skills_question = if question_text.is_empty() {
@@ -370,68 +317,67 @@ async fn ask(
     } else {
         question_text.clone()
     };
-    let catalogue = skills_for(notes, &request.working_directory, &skills_question, true).await;
+    let catalogue = skills_for(
+        terminal.skills,
+        notes,
+        &request.working_directory,
+        &skills_question,
+        SkillScope::HostWide,
+    )
+    .await;
     let mut turn = TerminalTurn {
         generator,
         sessions,
         id: &id,
-        system_prompt: ask_prompt(&prompt_registry, &catalogue, &skills_question, native_tools),
+        system_prompt: ask_prompt(&prompt_registry, &catalogue, &skills_question, calling),
         budget: session::conversation_budget(generator.context_window(LlmRole::Chat).await),
-        tools: if native_tools {
-            prompt_registry
-                .specs()
-                .into_iter()
-                .map(|spec| LlmToolSpec {
-                    name: spec.name.to_owned(),
-                    description: spec.description.to_owned(),
-                    schema: spec.schema,
-                })
-                .collect()
-        } else {
-            Vec::new()
-        },
+        tools: prompt_registry.specs_for(calling),
     };
     let skill_documents = SkillFolderDocuments::new(providers);
     let ctx = ToolContext {
-        skills: &catalogue,
         notes,
         files: Some(&files),
         documents: Some(&skill_documents),
+        ..ToolContext::new(&catalogue)
     };
+    let options = turn_options();
     loop {
-        let end = run_turn(&mut turn, &registry, &ctx, &mut steps, &mut |event| {
+        let end = run_turn(&mut turn, &registry, &ctx, &options, &mut |event| {
             on_event(match event {
                 TurnEvent::Line(text) => TerminalAssistEventDto::Line { text },
-                TurnEvent::Step(text) => TerminalAssistEventDto::Step { text },
+                TurnEvent::Step(text) => {
+                    steps.push(text.clone());
+                    TerminalAssistEventDto::Step { text }
+                }
             });
         })
         .await?;
         match end {
             TurnEnd::Answer(text) => return Ok(stopped(text, steps)),
+            TurnEnd::EmptyReply => return Err(ChatFailureDto::Empty),
             TurnEnd::Cancelled => return Ok(stopped(String::new(), steps)),
             TurnEnd::StepLimit => {
                 let text = "I stopped after many steps. Ask again to continue.".to_owned();
                 return Ok(stopped(text, steps));
             }
-            TurnEnd::Proposal(proposal) => {
+            TurnEnd::Interrupted(TerminalInterrupt::Note(proposal)) => {
                 sessions.push_tool(
                     &id,
                     "The note was shown to the person for review. Nothing is saved unless they \
                      save it.",
                 );
                 return Ok(TerminalAssistReplyDto {
-                    note_proposal: Some(proposal),
+                    note_proposal: Some(note_proposal_dto(proposal)),
                     ..stopped(String::new(), steps)
                 });
             }
-            TurnEnd::NeedsApproval(ApprovalRequest::RunCommand { command }) => {
+            TurnEnd::Interrupted(TerminalInterrupt::Command(command)) => {
                 return Ok(TerminalAssistReplyDto {
-                    run_command: Some(command),
+                    run_command: Some(command.command),
                     ..stopped(String::new(), steps)
                 });
             }
-            TurnEnd::NeedsApproval(ApprovalRequest::WriteFile { name, content }) => {
-                let pending = PendingWrite { name, content };
+            TurnEnd::Interrupted(TerminalInterrupt::WriteFile(pending)) => {
                 if !request.allow_file_writes {
                     sessions.push_tool(&id, "Error: creating files is turned off.");
                 } else if let Err(error) = write::check(&pending.name, &pending.content) {
@@ -469,13 +415,15 @@ struct TerminalTurn<'a, G> {
     sessions: &'a Sessions,
     id: &'a str,
     system_prompt: String,
-    tools: Vec<LlmToolSpec>,
+    tools: Vec<ToolSpec>,
     /// How many bytes of conversation the model's window allows.
     budget: usize,
 }
 
 #[async_trait]
 impl<G: ChatGenerator> TurnHost for TerminalTurn<'_, G> {
+    type Error = ChatFailureDto;
+
     async fn generate(
         &mut self,
         on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
@@ -623,18 +571,6 @@ fn prompts(request: &TerminalAssistRequestDto) -> Result<(String, String), ChatF
     }
 }
 
-/// The last `max_bytes` of `text`, starting on a character boundary.
-pub(super) fn newest_bytes(text: &str, max_bytes: usize) -> &str {
-    if text.len() <= max_bytes {
-        return text;
-    }
-    let mut start = text.len() - max_bytes;
-    while !text.is_char_boundary(start) {
-        start += 1;
-    }
-    &text[start..]
-}
-
 /// The first non-empty line of a command answer, without code fences, prompts or backticks.
 fn first_command_line(raw: &str) -> Option<String> {
     raw.lines()
@@ -648,24 +584,62 @@ fn first_command_line(raw: &str) -> Option<String> {
         .map(|line| truncate_to_bytes(&line, MAX_REPLY_BYTES).to_owned())
 }
 
-fn failure(error: LlmProfileError) -> ChatFailureDto {
-    match error {
-        LlmProfileError::ConsentRequired(_) => ChatFailureDto::ConsentRequired,
-        LlmProfileError::RoleNotAssigned => ChatFailureDto::RoleNotAssigned,
-        LlmProfileError::Cancelled => ChatFailureDto::Cancelled,
-        _ => ChatFailureDto::Unavailable,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::VecDeque;
     use std::sync::Mutex as StdMutex;
 
     use async_trait::async_trait;
+    use fm_agent::{NoteProposal, NoteToolCall, ToolOutcome};
     use fm_transport_dto::{TerminalContextDto, TerminalToolResultDto};
 
     use super::*;
+    use crate::llm_profiles::LlmProfileError;
+
+    fn skill_index() -> &'static Arc<SkillIndex> {
+        static INDEX: std::sync::OnceLock<Arc<SkillIndex>> = std::sync::OnceLock::new();
+        INDEX.get_or_init(|| Arc::new(SkillIndex::new()))
+    }
+
+    fn host<'a>(
+        providers: &'a ProviderRegistry,
+        sessions: &'a Sessions,
+        notes: Option<&'a dyn NotesAccess>,
+    ) -> TerminalHost<'a> {
+        TerminalHost {
+            providers,
+            sessions,
+            notes,
+            skills: skill_index(),
+        }
+    }
+
+    async fn reply_in(
+        generator: &impl ChatGenerator,
+        providers: &ProviderRegistry,
+        sessions: &Sessions,
+        notes: Option<&dyn NotesAccess>,
+        request: TerminalAssistRequestDto,
+    ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
+        super::reply(generator, &host(providers, sessions, notes), request).await
+    }
+
+    async fn reply_streaming_in(
+        generator: &impl ChatGenerator,
+        providers: &ProviderRegistry,
+        sessions: &Sessions,
+        notes: Option<&dyn NotesAccess>,
+        request: TerminalAssistRequestDto,
+        on_event: &mut (dyn FnMut(TerminalAssistEventDto) + Send),
+    ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
+        super::reply_streaming(
+            generator,
+            &host(providers, sessions, notes),
+            request,
+            on_event,
+        )
+        .await
+    }
 
     enum Outcome {
         Text(&'static str),
@@ -744,7 +718,7 @@ mod tests {
     ) -> impl std::future::Future<Output = Result<TerminalAssistReplyDto, ChatFailureDto>> + '_
     {
         let sessions = Sessions::default();
-        async move { super::reply(fake, &ProviderRegistry::new(), &sessions, None, request).await }
+        async move { reply_in(fake, &ProviderRegistry::new(), &sessions, None, request).await }
     }
 
     fn command(request: &str) -> TerminalAssistRequestDto {
@@ -917,7 +891,7 @@ mod tests {
         sessions: &Sessions,
         request: TerminalAssistRequestDto,
     ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
-        super::reply(fake, &ProviderRegistry::new(), sessions, None, request).await
+        reply_in(fake, &ProviderRegistry::new(), sessions, None, request).await
     }
 
     #[tokio::test]
@@ -1258,7 +1232,7 @@ mod tests {
             &work,
         );
         request.allow_file_writes = true;
-        let mut reply = super::reply(&fake, &local_providers(), &sessions, None, request)
+        let mut reply = reply_in(&fake, &local_providers(), &sessions, None, request)
             .await
             .unwrap();
         println!("steps: {:?}\ntext: {}", reply.steps, reply.text);
@@ -1267,7 +1241,7 @@ mod tests {
             again.request = None;
             again.allow_file_writes = true;
             again.write_decision = Some(TerminalWriteDecisionDto::Session);
-            reply = super::reply(&fake, &local_providers(), &sessions, None, again)
+            reply = reply_in(&fake, &local_providers(), &sessions, None, again)
                 .await
                 .unwrap();
             println!("steps: {:?}\ntext: {}", reply.steps, reply.text);
@@ -1310,7 +1284,7 @@ mod tests {
         let sessions = Sessions::default();
         let mut events = Vec::new();
 
-        let reply = super::reply_streaming(
+        let reply = reply_streaming_in(
             &fake,
             &ProviderRegistry::new(),
             &sessions,
@@ -1344,7 +1318,7 @@ mod tests {
         let sessions = Sessions::default();
         let mut events = Vec::new();
 
-        super::reply_streaming(
+        reply_streaming_in(
             &fake,
             &ProviderRegistry::new(),
             &sessions,
@@ -1374,27 +1348,25 @@ mod tests {
 
     #[async_trait]
     impl NotesAccess for FakeNotes {
-        async fn run(&self, call: NoteToolCall) -> NoteToolOutcome {
+        async fn run(&self, call: NoteToolCall) -> ToolOutcome<NoteProposal> {
             self.calls.lock().unwrap().push(call.clone());
             match call {
-                NoteToolCall::Search { query, .. } => NoteToolOutcome::Output {
-                    step: format!("Searched notes for {query}"),
-                    text: "1. ops/nginx.md: Replace nginx certificate".into(),
-                },
-                NoteToolCall::Read { path } => NoteToolOutcome::Output {
-                    step: format!("Read note {path}"),
-                    text: "NOTE-BODY: sudo cp fullchain.pem /etc/nginx/".into(),
-                },
+                NoteToolCall::Search { query, .. } => ToolOutcome::output(
+                    format!("Searched notes for {query}"),
+                    "1. ops/nginx.md: Replace nginx certificate",
+                ),
+                NoteToolCall::Read { path } => ToolOutcome::output(
+                    format!("Read note {path}"),
+                    "NOTE-BODY: sudo cp fullchain.pem /etc/nginx/",
+                ),
                 NoteToolCall::Propose { path, content, .. } => {
-                    NoteToolOutcome::Proposal(fm_transport_dto::NoteProposalDto {
+                    ToolOutcome::Interrupt(NoteProposal {
                         path,
-                        draft: fm_transport_dto::NoteDraftDto {
-                            title: "T".into(),
-                            file_name: "t.md".into(),
-                            tags: Vec::new(),
-                            content,
-                            redactions: 0,
-                        },
+                        title: "T".into(),
+                        file_name: "t.md".into(),
+                        tags: Vec::new(),
+                        content,
+                        redactions: 0,
                     })
                 }
             }
@@ -1413,7 +1385,7 @@ mod tests {
         notes: Option<&dyn NotesAccess>,
         request: TerminalAssistRequestDto,
     ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
-        super::reply(fake, &ProviderRegistry::new(), sessions, notes, request).await
+        reply_in(fake, &ProviderRegistry::new(), sessions, notes, request).await
     }
 
     #[tokio::test]
@@ -1556,7 +1528,7 @@ mod tests {
         sessions: &Sessions,
         request: TerminalAssistRequestDto,
     ) -> TerminalAssistReplyDto {
-        super::reply(fake, &local_providers(), sessions, None, request)
+        reply_in(fake, &local_providers(), sessions, None, request)
             .await
             .unwrap()
     }
@@ -1662,7 +1634,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let fake = scripted(&[]);
         let sessions = Sessions::default();
-        let result = super::reply(
+        let result = reply_in(
             &fake,
             &local_providers(),
             &sessions,
@@ -1699,8 +1671,8 @@ mod tests {
         let catalogue = SkillCatalogue::default();
         let off = agent_tools::registry(false);
         let on = agent_tools::registry(true);
-        assert!(!ask_prompt(&off, &catalogue, "", false).contains("write_file"));
-        assert!(ask_prompt(&on, &catalogue, "", false).contains("write_file"));
+        assert!(!ask_prompt(&off, &catalogue, "", ToolCalling::Text).contains("write_file"));
+        assert!(ask_prompt(&on, &catalogue, "", ToolCalling::Text).contains("write_file"));
     }
 
     #[tokio::test]
@@ -1740,16 +1712,13 @@ mod tests {
 
     #[async_trait]
     impl NotesAccess for SkillNotes {
-        async fn run(&self, call: NoteToolCall) -> NoteToolOutcome {
+        async fn run(&self, call: NoteToolCall) -> ToolOutcome<NoteProposal> {
             match call {
-                NoteToolCall::Read { path } => NoteToolOutcome::Output {
-                    step: format!("Read note {path}"),
-                    text: format!("Note {path}:\n1. certbot renew"),
-                },
-                _ => NoteToolOutcome::Output {
-                    step: "Notes".to_owned(),
-                    text: "unused".to_owned(),
-                },
+                NoteToolCall::Read { path } => ToolOutcome::output(
+                    format!("Read note {path}"),
+                    format!("Note {path}:\n1. certbot renew"),
+                ),
+                _ => ToolOutcome::output("Notes", "unused"),
             }
         }
 
@@ -1784,7 +1753,7 @@ mod tests {
             "Done.",
         ]);
         let sessions = Sessions::default();
-        let reply = super::reply(
+        let reply = reply_in(
             &fake,
             &ProviderRegistry::new(),
             &sessions,
@@ -1804,7 +1773,7 @@ mod tests {
             ]
         );
         let prompt = &fake.seen.lock().unwrap()[0].1.system_prompt;
-        assert!(prompt.contains("- read_skill loads a skill"));
+        assert!(prompt.contains("- read_skill: Loads a skill"));
         assert!(prompt.contains("- release: Use when cutting a release [project]"));
         assert!(prompt.contains("- nginx-cert: Use when replacing a certificate [note]"));
         let transcript = sessions.render("t");
@@ -1855,12 +1824,7 @@ mod tests {
         assert_eq!(reply.text, "It says alpha.");
         assert_eq!(reply.steps, ["Read a.txt"]);
         let seen = fake.seen.lock().unwrap();
-        let names: Vec<&str> = seen[0]
-            .1
-            .tools
-            .iter()
-            .map(|tool| tool.name.as_str())
-            .collect();
+        let names: Vec<&str> = seen[0].1.tools.iter().map(|tool| tool.name).collect();
         assert!(names.contains(&"read_file") && names.contains(&"run_command"));
         assert!(!names.contains(&"write_file"));
         assert!(
