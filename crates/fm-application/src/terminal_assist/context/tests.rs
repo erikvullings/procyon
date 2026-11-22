@@ -185,3 +185,21 @@ fn the_state_comes_in_parts_that_change_independently() {
     let bare = state_sections(&request(TerminalContextDto::default()));
     assert_eq!(bare.len(), 1);
 }
+
+#[test]
+fn a_local_folders_own_files_are_listed_whatever_the_pane_shows() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("b.md"), "x").unwrap();
+    std::fs::write(dir.path().join("a.pdf"), "x").unwrap();
+    std::fs::create_dir(dir.path().join("sub")).unwrap();
+    let mut asked = request(TerminalContextDto {
+        listing: vec!["elsewhere.txt".into()],
+        ..TerminalContextDto::default()
+    });
+    asked.working_directory = url::Url::from_directory_path(dir.path())
+        .unwrap()
+        .to_string();
+    let text = render_context(&asked, &[]);
+    assert!(text.contains("Folder listing (3 names):\n- a.pdf\n- b.md\n- sub/"));
+    assert!(!text.contains("elsewhere.txt"));
+}

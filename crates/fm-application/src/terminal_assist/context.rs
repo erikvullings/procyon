@@ -100,21 +100,44 @@ pub(super) fn state_sections(request: &TerminalAssistRequestDto) -> Vec<(&'stati
             format!("Selected in the folder: {}", names.join(", ")),
         ));
     }
-    if !context.listing.is_empty() {
-        let mut listing = format!("Folder listing ({} names):", context.listing.len());
-        for name in context.listing.iter().take(MAX_LISTED_NAMES) {
+    // The folder itself answers when it is local: the pane may show another folder or none yet.
+    let listing_names = shown_path
+        .as_deref()
+        .and_then(folder_names)
+        .unwrap_or_else(|| context.listing.clone());
+    if !listing_names.is_empty() {
+        let mut listing = format!("Folder listing ({} names):", listing_names.len());
+        for name in listing_names.iter().take(MAX_LISTED_NAMES) {
             let _ = write!(listing, "\n- {}", line(name));
         }
-        if context.listing.len() > MAX_LISTED_NAMES {
+        if listing_names.len() > MAX_LISTED_NAMES {
             let _ = write!(
                 listing,
                 "\n- and {} more",
-                context.listing.len() - MAX_LISTED_NAMES
+                listing_names.len() - MAX_LISTED_NAMES
             );
         }
         sections.push(("listing", listing));
     }
     sections
+}
+
+/// The names in a local folder, sorted, folders ending with `/`; `None` when it cannot be read.
+fn folder_names(folder: &Path) -> Option<Vec<String>> {
+    let mut names: Vec<String> = std::fs::read_dir(folder)
+        .ok()?
+        .flatten()
+        .map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                format!("{name}/")
+            } else {
+                name
+            }
+        })
+        .collect();
+    names.sort();
+    Some(names)
 }
 
 /// What happened since: recent commands with their output, and the files named with `@path`.

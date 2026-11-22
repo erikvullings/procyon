@@ -1151,11 +1151,11 @@ mod tests {
         let second_dir = tempfile::tempdir().unwrap();
         let fake = scripted(&["first", "second"]);
         let sessions = Sessions::default();
-        let mut one = ask_request("t1", "here?", first_dir.path());
-        one.context.listing = vec!["old.txt".into()];
+        std::fs::write(first_dir.path().join("old.txt"), "x").unwrap();
+        std::fs::write(second_dir.path().join("new.txt"), "x").unwrap();
+        let one = ask_request("t1", "here?", first_dir.path());
         ask_in(&fake, &sessions, one).await.unwrap();
-        let mut two = ask_request("t1", "now?", second_dir.path());
-        two.context.listing = vec!["new.txt".into()];
+        let two = ask_request("t1", "now?", second_dir.path());
         ask_in(&fake, &sessions, two).await.unwrap();
 
         let seen = fake.seen.lock().unwrap();
