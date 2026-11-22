@@ -62,7 +62,9 @@ fn a_registered_tool_is_described_in_the_generated_prompt() {
     let prompt = registry().prompt_section();
     assert!(prompt.contains("- echo repeats text."));
     assert!(prompt.contains("text (string), times (integer, optional)"));
-    assert!(prompt.contains(r#"Example: {"tool":"echo","text":"..."}"#));
+    let example = prompt.split("Example: ").nth(1).expect("an example");
+    let example: Value = serde_json::from_str(example).expect("the example is JSON");
+    assert_eq!(example, json!({"tool": "echo", "text": "..."}));
 }
 
 #[test]
@@ -170,4 +172,16 @@ async fn run_command_asks_for_approval_with_the_trimmed_line() {
             command: "cargo test".into()
         })
     );
+}
+
+#[tokio::test]
+async fn a_models_own_tag_syntax_with_bare_keys_is_a_call() {
+    for reply in [
+        r#"<|tool_call>call:echo{text:"hi",times:2}<tool_call|>"#,
+        r#"<|tool_call>call:echo{text:<|"|>hi<|"|>,times:2}<tool_call|>"#,
+    ] {
+        let outcome = call(&registry(), reply).await;
+        assert_eq!(outcome, ToolOutcome::output("Echoed", "hihi"), "{reply}");
+    }
+    assert!(registry().parse("call:rm{path:\"/\"}").is_none());
 }

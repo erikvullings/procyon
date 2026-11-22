@@ -227,6 +227,28 @@ impl ToolRegistry {
         reply
             .match_indices('{')
             .find_map(|(start, _)| self.call_at(&reply[start..]))
+            .or_else(|| self.native_text_call(reply))
+    }
+
+    /// A call in a model's own tag syntax, `call:NAME{key:"value"}` (Gemma writes
+    /// `<|tool_call>call:list_dir{path:""}<tool_call|>`): unquoted keys, and `<|"|>` as the string
+    /// delimiter.
+    fn native_text_call(&self, reply: &str) -> Option<ParsedCall> {
+        let reply = reply.replace("<|\"|>", "\"");
+        reply.match_indices("call:").find_map(|(start, marker)| {
+            let after = &reply[start + marker.len()..];
+            let name_end = after.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))?;
+            let tool = self.tools.get(&after[..name_end])?;
+            let args = after[name_end..]
+                .starts_with('{')
+                .then(|| balanced_object(&after[name_end..]))
+                .flatten()?;
+            let args: Value = serde_json::from_str(&quote_bare_keys(args)).ok()?;
+            Some(ParsedCall {
+                tool: Arc::clone(tool),
+                args,
+            })
+        })
     }
 
     /// Every tool call of a reply, in order: each `TOOL {json}` line is one call (a model or
@@ -356,6 +378,58 @@ fn example_call(name: &str, schema: &Value) -> String {
         }
     }
     call.to_string()
+}
+
+/// `{path:"a",n:2}` as JSON: wraps each bare key (an identifier after `{` or `,`) in quotes.
+fn quote_bare_keys(object: &str) -> String {
+    let mut out = String::with_capacity(object.len() + 8);
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut expects_key = false;
+    let mut chars = object.chars().peekable();
+    while let Some(c) = chars.next() {
+        if in_string {
+            out.push(c);
+            match c {
+                _ if escaped => escaped = false,
+                '\\' => escaped = true,
+                '"' => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+        match c {
+            '"' => {
+                in_string = true;
+                expects_key = false;
+                out.push(c);
+            }
+            '{' | ',' => {
+                expects_key = true;
+                out.push(c);
+            }
+            c if expects_key && (c.is_ascii_alphabetic() || c == '_') => {
+                out.push('"');
+                out.push(c);
+                while let Some(&next) = chars.peek() {
+                    if !(next.is_ascii_alphanumeric() || next == '_') {
+                        break;
+                    }
+                    out.push(next);
+                    chars.next();
+                }
+                out.push('"');
+                expects_key = false;
+            }
+            c => {
+                if !c.is_whitespace() {
+                    expects_key = false;
+                }
+                out.push(c);
+            }
+        }
+    }
+    out
 }
 
 /// The text from the opening brace to its matching closing brace, braces in strings ignored.
