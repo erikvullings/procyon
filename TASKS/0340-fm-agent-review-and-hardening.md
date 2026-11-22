@@ -1,6 +1,6 @@
 # 0340 fm-agent review and hardening
 
-Status: in_progress
+Status: done
 Priority: medium
 Subsystem: backend
 Depends on: 0339
@@ -91,3 +91,60 @@ A two-axis review (coding standards and spec, `git diff 91c4cf86...HEAD`) found 
   `terminal_assist`.
 
 ## Agent Notes
+- 2026-11-23 Claude: Done in commit `0a970145` (core refactor) and a follow-up commit (chat tests,
+  result bound).
+  - **`fm-agent` (layer 0, no workspace dependencies):**
+    - The traits are `AgentTool<I>`/`TypedTool<I>`, with derived schemas and a `ToolEffect` per
+      tool. `ToolOutcome<I>` is `Output(ToolOutput) | Interrupt(I)`.
+    - `ToolRegistry<I>` offers `parse`, `specs`/`specs_for`, `prompt_for`, and `describe` (lets a
+      host reword a tool). There is also `compose_system_prompt`.
+    - `run_turn` takes `TurnOptions`:
+      - `max_steps` 24
+      - `max_calls_per_reply` 8
+      - `max_concurrent_calls` 4
+      - `max_answer_bytes` (none by default)
+      - `max_result_bytes` 64 KiB
+      - `filter_result`
+      - `nudge`
+      - `skipped_calls_message`
+
+      `TurnHost` gets `type Error`. `TurnEnd` gains `EmptyReply` and `Interrupted(I)`, and the
+      `steps` out-parameter is gone: hosts collect steps from the events.
+    - `NotesAccess::run` returns `ToolOutcome<NoteProposal>`, so `NoteToolOutcome` is gone.
+    - The built-in `run_command` returns `CommandRequest`.
+    - `SkillIndex` caches headers by `SKILL.md` size and modification time.
+    - `Skill::resolve_file` and `read_checked(offset)` are what `read_skill_file` uses before the
+      host's `SkillDocuments`, which now receives a checked path.
+  - **`fm-application`:**
+    - `agent_host/` holds the shared parts, moved out of `terminal_assist`: `FolderTools`
+      (implements `FileTools`), `skills_for`, `SkillScope`, `chat_failure`, `note_proposal_dto`
+      and `READ_FILE_DESCRIPTION`.
+    - The terminal has `TerminalInterrupt {Note, Command, WriteFile}` and `TerminalHost`. The chat
+      uses `NoteProposal` as its interrupt type.
+    - `LlmToolSpec` was replaced by `fm_agent::ToolSpec`.
+    - Ollama now returns every native call, not only the first.
+    - `FileManagerService` holds one `Arc<SkillIndex>`.
+  - **Verified:**
+    - `cargo nextest run --workspace`: 4057 passed, 22 skipped, before the follow-up.
+    - `fm-agent`: 72 tests.
+    - The agent-related `fm-application` filter: 223 tests.
+    - `fm-server` `chat_tools_routes`: 2 tests.
+    - Workspace clippy is clean, as is the doctest in `lib.rs`.
+  - **Behaviour changes to know:**
+    - The text prompt format is now `- name: Description Arguments: ... Example: TOOL {...}`.
+    - Native calls come back as `TOOL {"name":..,"arguments":..}`.
+    - A JSON object inside an answer's prose is no longer taken as a call. One on its own line,
+      or ending the reply, still is.
+    - `ask` answers are still capped at 8 KiB by the terminal itself. Chat answers are bounded
+      only by the chat's own reply limit.
+  - **Decided against or left:**
+    - Structured tool-role messages: 0339's decision stands, and native calls are text in the
+      transcript.
+    - Skills via the VFS: they stay local `std::fs`. Skill folders are host-local, and remote ones
+      would need provider-specific sandboxing.
+    - `Arc`-sharing the system prompt, transcript and specs per step: measured as negligible next
+      to model latency.
+    - The English-only nudge: hosts can now pass their own `ContinueNudge`, or `None`.
+    - Non-`file:` chat tools folders: left to the provider, like every other server route
+      (`validate_location` skips non-local providers).
+

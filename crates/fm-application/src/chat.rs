@@ -1132,4 +1132,216 @@ mod tests {
         assert!(!seen[0].1.system_prompt.contains("TOOL"));
         assert!(seen[0].1.tools.is_empty());
     }
+
+    fn local_providers() -> fm_vfs::ProviderRegistry {
+        let mut providers = fm_vfs::ProviderRegistry::new();
+        providers.register(std::sync::Arc::new(
+            fm_vfs_local::LocalFileSystemProvider::new(),
+        ));
+        providers
+    }
+
+    /// Notes that offer one note as a skill and draft whatever the model proposes.
+    struct ChatNotes;
+
+    #[async_trait]
+    impl fm_agent::NotesAccess for ChatNotes {
+        async fn run(
+            &self,
+            call: fm_agent::NoteToolCall,
+        ) -> fm_agent::ToolOutcome<fm_agent::NoteProposal> {
+            match call {
+                fm_agent::NoteToolCall::Read { path } => fm_agent::ToolOutcome::output(
+                    format!("Read note {path}"),
+                    format!("Note {path}:\n1. certbot renew"),
+                ),
+                fm_agent::NoteToolCall::Search { .. } => {
+                    fm_agent::ToolOutcome::output("Searched notes", "1. ops/nginx.md")
+                }
+                fm_agent::NoteToolCall::Propose { path, content, .. } => {
+                    fm_agent::ToolOutcome::Interrupt(fm_agent::NoteProposal {
+                        path,
+                        title: "Renew certificates".into(),
+                        file_name: "renew-certificates.md".into(),
+                        tags: Vec::new(),
+                        content,
+                        redactions: 0,
+                    })
+                }
+            }
+        }
+
+        async fn skills(&self, _query: &str) -> Vec<fm_agent::NoteSkill> {
+            vec![fm_agent::NoteSkill {
+                name: "nginx-cert".into(),
+                description: "Use when replacing a certificate".into(),
+                path: "ops/nginx.md".into(),
+            }]
+        }
+    }
+
+    async fn stream_with(
+        generator: &impl ChatGenerator,
+        tooling: &ChatTooling<'_>,
+        folder: &std::path::Path,
+    ) -> (
+        Vec<ChatReplyEventDto>,
+        ChatConversationService,
+        Uuid,
+        Uuid,
+        tempfile::TempDir,
+    ) {
+        let (directory, conversations) = store();
+        let workspace = Uuid::new_v4();
+        let id = conversations.create(workspace).unwrap().id;
+        let mut seen = Vec::new();
+        ChatService::default()
+            .stream(
+                generator,
+                &conversations,
+                Some(tooling),
+                folder_request(workspace, id, folder),
+                &mut |event| seen.push(event),
+            )
+            .await;
+        (seen, conversations, workspace, id, directory)
+    }
+
+    #[tokio::test]
+    async fn the_model_lists_and_searches_the_folder_in_one_reply() {
+        let folder = tempdir().unwrap();
+        std::fs::write(folder.path().join("a.txt"), "alpha beta").unwrap();
+        std::fs::write(folder.path().join("b.txt"), "gamma").unwrap();
+        let providers = local_providers();
+        let generator = scripted(&[
+            "TOOL {\"tool\":\"list_dir\",\"path\":\".\"}\nTOOL {\"tool\":\"grep\",\"pattern\":\"beta\"}",
+            "a.txt mentions beta.",
+        ]);
+        let (seen, ..) = stream_with(&generator, &local_tooling(&providers), folder.path()).await;
+
+        let steps: Vec<&str> = seen
+            .iter()
+            .filter_map(|event| match event {
+                ChatReplyEventDto::Step { text } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(steps.len(), 2, "{seen:?}");
+        let second = &generator.seen.lock().unwrap()[1].user_prompt;
+        assert!(second.contains("b.txt"), "the listing reaches the model");
+        assert!(
+            second.contains("alpha beta"),
+            "the search hit reaches the model: {second}"
+        );
+        assert_eq!(
+            seen.last(),
+            Some(&ChatReplyEventDto::Done {
+                text: "a.txt mentions beta.".into()
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn notes_and_project_skills_are_offered_and_load_in_the_chat() {
+        let folder = tempdir().unwrap();
+        let skill = folder.path().join(".claude/skills/release");
+        std::fs::create_dir_all(&skill).unwrap();
+        std::fs::write(
+            skill.join("SKILL.md"),
+            "---\nname: release\ndescription: Use when cutting a release\n---\nTag, then push.\n",
+        )
+        .unwrap();
+        let providers = local_providers();
+        let tooling = ChatTooling {
+            notes: Some(&ChatNotes),
+            ..local_tooling(&providers)
+        };
+        let generator = scripted(&[
+            "TOOL {\"tool\":\"read_skill\",\"name\":\"nginx-cert\"}\nTOOL {\"tool\":\"read_skill\",\"name\":\"release\"}",
+            "Renew with certbot, then tag.",
+        ]);
+        let (seen, ..) = stream_with(&generator, &tooling, folder.path()).await;
+
+        let requests = generator.seen.lock().unwrap();
+        let system = &requests[0].system_prompt;
+        assert!(system.contains("- nginx-cert: Use when replacing a certificate [note]"));
+        assert!(system.contains("- release: Use when cutting a release [project]"));
+        assert!(requests[1].user_prompt.contains("1. certbot renew"));
+        assert!(requests[1].user_prompt.contains("Tag, then push."));
+        assert!(matches!(seen.last(), Some(ChatReplyEventDto::Done { .. })));
+    }
+
+    #[tokio::test]
+    async fn a_proposed_note_goes_to_review_and_the_reply_says_so() {
+        let folder = tempdir().unwrap();
+        let providers = local_providers();
+        let tooling = ChatTooling {
+            notes: Some(&ChatNotes),
+            ..local_tooling(&providers)
+        };
+        let generator = scripted(&[
+            r#"TOOL {"tool":"propose_note","title":"Renew","content":"certbot renew"}"#,
+        ]);
+        let (seen, conversations, workspace, id, _directory) =
+            stream_with(&generator, &tooling, folder.path()).await;
+
+        let proposal = seen.iter().find_map(|event| match event {
+            ChatReplyEventDto::NoteProposal { proposal } => Some(proposal),
+            _ => None,
+        });
+        let proposal = proposal.expect("a proposal event");
+        assert_eq!(proposal.path, None);
+        assert_eq!(proposal.draft.content, "certbot renew");
+        let saved = conversations.get(workspace, id).unwrap();
+        assert!(saved.messages[1].content.contains("Renew certificates"));
+    }
+
+    /// A model whose endpoint calls tools natively.
+    struct Native(Scripted);
+
+    #[async_trait]
+    impl ChatGenerator for Native {
+        async fn accepts_images(&self, role: LlmRole) -> Result<bool, LlmProfileError> {
+            self.0.accepts_images(role).await
+        }
+
+        async fn native_tool_calling(&self, _role: LlmRole) -> bool {
+            true
+        }
+
+        async fn generate_for_role(
+            &self,
+            role: LlmRole,
+            generation: LlmChatGeneration,
+            cancellation: &CancellationToken,
+            on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
+        ) -> Result<String, LlmProfileError> {
+            self.0
+                .generate_for_role(role, generation, cancellation, on_delta)
+                .await
+        }
+    }
+
+    #[tokio::test]
+    async fn natively_the_tools_go_as_specs_and_a_written_back_call_runs() {
+        let folder = tempdir().unwrap();
+        std::fs::write(folder.path().join("a.txt"), "alpha beta").unwrap();
+        let providers = local_providers();
+        let generator = Native(scripted(&[
+            r#"TOOL {"name":"read_file","arguments":{"path":"a.txt"}}"#,
+            "It says alpha beta.",
+        ]));
+        let (seen, ..) = stream_with(&generator, &local_tooling(&providers), folder.path()).await;
+
+        let requests = generator.0.seen.lock().unwrap();
+        assert!(!requests[0].system_prompt.contains("TOOL {json}"));
+        let names: Vec<&str> = requests[0].tools.iter().map(|tool| tool.name).collect();
+        assert!(names.contains(&"read_file") && names.contains(&"read_skill"));
+        assert!(
+            !names.contains(&"run_command"),
+            "the chat cannot run commands"
+        );
+        assert!(requests[1].user_prompt.contains("alpha beta"));
+        assert!(matches!(seen.last(), Some(ChatReplyEventDto::Done { .. })));
+    }
 }

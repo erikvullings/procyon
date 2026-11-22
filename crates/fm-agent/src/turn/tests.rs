@@ -406,3 +406,18 @@ fn a_promise_is_found_only_at_the_end_of_a_reply() {
         "x".repeat(400)
     )));
 }
+
+#[tokio::test]
+async fn a_huge_tool_result_is_cut_before_the_model_sees_it() {
+    let word = "w".repeat(5000);
+    let call = format!("TOOL {{\"tool\":\"shout\",\"word\":\"{word}\"}}");
+    let mut host = Scripted::new(&[call.as_str(), "ok"]);
+    let options = TurnOptions {
+        max_result_bytes: Some(100),
+        ..TurnOptions::default()
+    };
+    turn_with(&mut host, &harness(), &options).await;
+    let result = host.results()[0];
+    assert!(result.starts_with(&"W".repeat(100)));
+    assert!(result.ends_with("[The result was cut at 100 bytes.]"));
+}

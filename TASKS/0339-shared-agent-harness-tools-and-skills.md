@@ -265,3 +265,4 @@ pub(crate) trait AgentTool: Send + Sync {
 - Decided against: structured tool-role messages. The transcript stays text, which both protocols
   and every endpoint accept; native calls already come back as `TOOL {json}` lines. Revisit only if
   a model is found that ignores results given as text.
+- 2026-11-23 Claude: Reviewed and hardened in 0340 (DTO-free layer-0 `fm-agent`, derived schemas, strict single parse, concurrent read-only calls, `TurnOptions`, skill cache, 8 KiB answer cut fixed). The code snippets above describe the design before that refactor.

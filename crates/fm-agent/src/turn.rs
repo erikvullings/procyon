@@ -95,6 +95,9 @@ pub struct TurnOptions {
     pub max_concurrent_calls: usize,
     /// Longest answer kept, in bytes; `None` keeps it whole.
     pub max_answer_bytes: Option<usize>,
+    /// Longest tool result the model sees, in bytes; a longer one is cut with a note. `None`
+    /// leaves the bound to the tools and the host.
+    pub max_result_bytes: Option<usize>,
     /// Applied to every tool result before the model sees it (for example secret redaction).
     pub filter_result: Option<fn(&str) -> String>,
     /// Asks a model that only announced more work to go on; `None` takes such a reply as the answer.
@@ -110,6 +113,7 @@ impl Default for TurnOptions {
             max_calls_per_reply: 8,
             max_concurrent_calls: 4,
             max_answer_bytes: None,
+            max_result_bytes: Some(64 * 1024),
             filter_result: None,
             nudge: Some(ContinueNudge::default()),
             skipped_calls_message: Cow::Borrowed(
@@ -244,10 +248,7 @@ where
             match outcome {
                 ToolOutcome::Output(ToolOutput { step, text }) => {
                     on_event(TurnEvent::Step(step));
-                    match options.filter_result {
-                        Some(filter) => host.push_tool(&filter(&text)),
-                        None => host.push_tool(&text),
-                    }
+                    host.push_tool(&result_for_model(options, &text));
                 }
                 ToolOutcome::Interrupt(interrupt) => {
                     if done < total {
@@ -259,6 +260,21 @@ where
         }
     }
     None
+}
+
+/// A tool result as the model sees it: bounded, then filtered.
+fn result_for_model(options: &TurnOptions, text: &str) -> String {
+    let bounded: Cow<'_, str> = match options.max_result_bytes {
+        Some(max) if text.len() > max => Cow::Owned(format!(
+            "{}\n[The result was cut at {max} bytes.]",
+            truncate_to_bytes(text, max)
+        )),
+        _ => Cow::Borrowed(text),
+    };
+    match options.filter_result {
+        Some(filter) => filter(&bounded),
+        None => bounded.into_owned(),
+    }
 }
 
 #[cfg(test)]
