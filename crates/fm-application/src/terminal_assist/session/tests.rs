@@ -1,6 +1,6 @@
 use fm_transport_dto::TerminalBlockDto;
 
-use super::{MAX_RENDERED_BYTES, MAX_SESSIONS, MAX_TURNS, Sessions};
+use super::{MAX_RENDERED_BYTES, MAX_SESSIONS, MAX_TURNS, Sessions, conversation_budget};
 
 #[test]
 fn a_follow_up_sees_the_earlier_turns() {
@@ -155,4 +155,31 @@ fn the_last_question_survives_the_answers_and_tool_results_after_it() {
     sessions.push_assistant("t1", "TOOL {}");
     sessions.push_tool("t1", "output");
     assert_eq!(sessions.last_question("t1"), "renew the certificate");
+}
+
+#[test]
+fn a_long_run_of_tool_results_keeps_the_question_and_its_context() {
+    let sessions = Sessions::default();
+    sessions.push_person("t1", "summarise the folder", "Folder listing: a.md, b.md");
+    let result = "r".repeat(MAX_RENDERED_BYTES / 4);
+    for index in 0..8 {
+        sessions.push_assistant("t1", &format!("TOOL read {index}"));
+        sessions.push_tool("t1", &format!("{index} {result}"));
+    }
+
+    let prompt = sessions.render("t1");
+    assert!(prompt.starts_with("Context attached by the person:\nFolder listing: a.md, b.md"));
+    assert!(prompt.contains("Person: summarise the folder"));
+    assert!(prompt.contains("Earlier tool results were left out"));
+    assert!(prompt.contains("7 rrr"));
+    assert!(!prompt.contains("1 rrr"));
+    assert!(prompt.len() <= MAX_RENDERED_BYTES + 256);
+}
+
+#[test]
+fn the_conversation_budget_follows_the_models_window() {
+    assert_eq!(conversation_budget(None), MAX_RENDERED_BYTES);
+    assert!(conversation_budget(Some(262_144)) > 300 * 1024);
+    assert!(conversation_budget(Some(u32::MAX)) <= 900 * 1024);
+    assert!(conversation_budget(Some(1_000)) >= MAX_RENDERED_BYTES / 3);
 }

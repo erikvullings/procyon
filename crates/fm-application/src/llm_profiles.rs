@@ -1868,6 +1868,13 @@ impl LlmProfileService {
     }
 
     /// Whether chat requests for `role` carry native tools: the probe found the model takes them.
+    /// The context window, in tokens, of the role's profile.
+    pub(crate) fn role_context_window(&self, role: LlmRole) -> Option<u32> {
+        self.resolve_role(role)
+            .ok()
+            .map(|resolved| resolved.profile.advanced.context_window)
+    }
+
     pub(crate) async fn role_uses_native_tools(&self, role: LlmRole) -> bool {
         let Ok(resolved) = self.resolve_role(role) else {
             return false;

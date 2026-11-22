@@ -40,8 +40,9 @@ const MAX_IMAGES: usize = 4;
 const MAX_IMAGE_EDGE: u32 = 1024;
 /// Most decoded image bytes sent with one message.
 const MAX_IMAGE_BYTES: usize = 4 * 1024 * 1024;
-/// Upper bound on generated tokens for one reply.
-const MAX_REPLY_TOKENS: u32 = 4096;
+/// No limit of its own on generated tokens: the profile's answer limit (set from the model's
+/// own limits) is the only bound, so a long answer or a file's content is not cut short.
+const MAX_REPLY_TOKENS: u32 = u32::MAX;
 
 const SYSTEM_PROMPT: &str = "You are the chat assistant inside Procyon, a file manager. Answer the \
      person's questions helpfully and concisely. Some messages include context the person attached \
@@ -132,6 +133,11 @@ pub(crate) trait ChatGenerator: Send + Sync {
         false
     }
 
+    /// The role's model context window in tokens, when known: how much conversation may be sent.
+    async fn context_window(&self, _role: LlmRole) -> Option<u32> {
+        None
+    }
+
     async fn generate_for_role(
         &self,
         role: LlmRole,
@@ -149,6 +155,10 @@ impl ChatGenerator for LlmProfileService {
 
     async fn native_tool_calling(&self, role: LlmRole) -> bool {
         self.role_uses_native_tools(role).await
+    }
+
+    async fn context_window(&self, role: LlmRole) -> Option<u32> {
+        self.role_context_window(role)
     }
 
     async fn generate_for_role(

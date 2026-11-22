@@ -13,6 +13,20 @@ use crate::file_assistant::truncate_to_bytes;
 pub(super) const MAX_SESSIONS: usize = 32;
 /// Most bytes of conversation sent in one prompt.
 pub(super) const MAX_RENDERED_BYTES: usize = 24 * 1024;
+/// Most conversation bytes ever sent, whatever the model's window (the endpoint's own prompt limit).
+const MAX_CONVERSATION_BYTES: usize = 900 * 1024;
+
+/// How many bytes of conversation to send for a model with `window` tokens: about half the window
+/// (the rest is for the system prompt, the tools and the answer) at roughly three bytes a token.
+/// An unknown window keeps the small default.
+pub(super) fn conversation_budget(window: Option<u32>) -> usize {
+    window.map_or(MAX_RENDERED_BYTES, |tokens| {
+        (tokens as usize)
+            .saturating_mul(3)
+            .saturating_div(2)
+            .clamp(MAX_RENDERED_BYTES / 3, MAX_CONVERSATION_BYTES)
+    })
+}
 /// Most turns stored per session; older ones are dropped.
 const MAX_TURNS: usize = 40;
 /// Most command blocks remembered as already sent, per session.
@@ -284,6 +298,11 @@ impl Sessions {
 
     /// The conversation as the prompt body, newest turns kept within the size bound.
     pub(super) fn render(&self, id: &str) -> String {
+        self.render_within(id, MAX_RENDERED_BYTES)
+    }
+
+    /// Like [`render`](Self::render), within `limit` bytes.
+    pub(super) fn render_within(&self, id: &str, limit: usize) -> String {
         let state = self.lock();
         let Some(session) = state.sessions.get(id) else {
             return String::new();
@@ -305,18 +324,30 @@ impl Sessions {
                 Turn::Tool(text) => format!("Tool result:\n{text}\n\n"),
             })
             .collect();
-        // Keep the newest whole turns that fit, and always at least the last one.
-        let mut start = rendered.len();
-        let mut total = 0;
-        while start > 0 {
-            let size = rendered[start - 1].len();
-            if total + size > MAX_RENDERED_BYTES && start < rendered.len() {
-                break;
-            }
-            total += size;
-            start -= 1;
+        // The current question and its context (the folder listing) always stay: without them a
+        // long run of tool results leaves the model with no task. Of the rest, the newest whole
+        // turns that fit are kept, and the results in between are left out with a note.
+        let pin = rendered
+            .iter()
+            .rposition(|text| text.starts_with("Person: ") || text.starts_with("Context attached"))
+            .unwrap_or(0);
+        let mut budget = limit.saturating_sub(rendered[pin].len());
+        let mut tail_start = rendered.len();
+        while tail_start > pin + 1 && rendered[tail_start - 1].len() <= budget {
+            tail_start -= 1;
+            budget -= rendered[tail_start].len();
         }
-        rendered[start..].concat()
+        let mut head_start = pin;
+        while head_start > 0 && rendered[head_start - 1].len() <= budget {
+            head_start -= 1;
+            budget -= rendered[head_start].len();
+        }
+        let mut text = rendered[head_start..=pin].concat();
+        if tail_start > pin + 1 {
+            text.push_str("[Earlier tool results were left out to save space.]\n\n");
+        }
+        text.push_str(&rendered[tail_start..].concat());
+        text
     }
 
     /// The conversation so far, as the model sees it; empty for an unknown session. Used to turn

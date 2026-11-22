@@ -48,8 +48,9 @@ use self::write::{
 const MAX_REQUEST_CHARS: usize = 2 * 1024;
 /// Most transcript bytes sent; the newest output is kept.
 const MAX_TRANSCRIPT_BYTES: usize = 16 * 1024;
-/// Upper bound on generated tokens for one answer.
-const MAX_REPLY_TOKENS: u32 = 1024;
+/// No limit of its own on generated tokens: the profile's answer limit (set from the model's
+/// own limits) is the only bound, so a long answer or a file's content is not cut short.
+const MAX_REPLY_TOKENS: u32 = u32::MAX;
 /// Most files attached with `@path` to one question.
 const MAX_ATTACHED_FILES: usize = 5;
 /// Longest session id, in characters.
@@ -68,11 +69,18 @@ const ASK_INTRO: &str = "You are the assistant in the person's embedded terminal
 const ASK_TEXT_TOOLS: &str = "\nYou may use tools. To use one, reply with exactly one line and \
      nothing else: `TOOL {json}`. Then wait for the result. Paths are relative to the working \
      folder and cannot leave it. Look things up instead of guessing. Never say you will look \
-     something up without making the TOOL call in the same reply.";
+     something up without making the TOOL call in the same reply. Finish the whole task before \
+     you answer: keep calling tools until every file you need is read and any file you were asked \
+     to create is written. Never stop to report progress or to ask whether to continue; a reply \
+     without a TOOL line ends the task.";
 /// The same, when the endpoint takes the tools natively.
-const ASK_NATIVE_TOOLS: &str = "\nYou may use the tools you are given, one call at a time. Paths \
+const ASK_NATIVE_TOOLS: &str = "\nYou may use the tools you are given, and call up to 8 in one reply (for example to read \
+     several files at once). Paths \
      are relative to the working folder and cannot leave it. Look things up instead of guessing. \
-     Never say you will look something up without calling the tool in the same reply.";
+     Never say you will look something up without calling the tool in the same reply. Finish \
+     the whole task before you answer: keep calling tools until every file you need is read and \
+     any file you were asked to create is written. Never stop to report progress or to ask \
+     whether to continue; a reply without a tool call ends the task.";
 
 /// The ask prompt: the fixed text, the tools generated from the registry (task 0339), and the
 /// skills catalogue for this question.
@@ -368,6 +376,7 @@ async fn ask(
         sessions,
         id: &id,
         system_prompt: ask_prompt(&prompt_registry, &catalogue, &skills_question, native_tools),
+        budget: session::conversation_budget(generator.context_window(LlmRole::Chat).await),
         tools: if native_tools {
             prompt_registry
                 .specs()
@@ -461,6 +470,8 @@ struct TerminalTurn<'a, G> {
     id: &'a str,
     system_prompt: String,
     tools: Vec<LlmToolSpec>,
+    /// How many bytes of conversation the model's window allows.
+    budget: usize,
 }
 
 #[async_trait]
@@ -472,7 +483,7 @@ impl<G: ChatGenerator> TurnHost for TerminalTurn<'_, G> {
         generate(
             self.generator,
             self.system_prompt.clone(),
-            self.sessions.render(self.id),
+            self.sessions.render_within(self.id, self.budget),
             self.tools.clone(),
             on_delta,
         )
@@ -1143,6 +1154,126 @@ mod tests {
         assert!(prompt.starts_with("Context attached by the person:\nTerminal state:\n"));
         assert!(prompt.contains("Person: why?"));
         assert!(prompt.ends_with("Person: and now?\n\n"));
+    }
+
+    /// Talks to a real OpenAI-compatible endpoint with `curl`, native tools on.
+    struct LiveGenerator {
+        url: String,
+        model: String,
+    }
+
+    #[async_trait]
+    impl ChatGenerator for LiveGenerator {
+        async fn accepts_images(&self, _role: LlmRole) -> Result<bool, LlmProfileError> {
+            Ok(false)
+        }
+
+        async fn native_tool_calling(&self, _role: LlmRole) -> bool {
+            true
+        }
+
+        async fn context_window(&self, _role: LlmRole) -> Option<u32> {
+            Some(262_144)
+        }
+
+        async fn generate_for_role(
+            &self,
+            _role: LlmRole,
+            generation: LlmChatGeneration,
+            _cancellation: &CancellationToken,
+            _on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
+        ) -> Result<String, LlmProfileError> {
+            let tools: Vec<serde_json::Value> = generation
+                .tools
+                .iter()
+                .map(|tool| {
+                    serde_json::json!({"type": "function", "function": {
+                        "name": tool.name, "description": tool.description,
+                        "parameters": tool.schema}})
+                })
+                .collect();
+            let body = serde_json::json!({
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": generation.system_prompt},
+                    {"role": "user", "content": generation.user_prompt}],
+                "tools": tools, "temperature": 0.2, "max_tokens": 1024});
+            let output = std::process::Command::new("curl")
+                .args([
+                    "-s",
+                    "-m",
+                    "300",
+                    "-H",
+                    "Content-Type: application/json",
+                    "-d",
+                ])
+                .arg(body.to_string())
+                .arg(&self.url)
+                .output()
+                .expect("curl");
+            let reply: serde_json::Value = serde_json::from_slice(&output.stdout).expect("JSON");
+            let message = &reply["choices"][0]["message"];
+            let mut lines: Vec<String> = vec![message["content"].as_str().unwrap_or("").to_owned()];
+            for call in message["tool_calls"].as_array().into_iter().flatten() {
+                let mut args: serde_json::Value =
+                    serde_json::from_str(call["function"]["arguments"].as_str().unwrap_or("{}"))
+                        .unwrap_or_default();
+                args["tool"] = call["function"]["name"].clone();
+                lines.push(format!("TOOL {args}"));
+            }
+            Ok(lines.join("\n"))
+        }
+    }
+
+    /// Run by hand against a live model:
+    /// `LIVE_LLM_URL=http://127.0.0.1:8000/v1/chat/completions LIVE_LLM_MODEL=... cargo nextest
+    /// run -p fm-application live_model_summarises_a_folder --run-ignored all --no-capture`.
+    #[tokio::test]
+    #[ignore = "needs a live model"]
+    async fn live_model_summarises_a_folder_into_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let work = dir.path().join("work");
+        std::fs::create_dir(&work).unwrap();
+        let count: usize = std::env::var("LIVE_FILES")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(4);
+        for i in 1..=count {
+            let body = format!("Topic {i} covers aspect {i} of the subject, with point item-{i}. ");
+            std::fs::write(
+                work.join(format!("doc{i}.md")),
+                format!("# Doc {i}\n\n{}\n", body.repeat(60)),
+            )
+            .unwrap();
+        }
+        std::fs::copy(work.join("doc1.md"), work.join("doc1-copy.md")).unwrap();
+        let fake = LiveGenerator {
+            url: std::env::var("LIVE_LLM_URL").expect("LIVE_LLM_URL"),
+            model: std::env::var("LIVE_LLM_MODEL").expect("LIVE_LLM_MODEL"),
+        };
+        let sessions = Sessions::default();
+        let mut request = ask_request(
+            "live",
+            "Summarize all unique files in this folder into summaries.md",
+            &work,
+        );
+        request.allow_file_writes = true;
+        let mut reply = super::reply(&fake, &local_providers(), &sessions, None, request)
+            .await
+            .unwrap();
+        println!("steps: {:?}\ntext: {}", reply.steps, reply.text);
+        if reply.write_request.is_some() {
+            let mut again = ask_request("live", "", &work);
+            again.request = None;
+            again.allow_file_writes = true;
+            again.write_decision = Some(TerminalWriteDecisionDto::Session);
+            reply = super::reply(&fake, &local_providers(), &sessions, None, again)
+                .await
+                .unwrap();
+            println!("steps: {:?}\ntext: {}", reply.steps, reply.text);
+        }
+        let written = work.join("summaries/summaries.md");
+        println!("written: {:?}", std::fs::read_to_string(written));
     }
 
     #[tokio::test]
