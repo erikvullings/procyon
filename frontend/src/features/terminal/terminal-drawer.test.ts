@@ -728,6 +728,8 @@ describe('TerminalDrawer # after editing keys', () => {
 describe('questionAtPrompt', () => {
   it('reads a question from the tracked input when it is known', () => {
     expect(questionAtPrompt({ text: '# list files', known: true }, '')).toBe('list files');
+    expect(questionAtPrompt({ text: '#xxx', known: true }, '')).toBe('xxx');
+    expect(questionAtPrompt({ text: '', known: false }, 'user % #xxx')).toBe('xxx');
   });
 
   it('reads a question from the screen line when the tracked input is unknown', () => {

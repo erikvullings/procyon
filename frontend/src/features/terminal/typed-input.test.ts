@@ -41,3 +41,28 @@ describe('suggestionRemainder', () => {
     expect(suggestionRemainder(history, { text: '#ls', known: true })).toBeUndefined();
   });
 });
+
+describe('bracketed paste', () => {
+  it('keeps the line known and takes the pasted text literally', () => {
+    const typed = applyTypedInput(EMPTY_INPUT, '# ');
+    const pasted = applyTypedInput(
+      typed.state,
+      '\x1b[200~For each file,\nwrite a summary\x1b[201~',
+    );
+    expect(pasted.state).toEqual({ text: '# For each file, write a summary', known: true });
+    expect(pasted.submitted).toBeUndefined();
+  });
+
+  it('follows a paste split over several chunks, and a paste with no leading text', () => {
+    let state = applyTypedInput(EMPTY_INPUT, '\x1b[200~#long ').state;
+    expect(state.pasting).toBe(true);
+    state = applyTypedInput(state, 'question').state;
+    state = applyTypedInput(state, '\x1b[201~').state;
+    expect(state).toEqual({ text: '#long question', known: true });
+    expect(applyTypedInput(state, '\r').submitted).toBe('#long question');
+  });
+
+  it('a # with no space after it is still a question line', () => {
+    expect(applyTypedInput(EMPTY_INPUT, '#xxx').state.text).toBe('#xxx');
+  });
+});

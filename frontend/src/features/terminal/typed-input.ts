@@ -6,6 +6,8 @@
 export interface TypedInput {
   readonly text: string;
   readonly known: boolean;
+  /** Set while the chunks of a bracketed paste are still arriving. */
+  readonly pasting?: true;
 }
 
 export const EMPTY_INPUT: TypedInput = { text: '', known: true };
@@ -17,9 +19,66 @@ export function applyTypedInput(
 ): { readonly state: TypedInput; readonly submitted: string | undefined } {
   let text = state.text;
   let known = state.known;
+  let pasting = state.pasting === true;
+  let submitted: string | undefined;
+  // A bracketed paste (`ESC[200~ ... ESC[201~`) is literal text, line breaks included; the shell
+  // takes it as typed, so the line stays known.
+  const pieces = splitPaste(data);
+  for (const piece of pieces) {
+    if (piece === PASTE_START) {
+      pasting = true;
+      continue;
+    }
+    if (piece === PASTE_END) {
+      pasting = false;
+      continue;
+    }
+    if (pasting) {
+      text += piece.replace(/\r\n|[\r\n]/g, ' ');
+      continue;
+    }
+    const outcome = applyKeys(text, known, piece);
+    text = outcome.text;
+    known = outcome.known;
+    if (outcome.submitted !== undefined) submitted = outcome.submitted;
+  }
+  return { state: pasting ? { text, known, pasting: true } : { text, known }, submitted };
+}
+
+const PASTE_START = '\x1b[200~';
+const PASTE_END = '\x1b[201~';
+
+/** `data` cut into key input and the bracketed-paste markers, in order. */
+function splitPaste(data: string): string[] {
+  const pieces: string[] = [];
+  let rest = data;
+  while (rest !== '') {
+    const starts = [PASTE_START, PASTE_END]
+      .map((marker) => ({ marker, at: rest.indexOf(marker) }))
+      .filter((found) => found.at >= 0)
+      .sort((a, b) => a.at - b.at);
+    const next = starts[0];
+    if (next === undefined) {
+      pieces.push(rest);
+      break;
+    }
+    if (next.at > 0) pieces.push(rest.slice(0, next.at));
+    pieces.push(next.marker);
+    rest = rest.slice(next.at + next.marker.length);
+  }
+  return pieces;
+}
+
+function applyKeys(
+  start: string,
+  wasKnown: boolean,
+  data: string,
+): { readonly text: string; readonly known: boolean; readonly submitted: string | undefined } {
+  let text = start;
+  let known = wasKnown;
   let submitted: string | undefined;
   for (const character of data) {
-    if (character === '\x1b') return { state: { text: '', known: false }, submitted };
+    if (character === '\x1b') return { text: '', known: false, submitted };
     if (character === '\r' || character === '\n') {
       submitted = known ? text : undefined;
       text = '';
@@ -37,7 +96,7 @@ export function applyTypedInput(
       text += character;
     }
   }
-  return { state: { text, known }, submitted };
+  return { text, known, submitted };
 }
 
 /**

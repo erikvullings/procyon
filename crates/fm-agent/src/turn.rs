@@ -56,6 +56,34 @@ pub enum TurnEnd {
     NeedsApproval(ApprovalRequest),
 }
 
+/// Most times a reply that only promises more work is sent back to the model in one turn.
+const MAX_NUDGES: usize = 3;
+
+/// Whether the end of a reply promises further work ("I will continue with the remaining files").
+fn announces_more_work(reply: &str) -> bool {
+    const PROMISES: [&str; 9] = [
+        "i will continue",
+        "i'll continue",
+        "let me continue",
+        "i will proceed",
+        "i'll proceed",
+        "i will now",
+        "i'll now",
+        "i will read the",
+        "i will start",
+    ];
+    let tail: String = reply
+        .chars()
+        .rev()
+        .take(240)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+    let tail = tail.to_lowercase().replace('\u{2019}', "'");
+    PROMISES.iter().any(|promise| tail.contains(promise))
+}
+
 /// Runs tool calls until the turn ends. Every tool run adds its step to `steps`.
 pub async fn run_turn(
     host: &mut impl TurnHost,
@@ -64,6 +92,8 @@ pub async fn run_turn(
     steps: &mut Vec<String>,
     on_event: &mut (dyn FnMut(TurnEvent) + Send),
 ) -> Result<TurnEnd, ChatFailureDto> {
+    let mut worked = false;
+    let mut nudges = 0;
     for _ in 0..MAX_STEPS {
         let mut streamer = LineStreamer::new();
         let raw = host
@@ -88,8 +118,20 @@ pub async fn run_turn(
         host.push_assistant(trimmed);
         let calls = registry.parse_all(trimmed);
         if calls.is_empty() {
+            // A model that has been using tools may announce more work and then stop; ask it to
+            // go on instead of ending the task on a promise.
+            if worked && nudges < MAX_NUDGES && announces_more_work(trimmed) {
+                nudges += 1;
+                host.push_tool(
+                    "You said you would continue, but you made no tool call, so nothing happened. \
+                     Call the next tool now. Only if the whole task is complete, give the final \
+                     result.",
+                );
+                continue;
+            }
             return Ok(TurnEnd::Answer(trimmed.to_owned()));
         }
+        worked = true;
         let total = calls.len();
         for (index, call) in calls.into_iter().enumerate() {
             if host.is_cancelled() {

@@ -119,6 +119,48 @@ async fn a_tool_result_goes_back_to_the_model_until_it_answers() {
 }
 
 #[tokio::test]
+async fn a_promise_of_more_work_without_a_call_is_sent_back_to_the_model() {
+    let mut host = Scripted::new(&[
+        r#"TOOL {"tool":"shout","word":"a"}"#,
+        "Read the first file. I will continue with the remaining files.",
+        r#"TOOL {"tool":"shout","word":"b"}"#,
+        "All done.",
+    ]);
+    let (end, steps, _) = turn(&mut host).await;
+
+    assert_eq!(end, Ok(TurnEnd::Answer("All done.".into())));
+    assert_eq!(steps, ["Shouted", "Shouted"]);
+    assert!(
+        host.log
+            .iter()
+            .any(|entry| entry.contains("made no tool call"))
+    );
+}
+
+#[tokio::test]
+async fn a_promise_before_any_tool_use_or_forever_is_not_nudged_endlessly() {
+    let mut host = Scripted::new(&["I will continue later."]);
+    let (end, _, _) = turn(&mut host).await;
+    assert_eq!(end, Ok(TurnEnd::Answer("I will continue later.".into())));
+
+    let mut host = Scripted::new(&[
+        r#"TOOL {"tool":"shout","word":"a"}"#,
+        "I will continue.",
+        "I will continue.",
+        "I will continue.",
+        "I will continue.",
+    ]);
+    let (end, _, _) = turn(&mut host).await;
+    assert_eq!(end, Ok(TurnEnd::Answer("I will continue.".into())));
+    let nudges = host
+        .log
+        .iter()
+        .filter(|entry| entry.contains("made no tool call"))
+        .count();
+    assert_eq!(nudges, 3);
+}
+
+#[tokio::test]
 async fn several_calls_in_one_reply_all_run_in_order_before_the_model_is_asked_again() {
     let mut host = Scripted::new(&[
         "TOOL {\"tool\":\"shout\",\"word\":\"a\"}\nTOOL {\"tool\":\"shout\",\"word\":\"b\"}",

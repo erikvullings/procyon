@@ -350,7 +350,14 @@ function scrollbackTranscript(live: LiveTerminal): string {
 /** The text of the terminal's cursor line (the line being edited), without its prompt-free trailing blanks. */
 function cursorLine(terminal: Terminal): string {
   const buffer = terminal.buffer.active;
-  return buffer.getLine(buffer.baseY + buffer.cursorY)?.translateToString(true) ?? '';
+  let row = buffer.baseY + buffer.cursorY;
+  let text = buffer.getLine(row)?.translateToString(true) ?? '';
+  // A long line wraps onto several rows; the whole logical line is the input.
+  while (buffer.getLine(row)?.isWrapped === true && row > 0) {
+    row -= 1;
+    text = (buffer.getLine(row)?.translateToString(false) ?? '') + text;
+  }
+  return text;
 }
 
 /**
