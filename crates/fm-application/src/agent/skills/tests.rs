@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use super::*;
 use crate::agent::{ReadSkill, ReadSkillFile};
-use crate::agent::{ToolContext, ToolOutcome, TypedTool};
+use crate::agent::{ToolContext, TypedTool};
 use crate::terminal_assist::{NoteToolCall, NoteToolOutcome, NotesAccess};
 
 fn write_skill(root: &Path, folder: &str, text: &str) -> PathBuf {
@@ -261,25 +261,29 @@ async fn read_skill_loads_a_folder_skill_and_a_note_the_same_way() {
     let ctx = ToolContext {
         skills: &catalogue,
         notes: Some(&FakeNotes),
+        files: None,
     };
 
-    let ToolOutcome { text, .. } = ReadSkill
+    let text = ReadSkill
         .run_typed(&ctx, serde_json::from_str(r#"{"name":"DOCS"}"#).unwrap())
-        .await;
+        .await
+        .expect_text();
     assert!(text.contains("Use the template."));
     assert!(text.contains("references/guide.md"));
 
-    let ToolOutcome { text, .. } = ReadSkill
+    let text = ReadSkill
         .run_typed(
             &ctx,
             serde_json::from_str(r#"{"name":"nginx-cert"}"#).unwrap(),
         )
-        .await;
+        .await
+        .expect_text();
     assert_eq!(text, "Note ops/nginx.md:\nsteps");
 
-    let ToolOutcome { text, .. } = ReadSkill
+    let text = ReadSkill
         .run_typed(&ctx, serde_json::from_str(r#"{"name":"nope"}"#).unwrap())
-        .await;
+        .await
+        .expect_text();
     assert!(text.starts_with("Error: there is no skill called nope. Available: nginx-cert, docs"));
 }
 
@@ -299,15 +303,13 @@ async fn read_skill_file_is_sandboxed_and_redacts() {
     let ctx = ToolContext {
         skills: &catalogue,
         notes: None,
+        files: None,
     };
     let read = |path: &str| {
         let args =
             serde_json::from_value(serde_json::json!({"name": "docs", "path": path})).unwrap();
         let ctx = &ctx;
-        async move {
-            let ToolOutcome { text, .. } = ReadSkillFile.run_typed(ctx, args).await;
-            text
-        }
+        async move { ReadSkillFile.run_typed(ctx, args).await.expect_text() }
     };
     assert_eq!(read("references/guide.md").await, "the guide");
     assert!(

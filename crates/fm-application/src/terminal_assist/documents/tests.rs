@@ -5,7 +5,7 @@ use fm_vfs::ProviderRegistry;
 use fm_vfs_local::LocalFileSystemProvider;
 
 use super::{Documents, is_document, window};
-use crate::terminal_assist::protocol::ToolCall;
+use crate::terminal_assist::tools::FileCall;
 use crate::terminal_assist::tools::{MAX_READ_BYTES, ToolHost};
 
 fn registry() -> ProviderRegistry {
@@ -85,7 +85,7 @@ async fn an_epub_is_read_as_text_and_continues_with_an_offset() {
     let host = ToolHost::open(&providers, &working).unwrap();
     let documents = Documents::new(&providers);
 
-    let call = ToolCall::ReadFile {
+    let call = FileCall::ReadFile {
         path: "book.epub".into(),
         offset: None,
     };
@@ -108,7 +108,7 @@ async fn an_epub_is_read_as_text_and_continues_with_an_offset() {
     let later = documents
         .run(
             &host,
-            &ToolCall::ReadFile {
+            &FileCall::ReadFile {
                 path: "book.epub".into(),
                 offset: Some(end),
             },
@@ -139,20 +139,20 @@ async fn plain_files_and_missing_documents_are_handled_apart() {
     let host = ToolHost::open(&providers, &working).unwrap();
     let documents = Documents::new(&providers);
 
-    let plain = ToolCall::ReadFile {
+    let plain = FileCall::ReadFile {
         path: "notes.txt".into(),
         offset: None,
     };
     assert!(documents.run(&host, &plain).await.is_none());
 
-    let missing = ToolCall::ReadFile {
+    let missing = FileCall::ReadFile {
         path: "missing.epub".into(),
         offset: None,
     };
     let output = documents.run(&host, &missing).await.unwrap();
     assert!(output.text.starts_with("Error:"), "{}", output.text);
 
-    let outside = ToolCall::ReadFile {
+    let outside = FileCall::ReadFile {
         path: "../secret.epub".into(),
         offset: None,
     };

@@ -11,8 +11,8 @@ use fm_vfs::{EntryRef, FileSystemProvider, ListOptions, ProviderRegistry};
 use tokio::io::AsyncReadExt as _;
 use tokio_util::sync::CancellationToken;
 
-use super::protocol::ToolCall;
 use super::redact::redact_secrets;
+use super::tools::FileCall;
 use super::tools::{
     MAX_LISTED, MAX_READ_BYTES, ToolError, ToolOutput, error_text, is_credential_folder,
     is_secret_name, text_from_bytes,
@@ -34,25 +34,17 @@ impl RemoteSandbox {
     }
 
     /// Runs a read-only tool: a one-line description for the person, and the text for the model.
-    pub(super) async fn run(&self, call: &ToolCall) -> ToolOutput {
+    pub(super) async fn run(&self, call: &FileCall) -> ToolOutput {
         let (step, result) = match call {
-            ToolCall::ListDir { path } => (format!("Listed {path}"), self.list_dir(path).await),
-            ToolCall::ReadFile { path, offset } => (
+            FileCall::ListDir { path } => (format!("Listed {path}"), self.list_dir(path).await),
+            FileCall::ReadFile { path, offset } => (
                 format!("Read {path}"),
                 self.read_file(path, offset.unwrap_or(0)).await,
             ),
-            ToolCall::Grep { pattern, .. } => (
+            FileCall::Grep { pattern, .. } => (
                 format!("Searched for {pattern}"),
                 Err(ToolError::RemoteGrep),
             ),
-            ToolCall::RunCommand { .. } => {
-                ("Run command".to_owned(), Err(ToolError::NeedsApproval))
-            }
-            ToolCall::WriteFile { .. } => ("Create file".to_owned(), Err(ToolError::NeedsApproval)),
-            ToolCall::SearchNotes { .. }
-            | ToolCall::ReadNote { .. }
-            | ToolCall::ProposeNote { .. }
-            | ToolCall::ProposeNoteUpdate { .. } => ("Notes".to_owned(), Err(ToolError::NotesTool)),
         };
         ToolOutput {
             step,

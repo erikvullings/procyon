@@ -10,7 +10,6 @@ use fm_vfs::ProviderRegistry;
 use thiserror::Error;
 
 use super::context::path_from_location;
-use super::protocol::ToolCall;
 use super::redact::redact_secrets;
 use super::remote::RemoteSandbox;
 
@@ -29,6 +28,23 @@ const MAX_SEARCH_DEPTH: usize = 12;
 /// Folders a search never enters.
 const SKIPPED_FOLDERS: &[&str] = &[".git", "node_modules", "target", ".venv", "dist"];
 
+/// One read-only file tool call, after the registry has checked the arguments.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum FileCall {
+    ListDir {
+        path: String,
+    },
+    ReadFile {
+        path: String,
+        /// Byte offset to continue a file that an earlier read cut off.
+        offset: Option<usize>,
+    },
+    Grep {
+        pattern: String,
+        path: Option<String>,
+    },
+}
+
 /// Why a tool could not do what the model asked. Shown to the model as `Error: ...`; a missing
 /// path and one outside the folder read the same, so the model learns nothing about other paths.
 #[derive(Debug, Error)]
@@ -45,10 +61,6 @@ pub(super) enum ToolError {
     Unreadable(String),
     #[error("{0}")]
     Document(String),
-    #[error("This tool needs the person's approval and is handled by the assistant.")]
-    NeedsApproval,
-    #[error("notes tools only work on the notes folder.")]
-    NotesTool,
     #[error(
         "grep is not available for remote folders. Use read_file, or ask to run grep with run_command."
     )]
@@ -81,26 +93,17 @@ impl Sandbox {
     }
 
     /// Runs a read-only tool: a one-line description for the person, and the text for the model.
-    /// `RunCommand` is not a read-only tool and is answered with an error text.
-    pub(super) fn run(&self, call: &ToolCall) -> ToolOutput {
+    pub(super) fn run(&self, call: &FileCall) -> ToolOutput {
         let (step, result) = match call {
-            ToolCall::ListDir { path } => (format!("Listed {path}"), self.list_dir(path)),
-            ToolCall::ReadFile { path, offset } => (
+            FileCall::ListDir { path } => (format!("Listed {path}"), self.list_dir(path)),
+            FileCall::ReadFile { path, offset } => (
                 format!("Read {path}"),
                 self.read_file(path, offset.unwrap_or(0)),
             ),
-            ToolCall::Grep { pattern, path } => (
+            FileCall::Grep { pattern, path } => (
                 format!("Searched for {pattern}"),
                 self.grep(pattern, path.as_deref().unwrap_or(".")),
             ),
-            ToolCall::RunCommand { .. } => {
-                ("Run command".to_owned(), Err(ToolError::NeedsApproval))
-            }
-            ToolCall::WriteFile { .. } => ("Create file".to_owned(), Err(ToolError::NeedsApproval)),
-            ToolCall::SearchNotes { .. }
-            | ToolCall::ReadNote { .. }
-            | ToolCall::ProposeNote { .. }
-            | ToolCall::ProposeNoteUpdate { .. } => ("Notes".to_owned(), Err(ToolError::NotesTool)),
         };
         ToolOutput {
             step,
@@ -386,7 +389,7 @@ impl ToolHost {
     }
 
     /// Runs one read-only tool.
-    pub(super) async fn run(&self, call: ToolCall) -> ToolOutput {
+    pub(super) async fn run(&self, call: FileCall) -> ToolOutput {
         match self {
             Self::Local(sandbox) => {
                 let sandbox = sandbox.clone();

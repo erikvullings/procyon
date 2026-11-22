@@ -46,6 +46,7 @@ fn context(skills: &SkillCatalogue) -> ToolContext<'_> {
     ToolContext {
         skills,
         notes: None,
+        files: None,
     }
 }
 
@@ -96,7 +97,76 @@ fn an_unregistered_tool_is_not_a_call() {
 #[tokio::test]
 async fn invalid_arguments_become_an_error_for_the_model() {
     let outcome = call(&registry(), r#"TOOL {"tool":"echo","times":"many"}"#).await;
-    let ToolOutcome { text, .. } = outcome;
+    let text = outcome.expect_text();
     assert!(text.starts_with("Error: invalid arguments for echo"));
     assert!(text.contains("text (string)"));
+}
+
+async fn core(reply: &str) -> ToolOutcome {
+    let mut registry = read_only_registry();
+    registry.register(Typed(RunCommand));
+    call(&registry, reply).await
+}
+
+#[tokio::test]
+async fn the_shared_tools_check_their_arguments_before_any_access() {
+    for (reply, message) in [
+        (
+            r#"TOOL {"tool":"search_notes","query":"  "}"#,
+            "query must not be empty",
+        ),
+        (
+            r#"TOOL {"tool":"propose_note","content":""}"#,
+            "content must not be empty",
+        ),
+        (
+            r#"TOOL {"tool":"propose_note_update","path":" ","content":"x"}"#,
+            "path must not be empty",
+        ),
+        (
+            r#"TOOL {"tool":"read_file","path":""}"#,
+            "path must not be empty",
+        ),
+        (
+            r#"TOOL {"tool":"grep","pattern":""}"#,
+            "pattern must not be empty",
+        ),
+        (
+            r#"TOOL {"tool":"run_command","command":"  "}"#,
+            "one non-empty line",
+        ),
+        (
+            r#"TOOL {"tool":"run_command","command":"ls\nrm -rf x"}"#,
+            "one non-empty line",
+        ),
+        (
+            r#"TOOL {"tool":"read_file"}"#,
+            "invalid arguments for read_file",
+        ),
+    ] {
+        let text = core(reply).await.expect_text();
+        assert!(text.contains(message), "{reply}: {text}");
+    }
+}
+
+#[tokio::test]
+async fn valid_calls_without_access_are_explained_not_dropped() {
+    let text = core(r#"TOOL {"tool":"search_notes","query":"tls","limit":3}"#)
+        .await
+        .expect_text();
+    assert_eq!(text, "Error: notes are not available here.");
+    let text = core(r#"TOOL {"tool":"list_dir","path":"."}"#)
+        .await
+        .expect_text();
+    assert_eq!(text, "Error: file tools are not available here.");
+}
+
+#[tokio::test]
+async fn run_command_asks_for_approval_with_the_trimmed_line() {
+    assert_eq!(
+        core(r#"TOOL {"tool":"run_command","command":" cargo test "}"#).await,
+        ToolOutcome::NeedsApproval(ApprovalRequest::RunCommand {
+            command: "cargo test".into()
+        })
+    );
 }

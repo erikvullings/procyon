@@ -9,9 +9,8 @@ use fm_vfs::ProviderRegistry;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
-use super::protocol::ToolCall;
 use super::redact::redact_secrets;
-use super::tools::{MAX_READ_BYTES, ToolError, ToolHost, ToolOutput, error_text};
+use super::tools::{FileCall, MAX_READ_BYTES, ToolError, ToolHost, ToolOutput, error_text};
 use crate::document_conversion::DocumentConversionService;
 
 /// File name extensions read as documents.
@@ -87,8 +86,8 @@ impl Documents {
 
     /// Runs `read_file` on a document. `None` when the call is not a read of a document, so the
     /// plain tools handle it.
-    pub(super) async fn run(&self, host: &ToolHost, call: &ToolCall) -> Option<ToolOutput> {
-        let ToolCall::ReadFile { path, offset } = call else {
+    pub(super) async fn run(&self, host: &ToolHost, call: &FileCall) -> Option<ToolOutput> {
+        let FileCall::ReadFile { path, offset } = call else {
             return None;
         };
         if !is_document(path) {

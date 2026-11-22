@@ -220,9 +220,13 @@ pub(crate) trait AgentTool: Send + Sync {
   `read_skill`/`read_skill_file` (sandboxed; deny tests for `..`, symlinks, secrets, credential
   folders), notes as virtual skills (`NotesAccess::skills`, `name`/`description` in `NoteMeta`,
   capture writes `description: Use when …`). Wired into the terminal `ask` loop; README/CLAUDE.md updated.
-- Not done (open): porting the 10 legacy terminal tools to the registry (they still use the
-  `ToolCall` enum; approval and proposal outcomes need `Approval`/`Proposal` added back when they
-  move), `agent::run_turn` shared loop, native tool calling + `ToolCalling` capability, `skillsRoots`
+- 2026-11-22: All 10 terminal tools are registry tools now (`agent/tools.rs`, `terminal_assist/
+  agent_tools.rs`); `ToolCall`/`protocol.rs` are gone, `ToolOutcome` has `Output`, `Proposal` and
+  `NeedsApproval`, the hand-written tool list in `ASK_PROMPT` is generated. `FileTools` in the
+  `ToolContext` is how a host (terminal now, chat later) supplies sandboxed file access.
+  Behaviour change: a call with bad or blank arguments now returns an error to the model instead of
+  being taken as the final answer.
+- Not done (open): `agent::run_turn` shared loop, native tool calling + `ToolCalling` capability, `skillsRoots`
   setting, server-mode accessible-roots filtering for skill folders (user-home skills are read in
   both hosts today), `read_skill_file` through the document reader, chat parity (backend, routes,
   Tauri, frontend, mock fixtures). Note skills found for the first step of a question are not

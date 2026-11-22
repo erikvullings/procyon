@@ -5,7 +5,7 @@ use fm_vfs::ProviderRegistry;
 use fm_vfs_local::LocalFileSystemProvider;
 
 use super::RemoteSandbox;
-use crate::terminal_assist::protocol::ToolCall;
+use crate::terminal_assist::tools::FileCall;
 use crate::terminal_assist::tools::ToolOutput;
 
 /// The local provider stands in for any provider: the tools only use the provider interface.
@@ -24,17 +24,17 @@ fn remote() -> (tempfile::TempDir, RemoteSandbox) {
     (dir, sandbox)
 }
 
-async fn run(sandbox: &RemoteSandbox, call: ToolCall) -> ToolOutput {
+async fn run(sandbox: &RemoteSandbox, call: FileCall) -> ToolOutput {
     sandbox.run(&call).await
 }
 
 #[tokio::test]
 async fn list_dir_names_entries_sorted_with_folders_marked() {
     let (_dir, sandbox) = remote();
-    let output = run(&sandbox, ToolCall::ListDir { path: ".".into() }).await;
+    let output = run(&sandbox, FileCall::ListDir { path: ".".into() }).await;
     assert_eq!(output.step, "Listed .");
     assert_eq!(output.text, "a.txt\nb.txt\nsrc/");
-    let nested = run(&sandbox, ToolCall::ListDir { path: "src".into() }).await;
+    let nested = run(&sandbox, FileCall::ListDir { path: "src".into() }).await;
     assert_eq!(nested.text, "lib.rs");
 }
 
@@ -44,7 +44,7 @@ async fn read_file_returns_redacted_bounded_text() {
     fs::write(dir.path().join("conf.txt"), "TOKEN=abc\nname=x\n").unwrap();
     let output = run(
         &sandbox,
-        ToolCall::ReadFile {
+        FileCall::ReadFile {
             path: "conf.txt".into(),
             offset: None,
         },
@@ -56,7 +56,7 @@ async fn read_file_returns_redacted_bounded_text() {
     fs::write(dir.path().join("big.txt"), "z".repeat(40_000)).unwrap();
     let big = run(
         &sandbox,
-        ToolCall::ReadFile {
+        FileCall::ReadFile {
             path: "big.txt".into(),
             offset: None,
         },
@@ -82,7 +82,7 @@ async fn paths_outside_credential_folders_and_secret_files_are_refused() {
     ] {
         let output = run(
             &sandbox,
-            ToolCall::ReadFile {
+            FileCall::ReadFile {
                 path: path.into(),
                 offset: None,
             },
@@ -92,7 +92,7 @@ async fn paths_outside_credential_folders_and_secret_files_are_refused() {
     }
     let missing = run(
         &sandbox,
-        ToolCall::ReadFile {
+        FileCall::ReadFile {
             path: "missing.txt".into(),
             offset: None,
         },
@@ -100,7 +100,7 @@ async fn paths_outside_credential_folders_and_secret_files_are_refused() {
     .await;
     let outside = run(
         &sandbox,
-        ToolCall::ReadFile {
+        FileCall::ReadFile {
             path: "../x".into(),
             offset: None,
         },
@@ -121,7 +121,7 @@ async fn a_symlink_is_not_followed() {
     for path in ["link/o.txt", "a-link"] {
         let output = run(
             &sandbox,
-            ToolCall::ReadFile {
+            FileCall::ReadFile {
                 path: path.into(),
                 offset: None,
             },
@@ -137,7 +137,7 @@ async fn a_folder_is_not_a_file_and_a_file_is_not_a_folder() {
     assert!(
         run(
             &sandbox,
-            ToolCall::ReadFile {
+            FileCall::ReadFile {
                 path: "src".into(),
                 offset: None
             }
@@ -149,7 +149,7 @@ async fn a_folder_is_not_a_file_and_a_file_is_not_a_folder() {
     assert!(
         run(
             &sandbox,
-            ToolCall::ListDir {
+            FileCall::ListDir {
                 path: "a.txt".into()
             }
         )
@@ -164,7 +164,7 @@ async fn grep_is_not_available_for_remote_folders() {
     let (_dir, sandbox) = remote();
     let output = run(
         &sandbox,
-        ToolCall::Grep {
+        FileCall::Grep {
             pattern: "x".into(),
             path: None,
         },

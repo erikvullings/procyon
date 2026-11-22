@@ -8,6 +8,7 @@
 mod frontmatter;
 mod skill_tools;
 mod skills;
+mod tools;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -18,30 +19,63 @@ use serde_json::{Value, json};
 
 pub(crate) use self::skill_tools::{ReadSkill, ReadSkillFile};
 pub(crate) use self::skills::{NoteSkill, SkillCatalogue, SkillRoots};
+pub(crate) use self::tools::RunCommand;
+use fm_transport_dto::NoteProposalDto;
+
 use crate::terminal_assist::NotesAccess;
 
-/// What a tool run produced: a line for the person and the text for the model. Tools that need
-/// the person's approval or end the turn (commands, file creation, note proposals) are still
-/// handled by the terminal loop.
+/// What a tool run produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ToolOutcome {
-    pub(crate) step: String,
-    pub(crate) text: String,
+pub(crate) enum ToolOutcome {
+    /// A line for the person and the text for the model.
+    Output { step: String, text: String },
+    /// A note waiting for the person's review; it ends the turn.
+    Proposal(NoteProposalDto),
+    /// The tool does something only the person may allow; the loop asks them.
+    NeedsApproval(ApprovalRequest),
+}
+
+/// What the person is asked to approve.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ApprovalRequest {
+    /// Run one line in their terminal.
+    RunCommand { command: String },
+    /// Create one file (checked by the loop against its limits).
+    WriteFile { name: String, content: String },
 }
 
 impl ToolOutcome {
     pub(crate) fn output(step: impl Into<String>, text: impl Into<String>) -> Self {
-        Self {
+        Self::Output {
             step: step.into(),
             text: text.into(),
         }
     }
+
+    /// The text for the model, for tests of tools that only produce output.
+    #[cfg(test)]
+    pub(crate) fn expect_text(self) -> String {
+        match self {
+            Self::Output { text, .. } => text,
+            other => panic!("expected output, got {other:?}"),
+        }
+    }
+}
+
+/// Files the tools may look at: a working folder the host sandboxes. Each answer is a step line
+/// and the text for the model.
+#[async_trait]
+pub(crate) trait FileTools: Send + Sync {
+    async fn list_dir(&self, path: &str) -> ToolOutcome;
+    async fn read_file(&self, path: &str, offset: usize) -> ToolOutcome;
+    async fn grep(&self, pattern: &str, path: Option<&str>) -> ToolOutcome;
 }
 
 /// What tools may use, without reaching into the application facade.
 pub(crate) struct ToolContext<'a> {
     pub(crate) skills: &'a SkillCatalogue,
     pub(crate) notes: Option<&'a dyn NotesAccess>,
+    pub(crate) files: Option<&'a dyn FileTools>,
 }
 
 /// One tool the model may call.
@@ -152,9 +186,8 @@ impl ToolRegistry {
         if self.tools.is_empty() {
             return String::new();
         }
-        let mut text = String::from(
-            "More tools, called the same way (one `TOOL {json}` line, then wait for the result):",
-        );
+        let mut text =
+            String::from("Tools (one `TOOL {json}` line per call, then wait for the result):");
         for tool in self.tools.values() {
             let schema = tool.input_schema();
             text.push_str(&format!(
@@ -257,10 +290,18 @@ pub(crate) fn balanced_object(text: &str) -> Option<&str> {
     None
 }
 
-/// The registry of the skill tools every agent shares.
-pub(crate) fn skill_registry() -> ToolRegistry {
+/// The read-only tools every agent offers: files, notes and skills. An agent that may also run
+/// commands or create files adds those itself.
+pub(crate) fn read_only_registry() -> ToolRegistry {
     let mut registry = ToolRegistry::default();
     registry
+        .register(Typed(tools::ListDir))
+        .register(Typed(tools::ReadFile))
+        .register(Typed(tools::Grep))
+        .register(Typed(tools::SearchNotes))
+        .register(Typed(tools::ReadNote))
+        .register(Typed(tools::ProposeNote))
+        .register(Typed(tools::ProposeNoteUpdate))
         .register(Typed(ReadSkill))
         .register(Typed(ReadSkillFile));
     registry

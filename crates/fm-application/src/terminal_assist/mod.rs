@@ -3,10 +3,10 @@
 //! the person's chosen context and may use read-only tools; a command it wants to run is only
 //! proposed, and runs after the person approves it. Nothing is saved to disk.
 
+mod agent_tools;
 mod context;
 mod documents;
 mod notes;
-mod protocol;
 mod redact;
 mod remote;
 mod session;
@@ -14,7 +14,9 @@ mod stream;
 mod tools;
 mod write;
 
-use crate::agent::{self, SkillCatalogue, SkillRoots, ToolContext, ToolOutcome, ToolRegistry};
+use crate::agent::{
+    ApprovalRequest, SkillCatalogue, SkillRoots, ToolContext, ToolOutcome, ToolRegistry,
+};
 
 pub(crate) use notes::{NoteToolCall, NoteToolOutcome, NotesAccess};
 pub(crate) use redact::redact_secrets;
@@ -33,12 +35,12 @@ use crate::chat::ChatGenerator;
 use crate::file_assistant::truncate_to_bytes;
 use crate::llm_profiles::{LlmChatGeneration, LlmProfileError, LlmRole};
 
+use self::agent_tools::TerminalFiles;
 use self::context::{AttachedFile, render_activity, render_context, state_sections};
 use self::documents::{Documents, is_document};
-use self::protocol::{ToolCall, parse_tool_call};
 use self::session::PendingWrite;
 use self::stream::LineStreamer;
-use self::tools::{ToolHost, ToolOutput};
+use self::tools::ToolHost;
 use self::write::{
     FileWriter, MAX_BYTES_PER_QUESTION, MAX_FILES_PER_QUESTION, OUTPUT_FOLDER, WriteError,
 };
@@ -64,49 +66,14 @@ const ASK_PROMPT: &str = "You are the assistant in the person's embedded termina
      final line as `Command: <command>`. Prefer read-only commands and never chain several \
      destructive steps.\n\
      You may use tools. To use one, reply with exactly one line and nothing else: `TOOL {json}`. \
-     Then wait for the result. Tools: \
-     {\"tool\":\"list_dir\",\"path\":\".\"} lists a folder; \
-     {\"tool\":\"read_file\",\"path\":\"Cargo.toml\"} reads a text file, or the text of an \
-     EPUB, Word, PDF, PowerPoint or Excel document (a long file is cut \
-     off with a note: continue with {\"tool\":\"read_file\",\"path\":\"Cargo.toml\",\"offset\":32768}); \
-     {\"tool\":\"grep\",\"pattern\":\"text\",\"path\":\"src\"} finds lines containing text \
-     (path is optional); \
-     {\"tool\":\"run_command\",\"command\":\"cargo test\"} asks the person to run a command in \
-     their terminal. They may decline, and the result returns with its exit status and output. \
-     Paths are relative to the working folder and cannot leave it. Look things up instead of \
-     guessing. Never say you will look something up without making the TOOL call in the same \
-     reply.\n\
-     The person keeps notes, such as runbooks for tasks they do rarely. Before answering a \
-     how-to question, search them: \
-     {\"tool\":\"search_notes\",\"query\":\"replace nginx certificate\"} finds notes; \
-     {\"tool\":\"read_note\",\"path\":\"ops/nginx.md\"} reads one; \
-     {\"tool\":\"propose_note\",\"title\":\"...\",\"content\":\"...\"} proposes a new \
-     Markdown note and {\"tool\":\"propose_note_update\",\"path\":\"ops/nginx.md\",\
-     \"content\":\"...\"} proposes new text for a note. The person reviews a proposal before \
-     anything is saved; propose only when they ask for a note or a note is clearly outdated.";
-
-/// Added to the prompt when the person allows the assistant to create files (task 0338).
-const WRITE_PROMPT: &str = "\nYou can create new files: \
-     {\"tool\":\"write_file\",\"path\":\"report.md\",\"content\":\"...\"} creates a Markdown \
-     or text file in the folder summaries/ next to the working folder, after the person approves. \
-     Use a short plain file name ending in .md or .txt, without folders. It only creates new \
-     files and never changes an existing one: a taken name gets a number, and the result tells \
-     you the final name. To summarise several documents, read one and then write its file, one \
-     file per document, with a factual summary. Use it only when the person asks for files.";
+     Then wait for the result. Paths are relative to the working folder and cannot leave it. Look \
+     things up instead of guessing. Never say you will look something up without making the TOOL \
+     call in the same reply.";
 
 /// The ask prompt: the fixed text, the tools generated from the registry (task 0339), and the
 /// skills catalogue for this question.
-fn ask_prompt(
-    allow_file_writes: bool,
-    registry: &ToolRegistry,
-    catalogue: &SkillCatalogue,
-    request: &str,
-) -> String {
-    let mut prompt = if allow_file_writes {
-        format!("{ASK_PROMPT}{WRITE_PROMPT}")
-    } else {
-        ASK_PROMPT.to_owned()
-    };
+fn ask_prompt(registry: &ToolRegistry, catalogue: &SkillCatalogue, request: &str) -> String {
+    let mut prompt = ASK_PROMPT.to_owned();
     for section in [registry.prompt_section(), catalogue.prompt_section(request)] {
         if !section.is_empty() {
             prompt.push('\n');
@@ -239,7 +206,13 @@ async fn ask(
         .to_owned();
     let host = ToolHost::open(providers, &request.working_directory);
     let documents = Documents::new(providers);
-    let registry = agent::skill_registry();
+    // Calls are understood for every tool; the prompt describes `write_file` only when allowed.
+    let registry = agent_tools::registry(true);
+    let prompt_registry = agent_tools::registry(request.allow_file_writes);
+    let files = TerminalFiles {
+        host: host.as_ref(),
+        documents: &documents,
+    };
     let mut steps = Vec::new();
     let mut question_text = String::new();
 
@@ -321,12 +294,7 @@ async fn ask(
         let mut streamer = LineStreamer::new();
         let raw = generate(
             generator,
-            ask_prompt(
-                request.allow_file_writes,
-                &registry,
-                &catalogue,
-                &question_text,
-            ),
+            ask_prompt(&prompt_registry, &catalogue, &question_text),
             sessions.render(&id),
             &mut |delta: &str| {
                 streamer.push(delta, &mut |text| {
@@ -343,7 +311,7 @@ async fn ask(
             });
         });
         // A reply that looked like a tool call but was not one is shown after all.
-        if parse_tool_call(&raw).is_some() || registry.parse(&raw).is_some() {
+        if registry.parse(&raw).is_some() {
             streamer.discard_held();
         } else {
             streamer.release_held(&mut |text| {
@@ -358,115 +326,68 @@ async fn ask(
         }
         let trimmed = truncate_to_bytes(trimmed, MAX_REPLY_BYTES);
         sessions.push_assistant(&id, trimmed);
-        match parse_tool_call(trimmed) {
-            None => {
-                let Some(parsed) = registry.parse(trimmed) else {
-                    return Ok(stopped(trimmed.to_owned(), steps));
-                };
-                if sessions.is_cancelled(&id) {
-                    return Ok(stopped(String::new(), steps));
-                }
-                let ctx = ToolContext {
-                    skills: &catalogue,
-                    notes,
-                };
-                let ToolOutcome { step, text } = parsed.tool.run(&ctx, parsed.args).await;
+        let Some(parsed) = registry.parse(trimmed) else {
+            return Ok(stopped(trimmed.to_owned(), steps));
+        };
+        if sessions.is_cancelled(&id) {
+            return Ok(stopped(String::new(), steps));
+        }
+        let ctx = ToolContext {
+            skills: &catalogue,
+            notes,
+            files: Some(&files),
+        };
+        match parsed.tool.run(&ctx, parsed.args).await {
+            ToolOutcome::Output { step, text } => {
                 on_event(TerminalAssistEventDto::Step { text: step.clone() });
                 steps.push(step);
                 sessions.push_tool(&id, &text);
             }
-            Some(ToolCall::RunCommand { command }) => {
+            ToolOutcome::Proposal(proposal) => {
+                sessions.push_tool(
+                    &id,
+                    "The note was shown to the person for review. Nothing is saved unless they \
+                     save it.",
+                );
                 return Ok(TerminalAssistReplyDto {
-                    text: String::new(),
-                    steps,
-                    run_command: Some(command.trim().to_owned()),
-                    note_proposal: None,
-                    write_request: None,
+                    note_proposal: Some(proposal),
+                    ..stopped(String::new(), steps)
                 });
             }
-            Some(call) => {
-                if sessions.is_cancelled(&id) {
-                    return Ok(stopped(String::new(), steps));
-                }
-                if let ToolCall::WriteFile { path, content } = call {
-                    let pending = PendingWrite {
-                        name: path.trim().to_owned(),
-                        content,
-                    };
-                    if !request.allow_file_writes {
-                        sessions.push_tool(&id, "Error: creating files is turned off.");
-                    } else if let Err(error) = write::check(&pending.name, &pending.content) {
-                        sessions.push_tool(&id, &format!("Error: {error}"));
-                    } else if sessions.writes_granted(&id, &folder_key) {
-                        create_file(
-                            writer.as_ref(),
-                            sessions,
-                            &id,
-                            pending,
-                            on_event,
-                            &mut steps,
-                        )
-                        .await;
-                    } else {
-                        let asked = TerminalWriteRequestDto {
-                            folder: format!("./{OUTPUT_FOLDER}/"),
-                            name: pending.name.clone(),
-                            bytes: u32::try_from(pending.content.len()).unwrap_or(u32::MAX),
-                        };
-                        sessions.hold_write(&id, pending);
-                        return Ok(TerminalAssistReplyDto {
-                            write_request: Some(asked),
-                            ..stopped(String::new(), steps)
-                        });
-                    }
-                    continue;
-                }
-                if let Some(note_call) = note_tool_call(&call) {
-                    let outcome = match notes {
-                        Some(notes) => notes.run(note_call).await,
-                        None => NoteToolOutcome::Output {
-                            step: "Looked in the notes".to_owned(),
-                            text: "Error: notes are not available here.".to_owned(),
-                        },
-                    };
-                    match outcome {
-                        NoteToolOutcome::Proposal(proposal) => {
-                            sessions.push_tool(
-                                &id,
-                                "The note was shown to the person for review. Nothing is saved \
-                                 unless they save it.",
-                            );
-                            return Ok(TerminalAssistReplyDto {
-                                text: String::new(),
-                                steps,
-                                run_command: None,
-                                note_proposal: Some(proposal),
-                                write_request: None,
-                            });
-                        }
-                        NoteToolOutcome::Output { step, text } => {
-                            on_event(TerminalAssistEventDto::Step { text: step.clone() });
-                            steps.push(step);
-                            sessions.push_tool(&id, &text);
-                        }
-                    }
-                    continue;
-                }
-                let output = match &host {
-                    Some(host) => match documents.run(host, &call).await {
-                        Some(output) => output,
-                        None => host.run(call).await,
-                    },
-                    None => ToolOutput {
-                        step: "Looked up a file".to_owned(),
-                        text: "Error: file tools are not available for this location.".to_owned(),
-                    },
-                };
-                on_event(TerminalAssistEventDto::Step {
-                    text: output.step.clone(),
+            ToolOutcome::NeedsApproval(ApprovalRequest::RunCommand { command }) => {
+                return Ok(TerminalAssistReplyDto {
+                    run_command: Some(command),
+                    ..stopped(String::new(), steps)
                 });
-                steps.push(output.step);
-                sessions.push_tool(&id, &output.text);
+            }
+            ToolOutcome::NeedsApproval(ApprovalRequest::WriteFile { name, content }) => {
+                let pending = PendingWrite { name, content };
+                if !request.allow_file_writes {
+                    sessions.push_tool(&id, "Error: creating files is turned off.");
+                } else if let Err(error) = write::check(&pending.name, &pending.content) {
+                    sessions.push_tool(&id, &format!("Error: {error}"));
+                } else if sessions.writes_granted(&id, &folder_key) {
+                    create_file(
+                        writer.as_ref(),
+                        sessions,
+                        &id,
+                        pending,
+                        on_event,
+                        &mut steps,
+                    )
+                    .await;
+                } else {
+                    let asked = TerminalWriteRequestDto {
+                        folder: format!("./{OUTPUT_FOLDER}/"),
+                        name: pending.name.clone(),
+                        bytes: u32::try_from(pending.content.len()).unwrap_or(u32::MAX),
+                    };
+                    sessions.hold_write(&id, pending);
+                    return Ok(TerminalAssistReplyDto {
+                        write_request: Some(asked),
+                        ..stopped(String::new(), steps)
+                    });
+                }
             }
         }
     }
@@ -504,28 +425,6 @@ async fn create_file(
     on_event(TerminalAssistEventDto::Step { text: step.clone() });
     steps.push(step);
     sessions.push_tool(id, &text);
-}
-
-/// The notes tool behind a parsed tool call, when it is one.
-fn note_tool_call(call: &ToolCall) -> Option<NoteToolCall> {
-    match call {
-        ToolCall::SearchNotes { query, limit } => Some(NoteToolCall::Search {
-            query: query.clone(),
-            limit: *limit,
-        }),
-        ToolCall::ReadNote { path } => Some(NoteToolCall::Read { path: path.clone() }),
-        ToolCall::ProposeNote { title, content } => Some(NoteToolCall::Propose {
-            path: None,
-            title: title.clone(),
-            content: content.clone(),
-        }),
-        ToolCall::ProposeNoteUpdate { path, content } => Some(NoteToolCall::Propose {
-            path: Some(path.clone()),
-            title: None,
-            content: content.clone(),
-        }),
-        _ => None,
-    }
 }
 
 fn stopped(text: String, steps: Vec<String>) -> TerminalAssistReplyDto {
@@ -1378,30 +1277,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn notes_tool_calls_need_their_text() {
-        use super::protocol::parse_tool_call;
-        assert_eq!(
-            parse_tool_call(r#"TOOL {"tool":"search_notes","query":"  "}"#),
-            None
-        );
-        assert_eq!(
-            parse_tool_call(r#"TOOL {"tool":"propose_note","content":""}"#),
-            None
-        );
-        assert_eq!(
-            parse_tool_call(r#"TOOL {"tool":"propose_note_update","path":" ","content":"x"}"#),
-            None
-        );
-        assert_eq!(
-            parse_tool_call(r#"TOOL {"tool":"search_notes","query":"tls","limit":3}"#),
-            Some(ToolCall::SearchNotes {
-                query: "tls".into(),
-                limit: Some(3)
-            })
-        );
-    }
-
     fn local_providers() -> ProviderRegistry {
         let mut registry = ProviderRegistry::new();
         registry.register(std::sync::Arc::new(
@@ -1578,9 +1453,11 @@ mod tests {
         let reply = ask_local(&fake, &sessions, ask_request("t", "go", dir.path())).await;
         assert!(reply.write_request.is_none());
         assert!(sessions.render("t").contains("turned off"));
-        let (registry, catalogue) = (ToolRegistry::default(), SkillCatalogue::default());
-        assert!(!ask_prompt(false, &registry, &catalogue, "").contains("write_file"));
-        assert!(ask_prompt(true, &registry, &catalogue, "").contains("write_file"));
+        let catalogue = SkillCatalogue::default();
+        let off = agent_tools::registry(false);
+        let on = agent_tools::registry(true);
+        assert!(!ask_prompt(&off, &catalogue, "").contains("write_file"));
+        assert!(ask_prompt(&on, &catalogue, "").contains("write_file"));
     }
 
     #[tokio::test]
