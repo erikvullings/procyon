@@ -8,7 +8,9 @@
 mod frontmatter;
 mod skill_tools;
 mod skills;
+mod stream;
 mod tools;
+mod turn;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -20,6 +22,7 @@ use serde_json::{Value, json};
 pub(crate) use self::skill_tools::{ReadSkill, ReadSkillFile};
 pub(crate) use self::skills::{NoteSkill, SkillCatalogue, SkillRoots};
 pub(crate) use self::tools::RunCommand;
+pub(crate) use self::turn::{MAX_REPLY_BYTES, TurnEnd, TurnEvent, TurnHost, run_turn};
 use fm_transport_dto::NoteProposalDto;
 
 use crate::terminal_assist::NotesAccess;

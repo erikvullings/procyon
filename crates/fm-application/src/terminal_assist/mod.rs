@@ -10,12 +10,14 @@ mod notes;
 mod redact;
 mod remote;
 mod session;
-mod stream;
 mod tools;
 mod write;
 
+use async_trait::async_trait;
+
 use crate::agent::{
-    ApprovalRequest, SkillCatalogue, SkillRoots, ToolContext, ToolOutcome, ToolRegistry,
+    ApprovalRequest, MAX_REPLY_BYTES, SkillCatalogue, SkillRoots, ToolContext, ToolRegistry,
+    TurnEnd, TurnEvent, TurnHost, run_turn,
 };
 
 pub(crate) use notes::{NoteToolCall, NoteToolOutcome, NotesAccess};
@@ -39,7 +41,6 @@ use self::agent_tools::TerminalFiles;
 use self::context::{AttachedFile, render_activity, render_context, state_sections};
 use self::documents::{Documents, is_document};
 use self::session::PendingWrite;
-use self::stream::LineStreamer;
 use self::tools::ToolHost;
 use self::write::{
     FileWriter, MAX_BYTES_PER_QUESTION, MAX_FILES_PER_QUESTION, OUTPUT_FOLDER, WriteError,
@@ -49,8 +50,6 @@ use self::write::{
 const MAX_REQUEST_CHARS: usize = 2 * 1024;
 /// Most transcript bytes sent; the newest output is kept.
 const MAX_TRANSCRIPT_BYTES: usize = 16 * 1024;
-/// Longest answer kept, in bytes.
-const MAX_REPLY_BYTES: usize = 8 * 1024;
 /// Upper bound on generated tokens for one answer.
 const MAX_REPLY_TOKENS: u32 = 1024;
 /// Most files attached with `@path` to one question.
@@ -290,60 +289,33 @@ async fn ask(
     }
 
     let catalogue = skills_for(notes, &request.working_directory, &question_text).await;
+    let mut turn = TerminalTurn {
+        generator,
+        sessions,
+        id: &id,
+        system_prompt: ask_prompt(&prompt_registry, &catalogue, &question_text),
+    };
+    let ctx = ToolContext {
+        skills: &catalogue,
+        notes,
+        files: Some(&files),
+    };
     loop {
-        let mut streamer = LineStreamer::new();
-        let raw = generate(
-            generator,
-            ask_prompt(&prompt_registry, &catalogue, &question_text),
-            sessions.render(&id),
-            &mut |delta: &str| {
-                streamer.push(delta, &mut |text| {
-                    on_event(TerminalAssistEventDto::Line {
-                        text: text.to_owned(),
-                    });
-                });
-            },
-        )
+        let end = run_turn(&mut turn, &registry, &ctx, &mut steps, &mut |event| {
+            on_event(match event {
+                TurnEvent::Line(text) => TerminalAssistEventDto::Line { text },
+                TurnEvent::Step(text) => TerminalAssistEventDto::Step { text },
+            });
+        })
         .await?;
-        streamer.finish(&mut |text| {
-            on_event(TerminalAssistEventDto::Line {
-                text: text.to_owned(),
-            });
-        });
-        // A reply that looked like a tool call but was not one is shown after all.
-        if registry.parse(&raw).is_some() {
-            streamer.discard_held();
-        } else {
-            streamer.release_held(&mut |text| {
-                on_event(TerminalAssistEventDto::Line {
-                    text: text.to_owned(),
-                });
-            });
-        }
-        let trimmed = raw.trim();
-        if trimmed.is_empty() {
-            return Err(ChatFailureDto::Empty);
-        }
-        let trimmed = truncate_to_bytes(trimmed, MAX_REPLY_BYTES);
-        sessions.push_assistant(&id, trimmed);
-        let Some(parsed) = registry.parse(trimmed) else {
-            return Ok(stopped(trimmed.to_owned(), steps));
-        };
-        if sessions.is_cancelled(&id) {
-            return Ok(stopped(String::new(), steps));
-        }
-        let ctx = ToolContext {
-            skills: &catalogue,
-            notes,
-            files: Some(&files),
-        };
-        match parsed.tool.run(&ctx, parsed.args).await {
-            ToolOutcome::Output { step, text } => {
-                on_event(TerminalAssistEventDto::Step { text: step.clone() });
-                steps.push(step);
-                sessions.push_tool(&id, &text);
+        match end {
+            TurnEnd::Answer(text) => return Ok(stopped(text, steps)),
+            TurnEnd::Cancelled => return Ok(stopped(String::new(), steps)),
+            TurnEnd::StepLimit => {
+                let text = "I stopped after many steps. Ask again to continue.".to_owned();
+                return Ok(stopped(text, steps));
             }
-            ToolOutcome::Proposal(proposal) => {
+            TurnEnd::Proposal(proposal) => {
                 sessions.push_tool(
                     &id,
                     "The note was shown to the person for review. Nothing is saved unless they \
@@ -354,13 +326,13 @@ async fn ask(
                     ..stopped(String::new(), steps)
                 });
             }
-            ToolOutcome::NeedsApproval(ApprovalRequest::RunCommand { command }) => {
+            TurnEnd::NeedsApproval(ApprovalRequest::RunCommand { command }) => {
                 return Ok(TerminalAssistReplyDto {
                     run_command: Some(command),
                     ..stopped(String::new(), steps)
                 });
             }
-            ToolOutcome::NeedsApproval(ApprovalRequest::WriteFile { name, content }) => {
+            TurnEnd::NeedsApproval(ApprovalRequest::WriteFile { name, content }) => {
                 let pending = PendingWrite { name, content };
                 if !request.allow_file_writes {
                     sessions.push_tool(&id, "Error: creating files is turned off.");
@@ -390,6 +362,42 @@ async fn ask(
                 }
             }
         }
+    }
+}
+
+/// The terminal's side of a turn: the chat role, and the session that holds the conversation.
+struct TerminalTurn<'a, G> {
+    generator: &'a G,
+    sessions: &'a Sessions,
+    id: &'a str,
+    system_prompt: String,
+}
+
+#[async_trait]
+impl<G: ChatGenerator> TurnHost for TerminalTurn<'_, G> {
+    async fn generate(
+        &mut self,
+        on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
+    ) -> Result<String, ChatFailureDto> {
+        generate(
+            self.generator,
+            self.system_prompt.clone(),
+            self.sessions.render(self.id),
+            on_delta,
+        )
+        .await
+    }
+
+    fn push_assistant(&mut self, text: &str) {
+        self.sessions.push_assistant(self.id, text);
+    }
+
+    fn push_tool(&mut self, text: &str) {
+        self.sessions.push_tool(self.id, text);
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.sessions.is_cancelled(self.id)
     }
 }
 

@@ -226,7 +226,11 @@ pub(crate) trait AgentTool: Send + Sync {
   `ToolContext` is how a host (terminal now, chat later) supplies sandboxed file access.
   Behaviour change: a call with bad or blank arguments now returns an error to the model instead of
   being taken as the final answer.
-- Not done (open): `agent::run_turn` shared loop, native tool calling + `ToolCalling` capability, `skillsRoots`
+- 2026-11-22: `agent::run_turn` (`agent/turn.rs`) owns the step loop: max 24 steps (new), reply cap,
+  cancellation, streaming without tool-call lines, steps. The host implements `TurnHost`
+  (terminal: `TerminalTurn`); approvals and proposals end the turn and the caller may run it again.
+  `LineStreamer` moved to `agent/`.
+- Not done (open): shared loop, native tool calling + `ToolCalling` capability, `skillsRoots`
   setting, server-mode accessible-roots filtering for skill folders (user-home skills are read in
   both hosts today), `read_skill_file` through the document reader, chat parity (backend, routes,
   Tauri, frontend, mock fixtures). Note skills found for the first step of a question are not

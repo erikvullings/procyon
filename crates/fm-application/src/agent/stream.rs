@@ -3,19 +3,19 @@
 
 /// Emits complete lines of a reply and holds back tool-call-looking ones (task 0336).
 #[derive(Debug, Default)]
-pub(super) struct LineStreamer {
+pub(crate) struct LineStreamer {
     line: String,
     held: Vec<String>,
     holding: bool,
 }
 
 impl LineStreamer {
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     /// Adds streamed text; each line it completes is passed to `emit`.
-    pub(super) fn push(&mut self, delta: &str, emit: &mut dyn FnMut(&str)) {
+    pub(crate) fn push(&mut self, delta: &str, emit: &mut dyn FnMut(&str)) {
         self.line.push_str(delta);
         while let Some(end) = self.line.find('\n') {
             let line: String = self.line.drain(..=end).collect();
@@ -24,7 +24,7 @@ impl LineStreamer {
     }
 
     /// Passes on the last, unfinished line.
-    pub(super) fn finish(&mut self, emit: &mut dyn FnMut(&str)) {
+    pub(crate) fn finish(&mut self, emit: &mut dyn FnMut(&str)) {
         if !self.line.is_empty() {
             let line = std::mem::take(&mut self.line);
             self.handle(line.trim_end_matches('\r'), emit);
@@ -32,7 +32,7 @@ impl LineStreamer {
     }
 
     /// Emits the held lines: the reply turned out not to be a tool call.
-    pub(super) fn release_held(&mut self, emit: &mut dyn FnMut(&str)) {
+    pub(crate) fn release_held(&mut self, emit: &mut dyn FnMut(&str)) {
         self.holding = false;
         for line in std::mem::take(&mut self.held) {
             emit(&line);
@@ -40,7 +40,7 @@ impl LineStreamer {
     }
 
     /// Drops the held lines: the reply was a tool call.
-    pub(super) fn discard_held(&mut self) {
+    pub(crate) fn discard_held(&mut self) {
         self.holding = false;
         self.held.clear();
     }
