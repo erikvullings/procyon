@@ -66,9 +66,13 @@ fn looks_like_tool_call(line: &str) -> bool {
     let line = line.trim_start();
     line.starts_with("TOOL ")
         || line.starts_with("<tool_call")
+        || line.starts_with("<|tool_call")
         || line.starts_with("<function")
         || line.starts_with("```json")
         || (line.starts_with('{') && (line.contains("\"tool\"") || line.contains("\"name\"")))
+        // A call at the end of a sentence ("Let me look: {...}") is held too; a line that turns out
+        // not to be one is shown after the reply.
+        || (line.trim_end().ends_with('}') && line.contains("{\"tool\""))
 }
 
 #[cfg(test)]

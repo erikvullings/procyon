@@ -421,3 +421,15 @@ async fn a_huge_tool_result_is_cut_before_the_model_sees_it() {
     assert!(result.starts_with(&"W".repeat(100)));
     assert!(result.ends_with("[The result was cut at 100 bytes.]"));
 }
+
+#[tokio::test]
+async fn a_call_after_prose_on_one_line_is_not_streamed_raw() {
+    let mut host = Scripted::new(&[r#"Let me look: {"tool":"shout","word":"x"}"#, "ok"]);
+    let run = turn(&mut host).await;
+    assert_eq!(host.results(), ["X"]);
+    assert!(
+        run.events
+            .iter()
+            .all(|event| !matches!(event, TurnEvent::Line(line) if line.contains("\"tool\"")))
+    );
+}
