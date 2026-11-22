@@ -230,6 +230,11 @@ pub(crate) trait AgentTool: Send + Sync {
   cancellation, streaming without tool-call lines, steps. The host implements `TurnHost`
   (terminal: `TerminalTurn`); approvals and proposals end the turn and the caller may run it again.
   `LineStreamer` moved to `agent/`.
+- 2026-11-22: Native tool calling (hybrid): `ToolCalling` capability (settings switch, not for
+  Ollama's JSON chat API), `LlmChatGeneration.tools`, OpenAI-compatible `tools` in the request, and
+  streamed `tool_calls` come back as a `TOOL {json}` line so the transcript and loop stay text.
+  The prompt omits the tool list when native. Multi-call batching and structured tool-role
+  messages are not done.
 - Not done (open): shared loop, native tool calling + `ToolCalling` capability, `skillsRoots`
   setting, server-mode accessible-roots filtering for skill folders (user-home skills are read in
   both hosts today), `read_skill_file` through the document reader, chat parity (backend, routes,

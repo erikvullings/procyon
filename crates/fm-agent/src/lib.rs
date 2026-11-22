@@ -174,6 +174,17 @@ pub struct ToolRegistry {
     tools: BTreeMap<&'static str, Arc<dyn AgentTool>>,
 }
 
+/// One tool as an endpoint's `tools` list needs it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolSpec {
+    /// The tool's name.
+    pub name: &'static str,
+    /// What it does.
+    pub description: &'static str,
+    /// JSON Schema of its arguments.
+    pub schema: Value,
+}
+
 /// A call the model wrote: a registered tool and its raw arguments.
 pub struct ParsedCall {
     /// The tool that was named.
@@ -217,6 +228,18 @@ impl ToolRegistry {
             tool: Arc::clone(tool),
             args,
         })
+    }
+
+    /// The registered tools as specs, for an endpoint that calls tools natively.
+    pub fn specs(&self) -> Vec<ToolSpec> {
+        self.tools
+            .values()
+            .map(|tool| ToolSpec {
+                name: tool.name(),
+                description: tool.description(),
+                schema: tool.input_schema(),
+            })
+            .collect()
     }
 
     /// The prompt section that describes every tool, generated from the registered definitions.

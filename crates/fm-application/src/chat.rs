@@ -110,6 +110,12 @@ pub(crate) trait ChatGenerator: Send + Sync {
     /// Whether the role's model accepts images.
     async fn accepts_images(&self, role: LlmRole) -> Result<bool, LlmProfileError>;
 
+    /// Whether the role's endpoint calls tools natively (task 0339); otherwise tools use the text
+    /// protocol.
+    async fn native_tool_calling(&self, _role: LlmRole) -> bool {
+        false
+    }
+
     async fn generate_for_role(
         &self,
         role: LlmRole,
@@ -123,6 +129,10 @@ pub(crate) trait ChatGenerator: Send + Sync {
 impl ChatGenerator for LlmProfileService {
     async fn accepts_images(&self, role: LlmRole) -> Result<bool, LlmProfileError> {
         self.role_accepts_images(role).await
+    }
+
+    async fn native_tool_calling(&self, role: LlmRole) -> bool {
+        self.role_uses_native_tools(role).await
     }
 
     async fn generate_for_role(

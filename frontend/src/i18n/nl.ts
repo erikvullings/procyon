@@ -2480,6 +2480,7 @@ export const nl = {
     modelDiscovery: 'Modellen ontdekken en valideren',
     responsesCapability: 'Toekomstige Responses API-mogelijkheid aangeven',
     visionCapability: 'Accepteert afbeeldingen in de chat',
+    toolCallingCapability: 'Roept tools native aan (agents in terminal en chat)',
     imagesApi: 'Afbeeldingen-API',
     imagesApiOpenAi: 'OpenAI-stijl (één antwoord)',
     imagesApiDashscope: 'Alibaba Cloud-taak-API (Qwen-Image, Wan)',

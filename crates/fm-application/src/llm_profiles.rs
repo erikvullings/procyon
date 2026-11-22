@@ -1835,6 +1835,28 @@ impl LlmProfileService {
         Ok(profile.capabilities.contains(&LlmApiCapability::Vision))
     }
 
+    /// Whether chat requests for `role` carry native tools: the profile says it takes them and the
+    /// endpoint is OpenAI-compatible (the Ollama chat API is asked for JSON and has no tools here).
+    pub(crate) async fn role_uses_native_tools(&self, role: LlmRole) -> bool {
+        let Ok(resolved) = self.resolve_role(role) else {
+            return false;
+        };
+        if !resolved
+            .profile
+            .capabilities
+            .contains(&LlmApiCapability::ToolCalling)
+        {
+            return false;
+        }
+        let profile = LlmProfile {
+            model: resolved.model,
+            ..resolved.profile
+        };
+        self.probe_request(&profile)
+            .await
+            .is_ok_and(|request| request.ollama_generation_url.is_none())
+    }
+
     pub(crate) async fn model_capabilities(
         &self,
         id: Uuid,
@@ -3035,6 +3057,46 @@ mod tests {
         let plain = openai_generation_body(&request, &generation, ReasoningSwitch::Plain);
         assert!(plain.get("chat_template_kwargs").is_none());
         assert!(plain.get("reasoning_effort").is_none());
+        assert!(plain.get("tools").is_none());
+
+        let with_tools = LlmChatGeneration {
+            tools: vec![LlmToolSpec {
+                name: "read_file".into(),
+                description: "reads a file".into(),
+                schema: json!({"type": "object", "properties": {"path": {"type": "string"}}}),
+            }],
+            ..generation
+        };
+        let body = openai_generation_body(&request, &with_tools, ReasoningSwitch::Plain);
+        assert_eq!(body["tools"][0]["type"], "function");
+        assert_eq!(body["tools"][0]["function"]["name"], "read_file");
+        assert_eq!(
+            body["tools"][0]["function"]["parameters"]["properties"]["path"]["type"],
+            "string"
+        );
+    }
+
+    #[test]
+    fn streamed_native_tool_calls_become_a_text_protocol_line() {
+        let stream = concat!(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"Let me look.\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"c1\",\"function\":{\"name\":\"read_file\",\"arguments\":\"\"}}]}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"path\\\":\"}}]}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"a.txt\\\"}\"}}]}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+        let text = parse_streaming_chat(stream.as_bytes()).unwrap();
+        assert_eq!(
+            text,
+            "Let me look.\nTOOL {\"path\":\"a.txt\",\"tool\":\"read_file\"}"
+        );
+        // Arguments that are not an object still name the tool, so it can say what is missing.
+        assert_eq!(
+            tool_call_line("list_dir", "not json").as_deref(),
+            Some("TOOL {\"tool\":\"list_dir\"}")
+        );
+        assert_eq!(tool_call_line("", "{}"), None);
     }
 
     #[test]
@@ -3064,6 +3126,8 @@ mod tests {
         /// Failures `generate_chat` returns, front first, before it starts succeeding.
         generate_failures: Mutex<std::collections::VecDeque<LlmProfileError>>,
         generate_calls: std::sync::atomic::AtomicUsize,
+        /// The tools each generation carried.
+        generated_tools: Mutex<Vec<Vec<LlmToolSpec>>>,
     }
 
     #[async_trait]
@@ -3101,12 +3165,16 @@ mod tests {
         async fn generate_chat(
             &self,
             request: &LlmProbeRequest,
-            _generation: &LlmChatGeneration,
+            generation: &LlmChatGeneration,
             cancellation: &CancellationToken,
         ) -> Result<String, LlmProfileError> {
             if cancellation.is_cancelled() {
                 return Err(LlmProfileError::Cancelled);
             }
+            self.generated_tools
+                .lock()
+                .unwrap()
+                .push(generation.tools.clone());
             self.generate_calls
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             if let Some(failure) = self.generate_failures.lock().unwrap().pop_front() {
@@ -3139,6 +3207,7 @@ mod tests {
             }),
             generate_failures: Mutex::new(std::collections::VecDeque::new()),
             generate_calls: std::sync::atomic::AtomicUsize::new(0),
+            generated_tools: Mutex::new(Vec::new()),
         });
         (
             LlmProfileService::new(
@@ -4637,6 +4706,40 @@ mod tests {
             context_window: None,
             temperature: Some(0.0),
         }
+    }
+
+    #[tokio::test]
+    async fn tools_reach_the_endpoint_only_when_the_profile_takes_them_natively() {
+        let tool = || LlmToolSpec {
+            name: "read_file".into(),
+            description: "reads".into(),
+            schema: json!({"type": "object"}),
+        };
+        let (service, _, transport) = service(LlmHostPolicy::desktop());
+        let plain = service
+            .create(draft(LlmPreset::OpenAiCompatible, "http://127.0.0.1:8000"))
+            .await
+            .unwrap();
+        let mut capable_draft = draft(LlmPreset::OpenAiCompatible, "http://127.0.0.1:8001");
+        capable_draft
+            .capabilities
+            .insert(LlmApiCapability::ToolCalling);
+        let capable = service.create(capable_draft).await.unwrap();
+
+        for id in [plain.id, capable.id] {
+            let generation = LlmChatGeneration {
+                tools: vec![tool()],
+                ..tiny_generation()
+            };
+            service
+                .generate(id, generation, &CancellationToken::new())
+                .await
+                .unwrap();
+        }
+
+        let seen = transport.generated_tools.lock().unwrap();
+        assert!(seen[0].is_empty());
+        assert_eq!(seen[1], vec![tool()]);
     }
 
     #[tokio::test]

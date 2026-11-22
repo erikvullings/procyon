@@ -2075,6 +2075,8 @@ export const es = {
     modelDiscovery: 'Descubrir y validar modelos',
     responsesCapability: 'Anunciar la futura capacidad de la API Responses',
     visionCapability: 'Acepta imágenes en el chat',
+    toolCallingCapability:
+      'Llama a las herramientas de forma nativa (agentes del terminal y del chat)',
     imagesApi: 'API de imágenes',
     imagesApiOpenAi: 'Estilo OpenAI (una respuesta)',
     imagesApiDashscope: 'API de tareas de Alibaba Cloud (Qwen-Image, Wan)',

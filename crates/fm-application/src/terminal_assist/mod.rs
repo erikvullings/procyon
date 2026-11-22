@@ -32,7 +32,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::chat::ChatGenerator;
 use crate::file_assistant::truncate_to_bytes;
-use crate::llm_profiles::{LlmChatGeneration, LlmProfileError, LlmRole};
+use crate::llm_profiles::{LlmChatGeneration, LlmProfileError, LlmRole, LlmToolSpec};
 
 use self::agent_tools::TerminalFiles;
 use self::context::{AttachedFile, render_activity, render_context, state_sections};
@@ -56,21 +56,42 @@ const MAX_SESSION_ID_CHARS: usize = 64;
 /// Most output bytes of an approved command shown to the model.
 const MAX_COMMAND_OUTPUT_BYTES: usize = 8 * 1024;
 
-const ASK_PROMPT: &str = "You are the assistant in the person's embedded terminal. The context \
+const ASK_INTRO: &str = "You are the assistant in the person's embedded terminal. The context \
      shows their system, folder, selection and recent commands. Answer briefly and use only what \
      you can see or look up. To suggest a command for the person to review, write it on its own \
      final line as `Command: <command>`. Prefer read-only commands and never chain several \
-     destructive steps.\n\
-     You may use tools. To use one, reply with exactly one line and nothing else: `TOOL {json}`. \
-     Then wait for the result. Paths are relative to the working folder and cannot leave it. Look \
-     things up instead of guessing. Never say you will look something up without making the TOOL \
-     call in the same reply.";
+     destructive steps.";
+/// How the model calls tools when the endpoint has no native tool calling.
+const ASK_TEXT_TOOLS: &str = "\nYou may use tools. To use one, reply with exactly one line and \
+     nothing else: `TOOL {json}`. Then wait for the result. Paths are relative to the working \
+     folder and cannot leave it. Look things up instead of guessing. Never say you will look \
+     something up without making the TOOL call in the same reply.";
+/// The same, when the endpoint takes the tools natively.
+const ASK_NATIVE_TOOLS: &str = "\nYou may use the tools you are given, one call at a time. Paths \
+     are relative to the working folder and cannot leave it. Look things up instead of guessing. \
+     Never say you will look something up without calling the tool in the same reply.";
 
 /// The ask prompt: the fixed text, the tools generated from the registry (task 0339), and the
 /// skills catalogue for this question.
-fn ask_prompt(registry: &ToolRegistry, catalogue: &SkillCatalogue, request: &str) -> String {
-    let mut prompt = ASK_PROMPT.to_owned();
-    for section in [registry.prompt_section(), catalogue.prompt_section(request)] {
+fn ask_prompt(
+    registry: &ToolRegistry,
+    catalogue: &SkillCatalogue,
+    request: &str,
+    native_tools: bool,
+) -> String {
+    let mut prompt = ASK_INTRO.to_owned();
+    prompt.push_str(if native_tools {
+        ASK_NATIVE_TOOLS
+    } else {
+        ASK_TEXT_TOOLS
+    });
+    // Natively, the endpoint gets the tools as a list, so the prompt does not repeat them.
+    let tools = if native_tools {
+        String::new()
+    } else {
+        registry.prompt_section()
+    };
+    for section in [tools, catalogue.prompt_section(request)] {
         if !section.is_empty() {
             prompt.push('\n');
             prompt.push_str(&section);
@@ -135,7 +156,14 @@ pub(crate) async fn reply_streaming(
         return ask(generator, providers, sessions, notes, request, on_event).await;
     }
     let (system_prompt, user_prompt) = prompts(&request)?;
-    let raw = generate(generator, system_prompt, user_prompt, &mut |_: &str| {}).await?;
+    let raw = generate(
+        generator,
+        system_prompt,
+        user_prompt,
+        Vec::new(),
+        &mut |_: &str| {},
+    )
+    .await?;
     let text = match request.kind {
         TerminalAssistKindDto::Command => first_command_line(&raw),
         _ => {
@@ -157,6 +185,7 @@ async fn generate(
     generator: &impl ChatGenerator,
     system_prompt: String,
     user_prompt: String,
+    tools: Vec<LlmToolSpec>,
     on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
 ) -> Result<String, ChatFailureDto> {
     let cancellation = CancellationToken::new();
@@ -164,7 +193,7 @@ async fn generate(
         .generate_for_role(
             LlmRole::Chat,
             LlmChatGeneration {
-                tools: Vec::new(),
+                tools,
                 system_prompt,
                 user_prompt,
                 images: Vec::new(),
@@ -286,12 +315,26 @@ async fn ask(
         sessions.push_person(&id, question, &context);
     }
 
+    let native_tools = generator.native_tool_calling(LlmRole::Chat).await;
     let catalogue = skills_for(notes, &request.working_directory, &question_text).await;
     let mut turn = TerminalTurn {
         generator,
         sessions,
         id: &id,
-        system_prompt: ask_prompt(&prompt_registry, &catalogue, &question_text),
+        system_prompt: ask_prompt(&prompt_registry, &catalogue, &question_text, native_tools),
+        tools: if native_tools {
+            prompt_registry
+                .specs()
+                .into_iter()
+                .map(|spec| LlmToolSpec {
+                    name: spec.name.to_owned(),
+                    description: spec.description.to_owned(),
+                    schema: spec.schema,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        },
     };
     let ctx = ToolContext {
         skills: &catalogue,
@@ -369,6 +412,7 @@ struct TerminalTurn<'a, G> {
     sessions: &'a Sessions,
     id: &'a str,
     system_prompt: String,
+    tools: Vec<LlmToolSpec>,
 }
 
 #[async_trait]
@@ -381,6 +425,7 @@ impl<G: ChatGenerator> TurnHost for TerminalTurn<'_, G> {
             self.generator,
             self.system_prompt.clone(),
             self.sessions.render(self.id),
+            self.tools.clone(),
             on_delta,
         )
         .await
@@ -574,12 +619,18 @@ mod tests {
         /// Answers handed out first, one per call, before `outcome` applies.
         script: StdMutex<VecDeque<&'static str>>,
         seen: StdMutex<Vec<(LlmRole, LlmChatGeneration)>>,
+        /// Whether the endpoint takes tools natively.
+        native: bool,
     }
 
     #[async_trait]
     impl ChatGenerator for FakeGenerator {
         async fn accepts_images(&self, _role: LlmRole) -> Result<bool, LlmProfileError> {
             Ok(false)
+        }
+
+        async fn native_tool_calling(&self, _role: LlmRole) -> bool {
+            self.native
         }
 
         async fn generate_for_role(
@@ -618,6 +669,7 @@ mod tests {
             outcome,
             script: StdMutex::new(VecDeque::new()),
             seen: StdMutex::new(Vec::new()),
+            native: false,
         }
     }
 
@@ -829,7 +881,7 @@ mod tests {
         let prompt = &seen[1].1.user_prompt;
         assert!(prompt.contains("Assistant: It is a Rust project."));
         assert!(prompt.ends_with("Person: how to build?\n\n"));
-        assert!(seen[1].1.system_prompt.starts_with(ASK_PROMPT));
+        assert!(seen[1].1.system_prompt.starts_with(ASK_INTRO));
     }
 
     #[tokio::test]
@@ -1462,8 +1514,8 @@ mod tests {
         let catalogue = SkillCatalogue::default();
         let off = agent_tools::registry(false);
         let on = agent_tools::registry(true);
-        assert!(!ask_prompt(&off, &catalogue, "").contains("write_file"));
-        assert!(ask_prompt(&on, &catalogue, "").contains("write_file"));
+        assert!(!ask_prompt(&off, &catalogue, "", false).contains("write_file"));
+        assert!(ask_prompt(&on, &catalogue, "", false).contains("write_file"));
     }
 
     #[tokio::test]
@@ -1595,5 +1647,59 @@ mod tests {
         let transcript = sessions.render("t");
         assert!(transcript.contains("is not available."));
         assert!(transcript.contains("Error: invalid arguments for read_skill"));
+    }
+
+    #[tokio::test]
+    async fn a_native_endpoint_gets_the_tools_as_a_list_not_in_the_prompt() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), "alpha").unwrap();
+        let mut fake = scripted(&[
+            r#"TOOL {"tool":"read_file","path":"a.txt"}"#,
+            "It says alpha.",
+        ]);
+        fake.native = true;
+        let sessions = Sessions::default();
+
+        let reply = ask_local(
+            &fake,
+            &sessions,
+            ask_request("t", "what is in a.txt?", dir.path()),
+        )
+        .await;
+
+        assert_eq!(reply.text, "It says alpha.");
+        assert_eq!(reply.steps, ["Read a.txt"]);
+        let seen = fake.seen.lock().unwrap();
+        let names: Vec<&str> = seen[0]
+            .1
+            .tools
+            .iter()
+            .map(|tool| tool.name.as_str())
+            .collect();
+        assert!(names.contains(&"read_file") && names.contains(&"run_command"));
+        assert!(!names.contains(&"write_file"));
+        assert!(
+            seen[0]
+                .1
+                .tools
+                .iter()
+                .all(|tool| tool.schema["type"] == "object")
+        );
+        let prompt = &seen[0].1.system_prompt;
+        assert!(prompt.starts_with(ASK_INTRO));
+        assert!(!prompt.contains("TOOL {json}"));
+        assert!(!prompt.contains("- read_file"));
+    }
+
+    #[tokio::test]
+    async fn a_text_protocol_endpoint_gets_no_tools_list() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&["Hello."]);
+        let sessions = Sessions::default();
+        ask_local(&fake, &sessions, ask_request("t", "hi", dir.path())).await;
+        let seen = fake.seen.lock().unwrap();
+        assert!(seen[0].1.tools.is_empty());
+        assert!(seen[0].1.system_prompt.contains("TOOL {json}"));
+        assert!(seen[0].1.system_prompt.contains("- read_file"));
     }
 }

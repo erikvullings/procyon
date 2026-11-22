@@ -2433,6 +2433,7 @@ export const en = {
     modelDiscovery: 'Discover and validate models',
     responsesCapability: 'Advertise future Responses API capability',
     visionCapability: 'Accepts images in chat',
+    toolCallingCapability: 'Calls tools natively (agents in terminal and chat)',
     imagesApi: 'Images API',
     imagesApiOpenAi: 'OpenAI-style (one reply)',
     imagesApiDashscope: 'Alibaba Cloud task API (Qwen-Image, Wan)',

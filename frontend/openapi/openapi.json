@@ -19361,7 +19361,8 @@
           "modelDiscovery",
           "imageGenerations",
           "dashscopeTasks",
-          "vision"
+          "vision",
+          "toolCalling"
         ]
       },
       "LlmCredentialInputDto": {
