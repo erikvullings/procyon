@@ -116,7 +116,9 @@ deep capability module under `crates/fm-application/src/`. Existing seams includ
 (core/plugin/platform action dispatch), `ChecksumCoordinator`, `FileEditorService`,
 `DocxPreviewService` (bounded semantic conversion and retained package resources),
 `PptxPreviewService` (bounded conversion to retained PDF), `NotesService` (notes folder setting,
-session-to-runbook drafts, semantic-or-text note search; it never writes notes),
+session-to-runbook drafts, semantic-or-text note search; it never writes notes), the `agent` harness
+(`AgentTool`/`ToolRegistry` whose prompt section is generated from the registered tools, plus skills:
+`SKILL.md` folders and notes as virtual skills, loaded on demand with `read_skill`/`read_skill_file`),
 `ConnectionFacade`, `PluginManager`, `SemanticService`, `SemanticComponentService`, and
 `SemanticLibraryService`. Semantic capabilities are optional and lazy: their fake, local-IPC, or
 managed capabilities are injected explicitly, while ordinary

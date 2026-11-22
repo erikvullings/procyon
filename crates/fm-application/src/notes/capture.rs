@@ -33,6 +33,7 @@ pub(crate) const CAPTURE_PROMPT: &str = "You turn a terminal session into a shor
      exactly this shape:\n\
      Title: <a short title naming the task>\n\
      Tags: <two to five lowercase keywords, comma separated>\n\
+     Description: Use when <the situation or request in which this runbook helps>\n\
      \n\
      ## Goal\n<one or two sentences>\n\
      ## Prerequisites\n<what must be in place; leave the section out when nothing is needed>\n\
@@ -178,7 +179,7 @@ fn shown_directory(uri: &str) -> String {
 /// The model's reply as a complete note: front matter filled in, title heading first, redacted.
 fn assemble(input: &CaptureInput, raw: &str) -> NoteDraftDto {
     let reply = unfenced(raw.trim());
-    let (model_title, model_tags, body) = read_reply(reply);
+    let (model_title, model_description, model_tags, body) = read_reply(reply);
     let heading = body.lines().find_map(|line| {
         line.strip_prefix("# ")
             .map(str::trim)
@@ -196,8 +197,14 @@ fn assemble(input: &CaptureInput, raw: &str) -> NoteDraftDto {
     let body = with_title_heading(body.trim(), &title);
     let tags = clean_tags(model_tags);
     let stamp = input.now.to_rfc3339_opts(SecondsFormat::Secs, true);
+    let description = model_description
+        .map(|text| text.trim().to_owned())
+        .filter(|text| !text.is_empty())
+        .unwrap_or_else(|| format!("Use when you need to: {title}"));
     let meta = NoteMeta {
         title: Some(title.clone()),
+        name: None,
+        description: Some(description),
         created: Some(stamp.clone()),
         updated: Some(stamp),
         tags: tags.clone(),
@@ -237,11 +244,12 @@ fn unfenced(reply: &str) -> &str {
 }
 
 /// Title, tags and body from either front matter or leading `Title:` / `Tags:` lines.
-fn read_reply(reply: &str) -> (Option<String>, Vec<String>, String) {
+fn read_reply(reply: &str) -> (Option<String>, Option<String>, Vec<String>, String) {
     if let (Some(meta), body) = split_note(reply) {
-        return (meta.title, meta.tags, body.to_owned());
+        return (meta.title, meta.description, meta.tags, body.to_owned());
     }
     let mut title = None;
+    let mut description = None;
     let mut tags = Vec::new();
     let mut body_start = 0;
     // Leading `Title:` / `Tags:` lines and the blank lines among them are the header.
@@ -251,6 +259,9 @@ fn read_reply(reply: &str) -> (Option<String>, Vec<String>, String) {
         if lower.starts_with("title:") {
             title = Some(trimmed[6..].trim().trim_matches('"').to_owned())
                 .filter(|title| !title.is_empty());
+        } else if lower.starts_with("description:") {
+            description = Some(trimmed[12..].trim().trim_matches('"').to_owned())
+                .filter(|text| !text.is_empty());
         } else if lower.starts_with("tags:") {
             tags = trimmed[5..]
                 .trim()
@@ -263,7 +274,7 @@ fn read_reply(reply: &str) -> (Option<String>, Vec<String>, String) {
         }
         body_start += line.len();
     }
-    (title, tags, reply[body_start..].to_owned())
+    (title, description, tags, reply[body_start..].to_owned())
 }
 
 /// `body` starting with `# title`: an existing top heading is kept, otherwise one is added.

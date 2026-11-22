@@ -14,6 +14,8 @@ mod stream;
 mod tools;
 mod write;
 
+use crate::agent::{self, SkillCatalogue, SkillRoots, ToolContext, ToolOutcome, ToolRegistry};
+
 pub(crate) use notes::{NoteToolCall, NoteToolOutcome, NotesAccess};
 pub(crate) use redact::redact_secrets;
 pub(crate) use session::Sessions;
@@ -92,12 +94,46 @@ const WRITE_PROMPT: &str = "\nYou can create new files: \
      you the final name. To summarise several documents, read one and then write its file, one \
      file per document, with a factual summary. Use it only when the person asks for files.";
 
-fn ask_prompt(allow_file_writes: bool) -> String {
-    if allow_file_writes {
+/// The ask prompt: the fixed text, the tools generated from the registry (task 0339), and the
+/// skills catalogue for this question.
+fn ask_prompt(
+    allow_file_writes: bool,
+    registry: &ToolRegistry,
+    catalogue: &SkillCatalogue,
+    request: &str,
+) -> String {
+    let mut prompt = if allow_file_writes {
         format!("{ASK_PROMPT}{WRITE_PROMPT}")
     } else {
         ASK_PROMPT.to_owned()
+    };
+    for section in [registry.prompt_section(), catalogue.prompt_section(request)] {
+        if !section.is_empty() {
+            prompt.push('\n');
+            prompt.push_str(&section);
+        }
     }
+    prompt
+}
+
+/// The skills for one question: skill folders of the person and the project, and the notes that
+/// match the question (task 0339).
+async fn skills_for(
+    notes: Option<&dyn NotesAccess>,
+    working_directory: &str,
+    question: &str,
+) -> SkillCatalogue {
+    let directory = context::path_from_location(working_directory);
+    // Tests never read the real home folder.
+    let home = if cfg!(test) { None } else { dirs::home_dir() };
+    let roots = SkillRoots::standard(directory.as_deref(), home.as_deref(), &[]);
+    let mut catalogue = tokio::task::spawn_blocking(move || SkillCatalogue::discover(&roots))
+        .await
+        .unwrap_or_default();
+    if let Some(notes) = notes {
+        catalogue.add_notes(notes.skills(question).await);
+    }
+    catalogue
 }
 
 const COMMAND_PROMPT: &str = "You turn a request into one command for the person's shell. Reply \
@@ -203,7 +239,9 @@ async fn ask(
         .to_owned();
     let host = ToolHost::open(providers, &request.working_directory);
     let documents = Documents::new(providers);
+    let registry = agent::skill_registry();
     let mut steps = Vec::new();
+    let mut question_text = String::new();
 
     let folder_key = format!("{}|{OUTPUT_FOLDER}", request.working_directory);
     let writer = FileWriter::open(providers, &request.working_directory);
@@ -261,6 +299,7 @@ async fn ask(
             .map(str::trim)
             .filter(|text| !text.is_empty() && text.chars().count() <= MAX_REQUEST_CHARS)
             .ok_or(ChatFailureDto::InvalidRequest)?;
+        question_text = question.to_owned();
         let files = attached_files(host.as_ref(), &documents, &request.context.files).await;
         // The state goes in with the first question, and later only the parts that changed are
         // added: what was sent stays as it was, so a cached prompt prefix still matches and an
@@ -277,11 +316,17 @@ async fn ask(
         sessions.push_person(&id, question, &context);
     }
 
+    let catalogue = skills_for(notes, &request.working_directory, &question_text).await;
     loop {
         let mut streamer = LineStreamer::new();
         let raw = generate(
             generator,
-            ask_prompt(request.allow_file_writes),
+            ask_prompt(
+                request.allow_file_writes,
+                &registry,
+                &catalogue,
+                &question_text,
+            ),
             sessions.render(&id),
             &mut |delta: &str| {
                 streamer.push(delta, &mut |text| {
@@ -298,7 +343,7 @@ async fn ask(
             });
         });
         // A reply that looked like a tool call but was not one is shown after all.
-        if parse_tool_call(&raw).is_some() {
+        if parse_tool_call(&raw).is_some() || registry.parse(&raw).is_some() {
             streamer.discard_held();
         } else {
             streamer.release_held(&mut |text| {
@@ -314,7 +359,22 @@ async fn ask(
         let trimmed = truncate_to_bytes(trimmed, MAX_REPLY_BYTES);
         sessions.push_assistant(&id, trimmed);
         match parse_tool_call(trimmed) {
-            None => return Ok(stopped(trimmed.to_owned(), steps)),
+            None => {
+                let Some(parsed) = registry.parse(trimmed) else {
+                    return Ok(stopped(trimmed.to_owned(), steps));
+                };
+                if sessions.is_cancelled(&id) {
+                    return Ok(stopped(String::new(), steps));
+                }
+                let ctx = ToolContext {
+                    skills: &catalogue,
+                    notes,
+                };
+                let ToolOutcome { step, text } = parsed.tool.run(&ctx, parsed.args).await;
+                on_event(TerminalAssistEventDto::Step { text: step.clone() });
+                steps.push(step);
+                sessions.push_tool(&id, &text);
+            }
             Some(ToolCall::RunCommand { command }) => {
                 return Ok(TerminalAssistReplyDto {
                     text: String::new(),
@@ -864,7 +924,7 @@ mod tests {
         let prompt = &seen[1].1.user_prompt;
         assert!(prompt.contains("Assistant: It is a Rust project."));
         assert!(prompt.ends_with("Person: how to build?\n\n"));
-        assert_eq!(seen[1].1.system_prompt, ASK_PROMPT);
+        assert!(seen[1].1.system_prompt.starts_with(ASK_PROMPT));
     }
 
     #[tokio::test]
@@ -1518,8 +1578,9 @@ mod tests {
         let reply = ask_local(&fake, &sessions, ask_request("t", "go", dir.path())).await;
         assert!(reply.write_request.is_none());
         assert!(sessions.render("t").contains("turned off"));
-        assert!(!ask_prompt(false).contains("write_file"));
-        assert!(ask_prompt(true).contains("write_file"));
+        let (registry, catalogue) = (ToolRegistry::default(), SkillCatalogue::default());
+        assert!(!ask_prompt(false, &registry, &catalogue, "").contains("write_file"));
+        assert!(ask_prompt(true, &registry, &catalogue, "").contains("write_file"));
     }
 
     #[tokio::test]
@@ -1551,5 +1612,105 @@ mod tests {
             .count();
         assert_eq!(created, MAX_FILES_PER_QUESTION);
         assert!(sessions.render("t").contains("limit for this question"));
+    }
+
+    // --- skills and notes as skills (task 0339) ---
+
+    struct SkillNotes;
+
+    #[async_trait]
+    impl NotesAccess for SkillNotes {
+        async fn run(&self, call: NoteToolCall) -> NoteToolOutcome {
+            match call {
+                NoteToolCall::Read { path } => NoteToolOutcome::Output {
+                    step: format!("Read note {path}"),
+                    text: format!("Note {path}:\n1. certbot renew"),
+                },
+                _ => NoteToolOutcome::Output {
+                    step: "Notes".to_owned(),
+                    text: "unused".to_owned(),
+                },
+            }
+        }
+
+        async fn skills(&self, _query: &str) -> Vec<crate::agent::NoteSkill> {
+            vec![crate::agent::NoteSkill {
+                name: "nginx-cert".to_owned(),
+                description: "Use when replacing a certificate".to_owned(),
+                path: "ops/nginx.md".to_owned(),
+            }]
+        }
+    }
+
+    fn project_skill(dir: &std::path::Path) {
+        let skill = dir.join(".claude/skills/release");
+        std::fs::create_dir_all(&skill).unwrap();
+        std::fs::write(
+            skill.join("SKILL.md"),
+            "---\nname: release\ndescription: Use when cutting a release\n---\nTag, then push.\n",
+        )
+        .unwrap();
+        std::fs::write(skill.join("checklist.md"), "- changelog").unwrap();
+    }
+
+    #[tokio::test]
+    async fn skills_and_matching_notes_are_in_the_prompt_and_load_on_demand() {
+        let dir = tempfile::tempdir().unwrap();
+        project_skill(dir.path());
+        let fake = scripted(&[
+            r#"TOOL {"tool":"read_skill","name":"release"}"#,
+            r#"TOOL {"tool":"read_skill_file","name":"release","path":"checklist.md"}"#,
+            r#"TOOL {"tool":"read_skill","name":"nginx-cert"}"#,
+            "Done.",
+        ]);
+        let sessions = Sessions::default();
+        let reply = super::reply(
+            &fake,
+            &ProviderRegistry::new(),
+            &sessions,
+            Some(&SkillNotes),
+            ask_request("t", "cut a release and renew the certificate", dir.path()),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(reply.text, "Done.");
+        assert_eq!(
+            reply.steps,
+            [
+                "Loaded skill release",
+                "Read checklist.md in skill release",
+                "Loaded skill nginx-cert"
+            ]
+        );
+        let prompt = &fake.seen.lock().unwrap()[0].1.system_prompt;
+        assert!(prompt.contains("- read_skill loads a skill"));
+        assert!(prompt.contains("- release: Use when cutting a release [project]"));
+        assert!(prompt.contains("- nginx-cert: Use when replacing a certificate [note]"));
+        let transcript = sessions.render("t");
+        assert!(transcript.contains("Tag, then push."));
+        assert!(transcript.contains("- changelog"));
+        assert!(transcript.contains("1. certbot renew"));
+    }
+
+    #[tokio::test]
+    async fn a_skill_script_is_never_run_and_bad_skill_arguments_are_reported() {
+        let dir = tempfile::tempdir().unwrap();
+        project_skill(dir.path());
+        let fake = scripted(&[
+            r#"TOOL {"tool":"read_skill","name":"release","extra":1}"#,
+            r#"TOOL {"tool":"read_skill_file","name":"release","path":"../../../etc/hosts"}"#,
+            r#"TOOL {"tool":"read_skill"}"#,
+            "Stopped.",
+        ]);
+        let sessions = Sessions::default();
+        let reply = ask_in(&fake, &sessions, ask_request("t", "release", dir.path()))
+            .await
+            .unwrap();
+        assert_eq!(reply.text, "Stopped.");
+        assert!(reply.run_command.is_none());
+        let transcript = sessions.render("t");
+        assert!(transcript.contains("is not available."));
+        assert!(transcript.contains("Error: invalid arguments for read_skill"));
     }
 }

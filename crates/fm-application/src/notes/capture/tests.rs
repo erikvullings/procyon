@@ -215,3 +215,26 @@ async fn nothing_to_capture_and_model_failures_are_reported() {
         Err(ChatFailureDto::Empty)
     );
 }
+
+#[tokio::test]
+async fn a_capture_carries_a_use_when_description() {
+    let described = "Title: Replace cert\nTags: nginx\nDescription: Use when an nginx certificate expires\n\n## Steps\n1. go\n";
+    let draft = draft_note(&fake(Ok(described)), input("Person: x\n\n", vec![]))
+        .await
+        .unwrap();
+    let meta = split_note(&draft.content).0.unwrap();
+    assert_eq!(
+        meta.description.as_deref(),
+        Some("Use when an nginx certificate expires")
+    );
+
+    // Without one from the model, the title makes a description that still reads like a skill.
+    let draft = draft_note(&fake(Ok(ANSWER)), input("Person: x\n\n", vec![]))
+        .await
+        .unwrap();
+    let meta = split_note(&draft.content).0.unwrap();
+    assert_eq!(
+        meta.description.as_deref(),
+        Some("Use when you need to: Replace nginx TLS certificate")
+    );
+}

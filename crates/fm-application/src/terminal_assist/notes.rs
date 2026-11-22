@@ -6,6 +6,8 @@
 use async_trait::async_trait;
 use fm_transport_dto::NoteProposalDto;
 
+use crate::agent::NoteSkill;
+
 /// One notes tool the model asked for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum NoteToolCall {
@@ -37,4 +39,9 @@ pub(crate) enum NoteToolOutcome {
 #[async_trait]
 pub(crate) trait NotesAccess: Send + Sync {
     async fn run(&self, call: NoteToolCall) -> NoteToolOutcome;
+
+    /// The notes that best match `query`, as skills (task 0339). None without notes.
+    async fn skills(&self, _query: &str) -> Vec<NoteSkill> {
+        Vec::new()
+    }
 }

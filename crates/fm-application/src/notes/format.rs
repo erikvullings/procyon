@@ -6,6 +6,10 @@
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct NoteMeta {
     pub(crate) title: Option<String>,
+    /// The skill name (task 0339); notes are virtual skills.
+    pub(crate) name: Option<String>,
+    /// When to use the note, as a skill description: `Use when ...`.
+    pub(crate) description: Option<String>,
     pub(crate) created: Option<String>,
     pub(crate) updated: Option<String>,
     pub(crate) tags: Vec<String>,
@@ -74,6 +78,8 @@ fn parse_front_matter(front: &str) -> NoteMeta {
         let value = unquote(value);
         match key.as_str() {
             "title" => meta.title = Some(value),
+            "name" => meta.name = Some(value),
+            "description" => meta.description = Some(value),
             "created" => meta.created = Some(value),
             "updated" => meta.updated = Some(value),
             "shell" => meta.shell = Some(value),
@@ -141,6 +147,8 @@ pub(crate) fn render_note(meta: &NoteMeta, body: &str) -> String {
     let mut out = String::from("---\n");
     let scalars = [
         ("title", &meta.title),
+        ("name", &meta.name),
+        ("description", &meta.description),
         ("created", &meta.created),
         ("updated", &meta.updated),
     ];
@@ -298,6 +306,8 @@ mod tests {
     fn rendering_round_trips_and_quotes_values_that_need_it() {
         let meta = NoteMeta {
             title: Some("CSR: create with openssl #1".into()),
+            name: Some("csr-openssl".into()),
+            description: Some("Use when a CSR is needed".into()),
             created: Some("2026-11-20T14:03:00Z".into()),
             updated: Some("2026-11-20T14:03:00Z".into()),
             tags: vec!["openssl".into(), "tls, pki".into()],

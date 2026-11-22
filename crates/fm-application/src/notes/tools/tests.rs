@@ -158,3 +158,29 @@ async fn an_update_must_name_an_existing_note_and_keeps_the_text_as_written() {
     assert_eq!(proposal.draft.content, format!("{replacement}\n"));
     assert_eq!(proposal.draft.title, "Replace nginx certificate");
 }
+
+#[tokio::test]
+async fn matching_notes_are_offered_as_skills_with_name_and_description() {
+    let (dir, notes) = notes().await;
+    fs::write(
+        dir.path().join("ops/described.md"),
+        "---\ntitle: Rotate logs\nname: rotate-logs\ndescription: Use when logs fill the disk\n---\n# Rotate logs\nlogrotate\n",
+    )
+    .unwrap();
+
+    let skills = notes.skills("replace nginx certificate").await;
+    assert_eq!(skills[0].name, "replace-nginx-certificate");
+    assert_eq!(skills[0].path, "ops/nginx.md");
+    assert!(!skills[0].description.contains("abc123"));
+
+    let skills = notes.skills("logs disk logrotate").await;
+    assert_eq!(skills[0].name, "rotate-logs");
+    assert_eq!(skills[0].description, "Use when logs fill the disk");
+
+    assert!(notes.skills("   ").await.is_empty());
+    let none = AssistantNotes {
+        store: None,
+        semantic: None,
+    };
+    assert!(none.skills("x").await.is_empty());
+}

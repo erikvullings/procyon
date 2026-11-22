@@ -1,6 +1,6 @@
 # 0339 Shared agent harness: tool registry, skills, notes as skills
 
-Status: open
+Status: in progress (steps 3 and 4 done; 1, 2 and 5 partly or not started)
 Priority: medium
 Subsystem: backend, frontend, settings
 Depends on: 0324, 0336, 0337, 0338
@@ -214,3 +214,16 @@ pub(crate) trait AgentTool: Send + Sync {
   bounded transcript, running skill scripts, and exporting notes as real skills.
 
 ## Agent Notes
+- 2026-11-22: Done in `crates/fm-application/src/agent/`: `AgentTool`/`TypedTool`/`ToolRegistry` (prompt
+  section generated from the schema, uniform error for bad arguments, tolerant text-protocol parse),
+  Rust front-matter parser, `SkillCatalogue` (project > user > note, caps, ranking by request),
+  `read_skill`/`read_skill_file` (sandboxed; deny tests for `..`, symlinks, secrets, credential
+  folders), notes as virtual skills (`NotesAccess::skills`, `name`/`description` in `NoteMeta`,
+  capture writes `description: Use when …`). Wired into the terminal `ask` loop; README/CLAUDE.md updated.
+- Not done (open): porting the 10 legacy terminal tools to the registry (they still use the
+  `ToolCall` enum; approval and proposal outcomes need `Approval`/`Proposal` added back when they
+  move), `agent::run_turn` shared loop, native tool calling + `ToolCalling` capability, `skillsRoots`
+  setting, server-mode accessible-roots filtering for skill folders (user-home skills are read in
+  both hosts today), `read_skill_file` through the document reader, chat parity (backend, routes,
+  Tauri, frontend, mock fixtures). Note skills found for the first step of a question are not
+  re-searched on an approval continuation.

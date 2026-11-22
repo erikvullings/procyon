@@ -10,6 +10,7 @@ use tokio_util::sync::CancellationToken;
 use super::format::{NoteMeta, note_title, render_note, slugify, split_note};
 use super::search::{DEFAULT_HITS, SearchStrategy, SemanticNotes, search_notes};
 use super::store::NotesStore;
+use crate::agent::NoteSkill;
 use crate::file_assistant::truncate_to_bytes;
 use crate::terminal_assist::{NoteToolCall, NoteToolOutcome, NotesAccess, redact_secrets};
 
@@ -17,6 +18,8 @@ use crate::terminal_assist::{NoteToolCall, NoteToolOutcome, NotesAccess, redact_
 const MAX_NOTE_TEXT_BYTES: usize = 16 * 1024;
 /// Largest proposed note, in bytes.
 const MAX_PROPOSAL_BYTES: usize = 64 * 1024;
+/// Most notes offered as skills for one request.
+const NOTE_SKILLS: usize = 5;
 /// What the redaction marks start with.
 const REDACTION_MARK: &str = "[redacted";
 
@@ -28,6 +31,13 @@ pub(crate) struct AssistantNotes<'a> {
 
 #[async_trait]
 impl NotesAccess for AssistantNotes<'_> {
+    async fn skills(&self, query: &str) -> Vec<NoteSkill> {
+        match &self.store {
+            Some(store) => self.note_skills(store, query).await,
+            None => Vec::new(),
+        }
+    }
+
     async fn run(&self, call: NoteToolCall) -> NoteToolOutcome {
         let Some(store) = &self.store else {
             return output(
@@ -75,6 +85,44 @@ impl NotesAccess for AssistantNotes<'_> {
 }
 
 impl AssistantNotes<'_> {
+    /// The notes that best match `query`, as skills: the front matter `name` and `description`,
+    /// else a slug of the title and the matching snippet (task 0339).
+    async fn note_skills(&self, store: &NotesStore, query: &str) -> Vec<NoteSkill> {
+        if query.trim().is_empty() {
+            return Vec::new();
+        }
+        let (_, hits) = search_notes(
+            store,
+            self.semantic.as_deref(),
+            query,
+            NOTE_SKILLS,
+            &CancellationToken::new(),
+        )
+        .await;
+        let mut skills = Vec::new();
+        for hit in hits {
+            let meta = match store.read(&hit.path).await {
+                Ok(note) => split_note(&note.text).0,
+                Err(_) => None,
+            };
+            let name = meta
+                .as_ref()
+                .and_then(|meta| meta.name.clone())
+                .filter(|name| !name.trim().is_empty() && !name.contains(char::is_whitespace))
+                .unwrap_or_else(|| slugify(&hit.title));
+            let description = meta
+                .and_then(|meta| meta.description)
+                .filter(|text| !text.trim().is_empty())
+                .unwrap_or(hit.snippet);
+            skills.push(NoteSkill {
+                name,
+                description: redact_secrets(&description),
+                path: hit.path,
+            });
+        }
+        skills
+    }
+
     async fn search(&self, store: &NotesStore, query: &str, limit: Option<u32>) -> NoteToolOutcome {
         let limit = limit.map_or(DEFAULT_HITS, |limit| limit as usize);
         let (strategy, hits) = search_notes(

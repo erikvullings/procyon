@@ -65,7 +65,7 @@ pub(super) fn parse_tool_call(reply: &str) -> Option<ToolCall> {
 
 /// The tool call in the JSON object that starts `text`, when it is one.
 fn tool_call_at(text: &str) -> Option<ToolCall> {
-    let object = balanced_object(text)?;
+    let object = crate::agent::balanced_object(text)?;
     let mut value: serde_json::Value = serde_json::from_str(object).ok()?;
     if value.get("tool").is_none() {
         // `{"name": "read_file", "arguments": {"path": ".."}}`
@@ -100,36 +100,6 @@ fn tool_call_at(text: &str) -> Option<ToolCall> {
         ToolCall::Grep { pattern, .. } if pattern.is_empty() => None,
         _ => Some(call),
     }
-}
-
-/// The text from the opening brace to its matching closing brace, braces in strings ignored.
-fn balanced_object(text: &str) -> Option<&str> {
-    let mut depth = 0usize;
-    let mut in_string = false;
-    let mut escaped = false;
-    for (index, character) in text.char_indices() {
-        if in_string {
-            match character {
-                _ if escaped => escaped = false,
-                '\\' => escaped = true,
-                '"' => in_string = false,
-                _ => {}
-            }
-            continue;
-        }
-        match character {
-            '"' => in_string = true,
-            '{' => depth += 1,
-            '}' => {
-                depth = depth.checked_sub(1)?;
-                if depth == 0 {
-                    return Some(&text[..=index]);
-                }
-            }
-            _ => {}
-        }
-    }
-    None
 }
 
 #[cfg(test)]

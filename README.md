@@ -401,6 +401,17 @@ The terminal assistant searches your notes before answering how-to questions (se
 the folder is indexed, by text otherwise) and can propose a new note or an update, which you review
 as a diff before saving.
 
+### Skills
+
+The terminal assistant also knows Agent Skills: `SKILL.md` folders under `~/.claude/skills` and
+`~/.agents/skills`, and under `.claude/skills` / `.agents/skills` in the working folder up to the
+nearest git root. Its prompt lists their names and descriptions (at most 40, capped in size, the
+best matches for your question first) and it loads one on demand with `read_skill`, or a file in
+its folder with `read_skill_file`. Scripts in a skill are never run; a command a skill suggests
+only reaches your terminal as a proposal you approve. Your notes count as skills too: the notes
+that match your question appear in the same list, marked `note`, and new captures get a
+`description: Use when …` line. Project skills win over user skills, and both win over notes.
+
 ## Architecture
 
 ```text
