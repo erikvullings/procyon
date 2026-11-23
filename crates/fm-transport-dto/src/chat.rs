@@ -136,6 +136,8 @@ pub enum ChatFailureDto {
     Cancelled,
     /// The chat endpoint is not marked as accepting images in Settings.
     ImagesNotSupported,
+    /// The model did not answer in time; a long conversation makes a local model slow to start.
+    Timeout,
 }
 
 /// One event of a streamed chat reply: fragments as they arrive, then exactly one final event.
@@ -150,6 +152,12 @@ pub enum ChatReplyEventDto {
     /// A tool ran while the model worked toward its reply (task 0339).
     Step {
         /// One line saying what was looked up, such as `Read notes.md`.
+        text: String,
+    },
+    /// What a long tool call is doing now, such as `Summarising a.pdf: part 2 of 5`. Shown until
+    /// the next event; not saved with the reply.
+    Progress {
+        /// The one-line description.
         text: String,
     },
     /// The model drafted a note for the person to review. Nothing is saved unless they save it.

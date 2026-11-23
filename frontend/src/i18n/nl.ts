@@ -1687,6 +1687,8 @@ export const nl = {
     invalidRequest: 'Het bericht is leeg of te lang.',
     notFound: 'Dit gesprek bestaat niet meer.',
     noText: 'Het model gaf geen tekst terug.',
+    timeout:
+      'Het model deed er te lang over om te antwoorden. Probeer het opnieuw of begin een nieuw gesprek.',
     failed: 'De chat kon niet antwoorden. Controleer het eindpunt in de instellingen.',
     loadFailed: 'Gesprekken konden niet worden geladen.',
   },
@@ -2768,6 +2770,8 @@ export const nl = {
       'Stuurt de hierboven getoonde context naar het chat-eindpunt. Zonder uw goedkeuring wordt niets uitgevoerd.',
     assistNoCommand: 'Het antwoord bevat geen commando.',
     assistNoOutput: 'Er is nog geen terminaluitvoer.',
+    assistTimeout:
+      'Het model deed er te lang over om te antwoorden. Een lang gesprek vertraagt een lokaal model: /compact of /clear kan helpen.',
     assistRoleNotAssigned: 'Koppel in Instellingen een chat-eindpunt om terminalhulp te gebruiken.',
     assistConsentRequired: 'Het chat-eindpunt heeft toestemming nodig in Instellingen.',
     assistEmpty: 'De assistent gaf geen antwoord.',
@@ -2779,6 +2783,13 @@ export const nl = {
     blockSucceeded: 'Geslaagd',
     blockFailed: 'Mislukt',
     suggestionAccept: 'Druk op → om te accepteren',
+    composerOpen: 'Vraag',
+    composerOpenHelp:
+      'Stel de assistent een vraag. Een # bij een lege prompt opent hetzelfde invoerveld.',
+    composerLabel: 'Vraag voor de assistent',
+    composerPlaceholder: 'Vraag de assistent… @ voegt een bestand toe, / een opdracht of skill',
+    composerQueued: 'Wordt na dit antwoord verstuurd · Esc houdt de vraag hier',
+    composerSend: 'Versturen',
     consentTitle: 'Opdrachtblokken',
     consentText:
       'Opdrachtblokken inschakelen? Procyon start zsh en bash met eigen hooks en laadt je eigen opstartbestanden zoals gebruikelijk. Je dotfiles blijven ongewijzigd. Vragen met # werken in beide gevallen.',
@@ -2786,20 +2797,22 @@ export const nl = {
     consentDecline: 'Niet nu',
     assistEdit: 'Bewerken',
     contextEnvironment: 'Systeem',
-    contextEnvironmentDetail: 'Besturingssysteem, architectuur en shell',
+    contextEnvironmentDetail: 'Besturingssysteem, architectuur, shell en git-status',
     contextToggle: 'Meesturen ({count})',
     help: 'Hulp bij de assistent',
     helpTitle: 'Terminalassistent',
     helpClose: 'Sluiten',
     helpAsk:
-      'Typ # gevolgd door een vraag bij de prompt en druk op Enter. Vraag en antwoord verschijnen in de terminal; de vraag wordt nooit als commando uitgevoerd.',
+      'Typ # bij een lege prompt, of klik op Vraag, om het chatveld te openen. Schrijf de vraag en druk op Enter: de vraag en het antwoord verschijnen in de terminal, en de shell krijgt de vraag nooit te zien. Esc gaat terug naar de shell.',
+    helpKeys:
+      'In het chatveld verstuurt Enter en begint Shift+Enter een nieuwe regel. Tab vult @-bestanden en /-opdrachten aan, Omhoog en Omlaag halen eerdere vragen terug, en Esc gaat terug naar de shell.',
     helpContext:
       'Chips onder de vraag tonen wat er wordt verstuurd: systeem, maplijst, selectie, ander paneel en recente commando’s. Klik op een chip om hem weg te laten of weer op te nemen; de tooltip toont details.',
     helpMentions: 'Typ @bestand.txt in een vraag om dat bestand bij te voegen.',
     helpExplainFix:
       'Ctrl+Shift+E legt de laatste uitvoer uit en Ctrl+Shift+F stelt een oplossing voor. Commandoblokken bieden hetzelfde bij elk afgerond commando.',
     helpFollowUp:
-      'Stel een vervolgvraag door opnieuw # te typen. Het gesprek blijft per terminaltabblad bewaard tot het tabblad sluit.',
+      'Het chatveld blijft open voor vervolgvragen, en Omhoog en Omlaag halen eerdere vragen terug. Het gesprek blijft per terminaltabblad bewaard tot het tabblad sluit.',
     helpRun:
       'De assistent kan mappen tonen en bestanden in de werkmap lezen, ook via SSH (zoeken alleen lokaal). Wil hij een commando uitvoeren, dan keurt u dat eerst goed: Enter voert uit, Ctrl+C weigert.',
     helpSafety:

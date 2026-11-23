@@ -183,6 +183,12 @@ pub enum TerminalAssistEventDto {
         /// The one-line description.
         text: String,
     },
+    /// What a long tool call is doing now, for example `Summarising a.pdf: part 2 of 5`. Shown
+    /// until the next event; not part of the answer.
+    Progress {
+        /// The one-line description.
+        text: String,
+    },
 }
 
 /// The files under a session's root, for `@` completion (task 0343).

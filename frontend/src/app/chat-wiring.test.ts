@@ -76,6 +76,42 @@ describe('chat wiring', () => {
     expect(entry.pendingRequestId).toBeUndefined();
   });
 
+  it('shows what a long tool call reports until the next event, and never saves it', async () => {
+    const seen: (string | undefined)[] = [];
+    let entryRef: ChatTabEntry | undefined;
+    const client = {
+      streamChatReply: vi.fn(
+        (_request: ChatReplyRequest, onEvent: (event: ChatReplyEvent) => void) => {
+          onEvent({ type: 'progress', text: 'Summarising a.pdf: part 1 of 3' });
+          seen.push(entryRef?.progress);
+          onEvent({ type: 'progress', text: 'Summarising a.pdf: part 2 of 3' });
+          seen.push(entryRef?.progress);
+          onEvent({ type: 'step', text: 'Summarised a.pdf (3 parts)' });
+          seen.push(entryRef?.progress);
+          onEvent({ type: 'done', text: 'Summary.' });
+          return Promise.resolve();
+        },
+      ),
+      listChatConversations: vi.fn(() => Promise.resolve([])),
+    };
+    const { shell, entry } = fakeShell(client);
+    entryRef = entry;
+    const wiring = createChatWiring(shell, { replaceWorkspace: vi.fn() });
+
+    await wiring.send(client as unknown as FileManagerClient, entry.key, 'Summarise a.pdf');
+
+    expect(seen).toEqual([
+      'Summarising a.pdf: part 1 of 3',
+      'Summarising a.pdf: part 2 of 3',
+      undefined,
+    ]);
+    expect(entry.progress).toBeUndefined();
+    expect(entry.messages[entry.messages.length - 1]).toMatchObject({
+      role: 'assistant',
+      steps: ['Summarised a.pdf (3 parts)'],
+    });
+  });
+
   it('sends the folder only when tools are on, shows the steps, and reviews a proposed note', async () => {
     const requests: ChatReplyRequest[] = [];
     const proposal = { draft: { title: 'T', content: 'C' } };

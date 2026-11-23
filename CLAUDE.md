@@ -120,6 +120,8 @@ session-to-runbook drafts, semantic-or-text note search; it never writes notes),
 dependencies so it stays reusable: typed tools whose schemas are derived with `schemars`, a
 `ToolRegistry<I>` that generates the text-protocol prompt or native tool specs, `run_turn` with
 `TurnOptions` (bounded, concurrent read-only calls), host-defined interrupts `I` and host errors,
+`summarize_file`, which summarises a document in a fresh model call (`SideModel`) so only the
+summary enters the conversation,
 a provider-neutral conversation (`Message`, `fit_messages`) that native endpoints get as
 structured tool messages with call ids, plus skills: `SKILL.md` folders and notes as virtual
 skills, loaded on demand with `read_skill`/`read_skill_file`, and `AGENTS.md`/`CLAUDE.md`

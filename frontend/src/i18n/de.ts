@@ -1294,6 +1294,8 @@ export const de = {
     invalidRequest: 'Die Nachricht ist leer oder zu lang.',
     notFound: 'Diese Unterhaltung existiert nicht mehr.',
     noText: 'Das Modell hat keinen Text zurückgegeben.',
+    timeout:
+      'Das Modell hat zu lange für die Antwort gebraucht. Versuchen Sie es erneut oder beginnen Sie ein neues Gespräch.',
     failed: 'Der Chat konnte nicht antworten. Prüfe den Endpunkt in den Einstellungen.',
     loadFailed: 'Unterhaltungen konnten nicht geladen werden.',
   },
@@ -2797,6 +2799,8 @@ export const de = {
       'Sendet den oben gezeigten Kontext an den Chat-Endpunkt. Ohne Ihre Zustimmung wird nichts ausgeführt.',
     assistNoCommand: 'Die Antwort enthält keinen Befehl.',
     assistNoOutput: 'Es gibt noch keine Terminalausgabe.',
+    assistTimeout:
+      'Das Modell hat zu lange für die Antwort gebraucht. Ein langes Gespräch verlangsamt ein lokales Modell: /compact oder /clear kann helfen.',
     assistRoleNotAssigned:
       'Legen Sie in den Einstellungen einen Chat-Endpunkt fest, um die Terminalhilfe zu nutzen.',
     assistConsentRequired: 'Der Chat-Endpunkt benötigt in den Einstellungen Ihre Zustimmung.',
@@ -2809,6 +2813,14 @@ export const de = {
     blockSucceeded: 'Erfolgreich',
     blockFailed: 'Fehlgeschlagen',
     suggestionAccept: '→ zum Übernehmen drücken',
+    composerOpen: 'Fragen',
+    composerOpenHelp:
+      'Den Assistenten fragen. Ein # an einer leeren Eingabeaufforderung öffnet dasselbe Eingabefeld.',
+    composerLabel: 'Frage an den Assistenten',
+    composerPlaceholder:
+      'Den Assistenten fragen… @ fügt eine Datei hinzu, / einen Befehl oder Skill',
+    composerQueued: 'Wird nach dieser Antwort gesendet · Esc behält sie hier',
+    composerSend: 'Senden',
     consentTitle: 'Befehlsblöcke',
     consentText:
       'Befehlsblöcke aktivieren? Procyon startet zsh und bash mit eigenen Hooks und lädt weiterhin Ihre eigenen Startdateien. Ihre Dotfiles bleiben unverändert. Fragen mit # funktionieren in beiden Fällen.',
@@ -2816,20 +2828,22 @@ export const de = {
     consentDecline: 'Nicht jetzt',
     assistEdit: 'Bearbeiten',
     contextEnvironment: 'Betriebssystem',
-    contextEnvironmentDetail: 'Betriebssystem, Architektur und Shell',
+    contextEnvironmentDetail: 'Betriebssystem, Architektur, Shell und Git-Status',
     contextToggle: 'Kontext ({count})',
     help: 'Hilfe zum Assistenten',
     helpTitle: 'Terminal-Assistent',
     helpClose: 'Schließen',
     helpAsk:
-      'Geben Sie am Prompt # und eine Frage ein und drücken Sie Enter. Frage und Antwort erscheinen im Terminal; die Frage wird nie als Befehl ausgeführt.',
+      'Tippen Sie # an einer leeren Eingabeaufforderung oder klicken Sie auf Fragen, um das Chatfeld zu öffnen. Schreiben Sie die Frage und drücken Sie Enter: Frage und Antwort erscheinen im Terminal, die Shell sieht die Frage nie. Esc kehrt zur Shell zurück.',
+    helpKeys:
+      'Im Chatfeld sendet Enter, Umschalt+Enter beginnt eine neue Zeile. Tab ergänzt @-Dateien und /-Befehle, Pfeil nach oben/unten holt frühere Fragen zurück, und Esc kehrt zur Shell zurück.',
     helpContext:
       'Chips unter der Frage zeigen, was gesendet wird: System, Ordnerinhalt, Auswahl, anderes Fenster und letzte Befehle. Ein Klick auf einen Chip lässt ihn weg oder nimmt ihn wieder auf; der Tooltip zeigt Details.',
     helpMentions: 'Schreiben Sie @datei.txt in eine Frage, um diese Datei anzuhängen.',
     helpExplainFix:
       'Strg+Umschalt+E erklärt die letzte Ausgabe, Strg+Umschalt+F schlägt eine Korrektur vor. Befehlsblöcke bieten dasselbe für jeden beendeten Befehl.',
     helpFollowUp:
-      'Stellen Sie eine Rückfrage, indem Sie erneut # eingeben. Das Gespräch bleibt pro Terminal-Tab erhalten, bis der Tab geschlossen wird.',
+      'Das Chatfeld bleibt für Folgefragen offen, und Pfeil nach oben/unten holt frühere Fragen zurück. Das Gespräch bleibt pro Terminal-Tab erhalten, bis der Tab geschlossen wird.',
     helpRun:
       'Der Assistent kann Ordner auflisten und Dateien im Arbeitsordner lesen, auch über SSH (die Suche nur lokal). Will er einen Befehl ausführen, bestätigen Sie zuerst: Enter führt aus, Strg+C lehnt ab.',
     helpSafety:

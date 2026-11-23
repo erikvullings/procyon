@@ -1281,6 +1281,8 @@ export const fr = {
     invalidRequest: 'Le message est vide ou trop long.',
     notFound: 'Cette conversation n’existe plus.',
     noText: 'Le modèle n’a renvoyé aucun texte.',
+    timeout:
+      'Le modèle a mis trop de temps à répondre. Réessayez ou commencez une nouvelle conversation.',
     failed: 'Le chat n’a pas pu répondre. Vérifiez le point d’accès dans les réglages.',
     loadFailed: 'Impossible de charger les conversations.',
   },
@@ -2792,6 +2794,8 @@ export const fr = {
       "Envoie le contexte affiché ci-dessus au point de terminaison de chat. Rien ne s'exécute sans votre accord.",
     assistNoCommand: 'La réponse ne contient aucune commande.',
     assistNoOutput: "Il n'y a pas encore de sortie de terminal.",
+    assistTimeout:
+      'Le modèle a mis trop de temps à répondre. Une longue conversation ralentit un modèle local : /compact ou /clear peut aider.',
     assistRoleNotAssigned:
       "Configurez un point de terminaison de chat dans les paramètres pour utiliser l'assistance du terminal.",
     assistConsentRequired:
@@ -2805,6 +2809,12 @@ export const fr = {
     blockSucceeded: 'Réussi',
     blockFailed: 'Échoué',
     suggestionAccept: 'Appuyez sur → pour accepter',
+    composerOpen: 'Demander',
+    composerOpenHelp: 'Interroger l’assistant. Un # sur une invite vide ouvre le même champ.',
+    composerLabel: 'Question pour l’assistant',
+    composerPlaceholder: 'Demandez à l’assistant… @ ajoute un fichier, / une commande ou un skill',
+    composerQueued: 'Envoyée après cette réponse · Échap la garde ici',
+    composerSend: 'Envoyer',
     consentTitle: 'Blocs de commandes',
     consentText:
       'Activer les blocs de commandes ? Procyon lance zsh et bash avec ses crochets et charge toujours vos propres fichiers de démarrage. Vos fichiers de configuration restent inchangés. Les questions avec # fonctionnent dans les deux cas.',
@@ -2812,20 +2822,22 @@ export const fr = {
     consentDecline: 'Pas maintenant',
     assistEdit: 'Modifier',
     contextEnvironment: 'Système',
-    contextEnvironmentDetail: "Système d'exploitation, architecture et shell",
+    contextEnvironmentDetail: 'Système d’exploitation, architecture, shell et état git',
     contextToggle: 'Contexte ({count})',
     help: "Aide de l'assistant",
     helpTitle: 'Assistant de terminal',
     helpClose: 'Fermer',
     helpAsk:
-      "Tapez # suivi d'une question à l'invite, puis Entrée. La question et la réponse s'affichent dans le terminal ; la question n'est jamais exécutée comme commande.",
+      'Tapez # sur une invite vide, ou cliquez sur Demander, pour ouvrir le champ de discussion. Écrivez la question et appuyez sur Entrée : la question et la réponse s’affichent dans le terminal, et le shell ne voit jamais la question. Échap revient au shell.',
+    helpKeys:
+      'Dans le champ de discussion, Entrée envoie et Maj+Entrée commence une nouvelle ligne. Tab complète les fichiers @ et les commandes /, Haut et Bas rappellent les questions précédentes, et Échap revient au shell.',
     helpContext:
       "Les puces sous la question montrent ce qui est envoyé : système, liste du dossier, sélection, autre volet et commandes récentes. Cliquez sur une puce pour l'exclure ou la réinclure ; l'infobulle donne le détail.",
     helpMentions: 'Écrivez @fichier.txt dans une question pour joindre ce fichier.',
     helpExplainFix:
       'Ctrl+Maj+E explique la dernière sortie et Ctrl+Maj+F propose une correction. Les blocs de commandes offrent la même chose pour chaque commande terminée.',
     helpFollowUp:
-      "Posez une question de suivi en tapant # à nouveau. La conversation est conservée par onglet de terminal jusqu'à sa fermeture.",
+      'Le champ de discussion reste ouvert pour les questions suivantes, et Haut et Bas rappellent les questions précédentes. La conversation est conservée par onglet de terminal jusqu’à sa fermeture.',
     helpRun:
       "L'assistant peut lister des dossiers et lire des fichiers du dossier de travail, y compris via SSH (la recherche seulement en local). S'il veut exécuter une commande, vous l'approuvez d'abord : Entrée l'exécute, Ctrl+C la refuse.",
     helpSafety:

@@ -37,6 +37,8 @@ export interface ChatTabEntry {
   useTools?: boolean | undefined;
   /** What the tools looked up for the reply in progress, or the last reply; shown as pills. */
   steps?: string[] | undefined;
+  /** What a long tool call of the reply in progress is doing now, such as a summary's part. */
+  progress?: string | undefined;
   pendingRequestId?: string | undefined;
   streamedText?: string | undefined;
   /** The text a failed reply had streamed before it stopped; kept on screen for the person. */

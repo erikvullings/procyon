@@ -14,7 +14,7 @@ use super::{MAX_REPLY_TOKENS, Sessions, TerminalHost};
 use crate::agent_host::{SkillScope, chat_failure, project_context};
 use crate::chat::ChatGenerator;
 use crate::file_assistant::truncate_to_bytes;
-use crate::llm_profiles::{LlmChatGeneration, LlmRole};
+use crate::llm_profiles::{LlmChatGeneration, LlmRole, ReplyFormat};
 
 /// Most paths listed under a root.
 const MAX_FILES: usize = 5000;
@@ -197,6 +197,7 @@ pub(crate) async fn compact(
                 maximum_tokens: MAX_REPLY_TOKENS,
                 context_window: None,
                 temperature: None,
+                reply: ReplyFormat::Text,
             },
             &CancellationToken::new(),
             &mut |_| {},

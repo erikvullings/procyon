@@ -240,6 +240,7 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
     const finish = (): void => {
       entry.pendingRequestId = undefined;
       entry.streamedText = undefined;
+      entry.progress = undefined;
     };
     // The folder the tools may look into is read when the request is made, never remembered.
     const toolsFolder = entry.useTools === true ? folderOf(key)?.view?.location?.uri : undefined;
@@ -266,6 +267,8 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
         },
         (event) => {
           if (!isCurrent()) return;
+          // A report of a long tool call lasts until the next event.
+          entry.progress = event.type === 'progress' ? event.text : undefined;
           if (event.type === 'delta') {
             entry.streamedText = (entry.streamedText ?? '') + event.text;
           } else if (event.type === 'step') {
@@ -292,7 +295,7 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
             // They now belong to the reply, which shows them.
             entry.steps = [];
             finish();
-          } else {
+          } else if (event.type === 'failed') {
             entry.failure = event.reason;
             entry.partialReply = entry.streamedText;
             // Keep the attached context and images so the person can send again without re-adding.
@@ -335,6 +338,7 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
     const entry = entryOf(key);
     const requestId = entry?.pendingRequestId;
     if (entry === undefined || requestId === undefined) return;
+    entry.progress = undefined;
     entry.pendingRequestId = undefined;
     entry.streamedText = undefined;
     m.redraw();
@@ -553,6 +557,7 @@ type ChatFailureKey =
   | 'invalidRequest'
   | 'notFound'
   | 'imagesNotSupported'
+  | 'timeout'
   | 'noText'
   | 'failed';
 
@@ -569,6 +574,8 @@ function failureKey(reason: ChatFailure): ChatFailureKey {
       return 'notFound';
     case 'imagesNotSupported':
       return 'imagesNotSupported';
+    case 'timeout':
+      return 'timeout';
     case 'empty':
       return 'noText';
     default:

@@ -581,57 +581,6 @@ main.fm-workspace {
   cursor: ns-resize;
 }
 
-.fm-terminal-close {
-  position: absolute;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  top: 4px;
-  /* Clear of the 8px scrollbar on the pane's right edge. */
-  right: 12px;
-  z-index: 2;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--fm-radius);
-  background: transparent;
-  color: var(--fm-text-muted);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.fm-terminal-close:hover {
-  background: var(--fm-hover);
-  color: var(--fm-text);
-}
-
-/* The assistant help button, left of the close button, and its dialog (task 0336). */
-.fm-terminal-help {
-  position: absolute;
-  /* The × glyph sits low in its box, so the icon is nudged down to share its centre line. */
-  top: 6px;
-  right: 38px;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--fm-radius);
-  background: transparent;
-  color: var(--fm-text-muted);
-  cursor: pointer;
-}
-
-.fm-terminal-help:hover {
-  background: var(--fm-hover);
-  color: var(--fm-text);
-}
-
 /* A tooltip the drawer draws after a short hover delay; the webview shows no native one. */
 .fm-terminal-tooltip {
   position: fixed;
@@ -770,6 +719,10 @@ main.fm-workspace {
   font-size: 10px;
 }
 
+.fm-terminal-statusbar .fm-terminal-kbd {
+  margin-left: 2px;
+}
+
 .fm-terminal-assist-edit {
   width: 100%;
   box-sizing: border-box;
@@ -787,7 +740,7 @@ main.fm-workspace {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin: 0 0 6px;
+  margin: 0;
 }
 
 .fm-terminal-context-wrap {
@@ -900,6 +853,180 @@ main.fm-workspace {
 
 .fm-terminal-assist-buttons {
   flex: 0 0 auto;
+}
+
+/* The drawer's status line, always last: the folder in the shell, the context pills in the chat,
+   then the assistant's actions, Ask, help and close. */
+.fm-terminal-statusbar {
+  container-type: inline-size;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  min-height: 24px;
+  min-width: 0;
+}
+
+.fm-terminal-status-folder {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--fm-font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* The end of a long path is the part that tells folders apart. */
+  direction: rtl;
+  text-align: left;
+}
+
+.fm-terminal-status-button,
+.fm-terminal-status-ask {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 22px;
+  min-width: 22px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--fm-radius);
+  background: transparent;
+  color: var(--fm-text-muted);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.fm-terminal-status-ask {
+  padding: 0 6px;
+}
+
+/* Close, at the drawer's top right in the gutter beside the output, so it covers no text. */
+.fm-terminal-close {
+  position: absolute;
+  top: 4px;
+  right: 1px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--fm-radius);
+  background: transparent;
+  color: var(--fm-text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.fm-terminal-close:hover {
+  background: var(--fm-hover);
+  color: var(--fm-text);
+}
+
+.fm-terminal-status-button:hover,
+.fm-terminal-status-ask:hover {
+  background: var(--fm-hover);
+  color: var(--fm-text);
+}
+
+.fm-terminal-status-ask--on {
+  color: var(--fm-accent);
+}
+
+/* The chat input: where a question is written, set apart from the shell by its accent edge. */
+.fm-terminal-composer {
+  container-type: inline-size;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--fm-border);
+  border-left: 3px solid var(--fm-accent);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface);
+}
+
+.fm-terminal-composer:focus-within {
+  border-color: var(--fm-accent);
+}
+
+.fm-terminal-composer-mark {
+  display: inline-flex;
+  padding-top: 2px;
+  color: var(--fm-accent);
+}
+
+.fm-terminal-composer-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--fm-text);
+  font-family: var(--fm-font-mono);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.fm-terminal-composer-send {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--fm-radius);
+  background: var(--fm-accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.fm-terminal-composer-send:disabled {
+  background: transparent;
+  color: var(--fm-text-muted);
+  cursor: default;
+}
+
+.fm-terminal-composer-hint {
+  flex: 0 1 auto;
+  align-self: flex-end;
+  padding-bottom: 3px;
+  color: var(--fm-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.fm-terminal-composer--busy .fm-terminal-composer-mark {
+  animation: fm-terminal-composer-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes fm-terminal-composer-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fm-terminal-composer--busy .fm-terminal-composer-mark {
+    animation: none;
+  }
+}
+
+@container (max-width: 520px) {
+  .fm-terminal-composer-hint {
+    display: none;
+  }
 }
 
 /* The bar under the terminal while the assistant is in use (task 0336): what it waits on, then
@@ -1017,18 +1144,36 @@ main.fm-workspace {
   }
 }
 
-/* Actions on a finished command, drawn on its prompt line by an xterm decoration. */
+/* A finished command's status dot, in the last cell of its prompt line (an xterm decoration one
+   cell wide). Its actions show on hover or keyboard focus, so they never cover the command. */
+.xterm .xterm-decoration.fm-terminal-block-decoration {
+  left: auto;
+  right: 0;
+  overflow: visible;
+}
+
 .fm-terminal-block {
+  position: absolute;
+  top: 0;
+  right: 0;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 2px;
   height: 100%;
-  padding: 0 4px;
-  background: var(--fm-surface);
+  min-width: 100%;
+  border-radius: var(--fm-radius);
+}
+
+.fm-terminal-block:hover,
+.fm-terminal-block:focus-within {
+  padding: 0 2px 0 4px;
+  background: var(--fm-surface-elevated);
+  box-shadow: 0 0 0 1px var(--fm-border);
 }
 
 .fm-terminal-block-action {
-  display: inline-flex;
+  display: none;
   align-items: center;
   justify-content: center;
   width: 18px;
@@ -1039,6 +1184,11 @@ main.fm-workspace {
   background: transparent;
   color: var(--fm-text-muted);
   cursor: pointer;
+}
+
+.fm-terminal-block:hover .fm-terminal-block-action,
+.fm-terminal-block:focus-within .fm-terminal-block-action {
+  display: inline-flex;
 }
 
 .fm-terminal-block-action:hover {
@@ -1064,8 +1214,8 @@ main.fm-workspace {
 .fm-terminal-host {
   flex: 1 1 auto;
   min-height: 0;
-  /* No right padding: the terminal's scrollbar sits flush with the pane's right edge. */
-  padding: 4px 0 4px 8px;
+  /* The right gutter holds the close button above the end of the scrollbar's track. */
+  padding: 4px 22px 4px 8px;
   font-size: 0.92em;
 }
 

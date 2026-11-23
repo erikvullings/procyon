@@ -36,7 +36,7 @@ use crate::knowledge_search::{
 };
 use crate::llm_profiles::{
     EndpointLocality, LlmChatGeneration, LlmProfileError, LlmProfileService, LlmTestErrorCategory,
-    normalize_endpoint_locality,
+    ReplyFormat, normalize_endpoint_locality,
 };
 use crate::rag::{grounded_system_prompt, normalize_citation_references, parse_generated_answer};
 
@@ -319,6 +319,7 @@ impl KnowledgeAnswerCoordinator {
                     maximum_tokens: MAX_ANSWER_TOKENS,
                     context_window: None,
                     temperature: Some(ANSWER_TEMPERATURE),
+                    reply: ReplyFormat::Json,
                 },
                 &cancellation,
             )

@@ -19,6 +19,8 @@ const MAX_BLOCK_OUTPUT_BYTES: usize = 4 * 1024;
 const MAX_BLOCKS_BYTES: usize = 10 * 1024;
 /// Most bytes kept for one attached file.
 const MAX_FILE_BYTES: usize = 24 * 1024;
+/// Most changed paths listed in the git status.
+const MAX_GIT_PATHS: usize = 50;
 
 /// A file the person named with `@path`, already read inside the working folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,7 +54,7 @@ pub(super) fn render_state(request: &TerminalAssistRequestDto) -> String {
 }
 
 /// What describes the terminal now, in parts that change independently: `header` (system, shell,
-/// folder, branch), `otherPane`, `selection` and `listing`. A session sends a part with the first
+/// folder, branch), `git` (the working tree's status), `otherPane`, `selection` and `listing`. A session sends a part with the first
 /// question and again only when it changes.
 pub(super) fn state_sections(request: &TerminalAssistRequestDto) -> Vec<(&'static str, String)> {
     let context = &request.context;
@@ -81,6 +83,14 @@ pub(super) fn state_sections(request: &TerminalAssistRequestDto) -> Vec<(&'stati
         let _ = writeln!(header, "Git branch: {}", line(&branch));
     }
     let mut sections = vec![("header", header.trim_end().to_owned())];
+    // Part of the system context: the System pill leaves it out too.
+    if !context.omit_environment
+        && let Some(summary) = shown_path
+            .as_deref()
+            .and_then(|path| fm_vcs_status::working_tree_summary(path, MAX_GIT_PATHS))
+    {
+        sections.push(("git", render_git_status(&summary)));
+    }
     if let Some(other) = context.other_folder.as_deref() {
         let other = path_from_location(other)
             .map_or_else(|| line(other), |path| line(&path.to_string_lossy()));
@@ -172,6 +182,28 @@ fn git_branch(folder: &Path) -> Option<String> {
             .strip_prefix("ref: refs/heads/")
             .map(str::to_owned)
     })
+}
+
+/// The working tree's status as `git status --short` would show it.
+fn render_git_status(summary: &fm_vcs_status::WorkingTreeSummary) -> String {
+    let mut text = String::from("Git status");
+    if let Some((ahead, behind)) = summary.ahead_behind
+        && (ahead, behind) != (0, 0)
+    {
+        let _ = write!(text, " ({ahead} ahead, {behind} behind upstream)");
+    }
+    if summary.changes.is_empty() {
+        text.push_str(": clean working tree");
+        return text;
+    }
+    text.push(':');
+    for change in &summary.changes {
+        let _ = write!(text, "\n{} {}", change.code, line(&change.path));
+    }
+    if summary.more > 0 {
+        let _ = write!(text, "\n- and {} more", summary.more);
+    }
+    redact_secrets(&text)
 }
 
 /// Recent commands as text, newest kept when they do not all fit.

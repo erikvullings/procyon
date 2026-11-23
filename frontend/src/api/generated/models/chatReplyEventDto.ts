@@ -17,6 +17,10 @@ export type ChatReplyEventDto = {
   text: string;
   type: 'step';
 } | {
+  /** The one-line description. */
+  text: string;
+  type: 'progress';
+} | {
   /** The proposed note. */
   proposal: NoteProposalDto;
   type: 'noteProposal';

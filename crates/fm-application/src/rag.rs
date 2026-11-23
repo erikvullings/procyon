@@ -24,7 +24,7 @@ use uuid::Uuid;
 use crate::error::ApplicationError;
 use crate::llm_profiles::locality_to_dto;
 use crate::llm_profiles::{
-    EndpointLocality, LlmChatGeneration, LlmProfileError, LlmProfileService,
+    EndpointLocality, LlmChatGeneration, LlmProfileError, LlmProfileService, ReplyFormat,
     normalize_endpoint_locality,
 };
 use crate::rag_query_planning::{
@@ -1004,6 +1004,7 @@ impl RagCoordinator {
                     maximum_tokens: MAX_PLANNER_TOKENS,
                     context_window: None,
                     temperature: Some(0.0),
+                    reply: ReplyFormat::Json,
                 },
                 cancellation,
             )
@@ -1086,6 +1087,7 @@ impl RagCoordinator {
                     maximum_tokens: MAX_ANSWER_TOKENS,
                     context_window: None,
                     temperature: Some(0.2),
+                    reply: ReplyFormat::Json,
                 },
                 cancellation,
             )

@@ -189,3 +189,11 @@ fn a_symlink_loop_inside_the_folder_ends_the_search() {
     });
     assert_eq!(text, "No matches.");
 }
+
+#[test]
+fn a_page_cut_off_note_names_where_to_continue() {
+    use super::continuation;
+    let page = "abc\n[truncated at byte 32768: call read_file with \"offset\":32768 to continue]";
+    assert_eq!(continuation(page), ("abc", Some(32768)));
+    assert_eq!(continuation("the end"), ("the end", None));
+}

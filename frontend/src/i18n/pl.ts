@@ -1274,6 +1274,7 @@ export const pl = {
     invalidRequest: 'Wiadomość jest pusta lub za długa.',
     notFound: 'Ta rozmowa już nie istnieje.',
     noText: 'Model nie zwrócił tekstu.',
+    timeout: 'Model zbyt długo odpowiadał. Spróbuj ponownie lub zacznij nową rozmowę.',
     failed: 'Czat nie mógł odpowiedzieć. Sprawdź punkt dostępu w ustawieniach.',
     loadFailed: 'Nie udało się wczytać rozmów.',
   },
@@ -2769,6 +2770,8 @@ export const pl = {
       'Wysyła pokazany wyżej kontekst do endpointu czatu. Nic nie jest uruchamiane bez Twojej zgody.',
     assistNoCommand: 'Odpowiedź nie zawiera polecenia.',
     assistNoOutput: 'Brak jeszcze wyjścia terminala.',
+    assistTimeout:
+      'Model zbyt długo odpowiadał. Długa rozmowa spowalnia lokalny model: pomóc może /compact lub /clear.',
     assistRoleNotAssigned:
       'Przypisz endpoint czatu w Ustawieniach, aby korzystać z pomocy terminala.',
     assistConsentRequired: 'Endpoint czatu wymaga zgody w Ustawieniach.',
@@ -2781,6 +2784,13 @@ export const pl = {
     blockSucceeded: 'Zakończono sukcesem',
     blockFailed: 'Zakończono błędem',
     suggestionAccept: 'Naciśnij →, aby zaakceptować',
+    composerOpen: 'Zapytaj',
+    composerOpenHelp:
+      'Zapytaj asystenta. Wpisanie # przy pustym znaku zachęty otwiera to samo pole.',
+    composerLabel: 'Pytanie do asystenta',
+    composerPlaceholder: 'Zapytaj asystenta… @ dodaje plik, / polecenie lub skill',
+    composerQueued: 'Zostanie wysłane po tej odpowiedzi · Esc zatrzymuje je tutaj',
+    composerSend: 'Wyślij',
     consentTitle: 'Bloki poleceń',
     consentText:
       'Włączyć bloki poleceń? Procyon uruchamia zsh i bash z własnymi hookami i nadal wczytuje Twoje pliki startowe. Twoje pliki dotfiles się nie zmieniają. Pytania z # działają w obu przypadkach.',
@@ -2788,20 +2798,22 @@ export const pl = {
     consentDecline: 'Nie teraz',
     assistEdit: 'Edytuj',
     contextEnvironment: 'Środowisko',
-    contextEnvironmentDetail: 'System operacyjny, architektura i powłoka',
+    contextEnvironmentDetail: 'System operacyjny, architektura, powłoka i stan gita',
     contextToggle: 'Kontekst ({count})',
     help: 'Pomoc asystenta',
     helpTitle: 'Asystent terminala',
     helpClose: 'Zamknij',
     helpAsk:
-      'Wpisz # i pytanie w wierszu poleceń, a następnie naciśnij Enter. Pytanie i odpowiedź pojawiają się w terminalu; pytanie nigdy nie jest uruchamiane jako polecenie.',
+      'Wpisz # przy pustym znaku zachęty albo kliknij Zapytaj, aby otworzyć pole czatu. Napisz pytanie i naciśnij Enter: pytanie i odpowiedź pojawią się w terminalu, a powłoka nigdy nie zobaczy pytania. Esc wraca do powłoki.',
+    helpKeys:
+      'W polu czatu Enter wysyła, a Shift+Enter zaczyna nowy wiersz. Tab uzupełnia pliki @ i polecenia /, strzałki w górę i w dół przywracają wcześniejsze pytania, a Esc wraca do powłoki.',
     helpContext:
       'Znaczniki pod pytaniem pokazują, co jest wysyłane: system, listę folderu, zaznaczenie, drugi panel i ostatnie polecenia. Kliknij znacznik, aby go pominąć lub dołączyć ponownie; podpowiedź pokazuje szczegóły.',
     helpMentions: 'Wpisz @plik.txt w pytaniu, aby załączyć ten plik.',
     helpExplainFix:
       'Ctrl+Shift+E wyjaśnia ostatnie wyjście, a Ctrl+Shift+F proponuje poprawkę. Bloki poleceń oferują to samo przy każdym zakończonym poleceniu.',
     helpFollowUp:
-      'Zadaj pytanie uzupełniające, wpisując ponownie #. Rozmowa jest zachowana dla karty terminala do jej zamknięcia.',
+      'Pole czatu pozostaje otwarte na kolejne pytania, a strzałki w górę i w dół przywracają wcześniejsze pytania. Rozmowa jest zachowana dla każdej karty terminala do jej zamknięcia.',
     helpRun:
       'Asystent może wyświetlać foldery i czytać pliki w folderze roboczym, także przez SSH (wyszukiwanie tylko lokalnie). Gdy chce uruchomić polecenie, najpierw je zatwierdzasz: Enter uruchamia, Ctrl+C odrzuca.',
     helpSafety:

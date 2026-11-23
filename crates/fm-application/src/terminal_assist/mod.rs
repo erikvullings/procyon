@@ -32,11 +32,12 @@ use tokio_util::sync::CancellationToken;
 use fm_agent::{newest_bytes, truncate_to_bytes};
 
 use crate::agent_host::{
-    Documents, FolderTools, ProjectContext, SkillFolderDocuments, SkillScope, ToolHost,
-    chat_failure, generation_parts, is_document, note_proposal_dto, project_context, tool_calling,
+    Documents, FolderTools, ModelSideCalls, ProjectContext, SkillFolderDocuments, SkillScope,
+    ToolHost, chat_failure, generation_parts, is_document, note_proposal_dto, project_context,
+    tool_calling,
 };
 use crate::chat::ChatGenerator;
-use crate::llm_profiles::{LlmChatGeneration, LlmRole};
+use crate::llm_profiles::{LlmChatGeneration, LlmRole, ReplyFormat};
 
 use self::agent_tools::TerminalInterrupt;
 use self::context::{AttachedFile, render_activity, render_context, state_sections};
@@ -245,6 +246,7 @@ async fn generate(
                 maximum_tokens: MAX_REPLY_TOKENS,
                 context_window: None,
                 temperature: None,
+                reply: ReplyFormat::Text,
             },
             &cancellation,
             on_delta,
@@ -394,10 +396,14 @@ async fn ask(
         tools: prompt_registry.specs_for(calling),
     };
     let skill_documents = SkillFolderDocuments::new(providers);
+    let side_calls = ModelSideCalls::new(generator, CancellationToken::new())
+        .await
+        .stopped_when(|| sessions.is_cancelled(&id));
     let ctx = ToolContext {
         notes,
         files: Some(&files),
         documents: Some(&skill_documents),
+        side_model: Some(&side_calls),
         ..ToolContext::new(&project.skills)
     };
     let options = turn_options();
@@ -409,6 +415,7 @@ async fn ask(
                     steps.push(text.clone());
                     TerminalAssistEventDto::Step { text }
                 }
+                TurnEvent::Progress(text) => TerminalAssistEventDto::Progress { text },
             });
         })
         .await?;
@@ -1054,6 +1061,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_summarised_file_stays_out_of_the_conversation() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("paper.md"), "The full text of the paper.").unwrap();
+        let fake = scripted(&[
+            r#"TOOL {"tool":"summarize_file","path":"paper.md","focus":"decoys"}"#,
+            "A short paper about decoys.",
+            "Done: it is about decoys.",
+        ]);
+        let sessions = Sessions::default();
+        let mut events = Vec::new();
+
+        let reply = reply_streaming_in(
+            &fake,
+            &ProviderRegistry::new(),
+            &sessions,
+            None,
+            ask_request("t1", "summarise paper.md", dir.path()),
+            &mut |event| events.push(event),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(reply.text, "Done: it is about decoys.");
+        assert_eq!(reply.steps, vec!["Summarised paper.md".to_owned()]);
+        // The person sees what the tool is doing while it runs, then its step.
+        let progress = |text: &str| TerminalAssistEventDto::Progress { text: text.into() };
+        assert_eq!(
+            events[..3],
+            [
+                progress("Reading paper.md"),
+                progress("Summarising paper.md"),
+                TerminalAssistEventDto::Step {
+                    text: "Summarised paper.md".into()
+                },
+            ]
+        );
+        let seen = fake.seen.lock().unwrap();
+        // The side call: a fresh context with the document, and no tools.
+        let side = &seen[1].1;
+        assert!(side.user_prompt.contains("Focus: decoys"));
+        assert!(side.user_prompt.contains("The full text of the paper."));
+        assert!(side.tools.is_empty() && side.followups.is_empty());
+        assert!(!side.system_prompt.contains("summarize_file"));
+        // The conversation only gets the summary.
+        let next = &seen[2].1.user_prompt;
+        assert!(next.contains("Summary of paper.md"), "{next}");
+        assert!(next.contains("A short paper about decoys."));
+        assert!(!next.contains("The full text of the paper."));
+    }
+
+    #[tokio::test]
     async fn a_command_waits_for_approval_and_its_result_continues_the_turn() {
         let dir = tempfile::tempdir().unwrap();
         let fake = scripted(&[
@@ -1411,9 +1469,9 @@ mod tests {
         let texts: Vec<String> = events
             .into_iter()
             .map(|event| match event {
-                TerminalAssistEventDto::Line { text } | TerminalAssistEventDto::Step { text } => {
-                    text
-                }
+                TerminalAssistEventDto::Line { text }
+                | TerminalAssistEventDto::Step { text }
+                | TerminalAssistEventDto::Progress { text } => text,
             })
             .collect();
         assert_eq!(texts, ["Config:", "{\"name\": \"x\"}", "that is all"]);

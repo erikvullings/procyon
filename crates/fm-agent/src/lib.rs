@@ -56,6 +56,7 @@ mod skill_tools;
 mod skills;
 mod store;
 mod stream;
+mod summarize;
 mod text;
 mod tool;
 mod tools;
@@ -81,6 +82,7 @@ pub use self::store::{
     LOCAL_STORE_ID, LocalStore, SkillStore, StoreEntry, StoreEntryKind, StoreHandle, StoreMetadata,
     file_name, join_path, relative_to,
 };
+pub use self::summarize::{MAX_SUMMARY_PARTS, SideModel, SideModelError, WholeText};
 pub use self::text::{newest_bytes, truncate_to_bytes};
 pub use self::tool::{
     AgentTool, DocumentError, FileTools, SkillDocuments, ToolContext, ToolEffect, ToolOutcome,
@@ -92,11 +94,13 @@ pub use self::turn::{
 };
 
 use self::skill_tools::{ReadSkill, ReadSkillFile};
+use self::summarize::SummarizeFile;
 use self::tools::{
     Grep, ListDir, ProposeNote, ProposeNoteUpdate, ReadFile, ReadNote, RunCommand, SearchNotes,
 };
 
-/// The read-only tools: files (`list_dir`, `read_file`, `grep`), notes (`search_notes`,
+/// The read-only tools: files (`list_dir`, `read_file`, `grep`, and `summarize_file`, which
+/// summarises a document in a model call of its own), notes (`search_notes`,
 /// `read_note`, and the `propose_note*` drafts the person reviews) and skills (`read_skill`,
 /// `read_skill_file`). Nothing here writes or runs anything.
 pub fn read_only_registry<I>() -> ToolRegistry<I>
@@ -107,6 +111,7 @@ where
     registry
         .register(Typed(ListDir))
         .register(Typed(ReadFile))
+        .register(Typed(SummarizeFile))
         .register(Typed(Grep))
         .register(Typed(SearchNotes))
         .register(Typed(ReadNote))

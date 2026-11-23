@@ -22,7 +22,7 @@ use crate::chat_conversations::{
 };
 use crate::file_assistant::{VisibleText, truncate_to_bytes};
 use crate::llm_profiles::{
-    LlmChatGeneration, LlmImageAttachment, LlmProfileError, LlmProfileService, LlmRole,
+    LlmChatGeneration, LlmImageAttachment, LlmProfileError, LlmProfileService, LlmRole, ReplyFormat,
 };
 
 /// Longest message the person sends, in characters.
@@ -78,6 +78,9 @@ pub(crate) enum ChatReplyError {
     /// The chat endpoint is not marked as accepting images.
     #[error("the chat endpoint does not accept images")]
     ImagesNotSupported,
+    /// The model did not answer in time.
+    #[error("the chat model did not answer in time")]
+    Timeout,
 }
 
 impl From<ChatReplyError> for ChatFailureDto {
@@ -91,6 +94,7 @@ impl From<ChatReplyError> for ChatFailureDto {
             ChatReplyError::Empty => Self::Empty,
             ChatReplyError::Cancelled => Self::Cancelled,
             ChatReplyError::ImagesNotSupported => Self::ImagesNotSupported,
+            ChatReplyError::Timeout => Self::Timeout,
         }
     }
 }
@@ -106,6 +110,7 @@ impl From<ChatFailureDto> for ChatReplyError {
             ChatFailureDto::Empty => Self::Empty,
             ChatFailureDto::Cancelled => Self::Cancelled,
             ChatFailureDto::ImagesNotSupported => Self::ImagesNotSupported,
+            ChatFailureDto::Timeout => Self::Timeout,
         }
     }
 }
@@ -301,6 +306,7 @@ impl ChatService {
                             maximum_tokens: MAX_REPLY_TOKENS,
                             context_window: None,
                             temperature: None,
+                            reply: ReplyFormat::Text,
                         },
                         &cancellation,
                         &mut |fragment: &str| visible.push(fragment),

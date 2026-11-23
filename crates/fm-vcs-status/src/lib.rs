@@ -18,6 +18,10 @@ use std::sync::{Arc, Mutex};
 use fm_domain::{EntryKind, EntrySummary, GitFileStatus};
 use thiserror::Error;
 
+mod summary;
+
+pub use summary::{ChangedPath, WorkingTreeSummary, working_tree_summary};
+
 /// Failure to evaluate repository ignore rules during semantic enumeration.
 #[derive(Debug, Error)]
 pub enum GitIgnoreError {

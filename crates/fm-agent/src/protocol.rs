@@ -53,12 +53,14 @@ fn first_loose_call(reply: &str, known: &dyn Fn(&str) -> bool) -> Option<RawCall
         let start = offset;
         offset += line.len();
         let mut rest = line.trim_start();
+        let mut tagged = false;
         // Peel the openers a model may put first: `<tool_call>```json {..}` and the like.
         loop {
             let before = rest;
             for prefix in CALL_PREFIXES {
                 if let Some(after) = rest.strip_prefix(prefix) {
                     rest = after.trim_start();
+                    tagged |= prefix.starts_with('<');
                 }
             }
             if before.len() == rest.len() {
@@ -74,9 +76,20 @@ fn first_loose_call(reply: &str, known: &dyn Fn(&str) -> bool) -> Option<RawCall
             }
         } else if let Some(call) = tag_call(tail, known) {
             return Some(call);
+        } else if tagged && let Some(call) = garbled_call(tail, known) {
+            return Some(call);
         }
     }
     trailing_call(reply, known)
+}
+
+/// After a call tag, a call object that follows a stray word on the same line: a model that mixes
+/// its own call syntax with the documented one writes `<|tool_call>_call {"tool": ...} more text`.
+/// The tag says a call was meant, so the object counts even with text around it.
+fn garbled_call(tail: &str, known: &dyn Fn(&str) -> bool) -> Option<RawCall> {
+    let line_end = tail.find('\n').unwrap_or(tail.len());
+    let start = tail[..line_end].find('{')?;
+    object_call(&tail[start..], known)
 }
 
 /// Closers a model may put after a call.

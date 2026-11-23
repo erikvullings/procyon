@@ -72,9 +72,9 @@ impl TypedTool<TerminalInterrupt> for WriteFile {
         "Creates a Markdown or text file in the folder summaries/ next to the working folder, \
          after the person approves. Use a short plain file name ending in .md or .txt, without \
          folders. It only creates new files and never changes an existing one: a taken name \
-         gets a number, and the result tells you the final name. To summarise several \
-         documents, read one and then write its file, one file per document, with a factual \
-         summary. Use it only when the person asks for files."
+         gets a number, and the result tells you the final name. To summarise documents, use \
+         summarize_file for each, then write the summaries; it keeps the documents out of the \
+         conversation. Use it only when the person asks for files."
     }
 
     async fn run_typed(

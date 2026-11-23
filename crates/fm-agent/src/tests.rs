@@ -260,6 +260,7 @@ fn the_registries_offer_the_documented_tools_with_their_effects() {
             "read_skill_file",
             "run_command",
             "search_notes",
+            "summarize_file",
         ]
     );
     let read_only = read_only_registry::<Interrupt>();

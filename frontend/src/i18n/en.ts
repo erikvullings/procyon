@@ -1656,6 +1656,7 @@ export const en = {
     invalidRequest: 'The message is empty or too long.',
     notFound: 'This conversation no longer exists.',
     noText: 'The model returned no text.',
+    timeout: 'The model took too long to answer. Try again, or start a new conversation.',
     failed: 'The chat could not reply. Check the endpoint in Settings.',
     loadFailed: 'Could not load conversations.',
   },
@@ -2716,6 +2717,8 @@ export const en = {
       'Sends the context shown above to the chat endpoint. Nothing runs without your approval.',
     assistNoCommand: 'The reply contains no command.',
     assistNoOutput: 'There is no terminal output yet.',
+    assistTimeout:
+      'The model took too long to answer. A long conversation slows a local model down: /compact or /clear can help.',
     assistRoleNotAssigned: 'Assign a chat endpoint in Settings to use terminal assistance.',
     assistConsentRequired: 'The chat endpoint needs consent in Settings.',
     assistEmpty: 'The assistant returned no answer.',
@@ -2727,6 +2730,12 @@ export const en = {
     blockSucceeded: 'Succeeded',
     blockFailed: 'Failed',
     suggestionAccept: 'Press → to accept',
+    composerOpen: 'Ask',
+    composerOpenHelp: 'Ask the assistant. Typing # at an empty prompt opens the same input.',
+    composerLabel: 'Question for the assistant',
+    composerPlaceholder: 'Ask the assistant… @ adds a file, / a command or skill',
+    composerQueued: 'Sends after this answer · Esc keeps it here',
+    composerSend: 'Send',
     consentTitle: 'Command blocks',
     consentText:
       'Enable command blocks? Procyon starts zsh and bash with its hooks and still loads your own startup files. Your dotfiles stay unchanged. # questions work either way.',
@@ -2734,20 +2743,22 @@ export const en = {
     consentDecline: 'Not now',
     assistEdit: 'Edit',
     contextEnvironment: 'System',
-    contextEnvironmentDetail: 'Operating system, architecture and shell',
+    contextEnvironmentDetail: 'Operating system, architecture, shell and git status',
     contextToggle: 'Context ({count})',
     help: 'Assistant help',
     helpTitle: 'Terminal assistant',
     helpClose: 'Close',
     helpAsk:
-      'Type # followed by a question at the prompt and press Enter. The question and the answer appear in the terminal; the question is never run as a command.',
+      'Type # at an empty prompt, or click Ask, to open the chat input. Write the question and press Enter: the question and the answer appear in the terminal, and the shell never sees the question. Esc goes back to the shell.',
+    helpKeys:
+      'In the chat input, Enter sends and Shift+Enter starts a new line. Tab completes @ files and / commands, Up and Down bring back earlier questions, and Esc goes back to the shell.',
     helpContext:
       'Chips under the question show what is sent: system, folder listing, selection, other pane and recent commands. Click a chip to leave it out or include it again, and hover for details.',
     helpMentions: 'Type @file.txt in a question to attach that file.',
     helpExplainFix:
       'Ctrl+Shift+E explains the last output and Ctrl+Shift+F suggests a fix. Command blocks add the same actions to every finished command.',
     helpFollowUp:
-      'Ask a follow-up by typing # again. The conversation is kept per terminal tab until the tab closes.',
+      'The chat input stays open for follow-ups, and Up and Down bring back earlier questions. The conversation is kept per terminal tab until the tab closes.',
     helpRun:
       'The assistant can list folders and read files in the working folder, also over SSH (searching works locally only). When it wants to run a command you approve it first: Enter runs it, Ctrl+C declines.',
     helpSafety:

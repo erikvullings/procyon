@@ -17,11 +17,11 @@ use fm_vfs::ProviderRegistry;
 use tokio_util::sync::CancellationToken;
 
 use crate::agent_host::{
-    FolderTools, READ_FILE_DESCRIPTION, SkillFolderDocuments, SkillScope, chat_failure,
-    generation_parts, note_proposal_dto, project_context, tool_calling,
+    FolderTools, ModelSideCalls, READ_FILE_DESCRIPTION, SkillFolderDocuments, SkillScope,
+    chat_failure, generation_parts, note_proposal_dto, project_context, tool_calling,
 };
 use crate::chat::ChatGenerator;
-use crate::llm_profiles::{LlmChatGeneration, LlmImageAttachment, LlmRole};
+use crate::llm_profiles::{LlmChatGeneration, LlmImageAttachment, LlmRole, ReplyFormat};
 
 /// Most bytes of tool exchanges kept while tools run; the oldest exchanges drop out first. The
 /// conversation itself (with the person's question) is bounded by the chat and always kept.
@@ -106,10 +106,12 @@ pub(crate) async fn run(
         cancellation: input.cancellation,
     };
     let skill_documents = SkillFolderDocuments::new(tooling.providers);
+    let side_calls = ModelSideCalls::new(generator, input.cancellation.clone()).await;
     let ctx = ToolContext {
         notes: tooling.notes,
         files: Some(&files),
         documents: Some(&skill_documents),
+        side_model: Some(&side_calls),
         ..ToolContext::new(&catalogue)
     };
     let options = TurnOptions {
@@ -130,6 +132,7 @@ pub(crate) async fn run(
                 steps.push(truncate_to_bytes(&text, MAX_STEP_BYTES).to_owned());
                 ChatReplyEventDto::Step { text }
             }
+            TurnEvent::Progress(text) => ChatReplyEventDto::Progress { text },
         });
     })
     .await?;
@@ -194,6 +197,7 @@ impl<G: ChatGenerator> TurnHost for ChatTurn<'_, G> {
                     maximum_tokens: MAX_REPLY_TOKENS,
                     context_window: None,
                     temperature: None,
+                    reply: ReplyFormat::Text,
                 },
                 self.cancellation,
                 on_delta,

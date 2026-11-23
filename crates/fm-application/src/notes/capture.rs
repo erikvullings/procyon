@@ -9,7 +9,7 @@ use tokio_util::sync::CancellationToken;
 use super::format::{NoteMeta, render_note, slugify, split_note};
 use crate::chat::ChatGenerator;
 use crate::file_assistant::truncate_to_bytes;
-use crate::llm_profiles::{LlmChatGeneration, LlmProfileError, LlmRole};
+use crate::llm_profiles::{LlmChatGeneration, LlmProfileError, LlmRole, ReplyFormat};
 use crate::terminal_assist::redact_secrets;
 
 /// Most prompt bytes of conversation and commands together.
@@ -80,6 +80,7 @@ pub(crate) async fn draft_note(
                 maximum_tokens: MAX_NOTE_TOKENS,
                 context_window: None,
                 temperature: None,
+                reply: ReplyFormat::Text,
             },
             &CancellationToken::new(),
             &mut |_: &str| {},

@@ -15,6 +15,7 @@ use thiserror::Error;
 use crate::notes::NotesAccess;
 use crate::skills::SkillCatalogue;
 use crate::store::StoreHandle;
+use crate::summarize::{SideModel, WholeText};
 
 /// What a tool shows the person and tells the model.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,6 +107,12 @@ pub trait FileTools: Send + Sync {
     async fn read_file(&self, path: &str, offset: usize) -> ToolOutput;
     /// Finds lines containing `pattern`.
     async fn grep(&self, pattern: &str, path: Option<&str>) -> ToolOutput;
+    /// The whole text of a file (a document converted), up to about `max` bytes, for a tool that
+    /// hands it to a model call of its own instead of the conversation. `Err` holds the message
+    /// for the model. Hosts that cannot do this keep the default.
+    async fn read_whole(&self, _path: &str, _max: usize) -> Result<WholeText, String> {
+        Err("reading whole files is not available here.".to_owned())
+    }
 }
 
 /// Why a document inside a skill folder could not be read as text.
@@ -141,6 +148,13 @@ pub struct ToolContext<'a> {
     pub files: Option<&'a dyn FileTools>,
     /// The document converter for files inside skill folders, when the host has one.
     pub documents: Option<&'a dyn SkillDocuments>,
+    /// Model calls outside the conversation (`summarize_file`), when the host has them.
+    pub side_model: Option<&'a dyn SideModel>,
+    /// Where a long-running tool reports what it is doing, as one short line such as
+    /// `Summarising a.pdf: part 2 of 5`. [`run_turn`](crate::run_turn) sets it for each call and
+    /// shows the person the latest report until the call's step line replaces it. Report through
+    /// [`report`](Self::report).
+    pub progress: Option<&'a (dyn Fn(String) + Send + Sync)>,
 }
 
 impl<'a> ToolContext<'a> {
@@ -151,6 +165,15 @@ impl<'a> ToolContext<'a> {
             notes: None,
             files: None,
             documents: None,
+            side_model: None,
+            progress: None,
+        }
+    }
+
+    /// Reports what this call is doing now; nothing happens when no one listens.
+    pub fn report(&self, text: impl Into<String>) {
+        if let Some(progress) = self.progress {
+            progress(text.into());
         }
     }
 }

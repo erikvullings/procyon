@@ -13,17 +13,20 @@ use std::path::{Path, PathBuf};
 use async_trait::async_trait;
 use fm_agent::{
     FileTools, InstructionSource, MAX_INSTRUCTION_BYTES, Message, NoteProposal, NotesAccess,
-    SkillCatalogue, SkillIndex, SkillRoots, StoreHandle, ToolCalling, ToolOutput,
-    instruction_candidates, instructions_section, read_instructions, render_text,
+    SideModel, SideModelError, SkillCatalogue, SkillIndex, SkillRoots, StoreHandle, ToolCalling,
+    ToolOutput, WholeText, instruction_candidates, instructions_section, read_instructions,
+    render_text,
 };
 use fm_transport_dto::{ChatFailureDto, NoteDraftDto, NoteProposalDto};
 use fm_vfs::ProviderRegistry;
+use tokio_util::sync::CancellationToken;
 
 pub(crate) use self::documents::{Documents, SkillFolderDocuments, is_document};
+use self::sandbox::continuation;
 pub(crate) use self::sandbox::{FileCall, ToolHost};
 use self::skill_store::ProviderStore;
 use crate::chat::ChatGenerator;
-use crate::llm_profiles::{LlmProfileError, LlmRole};
+use crate::llm_profiles::{LlmChatGeneration, LlmProfileError, LlmRole, ReplyFormat};
 
 /// The local path of a `file:` location, or `None` for any other location.
 pub(crate) fn path_from_location(uri: &str) -> Option<PathBuf> {
@@ -92,6 +95,124 @@ impl FileTools for FolderTools {
             path: path.map(str::to_owned),
         })
         .await
+    }
+
+    async fn read_whole(&self, path: &str, max: usize) -> Result<WholeText, String> {
+        // `read_file` page by page, each continued at the offset its cut-off note names.
+        let mut text = String::new();
+        let mut offset = 0;
+        loop {
+            let page = self.read_file(path, offset).await.text;
+            if let Some(message) = page.strip_prefix("Error: ") {
+                return Err(message.to_owned());
+            }
+            let (body, next) = continuation(&page);
+            text.push_str(body);
+            match next {
+                Some(next) if next > offset && text.len() < max => offset = next,
+                Some(_) => {
+                    return Ok(WholeText {
+                        text,
+                        truncated: true,
+                    });
+                }
+                None => {
+                    return Ok(WholeText {
+                        text,
+                        truncated: false,
+                    });
+                }
+            }
+        }
+    }
+}
+
+/// Most tokens of one summary written outside the conversation.
+const SIDE_REPLY_TOKENS: u32 = 1024;
+/// Text one side call takes when the model's window is not known.
+const DEFAULT_SIDE_INPUT_BYTES: usize = 24 * 1024;
+/// Most text one side call takes, however large the window.
+const MAX_SIDE_INPUT_BYTES: usize = 96 * 1024;
+
+/// Model calls outside the conversation (`summarize_file`): the chat role's model with a fresh
+/// context, no history and no tools.
+pub(crate) struct ModelSideCalls<'a, G> {
+    generator: &'a G,
+    input_bytes: usize,
+    cancellation: CancellationToken,
+    /// Whether the person stopped the turn, for hosts that track it outside the token.
+    stopped: Option<Box<dyn Fn() -> bool + Send + Sync + 'a>>,
+}
+
+impl<'a, G: ChatGenerator> ModelSideCalls<'a, G> {
+    /// Side calls sized to the chat model's window, stopped by `cancellation`.
+    pub(crate) async fn new(generator: &'a G, cancellation: CancellationToken) -> Self {
+        let window = generator.context_window(LlmRole::Chat).await;
+        Self {
+            generator,
+            input_bytes: side_input_bytes(window),
+            cancellation,
+            stopped: None,
+        }
+    }
+
+    /// Also stops before a call once `stopped` says the person stopped the turn.
+    pub(crate) fn stopped_when(mut self, stopped: impl Fn() -> bool + Send + Sync + 'a) -> Self {
+        self.stopped = Some(Box::new(stopped));
+        self
+    }
+}
+
+/// The text one side call takes for a window of `tokens`: about two bytes a token (text runs
+/// three to four), less room for the instructions and the summary.
+fn side_input_bytes(tokens: Option<u32>) -> usize {
+    tokens.map_or(DEFAULT_SIDE_INPUT_BYTES, |tokens| {
+        (tokens as usize)
+            .saturating_sub(SIDE_REPLY_TOKENS as usize + 1024)
+            .saturating_mul(2)
+            .clamp(8 * 1024, MAX_SIDE_INPUT_BYTES)
+    })
+}
+
+#[async_trait]
+impl<G: ChatGenerator> SideModel for ModelSideCalls<'_, G> {
+    fn input_bytes(&self) -> usize {
+        self.input_bytes
+    }
+
+    async fn complete(&self, system: &str, prompt: &str) -> Result<String, SideModelError> {
+        if self.cancellation.is_cancelled()
+            || self.stopped.as_ref().is_some_and(|stopped| stopped())
+        {
+            return Err(SideModelError("the person stopped the request".to_owned()));
+        }
+        let reply = self
+            .generator
+            .generate_for_role(
+                LlmRole::Chat,
+                LlmChatGeneration {
+                    followups: Vec::new(),
+                    tools: Vec::new(),
+                    system_prompt: system.to_owned(),
+                    user_prompt: prompt.to_owned(),
+                    images: Vec::new(),
+                    maximum_tokens: SIDE_REPLY_TOKENS,
+                    context_window: None,
+                    temperature: None,
+                    reply: ReplyFormat::Text,
+                },
+                &self.cancellation,
+                &mut |_| {},
+            )
+            .await
+            .map_err(|error| {
+                tracing::warn!(error = %error, "a model call outside the conversation failed");
+                SideModelError(error.to_string())
+            })?;
+        if reply.trim().is_empty() {
+            return Err(SideModelError("the model returned no text".to_owned()));
+        }
+        Ok(reply)
     }
 }
 
@@ -288,10 +409,15 @@ pub(crate) fn generation_parts(
 
 /// Why a model call failed, as the agents report it.
 pub(crate) fn chat_failure(error: LlmProfileError) -> ChatFailureDto {
+    if !matches!(error, LlmProfileError::Cancelled) {
+        // The person sees one short message; the log keeps the cause.
+        tracing::warn!(error = %error, "the assistant's model call failed");
+    }
     match error {
         LlmProfileError::ConsentRequired(_) => ChatFailureDto::ConsentRequired,
         LlmProfileError::RoleNotAssigned => ChatFailureDto::RoleNotAssigned,
         LlmProfileError::Cancelled => ChatFailureDto::Cancelled,
+        LlmProfileError::Timeout => ChatFailureDto::Timeout,
         _ => ChatFailureDto::Unavailable,
     }
 }
@@ -319,5 +445,51 @@ pub(crate) fn note_proposal(path: Option<String>, draft: NoteDraftDto) -> NotePr
         tags: draft.tags,
         content: draft.content,
         redactions: draft.redactions,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use fm_vfs_local::LocalFileSystemProvider;
+
+    use super::*;
+    use crate::agent_host::sandbox::MAX_READ_BYTES;
+
+    fn folder(dir: &Path) -> FolderTools {
+        let mut providers = ProviderRegistry::new();
+        providers.register(Arc::new(LocalFileSystemProvider));
+        let url = url::Url::from_directory_path(dir.canonicalize().unwrap()).unwrap();
+        FolderTools::open(&providers, url.as_str())
+    }
+
+    #[tokio::test]
+    async fn a_whole_file_is_read_page_by_page_without_the_cut_off_notes() {
+        let dir = tempfile::tempdir().unwrap();
+        let text = "line of text\n".repeat(MAX_READ_BYTES / 4);
+        std::fs::write(dir.path().join("long.txt"), &text).unwrap();
+        let tools = folder(dir.path());
+
+        let whole = tools.read_whole("long.txt", 1024 * 1024).await.unwrap();
+        assert_eq!(whole.text, text);
+        assert!(!whole.truncated);
+
+        let start = tools.read_whole("long.txt", 10).await.unwrap();
+        assert_eq!(start.text.len(), MAX_READ_BYTES);
+        assert!(start.truncated);
+
+        assert_eq!(
+            tools.read_whole("missing.txt", 100).await,
+            Err("missing.txt is not available.".to_owned())
+        );
+    }
+
+    #[test]
+    fn a_side_call_takes_about_two_bytes_a_token_within_bounds() {
+        assert_eq!(side_input_bytes(None), DEFAULT_SIDE_INPUT_BYTES);
+        assert_eq!(side_input_bytes(Some(2048)), 8 * 1024);
+        assert_eq!(side_input_bytes(Some(32 * 1024)), (32 * 1024 - 2048) * 2);
+        assert_eq!(side_input_bytes(Some(1_000_000)), MAX_SIDE_INPUT_BYTES);
     }
 }

@@ -5,6 +5,7 @@ import { type IDecoration, type IMarker, Terminal } from '@xterm/xterm';
 import m, { type FactoryComponent } from 'mithril';
 import {
   copyIcon,
+  cornerDownLeftIcon,
   helpIcon,
   refreshIcon,
   sparklesIcon,
@@ -28,6 +29,14 @@ import {
   stepsAnsi,
 } from './answer-ansi';
 import { type BlockTracker, type CommandBlock, createBlockTracker } from './block-tracker';
+import {
+  caretOnFirstLine,
+  caretOnLastLine,
+  completed,
+  composerLine,
+  composerOpening,
+  promptIsEmpty,
+} from './question-composer';
 import { isReadOnlyCommand } from './read-only-command';
 import { highlightShell } from './shell-highlight';
 import { parseShellMark } from './shell-integration';
@@ -253,6 +262,12 @@ type LiveTerminal = {
     | undefined;
   /** The models `/model` listed last, so `/model 2` picks from what was shown. */
   models: readonly ModelChoice[];
+  /** The question in the chat input; `undefined` while the input is closed. */
+  composer: string | undefined;
+  /** Moves focus into the chat input when it is next drawn. */
+  composerFocus: boolean;
+  /** A question sent while the assistant was answering; asked once the answer is done. */
+  queued: string | undefined;
 };
 
 export interface TerminalKeyHandlers {
@@ -264,10 +279,6 @@ export interface TerminalKeyHandlers {
   readonly onAcceptSuggestion?: () => boolean;
   /** The assistant's and block keys (Enter, Ctrl+E, Ctrl+C, ...). Returns whether it used the key. */
   readonly onAssistantKey?: (event: KeyboardEvent) => boolean;
-  /** Completes the `@name` being typed after `#`. Returns whether it used the Tab. */
-  readonly onCompleteMention?: () => boolean;
-  /** Up/Down on a `#` line recalls earlier questions. Returns whether it used the key. */
-  readonly onRecallQuestion?: (direction: 'older' | 'newer') => boolean;
   /** Sends line-editing bytes (word and line jumps and deletes) to the shell. */
   readonly onShellInput?: (data: string) => void;
 }
@@ -328,31 +339,9 @@ export function handleTerminalKeyEvent(
       return false;
     }
   }
-  if (
-    bareModifiers &&
-    !event.ctrlKey &&
-    (event.key === 'ArrowUp' || event.key === 'ArrowDown') &&
-    handlers.onRecallQuestion?.(event.key === 'ArrowUp' ? 'older' : 'newer') === true
-  ) {
-    event.preventDefault();
-    event.stopPropagation();
-    return false;
-  }
   const edit = lineEditSequence(event);
   if (edit !== undefined && handlers.onShellInput !== undefined) {
     handlers.onShellInput(edit);
-    event.preventDefault();
-    event.stopPropagation();
-    return false;
-  }
-  if (
-    event.key === 'Tab' &&
-    !event.ctrlKey &&
-    !event.altKey &&
-    !event.metaKey &&
-    !event.shiftKey &&
-    handlers.onCompleteMention?.() === true
-  ) {
     event.preventDefault();
     event.stopPropagation();
     return false;
@@ -444,6 +433,11 @@ export function questionAtPrompt(typed: TypedInput, line: string): string | unde
   return match === null ? undefined : (match[1] ?? '').trim();
 }
 
+/** The terminal's folder as a path, for the header. */
+function folderLabel(location: Location): string {
+  return absolutePathOf(location.uri) ?? location.uri;
+}
+
 /** Shell text as coloured spans, so commands, options and strings stand apart in the overlay. */
 function highlightedShell(text: string): m.Children {
   return highlightShell(text).map((token) =>
@@ -462,6 +456,8 @@ function assistFailureText(reason: string): string {
       return t('terminal', 'assistEmpty');
     case 'noOutput':
       return t('terminal', 'assistNoOutput');
+    case 'timeout':
+      return t('terminal', 'assistTimeout');
     default:
       return t('terminal', 'assistFailed');
   }
@@ -473,7 +469,12 @@ function assistFailureText(reason: string): string {
  * conversation itself is written into the terminal.
  */
 type AssistPanel =
-  | { readonly status: 'busy'; readonly tabKey: string }
+  | {
+      readonly status: 'busy';
+      readonly tabKey: string;
+      /** What a long tool call is doing now, shown in place of "Thinking". */
+      readonly progress?: string | undefined;
+    }
   | { readonly status: 'suggest'; readonly tabKey: string; readonly command: string }
   | { readonly status: 'approve'; readonly tabKey: string; readonly command: string }
   | { readonly status: 'running'; readonly tabKey: string; readonly command: string }
@@ -625,7 +626,9 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     }
     live.typed = EMPTY_INPUT;
     live.suggestion = undefined;
-    live.terminal.write(`\r\x1b[2K${questionAnsi(options.display ?? question)}`);
+    live.terminal.write(
+      `\r\x1b[2K${questionAnsi(options.display ?? question, live.terminal.cols)}`,
+    );
     sendToSession(live, {
       question,
       ...(options.skill === undefined ? {} : { skill: options.skill }),
@@ -660,6 +663,13 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     let streamed = false;
     const onEvent = (event: TerminalAssistEvent): void => {
       if (token !== live.requestId) return;
+      // A report of a long tool call shows in the status line until the next event.
+      const progress = event.kind === 'progress' ? event.text : undefined;
+      if (panel?.status === 'busy' && panel.tabKey === live.key && panel.progress !== progress) {
+        panel = { ...panel, progress };
+        m.redraw();
+      }
+      if (event.kind === 'progress') return;
       streamed = true;
       live.terminal.write(
         event.kind === 'step' ? stepsAnsi([event.text]) : answer.line(event.text),
@@ -762,6 +772,11 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       live.restoreLine = undefined;
     }
     for (const data of live.held.splice(0)) onTypedData(live, data);
+    const queued = live.queued;
+    if (queued !== undefined && !isBusy(live)) {
+      live.queued = undefined;
+      submitQuestion(live, queued);
+    }
     m.redraw();
   }
 
@@ -770,6 +785,11 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     live.requestId += 1;
     void currentAttrs?.client.assistCancel?.(live.assistSession).catch(() => undefined);
     panel = undefined;
+    // A question waiting for this answer goes back into the input instead of being asked.
+    if (live.queued !== undefined) {
+      live.composer = live.queued;
+      live.queued = undefined;
+    }
     live.terminal.write('\r\x1b[2K', () => releasePrompt(live));
     m.redraw();
   }
@@ -889,6 +909,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     const attrs = currentAttrs;
     if (attrs === undefined || live.sessionId === undefined) return;
     void attrs.client.write(live.sessionId, new TextEncoder().encode(command));
+    live.typed = { text: `${live.typed.text}${command}`, known: live.typed.known };
     live.terminal.focus();
     panel = undefined;
     editing = undefined;
@@ -978,14 +999,17 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     awaiting?.(block);
     const decoration = live.terminal.registerDecoration({
       marker: block.promptMark,
+      // One cell at the right edge: a status dot that shows the actions on hover, so it never
+      // covers the command. (xterm.js only positions a right anchor for a non-zero `x`, so the
+      // stylesheet pins it to the edge.)
       anchor: 'right',
-      x: 0,
-      width: 8,
+      width: 1,
       height: 1,
     });
     if (decoration === undefined) return;
     live.decorations.set(block.id, decoration);
     decoration.onRender((element) => {
+      element.classList.add('fm-terminal-block-decoration');
       m.render(element, blockActions(live, block));
     });
   }
@@ -1159,12 +1183,10 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     return true;
   }
 
-  /**
-   * Handles keyboard input the person types into the terminal. A line that starts with `#` and is
-   * submitted is a question for the assistant: it is cleared from the prompt and never run.
-   */
   /** Keyboard input: held until the shell is ready, then tracked and sent. */
   function typeInput(live: LiveTerminal, data: string): void {
+    // The chat input does not need the shell, so `#` opens it even before the shell is ready.
+    if (!live.ready && live.pendingInput.length === 0 && openComposerFor(live, data)) return;
     if (!live.ready) live.pendingInput.push(data);
     else if (live.sessionId !== undefined) onTypedData(live, data);
   }
@@ -1172,74 +1194,157 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   /** Most questions remembered per tab. */
   const MAX_QUESTIONS = 100;
 
+  /** Keeps a question for Up/Down recall. */
+  function rememberQuestion(live: LiveTerminal, question: string): void {
+    if (live.questions.at(-1) !== question) live.questions.push(question);
+    if (live.questions.length > MAX_QUESTIONS) live.questions.shift();
+  }
+
+  /** Opens the chat input (or adds to it) and moves focus there. */
+  function openComposer(live: LiveTerminal, text = ''): void {
+    live.composer = `${live.composer ?? ''}${text}`;
+    live.composerFocus = true;
+    live.suggestion = undefined;
+    live.recallIndex = undefined;
+    // Drawn and focused now, so the keys typed right after `#` land in the input, not the shell.
+    m.redraw.sync();
+    prefetchMentionFiles(live);
+  }
+
+  /** Closes the chat input and gives the keyboard back to the shell. */
+  function closeComposer(live: LiveTerminal): void {
+    live.composer = undefined;
+    live.recallIndex = undefined;
+    live.terminal.focus();
+    m.redraw();
+  }
+
   /**
-   * Up/Down on a line that starts with `#` walks through the questions asked in this tab, like a
-   * shell's history; Down past the newest brings back what was typed. Other lines keep the shell's
-   * own history.
+   * Sends the question in the chat input; while an answer is being written it waits for that
+   * answer (one question at a time). The input stays open for the next one.
+   */
+  function submitComposer(live: LiveTerminal): void {
+    const question = (live.composer ?? '').trim();
+    if (question === '' || live.queued !== undefined) return;
+    live.composer = '';
+    live.recallIndex = undefined;
+    rememberQuestion(live, question);
+    if (isBusy(live)) live.queued = question;
+    else submitQuestion(live, question);
+    m.redraw();
+  }
+
+  /**
+   * Up/Down in the chat input walks through the questions asked in this tab, like a shell's
+   * history; Down past the newest brings back what was being written.
    */
   function recallQuestion(live: LiveTerminal, direction: 'older' | 'newer'): boolean {
-    if (!assistantOn() || !live.ready || isBusy(live) || live.sessionId === undefined) return false;
-    const recalling = live.recallIndex !== undefined;
-    if (!recalling && !(live.typed.known && live.typed.text.startsWith('#'))) return false;
+    if (live.composer === undefined) return false;
     const last = live.questions.length - 1;
     if (last < 0) return false;
     let index: number | undefined;
     let draft = live.recallDraft;
     if (direction === 'older') {
-      if (live.recallIndex === undefined) draft = live.typed.text;
+      if (live.recallIndex === undefined) draft = live.composer;
       index = live.recallIndex === undefined ? last : Math.max(0, live.recallIndex - 1);
     } else {
       if (live.recallIndex === undefined) return false;
       index = live.recallIndex >= last ? undefined : live.recallIndex + 1;
     }
-    const text = index === undefined ? draft : `# ${live.questions[index] ?? ''}`;
-    // Typed as input, so the shell shows it and the typed-line tracker follows. The text comes
-    // from the tracker, which never holds control characters.
-    onTypedData(live, `\x15${text}`);
+    live.composer = index === undefined ? draft : (live.questions[index] ?? '');
     live.recallDraft = draft;
     live.recallIndex = index;
+    m.redraw();
     return true;
   }
 
   /**
-   * Tab on a `#` line: `# /par` completes a command or skill name; `@par` completes a path under
+   * Tab in the chat input: `/par` completes a command or skill name; `@par` completes a path under
    * the session's root (task 0343), or in the terminal's folder when the host cannot list a tree.
    */
-  function completeMentionInShell(live: LiveTerminal): boolean {
+  function completeInComposer(live: LiveTerminal): boolean {
     const attrs = currentAttrs;
     const location = attrs?.location;
-    if (attrs === undefined || !assistantOn() || !live.ready || isBusy(live)) return false;
-    if (location === undefined) return false;
-    const typed = live.typed;
-    if (!typed.known || !typed.text.startsWith('#')) return false;
+    const text = live.composer;
+    if (attrs === undefined || location === undefined || text === undefined) return false;
+    const line = composerLine(text);
     const apply = (completion: { erase: number; insert: string } | undefined): void => {
-      // The line may have changed while the names were read.
-      if (completion === undefined || live.typed.text !== typed.text) return;
-      typeInput(live, '\x7f'.repeat(completion.erase) + completion.insert);
+      // The question may have changed while the names were read.
+      if (completion === undefined || live.composer !== text) return;
+      live.composer = completed(text, completion);
+      m.redraw();
     };
     const warn = (error: unknown): void => {
       console.warn('Reading names for completion failed.', error);
     };
-    if (typedSlash(typed.text) !== undefined) {
+    if (typedSlash(line) !== undefined) {
       void skillNames(live, attrs.client, live.assistRoot ?? location)
-        .then((skills) => apply(completeSlash(typed.text, slashNames(skills))))
+        .then((skills) => apply(completeSlash(line, slashNames(skills))))
         .catch(warn);
       return true;
     }
-    if (!/(?:^|\s)@(?:"[^"]*|'[^']*|\S*)$/.test(typed.text)) return false;
+    if (!/(?:^|\s)@(?:"[^"]*|'[^']*|\S*)$/.test(text)) return false;
     if (attrs.client.assistFiles !== undefined) {
-      const root = live.assistRoot ?? location;
-      void treeFiles(live, attrs.client, root)
-        .then((files) => apply(completeMentionInTree(typed.text, files)))
+      void treeFiles(live, attrs.client, live.assistRoot ?? location)
+        .then((files) => apply(completeMentionInTree(line, files)))
         .catch(warn);
       return true;
     }
     if (attrs.listFolder === undefined) return false;
     void attrs
       .listFolder(location)
-      .then((names) => apply(completeMention(typed.text, names)))
+      .then((names) => apply(completeMention(line, names)))
       .catch(warn);
     return true;
+  }
+
+  /**
+   * Keys in the chat input. On an empty input the answer's keys work as in the shell (Enter runs
+   * or inserts the proposed command, Esc declines it); Esc also stops an answer being written.
+   * Enter sends the question, Shift+Enter starts a new line, Tab completes, Up/Down recall
+   * earlier questions, and Esc (or Backspace on an empty input) goes back to the shell.
+   */
+  function composerKey(live: LiveTerminal, event: KeyboardEvent): void {
+    const input = event.currentTarget as HTMLTextAreaElement;
+    const text = live.composer ?? '';
+    const plain = !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
+    const chord = event.shiftKey && (event.ctrlKey || event.metaKey) && !event.altKey;
+    const toggle =
+      (plain && event.key === 'F12') ||
+      (event.ctrlKey && !event.shiftKey && !event.altKey && event.key === '`');
+    const used = (): void => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    // The drawer's toggle keys still reach the file manager.
+    if (toggle) return;
+    event.stopPropagation();
+    if (event.isComposing) return;
+    if ((text === '' || event.key === 'Escape' || chord) && assistantKey(event)) {
+      used();
+      return;
+    }
+    const caret = input.selectionStart ?? text.length;
+    const collapsed = caret === (input.selectionEnd ?? caret);
+    if (plain && event.key === 'Enter') {
+      used();
+      submitComposer(live);
+    } else if (plain && event.key === 'Escape') {
+      used();
+      closeComposer(live);
+    } else if (plain && event.key === 'Backspace' && text === '') {
+      used();
+      closeComposer(live);
+    } else if (plain && event.key === 'Tab') {
+      if (collapsed && caret === text.length && completeInComposer(live)) used();
+    } else if (
+      plain &&
+      collapsed &&
+      ((event.key === 'ArrowUp' && caretOnFirstLine(text, caret)) ||
+        (event.key === 'ArrowDown' && caretOnLastLine(text, caret)))
+    ) {
+      if (recallQuestion(live, event.key === 'ArrowUp' ? 'older' : 'newer')) used();
+    }
   }
 
   /** Marks the completion listings as possibly out of date. */
@@ -1274,7 +1379,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   }
 
   /**
-   * Starts reading the paths as soon as `@` is typed on a `#` line, so the listing is usually
+   * Starts reading the paths as soon as `@` is typed in the chat input, so the listing is usually
    * ready by the time Tab is pressed (over SSH a large tree takes a while). Nothing is read when
    * the cached listing is still current.
    */
@@ -1282,7 +1387,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     const attrs = currentAttrs;
     const location = attrs?.location;
     if (attrs?.client.assistFiles === undefined || location === undefined) return;
-    if (!assistantOn() || !live.typed.known || !/^#.*(?:^|\s)@$/.test(live.typed.text)) return;
+    if (!assistantOn() || !/(?:^|\s)@$/.test(live.composer ?? '')) return;
     void treeFiles(live, attrs.client, live.assistRoot ?? location).catch((error: unknown) => {
       console.warn('Reading the paths for @ completion failed.', error);
       live.fileLoad = undefined;
@@ -1321,7 +1426,9 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
 
   /** Writes a command's output under its question line, then gives the prompt back. */
   function showCommandOutput(live: LiveTerminal, question: string, text: string): void {
-    live.terminal.write(`\r\x1b[2K${questionAnsi(question)}${text}`, () => releasePrompt(live));
+    live.terminal.write(`\r\x1b[2K${questionAnsi(question, live.terminal.cols)}${text}`, () =>
+      releasePrompt(live),
+    );
   }
 
   /** Runs `/new`, `/clear`, `/compact`, `/model` or `/help` (task 0343). */
@@ -1386,7 +1493,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     live.requestId += 1;
     const token = live.requestId;
     panel = { status: 'busy', tabKey: live.key };
-    live.terminal.write(`\r\x1b[2K${questionAnsi(question)}`);
+    live.terminal.write(`\r\x1b[2K${questionAnsi(question, live.terminal.cols)}`);
     m.redraw();
     work()
       .then((text) => present(live, token, text, undefined))
@@ -1435,13 +1542,30 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     return infoAnsi([...modelLines(live.models), t('terminal', 'slashModelPick')]);
   }
 
+  /** Whether nothing is typed on the shell's line; read from the screen when it was not followed. */
+  function lineIsEmpty(live: LiveTerminal): boolean {
+    if (live.typed.known) return live.typed.text === '';
+    return promptIsEmpty(cursorLine(live.terminal));
+  }
+
+  /** `#` at an empty prompt opens the chat input; the shell never sees the question. */
+  function openComposerFor(live: LiveTerminal, data: string): boolean {
+    const atPrompt = live.atPrompt || !live.markSeen;
+    if (!atPrompt || !assistantOn() || !lineIsEmpty(live)) return false;
+    const opening = composerOpening(data);
+    if (opening === undefined) return false;
+    openComposer(live, opening.text);
+    if (opening.submit) submitComposer(live);
+    return true;
+  }
+
   function onTypedData(live: LiveTerminal, data: string): void {
     if (isBusy(live)) {
       // The terminal shows the answer where the prompt was; keys wait for the prompt to return.
       live.held.push(data);
       return;
     }
-    live.recallIndex = undefined;
+    if (openComposerFor(live, data)) return;
     const atPrompt = live.atPrompt || !live.markSeen;
     const question =
       data === '\r' && atPrompt && assistantOn()
@@ -1452,18 +1576,14 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       live.suggestion = undefined;
       writeToShell(live, '\x15');
       if (question !== '') {
-        if (live.questions.at(-1) !== question) live.questions.push(question);
-        if (live.questions.length > MAX_QUESTIONS) live.questions.shift();
+        rememberQuestion(live, question);
         submitQuestion(live, question);
       }
       m.redraw();
       return;
     }
-    const wasComposing = live.typed.text.startsWith('#');
     const applied = applyTypedInput(live.typed, data);
     live.typed = applied.state;
-    if (wasComposing !== live.typed.text.startsWith('#')) m.redraw();
-    if (data.endsWith('@')) prefetchMentionFiles(live);
     if (applied.submitted !== undefined && applied.submitted.trim() !== '') {
       const command = applied.submitted.trim();
       live.pendingCommand = command;
@@ -1565,6 +1685,9 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         skillCache: undefined,
         fileLoad: undefined,
         models: [],
+        composer: undefined,
+        composerFocus: false,
+        queued: undefined,
       };
       terminals.set(key, live);
       const current = live;
@@ -1583,8 +1706,6 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           ...(attrs.onFocusFolder === undefined ? {} : { onFocusFolder: attrs.onFocusFolder }),
           onAcceptSuggestion: () => acceptSuggestion(current),
           onAssistantKey: (event) => assistantKey(event),
-          onCompleteMention: () => completeMentionInShell(current),
-          onRecallQuestion: (direction) => recallQuestion(current, direction),
           onShellInput: (data) => typeInput(current, data),
         }),
       );
@@ -1641,17 +1762,17 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     }
   }
 
-  /** The answer panel and the suggestion, floated over the terminal's top-right corner. */
   /**
-   * The strip under the terminal output: the consent prompt, the history suggestion and the
-   * assistant bar. It only takes room while it has something to show. The conversation itself is
-   * written into the terminal, so there is no second scrolling area (tasks 0333, 0336).
+   * The strip under the terminal output, the drawer's status bar. It always ends with the status
+   * line: in the shell, the folder; in the chat, what the next question sends (the context pills).
+   * Above it come, when there is something to show, the command suggestion, the consent prompt,
+   * the assistant's proposal and the chat input. The conversation itself is written into the
+   * terminal, so there is no second scrolling area (tasks 0333, 0336, 0344).
    */
   function stripView(attrs: TerminalDrawerAttrs): m.Children {
-    if (attrs.location === undefined || attrs.tabKey === undefined) return undefined;
-    const live = terminals.get(attrs.tabKey);
+    const live = attrs.tabKey === undefined ? undefined : terminals.get(attrs.tabKey);
     const shown = panel !== undefined && panel.tabKey === attrs.tabKey ? panel : undefined;
-    const consent = consentView(attrs, live);
+    const chatting = live !== undefined && assistantOn() && live.composer !== undefined;
     const suggestion =
       live?.suggestion === undefined
         ? undefined
@@ -1659,9 +1780,127 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
             m('span.fm-terminal-suggestion-hint', t('terminal', 'suggestionAccept')),
             m('code', highlightedShell(`${live.typed.text}${live.suggestion}`)),
           ]);
-    const bar = live === undefined ? undefined : assistBar(live, shown);
-    if (consent === undefined && suggestion === undefined && bar === undefined) return undefined;
-    return m('.fm-terminal-strip', [suggestion, consent, bar]);
+    return m('.fm-terminal-strip', [
+      suggestion,
+      attrs.location === undefined ? undefined : consentView(attrs, live),
+      live !== undefined && shown !== undefined && assistantOn()
+        ? statusRow(shown, live)
+        : undefined,
+      chatting ? composerView(live, shown) : undefined,
+      statusLine(attrs, live, shown, chatting),
+    ]);
+  }
+
+  /**
+   * The bottom line: the folder (or, in the chat, the context pills), the assistant's actions,
+   * then Ask and help. Close stays at the top right, in a gutter of its own beside the output.
+   */
+  function statusLine(
+    attrs: TerminalDrawerAttrs,
+    live: LiveTerminal | undefined,
+    shown: AssistPanel | undefined,
+    chatting: boolean,
+  ): m.Children {
+    const folder = attrs.location === undefined ? '' : folderLabel(attrs.location);
+    return m('.fm-terminal-statusbar', [
+      live !== undefined && chatting
+        ? contextRow(live, composerLine(live.composer ?? ''))
+        : // Isolated, so the right-to-left trick that ellipsises the start leaves the path as is.
+          m('span.fm-terminal-status-folder', { title: folder }, m('bdi', folder)),
+      m('.fm-terminal-assist-buttons', [
+        live !== undefined && assistantOn() ? assistActions(live, shown, chatting) : undefined,
+        assistantOn() && attrs.location !== undefined && attrs.tabKey !== undefined
+          ? m(
+              'button.fm-terminal-status-ask',
+              {
+                type: 'button',
+                class: chatting ? 'fm-terminal-status-ask--on' : undefined,
+                'aria-pressed': String(chatting),
+                ...tooltipEvents(() => t('terminal', 'composerOpenHelp'), 'above-left'),
+                onclick: () => {
+                  // Looked up on click: the tab's terminal is made after the first draw.
+                  const current =
+                    attrs.tabKey === undefined ? undefined : terminals.get(attrs.tabKey);
+                  if (current === undefined) return;
+                  if (current.composer === undefined) openComposer(current);
+                  else closeComposer(current);
+                },
+              },
+              [
+                sparklesIcon({ size: 14 }),
+                t('terminal', 'composerOpen'),
+                m('kbd.fm-terminal-kbd', '#'),
+              ],
+            )
+          : undefined,
+        assistantOn()
+          ? m(
+              'button.fm-terminal-status-button.fm-terminal-help',
+              {
+                type: 'button',
+                'aria-label': t('terminal', 'help'),
+                ...tooltipEvents(() => t('terminal', 'help'), 'above-left'),
+                'aria-haspopup': 'dialog',
+                onclick: () => {
+                  helpOpen = true;
+                },
+              },
+              helpIcon({ size: 14 }),
+            )
+          : undefined,
+      ]),
+    ]);
+  }
+
+  /**
+   * The chat input, while the person is talking to the assistant. Its accent edge and the sparkles
+   * mark it apart from the shell, so it is clear where keys go; the arrow sends.
+   */
+  function composerView(live: LiveTerminal, shown: AssistPanel | undefined): m.Children {
+    const text = live.composer ?? '';
+    const busy = shown?.status === 'busy';
+    const focus = ({ dom }: m.VnodeDOM): void => {
+      if (!live.composerFocus) return;
+      live.composerFocus = false;
+      const input = dom as HTMLTextAreaElement;
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    };
+    return m('.fm-terminal-composer', { class: busy ? 'fm-terminal-composer--busy' : undefined }, [
+      m('span.fm-terminal-composer-mark', { 'aria-hidden': 'true' }, sparklesIcon({ size: 14 })),
+      m('textarea.fm-terminal-composer-input', {
+        rows: Math.min(6, text.split('\n').length),
+        value: text,
+        spellcheck: false,
+        placeholder: t('terminal', 'composerPlaceholder'),
+        'aria-label': t('terminal', 'composerLabel'),
+        oncreate: focus,
+        onupdate: focus,
+        oninput: (event: InputEvent) => {
+          live.composer = (event.target as HTMLTextAreaElement).value;
+          live.recallIndex = undefined;
+          prefetchMentionFiles(live);
+        },
+        onkeydown: (event: KeyboardEvent) => composerKey(live, event),
+      }),
+      live.queued === undefined
+        ? undefined
+        : m('span.fm-terminal-composer-hint', t('terminal', 'composerQueued')),
+      m(
+        'button.fm-terminal-composer-send',
+        {
+          type: 'button',
+          disabled: text.trim() === '' || live.queued !== undefined,
+          'aria-label': t('terminal', 'composerSend'),
+          ...tooltipEvents(() => t('terminal', 'composerSend'), 'above-left'),
+          onclick: () => {
+            live.composerFocus = true;
+            submitComposer(live);
+          },
+        },
+        cornerDownLeftIcon({ size: 14 }),
+      ),
+    ]);
   }
 
   /** An action button with its keyboard shortcut shown beside the label. */
@@ -1771,6 +2010,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     };
     const items = [
       'helpAsk',
+      'helpKeys',
       'helpContext',
       'helpMentions',
       'helpExplainFix',
@@ -1841,10 +2081,13 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     });
   }
 
-  /** "Thinking" with one, two, then three dots, animated by CSS; the dots keep their room. */
-  function thinkingStatus(): m.Children {
+  /**
+   * "Thinking", or what a long tool call reports, with one, two, then three dots, animated by
+   * CSS; the dots keep their room.
+   */
+  function thinkingStatus(progress: string | undefined): m.Children {
     return m('span.fm-terminal-assist-status.fm-terminal-assist-thinking', { role: 'status' }, [
-      t('terminal', 'assistBusy').replace(/[….]+$/, ''),
+      progress ?? t('terminal', 'assistBusy').replace(/[….]+$/, ''),
       m('span.fm-dots', { 'aria-hidden': 'true' }, [
         m('span', '.'),
         m('span', '.'),
@@ -1945,58 +2188,40 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   }
 
   /**
-   * The bar under the terminal while the assistant is in use: what it waits on, the context pills
-   * and Explain / Fix. It shows while a `#` question is typed, so the pills can be trimmed first.
+   * The assistant's actions on the status line: what it waits on, Explain / Fix when they apply,
+   * and Save as note once there is a conversation.
    */
-  function assistBar(live: LiveTerminal, shown: AssistPanel | undefined): m.Children {
-    if (!assistantOn()) return undefined;
-    const typing = live.typed.text.startsWith('#');
-    if (!live.assistActive && !typing && shown === undefined) return undefined;
-    const busy = shown?.status === 'busy';
-    return m('.fm-terminal-assist-bar', [
-      shown === undefined ? undefined : statusRow(shown, live),
-      m('.fm-terminal-assist-controls', [
-        contextRow(live, typing ? live.typed.text : ''),
-        m('.fm-terminal-assist-buttons', [
-          busy ? thinkingStatus() : undefined,
-          busy
-            ? shortcutButton(t('terminal', 'assistDismiss'), 'Esc', () => cancelBusy(live))
-            : undefined,
-          busy || !offerExplain(live)
-            ? undefined
-            : shortcutButton(t('terminal', 'blockExplain'), chordLabel('E'), () => explain(live)),
-          busy || !offerFix(live)
-            ? undefined
-            : shortcutButton(t('terminal', 'blockFix'), chordLabel('F'), () => fix(live)),
-          busy || currentAttrs?.onSaveAsNote === undefined
-            ? undefined
-            : m(
-                'button.fm-terminal-assist-action',
-                {
-                  type: 'button',
-                  'aria-keyshortcuts': chordLabel('S'),
-                  ...tooltipEvents(() => t('notes', 'saveAsNoteHelp'), 'above-left'),
-                  onclick: () => saveAsNote(live),
-                },
-                [t('notes', 'saveAsNote'), m('kbd.fm-terminal-kbd', chordLabel('S'))],
-              ),
-          live.assistActive && shown === undefined
-            ? m(
-                'button.fm-terminal-assist-action',
-                {
-                  type: 'button',
-                  'aria-label': t('terminal', 'assistDismiss'),
-                  onclick: () => {
-                    live.assistActive = false;
-                    m.redraw();
-                  },
-                },
-                '×',
-              )
-            : undefined,
-        ]),
-      ]),
-    ]);
+  function assistActions(
+    live: LiveTerminal,
+    shown: AssistPanel | undefined,
+    chatting: boolean,
+  ): m.Children {
+    if (shown?.status === 'busy') {
+      return [
+        thinkingStatus(shown.progress),
+        shortcutButton(t('terminal', 'assistDismiss'), 'Esc', () => cancelBusy(live)),
+      ];
+    }
+    return [
+      offerExplain(live) && (chatting || live.markSeen)
+        ? shortcutButton(t('terminal', 'blockExplain'), chordLabel('E'), () => explain(live))
+        : undefined,
+      offerFix(live) && (chatting || live.markSeen)
+        ? shortcutButton(t('terminal', 'blockFix'), chordLabel('F'), () => fix(live))
+        : undefined,
+      currentAttrs?.onSaveAsNote !== undefined && (chatting || live.assistActive)
+        ? m(
+            'button.fm-terminal-assist-action',
+            {
+              type: 'button',
+              'aria-keyshortcuts': chordLabel('S'),
+              ...tooltipEvents(() => t('notes', 'saveAsNoteHelp'), 'above-left'),
+              onclick: () => saveAsNote(live),
+            },
+            [t('notes', 'saveAsNote'), m('kbd.fm-terminal-kbd', chordLabel('S'))],
+          )
+        : undefined,
+    ];
   }
 
   /** Ends the tab's shell so the next open starts it with the current integration setting. */
@@ -2116,21 +2341,6 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
             },
             '×',
           ),
-          assistantOn()
-            ? m(
-                'button.fm-terminal-help',
-                {
-                  type: 'button',
-                  'aria-label': t('terminal', 'help'),
-                  ...tooltipEvents(() => t('terminal', 'help'), 'below-right'),
-                  'aria-haspopup': 'dialog',
-                  onclick: () => {
-                    helpOpen = true;
-                  },
-                },
-                helpIcon({ size: 14 }),
-              )
-            : undefined,
           helpOpen && assistantOn() ? helpDialog() : undefined,
           tip === undefined
             ? undefined

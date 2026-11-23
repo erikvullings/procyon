@@ -14,7 +14,9 @@ use fm_transport_dto::{
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::llm_profiles::{LlmChatGeneration, LlmProfileError, LlmProfileService, strip_reasoning};
+use crate::llm_profiles::{
+    LlmChatGeneration, LlmProfileError, LlmProfileService, ReplyFormat, strip_reasoning,
+};
 
 /// Most messages kept in one request, so a long chat cannot grow without bound.
 const MAX_MESSAGES: usize = 40;
@@ -143,6 +145,7 @@ impl FileAssistantService {
                     maximum_tokens: MAX_REPLY_TOKENS,
                     context_window: None,
                     temperature: Some(REPLY_TEMPERATURE),
+                    reply: ReplyFormat::Text,
                 },
                 &cancellation,
                 &mut |fragment: &str| visible.push(fragment),

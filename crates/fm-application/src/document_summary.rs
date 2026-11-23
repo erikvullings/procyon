@@ -25,7 +25,7 @@ use crate::error::ApplicationError;
 use crate::llm_profiles::locality_to_dto;
 use crate::llm_profiles::{
     EndpointLocality, LlmChatGeneration, LlmImageAttachment, LlmProfileError, LlmProfileService,
-    LlmTestErrorCategory, normalize_endpoint_locality,
+    LlmTestErrorCategory, ReplyFormat, normalize_endpoint_locality,
 };
 use crate::rejection::{Rejection, reason};
 use fm_transport_dto::document_summary::{SummaryAttributionDto, SummaryAttributionSourceDto};
@@ -676,6 +676,7 @@ impl DocumentSummaryCoordinator {
                                 == crate::llm_profiles::LlmPreset::Ollama)
                                 .then_some(budget.context_window),
                             temperature: Some(profile.advanced.temperature),
+                            reply: ReplyFormat::Json,
                         },
                         cancellation,
                     )
@@ -789,6 +790,7 @@ async fn extract_attribution(
                     .min(ATTRIBUTION_MAX_OUTPUT_TOKENS),
                 context_window: ollama.then_some(budget.context_window),
                 temperature: Some(0.0),
+                reply: ReplyFormat::Json,
             },
             cancellation,
         )

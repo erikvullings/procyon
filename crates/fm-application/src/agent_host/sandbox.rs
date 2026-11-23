@@ -315,6 +315,23 @@ pub(crate) fn text_from_bytes(
     Ok(text)
 }
 
+/// The text of a `read_file` page without its cut-off note, and the offset the note names to
+/// continue at; `None` when the page is the end of the file.
+pub(crate) fn continuation(page: &str) -> (&str, Option<usize>) {
+    const NOTE: &str = "\n[truncated at byte ";
+    let Some(at) = page.rfind(NOTE) else {
+        return (page, None);
+    };
+    let next = page[at + NOTE.len()..]
+        .split(':')
+        .next()
+        .and_then(|number| number.parse().ok());
+    match next {
+        Some(next) => (&page[..at], Some(next)),
+        None => (page, None),
+    }
+}
+
 /// Where the tools look: a local folder, or one on another machine through its provider.
 #[derive(Clone)]
 pub(crate) enum ToolHost {

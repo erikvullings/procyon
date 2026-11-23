@@ -1278,6 +1278,8 @@ export const es = {
     invalidRequest: 'El mensaje está vacío o es demasiado largo.',
     notFound: 'Esta conversación ya no existe.',
     noText: 'El modelo no devolvió texto.',
+    timeout:
+      'El modelo tardó demasiado en responder. Inténtalo de nuevo o empieza una conversación nueva.',
     failed: 'El chat no pudo responder. Revisa el punto de acceso en Ajustes.',
     loadFailed: 'No se pudieron cargar las conversaciones.',
   },
@@ -2776,6 +2778,8 @@ export const es = {
       'Envía el contexto mostrado arriba al endpoint de chat. No se ejecuta nada sin tu aprobación.',
     assistNoCommand: 'La respuesta no contiene ningún comando.',
     assistNoOutput: 'Todavía no hay salida de terminal.',
+    assistTimeout:
+      'El modelo tardó demasiado en responder. Una conversación larga ralentiza un modelo local: /compact o /clear pueden ayudar.',
     assistRoleNotAssigned:
       'Asigna un endpoint de chat en Ajustes para usar la asistencia de terminal.',
     assistConsentRequired: 'El endpoint de chat necesita tu consentimiento en Ajustes.',
@@ -2788,6 +2792,12 @@ export const es = {
     blockSucceeded: 'Correcto',
     blockFailed: 'Fallido',
     suggestionAccept: 'Pulsa → para aceptar',
+    composerOpen: 'Preguntar',
+    composerOpenHelp: 'Pregunta al asistente. Escribir # en un prompt vacío abre el mismo campo.',
+    composerLabel: 'Pregunta para el asistente',
+    composerPlaceholder: 'Pregunta al asistente… @ añade un archivo, / un comando o skill',
+    composerQueued: 'Se envía tras esta respuesta · Esc la conserva aquí',
+    composerSend: 'Enviar',
     consentTitle: 'Bloques de comandos',
     consentText:
       '¿Activar los bloques de comandos? Procyon inicia zsh y bash con sus hooks y sigue cargando tus propios archivos de inicio. Tus dotfiles no cambian. Las preguntas con # funcionan en ambos casos.',
@@ -2795,20 +2805,22 @@ export const es = {
     consentDecline: 'Ahora no',
     assistEdit: 'Editar',
     contextEnvironment: 'Sistema',
-    contextEnvironmentDetail: 'Sistema operativo, arquitectura y shell',
+    contextEnvironmentDetail: 'Sistema operativo, arquitectura, shell y estado de git',
     contextToggle: 'Contexto ({count})',
     help: 'Ayuda del asistente',
     helpTitle: 'Asistente de terminal',
     helpClose: 'Cerrar',
     helpAsk:
-      'Escribe # y una pregunta en el prompt y pulsa Intro. La pregunta y la respuesta aparecen en la terminal; la pregunta nunca se ejecuta como comando.',
+      'Escribe # en un prompt vacío, o pulsa Preguntar, para abrir el campo de chat. Escribe la pregunta y pulsa Intro: la pregunta y la respuesta aparecen en el terminal, y la shell nunca ve la pregunta. Esc vuelve a la shell.',
+    helpKeys:
+      'En el campo de chat, Intro envía y Mayús+Intro empieza una nueva línea. Tab completa archivos @ y comandos /, Arriba y Abajo recuperan preguntas anteriores, y Esc vuelve a la shell.',
     helpContext:
       'Los chips bajo la pregunta muestran qué se envía: sistema, listado de la carpeta, selección, otro panel y comandos recientes. Haz clic en un chip para omitirlo o incluirlo de nuevo; el tooltip da detalles.',
     helpMentions: 'Escribe @archivo.txt en una pregunta para adjuntar ese archivo.',
     helpExplainFix:
       'Ctrl+Mayús+E explica la última salida y Ctrl+Mayús+F sugiere una corrección. Los bloques de comandos añaden lo mismo a cada comando terminado.',
     helpFollowUp:
-      'Haz una pregunta de seguimiento escribiendo # otra vez. La conversación se conserva por pestaña de terminal hasta que se cierra.',
+      'El campo de chat sigue abierto para más preguntas, y Arriba y Abajo recuperan preguntas anteriores. La conversación se guarda por pestaña de terminal hasta que se cierra.',
     helpRun:
       'El asistente puede listar carpetas y leer archivos de la carpeta de trabajo, también por SSH (la búsqueda solo en local). Si quiere ejecutar un comando, lo apruebas antes: Intro lo ejecuta, Ctrl+C lo rechaza.',
     helpSafety:

@@ -56,6 +56,18 @@ describe('renderAnswerAnsi', () => {
 });
 
 describe('questionAnsi and stepsAnsi', () => {
+  it('wraps a long question at words, the next lines indented under the text', () => {
+    const lines = questionAnsi('summarise every unique file into summaries.md', 24).split('\r\n');
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: removing the colour codes
+    const plain = (line: string) => line.replace(/\x1b\[[0-9;]*m/g, '');
+    expect(lines.map(plain)).toEqual([
+      '❯ summarise every',
+      '  unique file into',
+      '  summaries.md',
+      '',
+    ]);
+  });
+
   it('marks the question and strips control characters from it', () => {
     expect(questionAnsi('why\x1b[2J?')).toBe('\x1b[1;35m❯\x1b[0m \x1b[1mwhy[2J?\x1b[22m\r\n');
   });

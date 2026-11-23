@@ -18,4 +18,5 @@ export const ChatFailureDto = {
   empty: 'empty',
   cancelled: 'cancelled',
   imagesNotSupported: 'imagesNotSupported',
+  timeout: 'timeout',
 } as const;

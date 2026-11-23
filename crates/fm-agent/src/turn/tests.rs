@@ -113,9 +113,10 @@ impl TypedTool<Approval> for Shout {
         ToolEffect::ReadOnly
     }
 
-    async fn run_typed(&self, _ctx: &ToolContext<'_>, args: Word) -> ToolOutcome<Approval> {
+    async fn run_typed(&self, ctx: &ToolContext<'_>, args: Word) -> ToolOutcome<Approval> {
         let now = self.running.fetch_add(1, Ordering::SeqCst) + 1;
         self.most.fetch_max(now, Ordering::SeqCst);
+        ctx.report(format!("Shouting {}", args.word));
         // Later words finish first, so an unordered collector would scramble the results.
         let delay = 30u64.saturating_sub(args.word.len() as u64 * 10);
         tokio::time::sleep(Duration::from_millis(delay)).await;
@@ -185,7 +186,7 @@ async fn turn_with(host: &mut Scripted, harness: &Harness, options: &TurnOptions
         .iter()
         .filter_map(|event| match event {
             TurnEvent::Step(step) => Some(step.clone()),
-            TurnEvent::Line(_) => None,
+            TurnEvent::Line(_) | TurnEvent::Progress(_) => None,
         })
         .collect();
     Run { end, steps, events }
@@ -204,6 +205,7 @@ async fn a_tool_result_goes_back_to_the_model_until_it_answers() {
     assert_eq!(
         run.events,
         [
+            TurnEvent::Progress("Shouting hi".into()),
             TurnEvent::Step("Shouted".into()),
             TurnEvent::Line("Done.".into()),
             TurnEvent::Line("Bye.".into()),
@@ -495,5 +497,38 @@ async fn a_call_after_prose_on_one_line_is_not_streamed_raw() {
         run.events
             .iter()
             .all(|event| !matches!(event, TurnEvent::Line(line) if line.contains("\"tool\"")))
+    );
+}
+
+#[tokio::test]
+async fn what_a_running_tool_reports_is_shown_before_its_step() {
+    let mut host = Scripted::new(&[
+        "TOOL {\"tool\":\"shout\",\"word\":\"a\"}\nTOOL {\"tool\":\"shout\",\"word\":\"bb\"}",
+        "Done.",
+    ]);
+    let run = turn(&mut host).await;
+    assert!(matches!(run.end, Ok(TurnEnd::Answer(_))), "{:?}", run.end);
+    let shown: Vec<&TurnEvent> = run
+        .events
+        .iter()
+        .filter(|event| !matches!(event, TurnEvent::Line(_)))
+        .collect();
+    // Both calls run together and report while running; their steps follow, in call order.
+    let (reports, steps) = shown.split_at(2);
+    let mut reports: Vec<&TurnEvent> = reports.to_vec();
+    reports.sort_by_key(|event| format!("{event:?}"));
+    assert_eq!(
+        reports,
+        [
+            &TurnEvent::Progress("Shouting a".into()),
+            &TurnEvent::Progress("Shouting bb".into()),
+        ]
+    );
+    assert_eq!(
+        steps,
+        [
+            &TurnEvent::Step("Shouted".into()),
+            &TurnEvent::Step("Shouted".into()),
+        ]
     );
 }

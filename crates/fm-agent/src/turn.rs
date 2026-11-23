@@ -8,7 +8,11 @@
 use std::borrow::Cow;
 
 use async_trait::async_trait;
+use std::pin::pin;
+
 use futures::StreamExt;
+use futures::channel::mpsc;
+use futures::future::{Either, select};
 use futures::stream;
 
 use crate::message::ToolCallRecord;
@@ -47,6 +51,9 @@ pub enum TurnEvent {
     Line(String),
     /// A tool ran; its step line.
     Step(String),
+    /// What a tool that is still running is doing (see [`ToolContext::report`]). Each report
+    /// replaces the one before; the tool's [`Step`](Self::Step) replaces the last.
+    Progress(String),
 }
 
 /// How a turn ended.
@@ -268,11 +275,7 @@ where
                 batch.push(next);
             }
         }
-        let outcomes: Vec<(ToolOutcome<I>, ToolCallRecord)> = stream::iter(batch)
-            .map(|(call, record)| async move { (call.tool.run(ctx, call.args).await, record) })
-            .buffered(options.max_concurrent_calls.max(1))
-            .collect()
-            .await;
+        let outcomes = run_batch(ctx, options, batch, on_event).await;
         for (outcome, record) in outcomes {
             match outcome {
                 ToolOutcome::Output(ToolOutput { step, text }) => {
@@ -296,6 +299,45 @@ where
         }
     }
     None
+}
+
+/// Runs one batch of calls, at most [`TurnOptions::max_concurrent_calls`] at a time, and passes
+/// on what they report while they run. Outcomes come back in call order.
+async fn run_batch<I: Send + 'static>(
+    ctx: &ToolContext<'_>,
+    options: &TurnOptions,
+    batch: Vec<(ParsedCall<I>, ToolCallRecord)>,
+    on_event: &mut (dyn FnMut(TurnEvent) + Send),
+) -> Vec<(ToolOutcome<I>, ToolCallRecord)> {
+    let (sender, mut reports) = mpsc::unbounded::<String>();
+    let report = move |text: String| {
+        // The receiver outlives every call of the batch; a failed send has no one to tell.
+        let _ = sender.unbounded_send(text);
+    };
+    let call_ctx = ToolContext {
+        progress: Some(&report),
+        ..*ctx
+    };
+    let call_ctx = &call_ctx;
+    let mut work = pin!(
+        stream::iter(batch)
+            .map(|(call, record)| async move { (call.tool.run(call_ctx, call.args).await, record) })
+            .buffered(options.max_concurrent_calls.max(1))
+            .collect::<Vec<_>>()
+    );
+    loop {
+        match select(work.as_mut(), reports.next()).await {
+            Either::Left((outcomes, _)) => {
+                // Reports sent just before the batch finished still go out, in order.
+                while let Ok(text) = reports.try_recv() {
+                    on_event(TurnEvent::Progress(text));
+                }
+                return outcomes;
+            }
+            Either::Right((Some(text), _)) => on_event(TurnEvent::Progress(text)),
+            Either::Right((None, rest)) => return rest.await,
+        }
+    }
 }
 
 /// A tool result as the model sees it: bounded, then filtered.

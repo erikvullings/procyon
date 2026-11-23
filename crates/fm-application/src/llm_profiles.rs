@@ -404,6 +404,15 @@ pub struct LlmImageAttachment {
     pub data: Vec<u8>,
 }
 
+/// The form a generation's reply takes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReplyFormat {
+    /// Prose or Markdown, or tool calls.
+    Text,
+    /// One JSON value, for callers that parse the reply.
+    Json,
+}
+
 /// Bounded host-owned generation request using a saved profile.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LlmChatGeneration {
@@ -428,6 +437,8 @@ pub struct LlmChatGeneration {
     /// Sampling temperature, further bounded by the saved profile. `None` keeps the model's own
     /// default, which the server applies when the field is absent.
     pub temperature: Option<f32>,
+    /// What the reply must be. A JSON reply is enforced where the endpoint can (Ollama).
+    pub reply: ReplyFormat,
 }
 
 /// Result of one generation attempt that may carry a thinking-off switch.
@@ -713,7 +724,7 @@ impl LlmProbeTransport for ReqwestLlmProbeTransport {
                 cancellation,
             )
             .await?;
-            classify_http_status(response.status().as_u16())?;
+            let response = refused_generation(response).await?;
             let bytes = read_bounded_body(response, cancellation).await?;
             return parse_ollama_chat(&bytes);
         }
@@ -765,7 +776,7 @@ impl LlmProbeTransport for ReqwestLlmProbeTransport {
         if request.reasoning_switch != ReasoningSwitch::Plain && matches!(status, 400 | 422) {
             return Ok(ChatOutcome::Rejected);
         }
-        classify_http_status(status)?;
+        let response = refused_generation(response).await?;
         let bytes = read_streamed_body(response, cancellation, request.timeout, on_delta).await?;
         let (text, reasoning_seen) = parse_streaming_chat_detailed(&bytes)?;
         Ok(ChatOutcome::Generated {
@@ -820,10 +831,17 @@ async fn read_streamed_body(
         on_delta,
     };
     loop {
-        // A chunk must arrive within the idle time; a stream that keeps arriving may run on.
+        // A chunk must arrive within the idle time; a stream that keeps arriving may run on. Until
+        // the first chunk the first-reply wait applies: a server may send its headers at once and
+        // then read a long prompt for minutes before the first token.
+        let wait = if bytes.is_empty() {
+            idle.max(FIRST_REPLY_MIN_WAIT)
+        } else {
+            idle
+        };
         let next = tokio::select! {
             () = cancellation.cancelled() => return Err(LlmProfileError::Cancelled),
-            next = tokio::time::timeout(idle, stream.next()) => {
+            next = tokio::time::timeout(wait, stream.next()) => {
                 next.map_err(|_| LlmProfileError::Timeout)?
             }
         };
@@ -2006,6 +2024,7 @@ impl LlmProfileService {
             maximum_tokens: 256,
             context_window: None,
             temperature: Some(0.0),
+            reply: ReplyFormat::Text,
         };
         let cancellation = CancellationToken::new();
         let outcome = self
@@ -2669,11 +2688,11 @@ fn ollama_generation_body(request: &LlmProbeRequest, generation: &LlmChatGenerat
         "think": false,
         "options": options
     });
-    if generation.tools.is_empty() {
-        body["format"] = json!("json");
-    } else {
+    if !generation.tools.is_empty() {
         // A JSON-only reply could not be a tool call, so tools replace the JSON constraint.
         body["tools"] = tool_definitions(&generation.tools);
+    } else if generation.reply == ReplyFormat::Json {
+        body["format"] = json!("json");
     }
     body
 }
@@ -2958,6 +2977,32 @@ fn parse_ollama_chat(bytes: &[u8]) -> Result<String, LlmProfileError> {
         .filter(|content| !content.trim().is_empty())
         .map(str::to_owned)
         .ok_or(LlmProfileError::MalformedResponse)
+}
+
+/// Most bytes of a refusal's body written to the log.
+const MAX_LOGGED_REFUSAL: usize = 2048;
+
+/// The response when its status is a success. Otherwise the endpoint's own explanation (a context
+/// that is too long, an unsupported parameter) is logged, since the person only sees that the
+/// assistant is unavailable.
+async fn refused_generation(
+    mut response: reqwest::Response,
+) -> Result<reqwest::Response, LlmProfileError> {
+    let status = response.status().as_u16();
+    let Err(error) = classify_http_status(status) else {
+        return Ok(response);
+    };
+    let mut body = Vec::new();
+    while body.len() < MAX_LOGGED_REFUSAL {
+        match tokio::time::timeout(Duration::from_secs(5), response.chunk()).await {
+            Ok(Ok(Some(chunk))) => body.extend_from_slice(&chunk),
+            _ => break,
+        }
+    }
+    body.truncate(MAX_LOGGED_REFUSAL);
+    let body = fm_agent::redact_secrets(&String::from_utf8_lossy(&body));
+    tracing::warn!(status, body = %body, "the chat endpoint refused the request");
+    Err(error)
 }
 
 fn classify_http_status(status: u16) -> Result<(), LlmProfileError> {
@@ -3365,6 +3410,7 @@ mod tests {
             maximum_tokens: 10,
             context_window: None,
             temperature: Some(0.0),
+            reply: ReplyFormat::Text,
         };
         let off = openai_generation_body(&request, &generation, ReasoningSwitch::Both);
         assert_eq!(off["chat_template_kwargs"]["enable_thinking"], false);
@@ -4014,6 +4060,7 @@ mod tests {
                 maximum_tokens: 512,
                 context_window: Some(8_192),
                 temperature: Some(0.1),
+                reply: ReplyFormat::Json,
             },
         );
 
@@ -4043,6 +4090,7 @@ mod tests {
             maximum_tokens: 8,
             context_window: None,
             temperature,
+            reply: ReplyFormat::Text,
         };
         let unset = openai_generation_body(&request, &generation(None), ReasoningSwitch::Plain);
         assert!(unset.get("temperature").is_none());
@@ -4061,6 +4109,7 @@ mod tests {
             maximum_tokens: 8,
             context_window: None,
             temperature: Some(0.0),
+            reply: ReplyFormat::Text,
         });
         assert_eq!(text_only, json!("Describe"));
 
@@ -4076,6 +4125,7 @@ mod tests {
             maximum_tokens: 8,
             context_window: None,
             temperature: Some(0.0),
+            reply: ReplyFormat::Text,
         });
         assert_eq!(with_image[0], json!({"type": "text", "text": "Describe"}));
         assert_eq!(
@@ -4985,6 +5035,7 @@ mod tests {
                 maximum_tokens: 1_024,
                 context_window: None,
                 temperature: Some(0.2),
+                reply: ReplyFormat::Json,
             },
         );
         assert_eq!(body["think"], false);
@@ -5085,6 +5136,7 @@ mod tests {
             maximum_tokens: 512,
             context_window: None,
             temperature: Some(0.1),
+            reply: ReplyFormat::Text,
         };
         assert!(matches!(
             service
@@ -5185,6 +5237,7 @@ mod tests {
             maximum_tokens: 16,
             context_window: None,
             temperature: Some(0.0),
+            reply: ReplyFormat::Text,
         }
     }
 
@@ -5564,9 +5617,18 @@ mod tests {
         );
         assert!(with_tools.get("format").is_none());
         assert_eq!(with_tools["tools"][0]["function"]["name"], "read_file");
-        let plain = ollama_generation_body(&request, &tiny_generation());
-        assert_eq!(plain["format"], "json");
-        assert!(plain.get("tools").is_none());
+        let json = ollama_generation_body(
+            &request,
+            &LlmChatGeneration {
+                reply: ReplyFormat::Json,
+                ..tiny_generation()
+            },
+        );
+        assert_eq!(json["format"], "json");
+        assert!(json.get("tools").is_none());
+        // Prose (a chat answer, a summary) is never forced into JSON.
+        let prose = ollama_generation_body(&request, &tiny_generation());
+        assert!(prose.get("format").is_none());
 
         let line = parse_ollama_chat(
             br#"{"done":true,"message":{"content":"","tool_calls":[{"function":{"name":"read_file","arguments":{"path":"a.txt"}}}]}}"#,

@@ -91,10 +91,14 @@ export interface TerminalAssistReply {
   readonly writeRequest?: TerminalWriteRequest;
 }
 
-/** Something shown while an answer is written: a finished line of it, or a step taken. */
+/**
+ * Something shown while an answer is written: a finished line of it, a step taken, or what a long
+ * tool call is doing now (it lasts until the next event).
+ */
 export type TerminalAssistEvent =
   | { readonly kind: 'line'; readonly text: string }
-  | { readonly kind: 'step'; readonly text: string };
+  | { readonly kind: 'step'; readonly text: string }
+  | { readonly kind: 'progress'; readonly text: string };
 
 /** A byte count for people: `812 B`, `1.2 KiB`. */
 export function byteSize(bytes: number): string {

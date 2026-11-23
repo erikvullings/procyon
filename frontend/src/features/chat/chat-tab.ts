@@ -370,9 +370,11 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
                     reply(entry.partialReply),
                   ])
                 : undefined,
-              pending && !entry.streamedText
-                ? m('p.fm-chat-pending', t('chat', 'waitingForModel'))
-                : undefined,
+              pending && entry.progress !== undefined
+                ? m('p.fm-chat-pending', { role: 'status' }, entry.progress)
+                : pending && !entry.streamedText
+                  ? m('p.fm-chat-pending', t('chat', 'waitingForModel'))
+                  : undefined,
             ),
             entry.error
               ? m('.fm-chat-error', { role: 'alert' }, [

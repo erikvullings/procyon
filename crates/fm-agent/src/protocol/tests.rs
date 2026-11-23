@@ -137,3 +137,13 @@ fn braces_inside_strings_do_not_end_the_object() {
     assert_eq!(balanced_object("{unclosed"), None);
     assert_eq!(balanced_object("x{}"), None);
 }
+
+#[test]
+fn a_call_garbled_after_a_call_tag_is_still_run() {
+    let reply = "<|tool_call>_call {\"tool\":\"read_file\",\"path\":\".\"} mission_completed: I will first list.";
+    let call = one(reply);
+    assert_eq!(call.name, "read_file");
+    assert_eq!(call.args, serde_json::json!({ "path": "." }));
+    // Without the tag, an object in a sentence is still not a call.
+    assert!(calls("I could run _call {\"tool\":\"read_file\",\"path\":\".\"} now.").is_empty());
+}

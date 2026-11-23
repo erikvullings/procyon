@@ -210,8 +210,14 @@ export function createAnswerStream(width: number): AnswerStream {
 }
 
 /** The person's question as a line in the terminal. */
-export function questionAnsi(question: string): string {
-  return `\x1b[1;35m❯${RESET} ${BOLD[0]}${clean(question).replace(/\n/g, ' ')}${BOLD[1]}${NEWLINE}`;
+export function questionAnsi(question: string, width?: number): string {
+  const text = clean(question).replace(/\n/g, ' ');
+  const mark = `\x1b[1;35m❯${RESET} `;
+  if (width === undefined) return `${mark}${BOLD[0]}${text}${BOLD[1]}${NEWLINE}`;
+  // Wrapped at words, the lines after the first indented under the text; one column is left free
+  // so the terminal never wraps a full line itself.
+  const lines = wrap([{ kind: 'bold', text }], width - 1, INDENT, INDENT);
+  return `${lines.map((line, index) => (index === 0 ? mark + line.slice(INDENT.length) : line)).join(NEWLINE)}${NEWLINE}`;
 }
 
 /** What the assistant looked at, one dimmed line each. */

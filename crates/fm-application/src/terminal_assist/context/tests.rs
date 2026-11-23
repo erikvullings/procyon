@@ -205,3 +205,32 @@ fn a_local_folders_own_files_are_listed_whatever_the_pane_shows() {
     assert!(text.contains("Folder listing (3 names):\n- a.pdf\n- b.md\n- sub/"));
     assert!(!text.contains("elsewhere.txt"));
 }
+
+#[test]
+fn a_git_working_tree_adds_its_status_unless_the_system_pill_is_off() {
+    let root = tempfile::tempdir().unwrap();
+    git2::Repository::init(root.path()).unwrap();
+    std::fs::write(root.path().join("new.txt"), "x").unwrap();
+    let folder = url::Url::from_directory_path(root.path().canonicalize().unwrap())
+        .unwrap()
+        .to_string();
+    let mut asked = request(TerminalContextDto::default());
+    asked.working_directory.clone_from(&folder);
+
+    let sections = state_sections(&asked);
+    let git = sections
+        .iter()
+        .find(|(name, _)| *name == "git")
+        .map(|(_, text)| text.as_str());
+    assert_eq!(git, Some("Git status:\n?? new.txt"));
+
+    let mut omitted = request(TerminalContextDto {
+        omit_environment: true,
+        ..TerminalContextDto::default()
+    });
+    omitted.working_directory = folder;
+    assert!(!render_state(&omitted).contains("Git status"));
+
+    // Outside a working tree there is no git part.
+    assert!(!render_state(&request(TerminalContextDto::default())).contains("Git status"));
+}

@@ -13,6 +13,25 @@ import {
   terminalHost,
 } from './terminal-drawer';
 
+/** The chat input `#` opens, once drawn; `null` while it is closed. */
+function chatInput(root: ParentNode): HTMLTextAreaElement | null {
+  m.redraw.sync();
+  return root.querySelector<HTMLTextAreaElement>('.fm-terminal-composer-input');
+}
+
+/** Where keys go: the chat input while it has focus, the terminal otherwise. */
+function keyTarget(root: ParentNode, terminal: HTMLTextAreaElement): HTMLTextAreaElement {
+  const input = chatInput(root);
+  return input !== null && document.activeElement === input ? input : terminal;
+}
+
+/** Types `text` into the chat input, as the browser does. */
+function typeInChat(input: HTMLTextAreaElement, text: string): void {
+  input.value += text;
+  input.setSelectionRange(input.value.length, input.value.length);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 describe('TerminalDrawer', () => {
   let root: HTMLElement;
 
@@ -260,18 +279,6 @@ describe('TerminalDrawer', () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
-  it('keeps Tab for the shell unless a mention was completed', () => {
-    const tab = () => new KeyboardEvent('keydown', { key: 'Tab', cancelable: true });
-    expect(
-      handleTerminalKeyEvent(tab(), { onToggle: vi.fn(), onCompleteMention: () => false }),
-    ).toBe(true);
-    const event = tab();
-    expect(
-      handleTerminalKeyEvent(event, { onToggle: vi.fn(), onCompleteMention: () => true }),
-    ).toBe(false);
-    expect(event.defaultPrevented).toBe(true);
-  });
-
   it('returns F12 to the file manager while xterm has focus', () => {
     const toggle = vi.fn();
     const event = new KeyboardEvent('keydown', { key: 'F12', cancelable: true });
@@ -422,10 +429,15 @@ describe('TerminalDrawer questions with #', () => {
   function pressEnter(textarea: HTMLTextAreaElement): void {
     const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
     Object.defineProperty(event, 'keyCode', { value: 13 });
-    textarea.dispatchEvent(event);
+    keyTarget(root, textarea).dispatchEvent(event);
   }
 
-  it('sends a # question to the assistant and clears the line instead of running it', async () => {
+  /** Waits for `#` to open the chat input with `text` in it. */
+  async function chatHolds(text: string): Promise<void> {
+    await vi.waitFor(() => expect(chatInput(root)?.value).toBe(text));
+  }
+
+  it('sends a # question from the chat input, and the shell never sees it', async () => {
     const write = vi.fn<TerminalClient['write']>(async () => undefined);
     const assist = vi.fn(async () => ({ text: 'Try this.\nCommand: ls -la' }));
     mount({
@@ -444,7 +456,8 @@ describe('TerminalDrawer questions with #', () => {
     if (textarea === null) throw new Error('xterm textarea missing');
 
     pasteText(textarea, '#list files');
-    await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+    await chatHolds('list files');
+    expect(write).not.toHaveBeenCalled();
     pressEnter(textarea);
 
     await vi.waitFor(() =>
@@ -458,10 +471,10 @@ describe('TerminalDrawer questions with #', () => {
       }),
       expect.any(Function),
     );
+    // The shell never sees the question; it only gets Enter for a fresh prompt after the answer.
     const sent = write.mock.calls.map(([, data]) => new TextDecoder().decode(data));
-    expect(sent).toContain('\x15');
-    // The Enter after the clear only brings the prompt back once the answer is shown.
-    expect(sent.indexOf('\r')).toBeGreaterThan(sent.indexOf('\x15'));
+    expect(sent.join('')).not.toContain('list files');
+    expect(sent).toContain('\r');
     expect(sent).not.toContain('\n');
   });
 
@@ -482,7 +495,8 @@ describe('TerminalDrawer questions with #', () => {
     const textarea = root.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea');
     if (textarea === null) throw new Error('xterm textarea missing');
     pasteText(textarea, '#list files');
-    await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+    await chatHolds('list files');
+    expect(write).not.toHaveBeenCalled();
     pressEnter(textarea);
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-terminal-assist-command')?.textContent).toContain('ls -la'),
@@ -609,10 +623,10 @@ describe('TerminalDrawer after inserting a generated command', () => {
       value: { getData: () => '#list files' },
     });
     textarea.dispatchEvent(paste);
-    await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(chatInput(root)?.value).toBe('list files'));
     const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
     Object.defineProperty(enter, 'keyCode', { value: 13 });
-    textarea.dispatchEvent(enter);
+    keyTarget(root, textarea).dispatchEvent(enter);
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-terminal-assist-command')?.textContent).toContain('ls -la'),
     );
@@ -620,7 +634,8 @@ describe('TerminalDrawer after inserting a generated command', () => {
       (button) => button.textContent?.startsWith('Insert at prompt') === true,
     );
     insert?.click();
-    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(4));
+    // Enter for a fresh prompt after the answer, then the inserted command.
+    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(2));
 
     const submit = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
     Object.defineProperty(submit, 'keyCode', { value: 13 });
@@ -658,7 +673,7 @@ describe('TerminalDrawer # after editing keys', () => {
     vi.unstubAllGlobals();
   });
 
-  it('still asks when the line was edited with an arrow key first', async () => {
+  it('opens the chat input when the screen shows an empty prompt after an arrow key', async () => {
     const write = vi.fn<TerminalClient['write']>(async () => undefined);
     const assist = vi.fn(async () => ({ text: 'Try this.\nCommand: ls -la' }));
     let echo: ((event: { type: 'output'; data: number[] }) => void) | undefined;
@@ -693,7 +708,7 @@ describe('TerminalDrawer # after editing keys', () => {
     const key = (name: string, keyCode: number) => {
       const event = new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true });
       Object.defineProperty(event, 'keyCode', { value: keyCode });
-      textarea.dispatchEvent(event);
+      keyTarget(root, textarea).dispatchEvent(event);
     };
     const paste = (text: string) => {
       const event = new Event('paste', { bubbles: true, cancelable: true });
@@ -707,7 +722,10 @@ describe('TerminalDrawer # after editing keys', () => {
     key('ArrowUp', 38);
     await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
     paste('# How to list all files sorted by size');
-    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() =>
+      expect(chatInput(root)?.value).toBe('How to list all files sorted by size'),
+    );
+    expect(write).toHaveBeenCalledOnce();
     key('Enter', 13);
 
     await vi.waitFor(() =>
@@ -719,11 +737,8 @@ describe('TerminalDrawer # after editing keys', () => {
         expect.any(Function),
       ),
     );
-    // The Enter that follows only brings the prompt back, after the clear and the answer.
-    await vi.waitFor(() => {
-      const bytes = write.mock.calls.map(([, data]) => data[0]);
-      expect(bytes.indexOf(13)).toBeGreaterThan(bytes.indexOf(21));
-    });
+    // Only Enter follows, to bring the prompt back after the answer.
+    await vi.waitFor(() => expect(write.mock.calls.map(([, data]) => data[0])).toContain(13));
   });
 });
 
@@ -808,8 +823,8 @@ describe('TerminalDrawer keyboard shortcuts for answers', () => {
     const paste = new Event('paste', { bubbles: true, cancelable: true });
     Object.defineProperty(paste, 'clipboardData', { value: { getData: () => '#list files' } });
     textarea().dispatchEvent(paste);
-    await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
-    press(textarea(), 'Enter', {}, 13);
+    await vi.waitFor(() => expect(chatInput(root)?.value).toBe('list files'));
+    press(keyTarget(root, textarea()), 'Enter', {}, 13);
     await vi.waitFor(() =>
       expect(root.querySelector('.fm-terminal-assist-command')?.textContent).toContain('ls -la'),
     );
@@ -879,13 +894,21 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
   const key = (name: string, keyCode: number) => {
     const event = new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true });
     Object.defineProperty(event, 'keyCode', { value: keyCode });
-    textarea().dispatchEvent(event);
+    keyTarget(root, textarea()).dispatchEvent(event);
   };
-  const ask = (text: string) => {
+  /** Types `text` where the keys go: `#...` at the prompt opens the chat input. */
+  const typeLine = (text: string) => {
+    const target = keyTarget(root, textarea());
+    if (target !== textarea()) {
+      typeInChat(target, text.replace(/^#\s*/, ''));
+      return;
+    }
     const paste = new Event('paste', { bubbles: true, cancelable: true });
     Object.defineProperty(paste, 'clipboardData', { value: { getData: () => text } });
     textarea().dispatchEvent(paste);
-    echo?.({ type: 'output', data: bytes(`user % ${text}`) });
+  };
+  const ask = (text: string) => {
+    typeLine(text);
     key('Enter', 13);
   };
   /** Shows a shell prompt mark and waits until the terminal has processed it. */
@@ -1111,6 +1134,31 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     );
   });
 
+  it('shows what a long tool call reports in the status line until its step arrives', async () => {
+    let finish: (() => void) | undefined;
+    assist.mockImplementationOnce(
+      (_request, onEvent) =>
+        new Promise((resolve) => {
+          onEvent?.({ kind: 'progress', text: 'Summarising a.pdf: part 2 of 5' });
+          finish = () => {
+            onEvent?.({ kind: 'step', text: 'Summarised a.pdf (5 parts)' });
+            resolve({ text: '', steps: ['Summarised a.pdf (5 parts)'] });
+          };
+        }),
+    );
+    await mount();
+    ask('# summarise');
+
+    const status = () => root.querySelector('.fm-terminal-assist-thinking')?.textContent ?? '';
+    await vi.waitFor(() => expect(status()).toContain('Summarising a.pdf: part 2 of 5'));
+    // The report is not written into the terminal as part of the answer.
+    expect((root.textContent ?? '').split('part 2 of 5')).toHaveLength(2);
+
+    finish?.();
+    await vi.waitFor(() => expect(root.textContent).toContain('Summarised a.pdf (5 parts)'));
+    expect(root.textContent).not.toContain('part 2 of 5');
+  });
+
   it('folds the pills into one button that opens them', async () => {
     await mount();
     ask('# first');
@@ -1211,27 +1259,22 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     folderNames = ['ATP 7-100.1 Russian Tactics  2024.pdf', 'notes.md'];
     await mount();
     await markPrompt();
-    const paste = new Event('paste', { bubbles: true, cancelable: true });
-    Object.defineProperty(paste, 'clipboardData', { value: { getData: () => '# read @ATP' } });
-    textarea().dispatchEvent(paste);
-    echo?.({ type: 'output', data: bytes('user % # read @ATP') });
+    typeLine('# read @ATP');
 
     key('Tab', 9);
 
     await vi.waitFor(() =>
-      expect(write.mock.calls.map(([, data]) => new TextDecoder().decode(data)).join('')).toContain(
-        '"ATP 7-100.1 Russian Tactics  2024.pdf" ',
-      ),
+      expect(chatInput(root)?.value).toBe('read @"ATP 7-100.1 Russian Tactics  2024.pdf" '),
     );
   });
 
-  const typeLine = (text: string) => {
-    const paste = new Event('paste', { bubbles: true, cancelable: true });
-    Object.defineProperty(paste, 'clipboardData', { value: { getData: () => text } });
-    textarea().dispatchEvent(paste);
-    echo?.({ type: 'output', data: bytes(`user % ${text}`) });
+  const chatText = () => chatInput(root)?.value;
+  const clearChat = () => {
+    const input = chatInput(root);
+    if (input === null) throw new Error('chat input missing');
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
   };
-  const written = () => write.mock.calls.map(([, data]) => new TextDecoder().decode(data)).join('');
 
   it('completes an @path anywhere under the session root and lists again after a change', async () => {
     let files = ['README.md', 'src/', 'src/deep/', 'src/deep/main.rs'];
@@ -1239,8 +1282,9 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     await mountWith({ assistFiles });
     typeLine('# read @main');
     key('Tab', 9);
-    await vi.waitFor(() => expect(written()).toContain('@src/deep/main.rs '));
+    await vi.waitFor(() => expect(chatText()).toBe('read @src/deep/main.rs '));
     expect(assistFiles).toHaveBeenCalledWith('file:///home/repo');
+    clearChat();
 
     // A command ran: the next completion lists the tree again and sees the new file.
     files = [...files, 'src/new.rs'];
@@ -1250,7 +1294,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     await markPrompt();
     typeLine('# open @new');
     key('Tab', 9);
-    await vi.waitFor(() => expect(written()).toContain('@src/new.rs '));
+    await vi.waitFor(() => expect(chatText()).toBe('open @src/new.rs '));
     expect(assistFiles).toHaveBeenCalledTimes(2);
   });
 
@@ -1268,7 +1312,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     typeLine('main');
     key('Tab', 9);
     release?.();
-    await vi.waitFor(() => expect(written()).toContain('@src/deep/main.rs '));
+    await vi.waitFor(() => expect(chatText()).toBe('read @src/deep/main.rs '));
     expect(assistFiles).toHaveBeenCalledOnce();
   });
 
@@ -1322,7 +1366,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     await markPrompt();
     typeLine('# /rel');
     key('Tab', 9);
-    await vi.waitFor(() => expect(written()).toContain('ease '));
+    await vi.waitFor(() => expect(chatText()).toBe('/release '));
     expect(assistSkills).toHaveBeenCalledWith('file:///home/repo');
   });
 
@@ -1387,28 +1431,87 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     expect(saveNote).toHaveBeenCalledOnce();
   });
 
-  it('recalls earlier questions with Up and Down on a # line', async () => {
+  it('opens the chat input from Ask, and Esc or Backspace on an empty input go back to the shell', async () => {
+    await mount();
+    await markPrompt();
+    button('Ask')?.click();
+    await vi.waitFor(() => expect(document.activeElement).toBe(chatInput(root)));
+    expect(button('Ask')?.getAttribute('aria-pressed')).toBe('true');
+
+    typeLine('half a question');
+    key('Escape', 27);
+    expect(chatInput(root)).toBeNull();
+    expect(document.activeElement).toBe(textarea());
+
+    typeLine('#');
+    await vi.waitFor(() => expect(chatInput(root)?.value).toBe(''));
+    key('Backspace', 8);
+    expect(chatInput(root)).toBeNull();
+    expect(assist).not.toHaveBeenCalled();
+  });
+
+  it('shows the folder on the status line in the shell, the pills in the chat, and sends with the arrow', async () => {
+    await mount();
+    await markPrompt();
+    m.redraw.sync();
+    expect(root.querySelector('.fm-terminal-status-folder')?.textContent).toBe('/home');
+    expect(root.querySelector('.fm-terminal-context')).toBeNull();
+
+    typeLine('# what is here?');
+    expect(root.querySelector('.fm-terminal-status-folder')).toBeNull();
+    expect(root.querySelector('.fm-terminal-context')).not.toBeNull();
+    root.querySelector<HTMLButtonElement>('.fm-terminal-composer-send')?.click();
+
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledOnce());
+    expect(sentAt(0)?.request).toBe('what is here?');
+    m.redraw.sync();
+    expect(root.querySelector<HTMLButtonElement>('.fm-terminal-composer-send')?.disabled).toBe(
+      true,
+    );
+  });
+
+  it('asks a question written while an answer is coming once that answer is done', async () => {
+    let answer: ((reply: { text: string }) => void) | undefined;
+    assist.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    await mount();
+    await markPrompt();
+    ask('# slow');
+    await vi.waitFor(() => expect(answer).toBeDefined());
+    ask('# next');
+    expect(chatInput(root)?.value).toBe('');
+    expect(root.textContent).toContain('Sends after this answer');
+    expect(assist).toHaveBeenCalledOnce();
+
+    answer?.({ text: 'Done.' });
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
+    expect(sentAt(1)?.request).toBe('next');
+  });
+
+  it('recalls earlier questions with Up and Down in the chat input', async () => {
     await mount();
     await markPrompt();
     ask('# first');
     await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(1));
     ask('# second');
     await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
-    const typed = () => write.mock.calls.map(([, data]) => new TextDecoder().decode(data));
+    typeLine('draft');
 
-    const paste = new Event('paste', { bubbles: true, cancelable: true });
-    Object.defineProperty(paste, 'clipboardData', { value: { getData: () => '#' } });
-    textarea().dispatchEvent(paste);
     key('ArrowUp', 38);
-    await vi.waitFor(() => expect(typed()).toContain('\x15# second'));
+    expect(chatInput(root)?.value).toBe('second');
     key('ArrowUp', 38);
-    await vi.waitFor(() => expect(typed()).toContain('\x15# first'));
+    expect(chatInput(root)?.value).toBe('first');
     key('ArrowDown', 40);
-    await vi.waitFor(() =>
-      expect(typed().filter((text) => text === '\x15# second')).toHaveLength(2),
-    );
+    expect(chatInput(root)?.value).toBe('second');
     key('ArrowDown', 40);
-    await vi.waitFor(() => expect(typed().at(-1)).toBe('\x15#'));
+    expect(chatInput(root)?.value).toBe('draft');
+    // The shell never saw any of it.
+    const typed = write.mock.calls.map(([, data]) => new TextDecoder().decode(data)).join('');
+    expect(typed).not.toContain('first');
   });
 
   it('leaves Up to the shell on a line that is not a question', async () => {
@@ -1416,12 +1519,15 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     await markPrompt();
     ask('# first');
     await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(1));
+    // Back in the terminal, Up is the shell's own history.
+    textarea().focus();
     const before = write.mock.calls.length;
     key('ArrowUp', 38);
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(
-      write.mock.calls.slice(before).map(([, data]) => new TextDecoder().decode(data)),
-    ).not.toContain('\x15# first');
+    await vi.waitFor(() =>
+      expect(
+        write.mock.calls.slice(before).map(([, data]) => new TextDecoder().decode(data)),
+      ).toContain('\x1b[A'),
+    );
   });
 
   it('offers Explain after a command and Fix only after a failed one', async () => {
@@ -1578,6 +1684,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     const onSaveAsNote = vi.fn();
     await mount({ onSaveAsNote, workspaceId: 'ws-1' });
     echo?.({ type: 'output', data: bytes('certbot renew done\r\n') });
+    await vi.waitFor(() => expect(root.textContent).toContain('certbot renew done'));
     ask('# how do I renew?');
     await vi.waitFor(() => expect(assist).toHaveBeenCalledOnce());
     expect(sentAt(0)?.workspaceId).toBe('ws-1');
