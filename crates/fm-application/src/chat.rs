@@ -293,6 +293,7 @@ impl ChatService {
                     .generate_for_role(
                         LlmRole::Chat,
                         LlmChatGeneration {
+                            followups: Vec::new(),
                             tools: Vec::new(),
                             system_prompt: SYSTEM_PROMPT.to_owned(),
                             user_prompt: prompts,
@@ -1341,7 +1342,18 @@ mod tests {
             !names.contains(&"run_command"),
             "the chat cannot run commands"
         );
-        assert!(requests[1].user_prompt.contains("alpha beta"));
+        // The call and its result follow the question as structured messages (task 0341).
+        assert!(!requests[1].user_prompt.contains("alpha beta"));
+        let followups = &requests[1].followups;
+        let fm_agent::Message::Assistant { calls, .. } = &followups[0] else {
+            panic!("the reply with its call comes first: {followups:?}");
+        };
+        assert_eq!(calls[0].name, "read_file");
+        assert!(matches!(
+            &followups[1],
+            fm_agent::Message::ToolResult { call_id, text, .. }
+                if *call_id == calls[0].id && text.contains("alpha beta")
+        ));
         assert!(matches!(seen.last(), Some(ChatReplyEventDto::Done { .. })));
     }
 }

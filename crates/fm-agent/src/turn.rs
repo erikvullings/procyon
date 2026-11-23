@@ -11,6 +11,7 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use futures::stream;
 
+use crate::message::ToolCallRecord;
 use crate::registry::{ParsedCall, ToolRegistry};
 use crate::stream::LineStreamer;
 use crate::text::truncate_to_bytes;
@@ -27,10 +28,14 @@ pub trait TurnHost: Send {
         &mut self,
         on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
     ) -> Result<String, Self::Error>;
-    /// Records the model's reply in the conversation.
-    fn push_assistant(&mut self, text: &str);
-    /// Records a tool result (or a message from the loop) in the conversation.
-    fn push_tool(&mut self, text: &str);
+    /// Records the model's reply and the calls the loop runs from it. Every recorded call gets
+    /// exactly one result: from the loop through [`push_result`](Self::push_result), or, for the
+    /// call that interrupted the turn, from the host later.
+    fn push_assistant(&mut self, text: &str, calls: &[ToolCallRecord]);
+    /// Records the result of one call.
+    fn push_result(&mut self, call: &ToolCallRecord, text: &str);
+    /// Records a message from the loop to the model (a nudge to go on).
+    fn push_note(&mut self, text: &str);
     /// Whether the person stopped the request.
     fn is_cancelled(&self) -> bool;
 }
@@ -56,8 +61,13 @@ pub enum TurnEnd<I> {
     /// The model kept calling tools until [`TurnOptions::max_steps`].
     StepLimit,
     /// A tool stopped the turn for the person. Its call has no result in the conversation yet: the
-    /// host records what happened and may run the turn again.
-    Interrupted(I),
+    /// host records what happened as that call's result and may run the turn again.
+    Interrupted {
+        /// The call that stopped the turn.
+        call: ToolCallRecord,
+        /// What the tool asks of the person.
+        interrupt: I,
+    },
 }
 
 /// Asks a model that announced more work without calling a tool to go on.
@@ -102,7 +112,8 @@ pub struct TurnOptions {
     pub filter_result: Option<fn(&str) -> String>,
     /// Asks a model that only announced more work to go on; `None` takes such a reply as the answer.
     pub nudge: Option<ContinueNudge>,
-    /// Told to the model when a call stopped the turn and later calls of the reply did not run.
+    /// The result of the calls of a reply that did not run because an earlier call stopped the
+    /// turn.
     pub skipped_calls_message: Cow<'static, str>,
 }
 
@@ -117,8 +128,8 @@ impl Default for TurnOptions {
             filter_result: None,
             nudge: Some(ContinueNudge::default()),
             skipped_calls_message: Cow::Borrowed(
-                "The calls after this one were not run. Ask again for them if they are still \
-                 needed.",
+                "Not run: an earlier call of this reply stopped for the person. Call it again if it \
+                 is still needed.",
             ),
         }
     }
@@ -162,7 +173,7 @@ where
 {
     let mut worked = false;
     let mut nudges = 0;
-    for _ in 0..options.max_steps {
+    for step in 0..options.max_steps {
         if host.is_cancelled() {
             return Ok(TurnEnd::Cancelled);
         }
@@ -190,7 +201,19 @@ where
             Some(max) if calls.is_empty() => truncate_to_bytes(reply, max),
             _ => reply,
         };
-        host.push_assistant(kept);
+        let records: Vec<ToolCallRecord> = calls
+            .iter()
+            .enumerate()
+            .map(|(index, call)| ToolCallRecord {
+                id: call
+                    .id
+                    .clone()
+                    .unwrap_or_else(|| format!("call_{step}_{index}")),
+                name: call.tool.name().to_owned(),
+                arguments: call.args.clone(),
+            })
+            .collect();
+        host.push_assistant(kept, &records);
         if calls.is_empty() {
             if let Some(nudge) = &options.nudge
                 && worked
@@ -198,13 +221,13 @@ where
                 && (nudge.promises_more)(kept)
             {
                 nudges += 1;
-                host.push_tool(&nudge.message);
+                host.push_note(&nudge.message);
                 continue;
             }
             return Ok(TurnEnd::Answer(kept.to_owned()));
         }
         worked = true;
-        if let Some(end) = run_calls(host, ctx, options, calls, on_event).await {
+        if let Some(end) = run_calls(host, ctx, options, calls, records, on_event).await {
             return Ok(end);
         }
     }
@@ -212,51 +235,64 @@ where
 }
 
 /// Runs the calls of one reply: consecutive read-only calls together (bounded), the others alone,
-/// results recorded in call order. `Some` when the turn ends.
+/// results recorded in call order. A call that interrupts ends the turn once its batch is done:
+/// the calls of the batch that ran keep their results, later calls get the skipped message.
+/// `Some` when the turn ends.
 async fn run_calls<H, I>(
     host: &mut H,
     ctx: &ToolContext<'_>,
     options: &TurnOptions,
     calls: Vec<ParsedCall<I>>,
+    records: Vec<ToolCallRecord>,
     on_event: &mut (dyn FnMut(TurnEvent) + Send),
 ) -> Option<TurnEnd<I>>
 where
     H: TurnHost,
     I: Send + 'static,
 {
-    let total = calls.len();
-    let mut done = 0;
-    let mut calls = calls.into_iter().peekable();
-    while let Some(first) = calls.next() {
+    let mut pending = calls.into_iter().zip(records).peekable();
+    let mut stop: Option<(ToolCallRecord, I)> = None;
+    while let Some(first) = pending.next() {
         if host.is_cancelled() {
+            // The calls that never ran still need their results.
+            for (_, record) in std::iter::once(first).chain(pending) {
+                host.push_result(&record, crate::message::NOT_RUN_RESULT);
+            }
             return Some(TurnEnd::Cancelled);
         }
         let mut batch = vec![first];
-        if batch[0].tool.effect() == ToolEffect::ReadOnly {
-            while let Some(next) = calls.next_if(|call| call.tool.effect() == ToolEffect::ReadOnly)
+        if batch[0].0.tool.effect() == ToolEffect::ReadOnly {
+            while let Some(next) =
+                pending.next_if(|(call, _)| call.tool.effect() == ToolEffect::ReadOnly)
             {
                 batch.push(next);
             }
         }
-        let outcomes: Vec<ToolOutcome<I>> = stream::iter(batch)
-            .map(|call| async move { call.tool.run(ctx, call.args).await })
+        let outcomes: Vec<(ToolOutcome<I>, ToolCallRecord)> = stream::iter(batch)
+            .map(|(call, record)| async move { (call.tool.run(ctx, call.args).await, record) })
             .buffered(options.max_concurrent_calls.max(1))
             .collect()
             .await;
-        for outcome in outcomes {
-            done += 1;
+        for (outcome, record) in outcomes {
             match outcome {
                 ToolOutcome::Output(ToolOutput { step, text }) => {
                     on_event(TurnEvent::Step(step));
-                    host.push_tool(&result_for_model(options, &text));
+                    host.push_result(&record, &result_for_model(options, &text));
                 }
-                ToolOutcome::Interrupt(interrupt) => {
-                    if done < total {
-                        host.push_tool(&options.skipped_calls_message);
-                    }
-                    return Some(TurnEnd::Interrupted(interrupt));
+                ToolOutcome::Interrupt(interrupt) if stop.is_none() => {
+                    stop = Some((record, interrupt));
+                }
+                // Only one call stops the turn; a second one is skipped.
+                ToolOutcome::Interrupt(_) => {
+                    host.push_result(&record, &options.skipped_calls_message);
                 }
             }
+        }
+        if let Some((call, interrupt)) = stop {
+            for (_, record) in pending {
+                host.push_result(&record, &options.skipped_calls_message);
+            }
+            return Some(TurnEnd::Interrupted { call, interrupt });
         }
     }
     None

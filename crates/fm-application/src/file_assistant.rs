@@ -135,6 +135,7 @@ impl FileAssistantService {
             .generate_streamed(
                 request.profile_id,
                 LlmChatGeneration {
+                    followups: Vec::new(),
                     tools: Vec::new(),
                     system_prompt: prompts.system,
                     user_prompt: prompts.user,

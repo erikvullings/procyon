@@ -26,10 +26,12 @@ fn tool_lines_in_both_object_forms_are_calls_in_order() {
         found,
         vec![
             RawCall {
+                id: None,
                 name: "echo".into(),
                 args: json!({"text": "a"})
             },
             RawCall {
+                id: None,
                 name: "read_file".into(),
                 args: json!({"path": "x"})
             },
@@ -51,12 +53,28 @@ fn tool_lines_stop_at_the_limit_and_skip_unknown_tools() {
 
 #[test]
 fn an_argument_called_tool_or_name_survives_the_name_and_arguments_form() {
-    let line = tool_call_line("echo", &json!({"tool": "hammer", "name": "x"}));
+    let line = tool_call_line(None, "echo", &json!({"tool": "hammer", "name": "x"}));
     assert_eq!(
         one(&line).args,
         json!({"tool": "hammer", "name": "x"}),
         "{line}"
     );
+}
+
+#[test]
+fn a_native_call_id_is_kept_and_an_id_argument_of_the_tool_form_stays_an_argument() {
+    let line = tool_call_line(Some("call_7"), "echo", &json!({"text": "x"}));
+    let object: serde_json::Value = serde_json::from_str(&line[5..]).unwrap();
+    assert_eq!(
+        object,
+        json!({"id": "call_7", "name": "echo", "arguments": {"text": "x"}})
+    );
+    let call = one(&line);
+    assert_eq!(call.id.as_deref(), Some("call_7"));
+    assert_eq!(call.args, json!({"text": "x"}));
+    let call = one(r#"TOOL {"tool":"echo","id":"42"}"#);
+    assert_eq!(call.id, None);
+    assert_eq!(call.args, json!({"id": "42"}));
 }
 
 #[test]

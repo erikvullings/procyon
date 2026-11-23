@@ -45,6 +45,7 @@
 //! the built-in tools that interrupt need `I: From<CommandRequest>` or `I: From<NoteProposal>`.
 
 mod frontmatter;
+mod message;
 mod notes;
 mod paths;
 mod protocol;
@@ -58,6 +59,9 @@ mod tool;
 mod tools;
 mod turn;
 
+pub use self::message::{
+    Message, NOT_RUN_RESULT, OMITTED_NOTE, ToolCallRecord, fit_messages, render_text,
+};
 pub use self::notes::{NoteProposal, NoteToolCall, NotesAccess};
 pub use self::paths::{is_credential_folder, is_secret_name};
 pub use self::protocol::tool_call_line;

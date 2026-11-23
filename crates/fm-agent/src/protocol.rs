@@ -13,6 +13,8 @@ use serde_json::{Map, Value};
 /// A call as written: the tool's name and its raw arguments.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct RawCall {
+    /// The endpoint's id for a native call written back with one.
+    pub(crate) id: Option<String>,
     pub(crate) name: String,
     pub(crate) args: Value,
 }
@@ -122,10 +124,14 @@ fn object_call(text: &str, known: &dyn Fn(&str) -> bool) -> Option<RawCall> {
     let Value::Object(mut fields) = serde_json::from_str::<Value>(object).ok()? else {
         return None;
     };
-    let (name, args) = match fields.remove("tool") {
-        Some(Value::String(name)) => (name, Value::Object(fields)),
+    let (id, name, args) = match fields.remove("tool") {
+        Some(Value::String(name)) => (None, name, Value::Object(fields)),
         _ => {
             let name = fields.remove("name")?.as_str()?.to_owned();
+            let id = match fields.remove("id") {
+                Some(Value::String(id)) if !id.is_empty() => Some(id),
+                _ => None,
+            };
             let args = match fields
                 .remove("arguments")
                 .or_else(|| fields.remove("parameters"))
@@ -135,10 +141,10 @@ fn object_call(text: &str, known: &dyn Fn(&str) -> bool) -> Option<RawCall> {
                 Some(args) => args,
                 None => Value::Object(Map::new()),
             };
-            (name, args)
+            (id, name, args)
         }
     };
-    known(&name).then_some(RawCall { name, args })
+    known(&name).then_some(RawCall { id, name, args })
 }
 
 /// `call:NAME{key:"value"}` at the start of `text` (Gemma writes
@@ -155,6 +161,7 @@ fn tag_call(text: &str, known: &dyn Fn(&str) -> bool) -> Option<RawCall> {
     let object = balanced_object(&body)?;
     let args: Value = serde_json::from_str(&quote_bare_keys(object)).ok()?;
     args.is_object().then(|| RawCall {
+        id: None,
         name: name.to_owned(),
         args,
     })
@@ -246,15 +253,19 @@ fn quote_bare_keys(object: &str) -> String {
     out
 }
 
-/// `TOOL {"name":"<name>","arguments":{..}}`: a call in the protocol's line form. Hosts write native
-/// tool calls back like this, so an argument may be called `tool` or `name` without clashing.
-pub fn tool_call_line(name: &str, arguments: &Value) -> String {
+/// `TOOL {"id":"<id>","name":"<name>","arguments":{..}}`: a call in the protocol's line form (the
+/// id only when given). Hosts write native tool calls back like this, keeping the endpoint's call
+/// id, so an argument may be called `tool` or `name` without clashing.
+pub fn tool_call_line(id: Option<&str>, name: &str, arguments: &Value) -> String {
     let arguments = if arguments.is_object() {
         arguments.clone()
     } else {
         Value::Object(Map::new())
     };
     let mut object = Map::new();
+    if let Some(id) = id.filter(|id| !id.is_empty()) {
+        object.insert("id".to_owned(), Value::String(id.to_owned()));
+    }
     object.insert("name".to_owned(), Value::String(name.to_owned()));
     object.insert("arguments".to_owned(), arguments);
     format!("TOOL {}", Value::Object(object))

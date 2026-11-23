@@ -7,7 +7,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use super::*;
-use crate::{SkillCatalogue, Typed, TypedTool};
+use crate::{Message, SkillCatalogue, Typed, TypedTool};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Failure;
@@ -17,6 +17,8 @@ struct Failure;
 struct Scripted {
     replies: VecDeque<String>,
     log: Vec<String>,
+    /// The conversation as the loop recorded it.
+    messages: Vec<Message>,
     cancelled: bool,
 }
 
@@ -25,6 +27,7 @@ impl Scripted {
         Self {
             replies: replies.iter().map(|reply| (*reply).to_owned()).collect(),
             log: Vec::new(),
+            messages: Vec::new(),
             cancelled: false,
         }
     }
@@ -33,6 +36,13 @@ impl Scripted {
         self.log
             .iter()
             .filter_map(|entry| entry.strip_prefix("tool: "))
+            .collect()
+    }
+
+    fn notes(&self) -> Vec<&str> {
+        self.log
+            .iter()
+            .filter_map(|entry| entry.strip_prefix("note: "))
             .collect()
     }
 }
@@ -52,12 +62,22 @@ impl TurnHost for Scripted {
         Ok(reply)
     }
 
-    fn push_assistant(&mut self, text: &str) {
+    fn push_assistant(&mut self, text: &str, calls: &[ToolCallRecord]) {
         self.log.push(format!("assistant: {text}"));
+        self.messages.push(Message::Assistant {
+            text: text.to_owned(),
+            calls: calls.to_vec(),
+        });
     }
 
-    fn push_tool(&mut self, text: &str) {
+    fn push_result(&mut self, call: &ToolCallRecord, text: &str) {
         self.log.push(format!("tool: {text}"));
+        self.messages.push(Message::result(call, text));
+    }
+
+    fn push_note(&mut self, text: &str) {
+        self.log.push(format!("note: {text}"));
+        self.messages.push(Message::Note(text.to_owned()));
     }
 
     fn is_cancelled(&self) -> bool {
@@ -194,7 +214,7 @@ async fn a_tool_result_goes_back_to_the_model_until_it_answers() {
 
 #[tokio::test]
 async fn a_native_call_written_back_as_a_line_runs_the_same_tool() {
-    let line = crate::tool_call_line("shout", &serde_json::json!({"word": "hey"}));
+    let line = crate::tool_call_line(None, "shout", &serde_json::json!({"word": "hey"}));
     let mut host = Scripted::new(&[line.as_str(), "Done."]);
     let run = turn(&mut host).await;
     assert_eq!(run.end, Ok(TurnEnd::Answer("Done.".into())));
@@ -245,11 +265,55 @@ async fn an_interrupt_ends_the_turn_and_says_later_calls_did_not_run() {
          TOOL {\"tool\":\"shout\",\"word\":\"b\"}",
     ]);
     let run = turn(&mut host).await;
-    assert_eq!(run.end, Ok(TurnEnd::Interrupted(Approval("ok?".into()))));
+    let Ok(TurnEnd::Interrupted { call, interrupt }) = run.end else {
+        panic!("{:?}", run.end);
+    };
+    assert_eq!(interrupt, Approval("ok?".into()));
+    assert_eq!(call.name, "ask");
+    assert_eq!(call.id, "call_0_1");
     let results = host.results();
     assert_eq!(results[0], "A");
-    assert!(results[1].contains("were not run"));
+    assert!(results[1].starts_with("Not run"));
     assert_eq!(results.len(), 2);
+    // Every recorded call but the interrupting one has its result; the host answers that one.
+    let Message::Assistant { calls, .. } = &host.messages[0] else {
+        panic!("the reply comes first");
+    };
+    let answered: Vec<&str> = host.messages[1..]
+        .iter()
+        .filter_map(|message| match message {
+            Message::ToolResult { call_id, .. } => Some(call_id.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(calls.len(), 3);
+    assert_eq!(answered, ["call_0_0", "call_0_2"]);
+}
+
+#[tokio::test]
+async fn native_call_ids_are_recorded_with_the_reply_and_its_results() {
+    let lines = [
+        crate::tool_call_line(Some("c-1"), "shout", &serde_json::json!({"word": "a"})),
+        crate::tool_call_line(Some("c-2"), "shout", &serde_json::json!({"word": "b"})),
+    ]
+    .join("\n");
+    let mut host = Scripted::new(&[lines.as_str(), "Done."]);
+    turn(&mut host).await;
+    let Message::Assistant { calls, .. } = &host.messages[0] else {
+        panic!("the reply comes first");
+    };
+    let ids: Vec<&str> = calls.iter().map(|call| call.id.as_str()).collect();
+    assert_eq!(ids, ["c-1", "c-2"]);
+    assert_eq!(
+        host.messages[1],
+        Message::ToolResult {
+            call_id: "c-1".into(),
+            name: "shout".into(),
+            text: "A".into(),
+        }
+    );
+    assert!(matches!(&host.messages[2], Message::ToolResult { call_id, .. } if call_id == "c-2"));
+    assert!(matches!(&host.messages[3], Message::Assistant { calls, .. } if calls.is_empty()));
 }
 
 #[tokio::test]
@@ -276,7 +340,7 @@ async fn a_promise_of_more_work_without_a_call_is_sent_back_to_the_model() {
     assert_eq!(run.end, Ok(TurnEnd::Answer("All done.".into())));
     assert_eq!(run.steps, ["Shouted", "Shouted"]);
     assert!(
-        host.results()
+        host.notes()
             .iter()
             .any(|text| text.contains("made no tool call"))
     );
@@ -300,7 +364,7 @@ async fn a_promise_before_any_tool_use_or_forever_is_not_nudged_endlessly() {
     let run = turn(&mut host).await;
     assert_eq!(run.end, Ok(TurnEnd::Answer("I will continue.".into())));
     let nudges = host
-        .results()
+        .notes()
         .iter()
         .filter(|text| text.contains("made no tool call"))
         .count();

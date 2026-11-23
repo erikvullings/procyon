@@ -13,8 +13,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use fm_agent::{
-    SkillCatalogue, SkillIndex, ToolCalling, ToolContext, ToolRegistry, ToolSpec, TurnEnd,
-    TurnEvent, TurnHost, TurnOptions, compose_system_prompt, run_turn,
+    Message, SkillCatalogue, SkillIndex, ToolCallRecord, ToolCalling, ToolContext, ToolRegistry,
+    ToolSpec, TurnEnd, TurnEvent, TurnHost, TurnOptions, compose_system_prompt, run_turn,
 };
 
 pub(crate) use fm_agent::{NotesAccess, redact_secrets};
@@ -31,8 +31,8 @@ use tokio_util::sync::CancellationToken;
 use fm_agent::{newest_bytes, truncate_to_bytes};
 
 use crate::agent_host::{
-    Documents, FolderTools, SkillFolderDocuments, SkillScope, ToolHost, chat_failure, is_document,
-    note_proposal_dto, skills_for, tool_calling,
+    Documents, FolderTools, SkillFolderDocuments, SkillScope, ToolHost, chat_failure,
+    generation_parts, is_document, note_proposal_dto, skills_for, tool_calling,
 };
 use crate::chat::ChatGenerator;
 use crate::llm_profiles::{LlmChatGeneration, LlmRole};
@@ -158,7 +158,7 @@ pub(crate) async fn reply_streaming(
     let raw = generate(
         generator,
         system_prompt,
-        user_prompt,
+        (user_prompt, Vec::new()),
         Vec::new(),
         &mut |_: &str| {},
     )
@@ -183,7 +183,7 @@ pub(crate) async fn reply_streaming(
 async fn generate(
     generator: &impl ChatGenerator,
     system_prompt: String,
-    user_prompt: String,
+    (user_prompt, followups): (String, Vec<Message>),
     tools: Vec<ToolSpec>,
     on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
 ) -> Result<String, ChatFailureDto> {
@@ -192,6 +192,7 @@ async fn generate(
         .generate_for_role(
             LlmRole::Chat,
             LlmChatGeneration {
+                followups,
                 tools,
                 system_prompt,
                 user_prompt,
@@ -331,6 +332,7 @@ async fn ask(
         id: &id,
         system_prompt: ask_prompt(&prompt_registry, &catalogue, &skills_question, calling),
         budget: session::conversation_budget(generator.context_window(LlmRole::Chat).await),
+        calling,
         tools: prompt_registry.specs_for(calling),
     };
     let skill_documents = SkillFolderDocuments::new(providers);
@@ -352,7 +354,7 @@ async fn ask(
             });
         })
         .await?;
-        match end {
+        let interrupt = match end {
             TurnEnd::Answer(text) => return Ok(stopped(text, steps)),
             TurnEnd::EmptyReply => return Err(ChatFailureDto::Empty),
             TurnEnd::Cancelled => return Ok(stopped(String::new(), steps)),
@@ -360,7 +362,14 @@ async fn ask(
                 let text = "I stopped after many steps. Ask again to continue.".to_owned();
                 return Ok(stopped(text, steps));
             }
-            TurnEnd::Interrupted(TerminalInterrupt::Note(proposal)) => {
+            TurnEnd::Interrupted { call, interrupt } => {
+                // What the person decides becomes this call's result.
+                sessions.hold_call(&id, call);
+                interrupt
+            }
+        };
+        match interrupt {
+            TerminalInterrupt::Note(proposal) => {
                 sessions.push_tool(
                     &id,
                     "The note was shown to the person for review. Nothing is saved unless they \
@@ -371,13 +380,13 @@ async fn ask(
                     ..stopped(String::new(), steps)
                 });
             }
-            TurnEnd::Interrupted(TerminalInterrupt::Command(command)) => {
+            TerminalInterrupt::Command(command) => {
                 return Ok(TerminalAssistReplyDto {
                     run_command: Some(command.command),
                     ..stopped(String::new(), steps)
                 });
             }
-            TurnEnd::Interrupted(TerminalInterrupt::WriteFile(pending)) => {
+            TerminalInterrupt::WriteFile(pending) => {
                 if !request.allow_file_writes {
                     sessions.push_tool(&id, "Error: creating files is turned off.");
                 } else if let Err(error) = write::check(&pending.name, &pending.content) {
@@ -415,6 +424,7 @@ struct TerminalTurn<'a, G> {
     sessions: &'a Sessions,
     id: &'a str,
     system_prompt: String,
+    calling: ToolCalling,
     tools: Vec<ToolSpec>,
     /// How many bytes of conversation the model's window allows.
     budget: usize,
@@ -428,22 +438,27 @@ impl<G: ChatGenerator> TurnHost for TerminalTurn<'_, G> {
         &mut self,
         on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
     ) -> Result<String, ChatFailureDto> {
+        let messages = self.sessions.messages_within(self.id, self.budget);
         generate(
             self.generator,
             self.system_prompt.clone(),
-            self.sessions.render_within(self.id, self.budget),
+            generation_parts(messages, self.calling),
             self.tools.clone(),
             on_delta,
         )
         .await
     }
 
-    fn push_assistant(&mut self, text: &str) {
-        self.sessions.push_assistant(self.id, text);
+    fn push_assistant(&mut self, text: &str, calls: &[ToolCallRecord]) {
+        self.sessions.push_assistant(self.id, text, calls);
     }
 
-    fn push_tool(&mut self, text: &str) {
-        self.sessions.push_tool(self.id, text);
+    fn push_result(&mut self, call: &ToolCallRecord, text: &str) {
+        self.sessions.push_result(self.id, call, text);
+    }
+
+    fn push_note(&mut self, text: &str) {
+        self.sessions.push_note(self.id, text);
     }
 
     fn is_cancelled(&self) -> bool {

@@ -68,6 +68,8 @@ impl<I> Clone for ToolRegistry<I> {
 
 /// A call the model wrote to a registered tool.
 pub struct ParsedCall<I> {
+    /// The endpoint's id for a native call, when it sent one.
+    pub id: Option<String>,
     /// The tool that was named.
     pub tool: Arc<dyn AgentTool<I>>,
     /// Its arguments as the model wrote them.
@@ -139,9 +141,10 @@ impl<I> ToolRegistry<I> {
         let known = |name: &str| self.tools.contains_key(name);
         parse_calls(reply, &known, max)
             .into_iter()
-            .filter_map(|RawCall { name, args }| {
+            .filter_map(|RawCall { id, name, args }| {
                 let entry = self.tools.get(name.as_str())?;
                 Some(ParsedCall {
+                    id,
                     tool: Arc::clone(&entry.tool),
                     args,
                 })

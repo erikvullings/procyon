@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash as _, Hasher as _};
 use std::sync::{Mutex, MutexGuard};
 
+use fm_agent::{Message, ToolCallRecord, fit_messages, render_text};
 use fm_transport_dto::TerminalBlockDto;
 
 use crate::file_assistant::truncate_to_bytes;
@@ -36,10 +37,28 @@ const MAX_TURN_BYTES: usize = 12 * 1024;
 
 #[derive(Debug, Clone)]
 enum Turn {
-    Person { question: String, context: String },
-    Assistant(String),
-    Tool(String),
+    Person {
+        question: String,
+        context: String,
+    },
+    /// A reply, a call's result or a note, as the agent loop recorded it.
+    Agent(Message),
 }
+
+impl Turn {
+    fn message(&self) -> Message {
+        match self {
+            Self::Person { question, context } if !context.is_empty() => Message::User(format!(
+                "Context attached by the person:\n{context}\n\nPerson: {question}"
+            )),
+            Self::Person { question, .. } => Message::User(format!("Person: {question}")),
+            Self::Agent(message) => message.clone(),
+        }
+    }
+}
+
+/// The result of a call that waited for the person when they asked something else instead.
+const MOVED_ON: &str = "Not run: the person asked something else instead.";
 
 /// A file the assistant wants to create, held until the person answers (task 0338).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,6 +78,8 @@ struct WriteGrant {
 struct Session {
     /// The file waiting for approval.
     pending_write: Option<PendingWrite>,
+    /// The call that stopped the turn for the person; what they decide is its result.
+    pending_call: Option<ToolCallRecord>,
     write_grant: Option<WriteGrant>,
     /// Files and bytes created for the current question.
     written_files: usize,
@@ -187,6 +208,11 @@ impl Sessions {
             {
                 session.write_grant = None;
             }
+            if let Some(call) = session.pending_call.take() {
+                session
+                    .turns
+                    .push(Turn::Agent(Message::result(&call, MOVED_ON)));
+            }
             session.turns.push(Turn::Person {
                 question: question.to_owned(),
                 context: context.to_owned(),
@@ -247,21 +273,51 @@ impl Sessions {
         allowed
     }
 
-    /// Records the assistant's reply.
-    pub(super) fn push_assistant(&self, id: &str, text: &str) {
+    /// Records the assistant's reply and the calls run from it.
+    pub(super) fn push_assistant(&self, id: &str, text: &str, calls: &[ToolCallRecord]) {
         self.with(id, |session| {
-            session.turns.push(Turn::Assistant(
-                truncate_to_bytes(text, MAX_TURN_BYTES).to_owned(),
-            ));
+            session.turns.push(Turn::Agent(Message::Assistant {
+                text: truncate_to_bytes(text, MAX_TURN_BYTES).to_owned(),
+                calls: calls.to_vec(),
+            }));
         });
     }
 
-    /// Records a tool result the assistant should see.
+    /// Records the result of one call.
+    pub(super) fn push_result(&self, id: &str, call: &ToolCallRecord, text: &str) {
+        self.with(id, |session| {
+            session.turns.push(Turn::Agent(Message::result(
+                call,
+                truncate_to_bytes(text, MAX_TURN_BYTES),
+            )));
+        });
+    }
+
+    /// Records a message from the loop to the model.
+    pub(super) fn push_note(&self, id: &str, text: &str) {
+        self.with(id, |session| {
+            session.turns.push(Turn::Agent(Message::Note(
+                truncate_to_bytes(text, MAX_TURN_BYTES).to_owned(),
+            )));
+        });
+    }
+
+    /// Remembers the call that stopped the turn for the person, until [`push_tool`](Self::push_tool)
+    /// or a new question answers it.
+    pub(super) fn hold_call(&self, id: &str, call: ToolCallRecord) {
+        self.with(id, |session| session.pending_call = Some(call));
+    }
+
+    /// Records what came of the call waiting for the person (a command's output, a decline, a
+    /// file created) as its result; a tool result without a call when none waits.
     pub(super) fn push_tool(&self, id: &str, text: &str) {
         self.with(id, |session| {
-            session.turns.push(Turn::Tool(
-                truncate_to_bytes(text, MAX_TURN_BYTES).to_owned(),
-            ));
+            let text = truncate_to_bytes(text, MAX_TURN_BYTES);
+            let message = match session.pending_call.take() {
+                Some(call) => Message::result(&call, text),
+                None => Message::Note(format!("Tool result:\n{text}")),
+            };
+            session.turns.push(Turn::Agent(message));
         });
     }
 
@@ -303,51 +359,20 @@ impl Sessions {
 
     /// Like [`render`](Self::render), within `limit` bytes.
     pub(super) fn render_within(&self, id: &str, limit: usize) -> String {
+        render_text(&self.messages_within(id, limit))
+    }
+
+    /// The conversation as messages within about `limit` bytes. The current question and its
+    /// context (the folder listing) always stay: without them a long run of tool results leaves
+    /// the model with no task. Of the rest, the newest whole replies with their results that fit
+    /// are kept, and the ones in between are left out with a note.
+    pub(super) fn messages_within(&self, id: &str, limit: usize) -> Vec<Message> {
         let state = self.lock();
         let Some(session) = state.sessions.get(id) else {
-            return String::new();
+            return Vec::new();
         };
-        let rendered: Vec<String> = session
-            .turns
-            .iter()
-            .map(|turn| match turn {
-                Turn::Person { question, context } => {
-                    if !context.is_empty() {
-                        format!(
-                            "Context attached by the person:\n{context}\n\nPerson: {question}\n\n"
-                        )
-                    } else {
-                        format!("Person: {question}\n\n")
-                    }
-                }
-                Turn::Assistant(text) => format!("Assistant: {text}\n\n"),
-                Turn::Tool(text) => format!("Tool result:\n{text}\n\n"),
-            })
-            .collect();
-        // The current question and its context (the folder listing) always stay: without them a
-        // long run of tool results leaves the model with no task. Of the rest, the newest whole
-        // turns that fit are kept, and the results in between are left out with a note.
-        let pin = rendered
-            .iter()
-            .rposition(|text| text.starts_with("Person: ") || text.starts_with("Context attached"))
-            .unwrap_or(0);
-        let mut budget = limit.saturating_sub(rendered[pin].len());
-        let mut tail_start = rendered.len();
-        while tail_start > pin + 1 && rendered[tail_start - 1].len() <= budget {
-            tail_start -= 1;
-            budget -= rendered[tail_start].len();
-        }
-        let mut head_start = pin;
-        while head_start > 0 && rendered[head_start - 1].len() <= budget {
-            head_start -= 1;
-            budget -= rendered[head_start].len();
-        }
-        let mut text = rendered[head_start..=pin].concat();
-        if tail_start > pin + 1 {
-            text.push_str("[Earlier tool results were left out to save space.]\n\n");
-        }
-        text.push_str(&rendered[tail_start..].concat());
-        text
+        let messages: Vec<Message> = session.turns.iter().map(Turn::message).collect();
+        fit_messages(&messages, limit)
     }
 
     /// The conversation so far, as the model sees it; empty for an unknown session. Used to turn

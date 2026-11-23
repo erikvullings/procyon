@@ -1,3 +1,4 @@
+use fm_agent::{Message, ToolCallRecord};
 use fm_transport_dto::TerminalBlockDto;
 
 use super::{MAX_RENDERED_BYTES, MAX_SESSIONS, MAX_TURNS, Sessions, conversation_budget};
@@ -6,7 +7,7 @@ use super::{MAX_RENDERED_BYTES, MAX_SESSIONS, MAX_TURNS, Sessions, conversation_
 fn a_follow_up_sees_the_earlier_turns() {
     let sessions = Sessions::default();
     sessions.push_person("t1", "what is here?", "Working directory: /a");
-    sessions.push_assistant("t1", "A Rust project.");
+    sessions.push_assistant("t1", "A Rust project.", &[]);
     sessions.push_person("t1", "build it", "Working directory: /a");
 
     let prompt = sessions.render("t1");
@@ -19,7 +20,7 @@ fn a_follow_up_sees_the_earlier_turns() {
 fn each_person_turn_keeps_the_activity_it_came_with() {
     let sessions = Sessions::default();
     sessions.push_person("t1", "first", "OUTPUT-ONE");
-    sessions.push_assistant("t1", "ok");
+    sessions.push_assistant("t1", "ok", &[]);
     sessions.push_person("t1", "second", "OUTPUT-TWO");
 
     let prompt = sessions.render("t1");
@@ -82,7 +83,7 @@ fn only_commands_not_sent_before_are_offered_again() {
 fn tool_results_follow_the_turn_that_asked_for_them() {
     let sessions = Sessions::default();
     sessions.push_person("t1", "list", "ctx");
-    sessions.push_assistant("t1", "TOOL {\"tool\":\"list_dir\",\"path\":\".\"}");
+    sessions.push_assistant("t1", "TOOL {\"tool\":\"list_dir\",\"path\":\".\"}", &[]);
     sessions.push_tool("t1", "a.txt\nb.txt");
 
     let prompt = sessions.render("t1");
@@ -95,7 +96,7 @@ fn the_oldest_turns_go_first_when_the_prompt_is_too_long() {
     let sessions = Sessions::default();
     let filler = "x".repeat(MAX_RENDERED_BYTES / 2);
     sessions.push_person("t1", &format!("one {filler}"), "");
-    sessions.push_assistant("t1", &format!("two {filler}"));
+    sessions.push_assistant("t1", &format!("two {filler}"), &[]);
     sessions.push_person("t1", "three", "");
 
     let prompt = sessions.render("t1");
@@ -152,7 +153,7 @@ fn the_last_question_survives_the_answers_and_tool_results_after_it() {
     let sessions = Sessions::default();
     assert_eq!(sessions.last_question("t1"), "");
     sessions.push_person("t1", "renew the certificate", "");
-    sessions.push_assistant("t1", "TOOL {}");
+    sessions.push_assistant("t1", "TOOL {}", &[]);
     sessions.push_tool("t1", "output");
     assert_eq!(sessions.last_question("t1"), "renew the certificate");
 }
@@ -163,7 +164,7 @@ fn a_long_run_of_tool_results_keeps_the_question_and_its_context() {
     sessions.push_person("t1", "summarise the folder", "Folder listing: a.md, b.md");
     let result = "r".repeat(MAX_RENDERED_BYTES / 4);
     for index in 0..8 {
-        sessions.push_assistant("t1", &format!("TOOL read {index}"));
+        sessions.push_assistant("t1", &format!("TOOL read {index}"), &[]);
         sessions.push_tool("t1", &format!("{index} {result}"));
     }
 
@@ -182,4 +183,49 @@ fn the_conversation_budget_follows_the_models_window() {
     assert!(conversation_budget(Some(262_144)) > 300 * 1024);
     assert!(conversation_budget(Some(u32::MAX)) <= 900 * 1024);
     assert!(conversation_budget(Some(1_000)) >= MAX_RENDERED_BYTES / 3);
+}
+
+fn command_call() -> ToolCallRecord {
+    ToolCallRecord {
+        id: "c1".into(),
+        name: "run_command".into(),
+        arguments: serde_json::json!({"command": "ls"}),
+    }
+}
+
+#[test]
+fn the_output_of_an_approved_command_answers_its_call() {
+    let sessions = Sessions::default();
+    sessions.push_person("t1", "list it", "");
+    sessions.push_assistant("t1", "TOOL run ls", &[command_call()]);
+    sessions.hold_call("t1", command_call());
+    sessions.push_tool("t1", "a.txt");
+    let messages = sessions.messages_within("t1", 10_000);
+    assert_eq!(
+        messages[2],
+        Message::ToolResult {
+            call_id: "c1".into(),
+            name: "run_command".into(),
+            text: "a.txt".into(),
+        }
+    );
+    // Once answered, a later message is no longer taken as that call's result.
+    sessions.push_tool("t1", "stray");
+    let messages = sessions.messages_within("t1", 10_000);
+    assert_eq!(messages[3], Message::Note("Tool result:\nstray".into()));
+}
+
+#[test]
+fn a_new_question_answers_a_command_the_person_did_not_run() {
+    let sessions = Sessions::default();
+    sessions.push_person("t1", "list it", "");
+    sessions.push_assistant("t1", "TOOL run ls", &[command_call()]);
+    sessions.hold_call("t1", command_call());
+    sessions.push_person("t1", "something else", "");
+    let messages = sessions.messages_within("t1", 10_000);
+    assert!(matches!(
+        &messages[2],
+        Message::ToolResult { call_id, text, .. } if call_id == "c1" && text.starts_with("Not run")
+    ));
+    assert_eq!(messages[3], Message::User("Person: something else".into()));
 }

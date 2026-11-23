@@ -311,6 +311,7 @@ impl KnowledgeAnswerCoordinator {
             .generate(
                 intent.profile_id,
                 LlmChatGeneration {
+                    followups: Vec::new(),
                     tools: Vec::new(),
                     system_prompt,
                     user_prompt,

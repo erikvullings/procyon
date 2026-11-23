@@ -4,14 +4,13 @@
 //! leave the folder. Whatever it reads goes to the chat endpoint under the consent that already
 //! covers the conversation: a cloud endpoint without consent fails before anything is sent.
 
-use std::collections::VecDeque;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use fm_agent::{
-    NoteProposal, NotesAccess, SkillIndex, ToolContext, ToolSpec, TurnEnd, TurnEvent, TurnHost,
-    TurnOptions, compose_system_prompt, read_only_registry, redact_secrets, run_turn,
-    truncate_to_bytes,
+    Message, NoteProposal, NotesAccess, SkillIndex, ToolCallRecord, ToolCalling, ToolContext,
+    ToolSpec, TurnEnd, TurnEvent, TurnHost, TurnOptions, compose_system_prompt, fit_messages,
+    read_only_registry, redact_secrets, run_turn, truncate_to_bytes,
 };
 use fm_transport_dto::{ChatFailureDto, ChatReplyEventDto, NoteProposalDto};
 use fm_vfs::ProviderRegistry;
@@ -19,7 +18,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::agent_host::{
     FolderTools, READ_FILE_DESCRIPTION, SkillFolderDocuments, SkillScope, chat_failure,
-    note_proposal_dto, skills_for, tool_calling,
+    generation_parts, note_proposal_dto, skills_for, tool_calling,
 };
 use crate::chat::ChatGenerator;
 use crate::llm_profiles::{LlmChatGeneration, LlmImageAttachment, LlmRole};
@@ -34,8 +33,6 @@ const MAX_STEP_BYTES: usize = 200;
 /// No limit of its own on generated tokens: the profile's answer limit (set from the model's
 /// own limits) is the only bound, so a long answer or a file's content is not cut short.
 const MAX_REPLY_TOKENS: u32 = u32::MAX;
-/// Put in place of tool exchanges that no longer fit.
-const OMITTED: &str = "[Earlier tool results of this answer were left out to save space.]\n\n";
 
 const TOOLS_INTRO: &str = "\nYou can look things up in the folder the person chose, in their \
      notes and in the skills listed below. Paths are relative to that folder and cannot leave it. \
@@ -96,9 +93,8 @@ pub(crate) async fn run(
         generator,
         system_prompt: compose_system_prompt(&base, &registry, calling, &catalogue, input.question),
         conversation: input.transcript,
-        exchanges: VecDeque::new(),
-        exchange_bytes: 0,
-        omitted: false,
+        exchanges: Vec::new(),
+        calling,
         tools: registry.specs_for(calling),
         images: input.images,
         cancellation: input.cancellation,
@@ -139,8 +135,8 @@ pub(crate) async fn run(
             AgentEnd::Answer("I stopped after many steps. Ask again to continue.".to_owned()),
             steps,
         )),
-        TurnEnd::Interrupted(proposal) => {
-            Ok((AgentEnd::Proposal(note_proposal_dto(proposal)), steps))
+        TurnEnd::Interrupted { interrupt, .. } => {
+            Ok((AgentEnd::Proposal(note_proposal_dto(interrupt)), steps))
         }
     }
 }
@@ -151,44 +147,22 @@ struct ChatTurn<'a, G> {
     system_prompt: String,
     /// The conversation up to the person's question; always sent whole.
     conversation: String,
-    /// This answer's replies and tool results, oldest first.
-    exchanges: VecDeque<String>,
-    exchange_bytes: usize,
-    /// Whether old exchanges were dropped.
-    omitted: bool,
+    /// This answer's replies, results and notes, oldest first.
+    exchanges: Vec<Message>,
+    calling: ToolCalling,
     tools: Vec<ToolSpec>,
     images: Vec<LlmImageAttachment>,
     cancellation: &'a CancellationToken,
 }
 
 impl<G> ChatTurn<'_, G> {
-    fn push(&mut self, text: String) {
-        self.exchange_bytes += text.len();
-        self.exchanges.push_back(text);
-        // The newest exchange always stays, so the model sees the result it is waiting for.
-        while self.exchange_bytes > MAX_EXCHANGE_BYTES && self.exchanges.len() > 1 {
-            if let Some(dropped) = self.exchanges.pop_front() {
-                self.exchange_bytes -= dropped.len();
-                self.omitted = true;
-            }
-        }
-    }
-
-    fn transcript(&self) -> String {
-        let mut text = String::with_capacity(
-            self.conversation.len() + self.exchange_bytes + OMITTED.len() + 2,
-        );
-        text.push_str(&self.conversation);
-        if !self.exchanges.is_empty() && !text.ends_with("\n\n") {
-            text.push_str(if text.ends_with('\n') { "\n" } else { "\n\n" });
-        }
-        if self.omitted {
-            text.push_str(OMITTED);
-        }
-        for exchange in &self.exchanges {
-            text.push_str(exchange);
-        }
-        text
+    /// The conversation and as many of the newest exchanges as fit: whole replies with their
+    /// results, the oldest left out first with a note.
+    fn messages(&self) -> Vec<Message> {
+        let mut all = Vec::with_capacity(self.exchanges.len() + 1);
+        all.push(Message::User(self.conversation.clone()));
+        all.extend(self.exchanges.iter().cloned());
+        fit_messages(&all, self.conversation.len() + MAX_EXCHANGE_BYTES)
     }
 }
 
@@ -200,13 +174,15 @@ impl<G: ChatGenerator> TurnHost for ChatTurn<'_, G> {
         &mut self,
         on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
     ) -> Result<String, ChatFailureDto> {
+        let (user_prompt, followups) = generation_parts(self.messages(), self.calling);
         self.generator
             .generate_for_role(
                 LlmRole::Chat,
                 LlmChatGeneration {
+                    followups,
                     tools: self.tools.clone(),
                     system_prompt: self.system_prompt.clone(),
-                    user_prompt: self.transcript(),
+                    user_prompt,
                     // Images belong to the person's message, so they are sent once.
                     images: std::mem::take(&mut self.images),
                     maximum_tokens: MAX_REPLY_TOKENS,
@@ -220,13 +196,20 @@ impl<G: ChatGenerator> TurnHost for ChatTurn<'_, G> {
             .map_err(chat_failure)
     }
 
-    fn push_assistant(&mut self, text: &str) {
-        self.push(format!("Assistant: {text}\n\n"));
+    fn push_assistant(&mut self, text: &str, calls: &[ToolCallRecord]) {
+        self.exchanges.push(Message::Assistant {
+            text: text.to_owned(),
+            calls: calls.to_vec(),
+        });
     }
 
-    fn push_tool(&mut self, text: &str) {
+    fn push_result(&mut self, call: &ToolCallRecord, text: &str) {
         let text = truncate_to_bytes(text, MAX_TOOL_BYTES);
-        self.push(format!("Tool result:\n{text}\n\n"));
+        self.exchanges.push(Message::result(call, text));
+    }
+
+    fn push_note(&mut self, text: &str) {
+        self.exchanges.push(Message::Note(text.to_owned()));
     }
 
     fn is_cancelled(&self) -> bool {
@@ -236,6 +219,9 @@ impl<G: ChatGenerator> TurnHost for ChatTurn<'_, G> {
 
 #[cfg(test)]
 mod tests {
+    use fm_agent::{OMITTED_NOTE, render_text};
+    use serde_json::json;
+
     use super::*;
 
     struct NoModel;
@@ -246,35 +232,78 @@ mod tests {
             generator: &NoModel,
             system_prompt: String::new(),
             conversation: "Person: what is in the big file?\n".to_owned(),
-            exchanges: VecDeque::new(),
-            exchange_bytes: 0,
-            omitted: false,
+            exchanges: Vec::new(),
+            calling: ToolCalling::Text,
             tools: Vec::new(),
             images: Vec::new(),
             cancellation: CANCEL.get_or_init(CancellationToken::new),
         }
     }
 
+    fn call(n: usize) -> ToolCallRecord {
+        ToolCallRecord {
+            id: format!("c{n}"),
+            name: "read_file".into(),
+            arguments: json!({"path": n.to_string()}),
+        }
+    }
+
+    fn reply(turn: &mut ChatTurn<'_, NoModel>, text: &str, calls: &[ToolCallRecord]) {
+        turn.exchanges.push(Message::Assistant {
+            text: text.to_owned(),
+            calls: calls.to_vec(),
+        });
+    }
+
+    fn result(turn: &mut ChatTurn<'_, NoModel>, call: &ToolCallRecord, text: &str) {
+        turn.exchanges.push(Message::result(call, text));
+    }
+
     #[test]
     fn the_question_stays_when_old_tool_results_drop_out() {
         let mut turn = turn();
         for n in 0..40 {
-            turn.push(format!("Tool result:\n{n}{}\n\n", "x".repeat(10 * 1024)));
+            reply(&mut turn, &format!("TOOL read {n}"), &[call(n)]);
+            result(
+                &mut turn,
+                &call(n),
+                &format!("{n}{}", "x".repeat(10 * 1024)),
+            );
         }
-        let transcript = turn.transcript();
+        let transcript = render_text(&turn.messages());
         assert!(transcript.starts_with("Person: what is in the big file?\n"));
-        assert!(transcript.contains(OMITTED));
+        assert!(transcript.contains(OMITTED_NOTE));
         assert!(transcript.contains("Tool result:\n39"));
         assert!(!transcript.contains("Tool result:\n0x"));
-        assert!(turn.exchange_bytes <= MAX_EXCHANGE_BYTES);
+        assert!(transcript.len() <= turn.conversation.len() + MAX_EXCHANGE_BYTES + 1024);
     }
 
     #[test]
     fn the_newest_result_is_kept_even_when_it_alone_is_large() {
         let mut turn = turn();
-        turn.push("small\n\n".to_owned());
-        turn.push("y".repeat(MAX_EXCHANGE_BYTES + 10));
-        assert_eq!(turn.exchanges.len(), 1);
-        assert!(turn.transcript().starts_with("Person:"));
+        reply(&mut turn, "small", &[call(0)]);
+        result(&mut turn, &call(0), "small");
+        reply(&mut turn, "big", &[call(1)]);
+        turn.exchanges.push(Message::result(
+            &call(1),
+            "y".repeat(MAX_EXCHANGE_BYTES + 10),
+        ));
+        let messages = turn.messages();
+        assert!(matches!(&messages[0], Message::User(text) if text.starts_with("Person:")));
+        assert!(
+            matches!(messages.last(), Some(Message::ToolResult { call_id, .. }) if call_id == "c1")
+        );
+    }
+
+    #[test]
+    fn natively_the_question_is_the_prompt_and_the_exchanges_follow_as_messages() {
+        let mut turn = turn();
+        turn.calling = ToolCalling::Native;
+        reply(&mut turn, "Let me look.", &[call(0)]);
+        result(&mut turn, &call(0), "content");
+        let (prompt, followups) = generation_parts(turn.messages(), turn.calling);
+        assert_eq!(prompt, turn.conversation);
+        assert_eq!(followups.len(), 2);
+        assert!(matches!(&followups[1], Message::ToolResult { call_id, .. } if call_id == "c0"));
     }
 }

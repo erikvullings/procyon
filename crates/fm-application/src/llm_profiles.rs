@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use fm_agent::ToolSpec;
+use fm_agent::{Message, ToolSpec, render_text};
 use fm_credentials::{CredentialRef, CredentialStore, SecretMaterial, StoreCredentialRequest};
 use fm_settings::{SettingsStore, VersionedDocument};
 use fm_transport_dto::{
@@ -407,14 +407,18 @@ pub struct LlmImageAttachment {
 /// Bounded host-owned generation request using a saved profile.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LlmChatGeneration {
-    /// Tools the model may call natively (task 0339). Sent only to OpenAI-compatible endpoints
-    /// whose model was found to take them (see [`ToolCallingProbe`]); a call comes back as a
-    /// `TOOL {json}` line in the reply text, the same form the text protocol uses.
+    /// Tools the model may call natively (task 0339). Sent only to endpoints whose model was found
+    /// to take them (see [`ToolCallingProbe`]); a call comes back as a `TOOL {json}` line in the
+    /// reply text (with the endpoint's call id), the same form the text protocol uses.
     pub tools: Vec<ToolSpec>,
     /// Trusted system instruction.
     pub system_prompt: String,
-    /// User-role evidence payload.
+    /// User-role evidence payload. May be empty when `followups` starts with the person's message.
     pub user_prompt: String,
+    /// The conversation after `user_prompt` (task 0341): replies with their native calls, one
+    /// result per call, and further user messages and notes. Sent as structured messages to an
+    /// endpoint that takes the `tools`; folded into `user_prompt` as text otherwise.
+    pub followups: Vec<Message>,
     /// Bounded image evidence. Only transports with verified vision support may accept it.
     pub images: Vec<LlmImageAttachment>,
     /// Maximum generated tokens, further bounded by the saved profile.
@@ -1723,10 +1727,11 @@ impl LlmProfileService {
         {
             return Err(LlmProfileError::ConsentRequired(endpoint.host));
         }
+        let followup_bytes: usize = generation.followups.iter().map(Message::size).sum();
         if generation.system_prompt.is_empty()
-            || generation.user_prompt.is_empty()
+            || (generation.user_prompt.is_empty() && generation.followups.is_empty())
             || generation.system_prompt.len() > 64 * 1024
-            || generation.user_prompt.len() > 1024 * 1024
+            || generation.user_prompt.len() + followup_bytes > 1024 * 1024
         {
             return Err(LlmProfileError::InvalidConfiguration);
         }
@@ -1737,8 +1742,22 @@ impl LlmProfileService {
         {
             return Err(LlmProfileError::InvalidConfiguration);
         }
+        let native = profile.takes_native_tools() && !generation.tools.is_empty();
+        let (user_prompt, followups) = if native || generation.followups.is_empty() {
+            (generation.user_prompt, generation.followups)
+        } else {
+            // An endpoint without native tools reads the tool exchanges as text after the prompt.
+            let mut text = generation.user_prompt;
+            if !text.is_empty() && !text.ends_with("\n\n") {
+                text.push_str(if text.ends_with('\n') { "\n" } else { "\n\n" });
+            }
+            text.push_str(&render_text(&generation.followups));
+            (text, Vec::new())
+        };
         let bounded = LlmChatGeneration {
-            tools: if profile.takes_native_tools() {
+            user_prompt,
+            followups,
+            tools: if native {
                 generation.tools.clone()
             } else {
                 Vec::new()
@@ -1969,6 +1988,7 @@ impl LlmProfileService {
             };
         }
         let probe = LlmChatGeneration {
+            followups: Vec::new(),
             tools: vec![ToolSpec {
                 name: "echo",
                 description: "Repeats the given text.",
@@ -2498,12 +2518,14 @@ fn openai_generation_body(
     generation: &LlmChatGeneration,
     switch: ReasoningSwitch,
 ) -> Value {
+    let mut messages = vec![json!({"role": "system", "content": generation.system_prompt})];
+    if !generation.user_prompt.is_empty() || !generation.images.is_empty() {
+        messages.push(json!({"role": "user", "content": openai_user_content(generation)}));
+    }
+    messages.extend(generation.followups.iter().map(openai_message));
     let mut body = json!({
         "model": request.model,
-        "messages": [
-            {"role": "system", "content": generation.system_prompt},
-            {"role": "user", "content": openai_user_content(generation)}
-        ],
+        "messages": messages,
         "stream": true,
         "max_tokens": generation.maximum_tokens,
     });
@@ -2523,6 +2545,59 @@ fn openai_generation_body(
         body["reasoning_effort"] = json!("none");
     }
     body
+}
+
+/// One conversation message in the OpenAI chat format: a reply carries its calls as `tool_calls`
+/// (arguments as a JSON string), a result is a `tool` message naming the call's id.
+fn openai_message(message: &Message) -> Value {
+    match message {
+        Message::User(text) | Message::Note(text) => json!({"role": "user", "content": text}),
+        Message::Assistant { text, calls } => {
+            let prose = Message::prose(text);
+            let mut value = json!({"role": "assistant", "content": prose});
+            if !calls.is_empty() {
+                if prose.is_empty() {
+                    value["content"] = Value::Null;
+                }
+                value["tool_calls"] = calls
+                    .iter()
+                    .map(|call| {
+                        json!({"id": call.id, "type": "function", "function": {
+                            "name": call.name,
+                            "arguments": call.arguments.to_string(),
+                        }})
+                    })
+                    .collect();
+            }
+            value
+        }
+        Message::ToolResult { call_id, text, .. } => {
+            json!({"role": "tool", "tool_call_id": call_id, "content": text})
+        }
+    }
+}
+
+/// One conversation message in Ollama's chat format: calls carry their arguments as an object,
+/// and a result names its tool (Ollama has no call ids).
+fn ollama_message(message: &Message) -> Value {
+    match message {
+        Message::User(text) | Message::Note(text) => json!({"role": "user", "content": text}),
+        Message::Assistant { text, calls } => {
+            let mut value = json!({"role": "assistant", "content": Message::prose(text)});
+            if !calls.is_empty() {
+                value["tool_calls"] = calls
+                    .iter()
+                    .map(|call| {
+                        json!({"function": {"name": call.name, "arguments": call.arguments}})
+                    })
+                    .collect();
+            }
+            value
+        }
+        Message::ToolResult { name, text, .. } => {
+            json!({"role": "tool", "content": text, "tool_name": name})
+        }
+    }
 }
 
 /// The `tools` list OpenAI-compatible endpoints and Ollama take.
@@ -2582,12 +2657,14 @@ fn ollama_generation_body(request: &LlmProbeRequest, generation: &LlmChatGenerat
     if let Some(context_window) = generation.context_window {
         options["num_ctx"] = Value::from(context_window);
     }
+    let mut messages = vec![json!({"role": "system", "content": generation.system_prompt})];
+    if !generation.user_prompt.is_empty() || !images.is_empty() {
+        messages.push(json!({"role": "user", "content": generation.user_prompt, "images": images}));
+    }
+    messages.extend(generation.followups.iter().map(ollama_message));
     let mut body = json!({
         "model": request.model,
-        "messages": [
-            {"role": "system", "content": generation.system_prompt},
-            {"role": "user", "content": generation.user_prompt, "images": images}
-        ],
+        "messages": messages,
         "stream": false,
         "think": false,
         "options": options
@@ -2706,8 +2783,8 @@ fn parse_streaming_chat_detailed(bytes: &[u8]) -> Result<(String, bool), LlmProf
     let mut truncated = false;
     let mut content = String::new();
     let mut reasoning_seen = false;
-    // Native tool calls arrive in pieces: a name, then argument fragments, by call index.
-    let mut tool_calls: Vec<(String, String)> = Vec::new();
+    // Native tool calls arrive in pieces: an id and a name, then argument fragments, by call index.
+    let mut tool_calls: Vec<StreamedCall> = Vec::new();
     for line in text.lines() {
         let Some(data) = line.strip_prefix("data:") else {
             continue;
@@ -2759,18 +2836,23 @@ fn parse_streaming_chat_detailed(bytes: &[u8]) -> Result<(String, bool), LlmProf
                     .unwrap_or(0)
                     .min(MAX_TOOL_CALLS_PER_REPLY);
                 if tool_calls.len() <= index {
-                    tool_calls.resize(index + 1, (String::new(), String::new()));
+                    tool_calls.resize_with(index + 1, StreamedCall::default);
+                }
+                if let Some(id) = call.get("id").and_then(Value::as_str)
+                    && tool_calls[index].id.is_empty()
+                {
+                    tool_calls[index].id = id.chars().take(MAX_CALL_ID_CHARS).collect();
                 }
                 let function = call.get("function");
                 if let Some(name) = function.and_then(|f| f.get("name")).and_then(Value::as_str) {
-                    tool_calls[index].0.push_str(name);
+                    tool_calls[index].name.push_str(name);
                 }
                 if let Some(arguments) = function
                     .and_then(|f| f.get("arguments"))
                     .and_then(Value::as_str)
                 {
-                    tool_calls[index].1.push_str(arguments);
-                    if tool_calls[index].1.len() > MAX_STREAM_BYTES {
+                    tool_calls[index].arguments.push_str(arguments);
+                    if tool_calls[index].arguments.len() > MAX_STREAM_BYTES {
                         return Err(LlmProfileError::MalformedResponse);
                     }
                 }
@@ -2790,7 +2872,7 @@ fn parse_streaming_chat_detailed(bytes: &[u8]) -> Result<(String, bool), LlmProf
         // Every named call becomes a `TOOL {json}` line; the agent loop runs them in order.
         let lines: Vec<String> = tool_calls
             .iter()
-            .filter_map(|(name, arguments)| tool_call_line(name, arguments))
+            .filter_map(|call| tool_call_line(Some(&call.id), &call.name, &call.arguments))
             .collect();
         if !lines.is_empty() {
             let line = lines.join("\n");
@@ -2811,11 +2893,22 @@ const TOOL_PROBE_RETRY: Duration = Duration::from_secs(10 * 60);
 
 /// Most tool calls looked at in one streamed reply.
 const MAX_TOOL_CALLS_PER_REPLY: usize = 16;
+/// Longest call id kept from an endpoint.
+const MAX_CALL_ID_CHARS: usize = 128;
 
-/// A native tool call as a text-protocol line (`TOOL {"name":..,"arguments":{..}}`), so the agent
-/// loop reads native and text calls the same way. Arguments that are not a JSON object become a
-/// call without arguments: the tool then reports what is missing.
-fn tool_call_line(name: &str, arguments: &str) -> Option<String> {
+/// One native call as it streams in.
+#[derive(Debug, Clone, Default)]
+struct StreamedCall {
+    id: String,
+    name: String,
+    arguments: String,
+}
+
+/// A native tool call as a text-protocol line (`TOOL {"id":..,"name":..,"arguments":{..}}`), so
+/// the agent loop reads native and text calls the same way and can answer the call by its id.
+/// Arguments that are not a JSON object become a call without arguments: the tool then reports
+/// what is missing.
+fn tool_call_line(id: Option<&str>, name: &str, arguments: &str) -> Option<String> {
     if name.is_empty() {
         return None;
     }
@@ -2823,7 +2916,7 @@ fn tool_call_line(name: &str, arguments: &str) -> Option<String> {
         Ok(Value::Object(object)) => Value::Object(object),
         _ => Value::Object(serde_json::Map::new()),
     };
-    Some(fm_agent::tool_call_line(name, &arguments))
+    Some(fm_agent::tool_call_line(id, name, &arguments))
 }
 
 fn parse_ollama_chat(bytes: &[u8]) -> Result<String, LlmProfileError> {
@@ -2850,7 +2943,8 @@ fn parse_ollama_chat(bytes: &[u8]) -> Result<String, LlmProfileError> {
                         .get("arguments")
                         .map(Value::to_string)
                         .unwrap_or_default();
-                    tool_call_line(name, &arguments)
+                    let id = call.get("id").and_then(Value::as_str);
+                    tool_call_line(id, name, &arguments)
                 })
                 .collect()
         })
@@ -3263,6 +3357,7 @@ mod tests {
             reasoning_switch: ReasoningSwitch::Both,
         };
         let generation = LlmChatGeneration {
+            followups: Vec::new(),
             tools: Vec::new(),
             system_prompt: "s".into(),
             user_prompt: "u".into(),
@@ -3280,6 +3375,7 @@ mod tests {
         assert!(plain.get("tools").is_none());
 
         let with_tools = LlmChatGeneration {
+            followups: Vec::new(),
             tools: vec![ToolSpec {
                 name: "read_file",
                 description: "reads a file",
@@ -3309,14 +3405,14 @@ mod tests {
         let text = parse_streaming_chat(stream.as_bytes()).unwrap();
         assert_eq!(
             text,
-            "Let me look.\nTOOL {\"name\":\"read_file\",\"arguments\":{\"path\":\"a.txt\"}}"
+            "Let me look.\nTOOL {\"id\":\"c1\",\"name\":\"read_file\",\"arguments\":{\"path\":\"a.txt\"}}"
         );
         // Arguments that are not an object still name the tool, so it can say what is missing.
         assert_eq!(
-            tool_call_line("list_dir", "not json").as_deref(),
+            tool_call_line(None, "list_dir", "not json").as_deref(),
             Some("TOOL {\"name\":\"list_dir\",\"arguments\":{}}")
         );
-        assert_eq!(tool_call_line("", "{}"), None);
+        assert_eq!(tool_call_line(None, "", "{}"), None);
     }
 
     #[test]
@@ -3330,6 +3426,100 @@ mod tests {
             parse_streaming_chat(stream.as_bytes()).unwrap(),
             "TOOL {\"name\":\"list_dir\",\"arguments\":{}}\nTOOL {\"name\":\"grep\",\"arguments\":{\"pattern\":\"x\"}}"
         );
+    }
+
+    fn probe_request_for_tests() -> LlmProbeRequest {
+        LlmProbeRequest {
+            url: "http://localhost:8000/v1/chat/completions".into(),
+            ollama_generation_url: None,
+            model: "m".into(),
+            api_key: None,
+            api_key_header: "authorization",
+            headers: BTreeMap::new(),
+            timeout: Duration::from_secs(30),
+            reasoning_switch: ReasoningSwitch::Plain,
+        }
+    }
+
+    fn conversation_with_a_call() -> Vec<Message> {
+        let call = fm_agent::ToolCallRecord {
+            id: "c1".into(),
+            name: "read_file".into(),
+            arguments: json!({"path": "a.txt"}),
+        };
+        vec![
+            Message::Assistant {
+                text: "Let me look.\nTOOL {\"id\":\"c1\",\"name\":\"read_file\",\"arguments\":{\"path\":\"a.txt\"}}".into(),
+                calls: vec![call.clone()],
+            },
+            Message::result(&call, "alpha"),
+            Message::Note("Go on.".into()),
+        ]
+    }
+
+    #[test]
+    fn openai_bodies_carry_calls_and_results_as_tool_messages() {
+        let generation = LlmChatGeneration {
+            followups: conversation_with_a_call(),
+            ..tiny_generation()
+        };
+        let body = openai_generation_body(
+            &probe_request_for_tests(),
+            &generation,
+            ReasoningSwitch::Plain,
+        );
+        let messages = body["messages"].as_array().unwrap();
+        assert_eq!(messages[1]["role"], "user");
+        assert_eq!(messages[2]["role"], "assistant");
+        assert_eq!(messages[2]["content"], "Let me look.");
+        assert_eq!(messages[2]["tool_calls"][0]["id"], "c1");
+        assert_eq!(messages[2]["tool_calls"][0]["type"], "function");
+        assert_eq!(
+            messages[2]["tool_calls"][0]["function"]["arguments"],
+            "{\"path\":\"a.txt\"}"
+        );
+        assert_eq!(
+            messages[3],
+            json!({"role": "tool", "tool_call_id": "c1", "content": "alpha"})
+        );
+        assert_eq!(messages[4], json!({"role": "user", "content": "Go on."}));
+    }
+
+    #[test]
+    fn ollama_bodies_carry_calls_and_results_by_tool_name() {
+        let generation = LlmChatGeneration {
+            followups: conversation_with_a_call(),
+            tools: vec![ToolSpec {
+                name: "read_file",
+                description: "Reads.",
+                schema: json!({"type": "object"}),
+            }],
+            ..tiny_generation()
+        };
+        let body = ollama_generation_body(&probe_request_for_tests(), &generation);
+        let messages = body["messages"].as_array().unwrap();
+        assert_eq!(
+            messages[2]["tool_calls"][0]["function"],
+            json!({"name": "read_file", "arguments": {"path": "a.txt"}})
+        );
+        assert_eq!(
+            messages[3],
+            json!({"role": "tool", "content": "alpha", "tool_name": "read_file"})
+        );
+    }
+
+    #[test]
+    fn a_native_call_with_only_calls_has_no_text_content() {
+        let call = fm_agent::ToolCallRecord {
+            id: "c9".into(),
+            name: "list_dir".into(),
+            arguments: json!({}),
+        };
+        let message = openai_message(&Message::Assistant {
+            text: "TOOL {\"id\":\"c9\",\"name\":\"list_dir\",\"arguments\":{}}".into(),
+            calls: vec![call],
+        });
+        assert_eq!(message["content"], Value::Null);
     }
 
     #[test]
@@ -3361,6 +3551,8 @@ mod tests {
         generate_calls: std::sync::atomic::AtomicUsize,
         /// The tools each generation carried.
         generated_tools: Mutex<Vec<Vec<ToolSpec>>>,
+        /// The prompt and the number of follow-up messages each generation carried.
+        generated_prompts: Mutex<Vec<(String, usize)>>,
         /// Whether a generation offered the `echo` probe tool is answered with a call to it.
         script_tool_call: std::sync::atomic::AtomicBool,
     }
@@ -3410,6 +3602,10 @@ mod tests {
                 .lock()
                 .unwrap()
                 .push(generation.tools.clone());
+            self.generated_prompts
+                .lock()
+                .unwrap()
+                .push((generation.user_prompt.clone(), generation.followups.len()));
             self.generate_calls
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             if let Some(failure) = self.generate_failures.lock().unwrap().pop_front() {
@@ -3450,6 +3646,7 @@ mod tests {
             generate_failures: Mutex::new(std::collections::VecDeque::new()),
             generate_calls: std::sync::atomic::AtomicUsize::new(0),
             generated_tools: Mutex::new(Vec::new()),
+            generated_prompts: Mutex::new(Vec::new()),
             script_tool_call: std::sync::atomic::AtomicBool::new(false),
         });
         (
@@ -3806,6 +4003,7 @@ mod tests {
         let body = ollama_generation_body(
             &request,
             &LlmChatGeneration {
+                followups: Vec::new(),
                 tools: Vec::new(),
                 system_prompt: "Summarize.".into(),
                 user_prompt: "Evidence".into(),
@@ -3837,6 +4035,7 @@ mod tests {
             reasoning_switch: ReasoningSwitch::Plain,
         };
         let generation = |temperature| LlmChatGeneration {
+            followups: Vec::new(),
             tools: Vec::new(),
             system_prompt: "s".into(),
             user_prompt: "u".into(),
@@ -3854,6 +4053,7 @@ mod tests {
     #[test]
     fn openai_user_content_puts_each_image_after_the_text() {
         let text_only = openai_user_content(&LlmChatGeneration {
+            followups: Vec::new(),
             tools: Vec::new(),
             system_prompt: "s".into(),
             user_prompt: "Describe".into(),
@@ -3865,6 +4065,7 @@ mod tests {
         assert_eq!(text_only, json!("Describe"));
 
         let with_image = openai_user_content(&LlmChatGeneration {
+            followups: Vec::new(),
             tools: Vec::new(),
             system_prompt: "s".into(),
             user_prompt: "Describe".into(),
@@ -4776,6 +4977,7 @@ mod tests {
         let body = ollama_generation_body(
             &request,
             &LlmChatGeneration {
+                followups: Vec::new(),
                 tools: Vec::new(),
                 system_prompt: "Answer from evidence.".into(),
                 user_prompt: "Question".into(),
@@ -4875,6 +5077,7 @@ mod tests {
             .await
             .unwrap();
         let generation = LlmChatGeneration {
+            followups: Vec::new(),
             tools: Vec::new(),
             system_prompt: "Summarize grounded evidence.".into(),
             user_prompt: "Evidence".into(),
@@ -4925,6 +5128,39 @@ mod tests {
         assert_eq!(seen, vec!["OK".to_owned()]);
     }
 
+    #[tokio::test]
+    async fn an_endpoint_without_native_tools_reads_the_exchanges_as_text() {
+        let (service, _, transport) = service(LlmHostPolicy::desktop());
+        let profile = service
+            .create(draft(LlmPreset::OpenAiCompatible, "http://127.0.0.1:8000"))
+            .await
+            .unwrap();
+        let generation = LlmChatGeneration {
+            tools: vec![ToolSpec {
+                name: "read_file",
+                description: "Reads.",
+                schema: json!({"type": "object"}),
+            }],
+            followups: conversation_with_a_call(),
+            ..tiny_generation()
+        };
+        service
+            .generate_streamed(
+                profile.id,
+                generation,
+                &CancellationToken::new(),
+                &mut |_| {},
+            )
+            .await
+            .unwrap();
+        let prompts = transport.generated_prompts.lock().unwrap();
+        let (prompt, followups) = &prompts[0];
+        assert_eq!(*followups, 0);
+        assert!(prompt.contains("Assistant: Let me look."), "{prompt}");
+        assert!(prompt.contains("Tool result:\nalpha"), "{prompt}");
+        assert!(transport.generated_tools.lock().unwrap()[0].is_empty());
+    }
+
     #[test]
     fn streamed_content_reports_complete_lines_across_chunks() {
         let mut fragments = Vec::new();
@@ -4941,6 +5177,7 @@ mod tests {
 
     fn tiny_generation() -> LlmChatGeneration {
         LlmChatGeneration {
+            followups: Vec::new(),
             tools: Vec::new(),
             system_prompt: "Answer.".into(),
             user_prompt: "Question".into(),
@@ -4974,6 +5211,7 @@ mod tests {
                 .generate(
                     profile.id,
                     LlmChatGeneration {
+                        followups: Vec::new(),
                         tools: vec![tool()],
                         ..tiny_generation()
                     },
@@ -5319,6 +5557,7 @@ mod tests {
         let with_tools = ollama_generation_body(
             &request,
             &LlmChatGeneration {
+                followups: Vec::new(),
                 tools: vec![tool],
                 ..tiny_generation()
             },

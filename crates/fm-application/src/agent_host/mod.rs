@@ -11,8 +11,8 @@ use std::path::PathBuf;
 
 use async_trait::async_trait;
 use fm_agent::{
-    FileTools, NoteProposal, NotesAccess, SkillCatalogue, SkillIndex, SkillRoots, ToolCalling,
-    ToolOutput,
+    FileTools, Message, NoteProposal, NotesAccess, SkillCatalogue, SkillIndex, SkillRoots,
+    ToolCalling, ToolOutput, render_text,
 };
 use fm_transport_dto::{ChatFailureDto, NoteDraftDto, NoteProposalDto};
 use fm_vfs::ProviderRegistry;
@@ -151,6 +151,26 @@ pub(crate) async fn tool_calling(generator: &impl ChatGenerator) -> ToolCalling 
         ToolCalling::Native
     } else {
         ToolCalling::Text
+    }
+}
+
+/// A conversation as a generation request takes it: for the text protocol, all of it rendered as
+/// the prompt; natively, the leading user message as the prompt and the rest as structured
+/// follow-up messages (task 0341).
+pub(crate) fn generation_parts(
+    mut messages: Vec<Message>,
+    calling: ToolCalling,
+) -> (String, Vec<Message>) {
+    match calling {
+        ToolCalling::Text => (render_text(&messages), Vec::new()),
+        ToolCalling::Native => {
+            let prompt = match messages.first_mut() {
+                Some(Message::User(prompt)) => std::mem::take(prompt),
+                _ => return (String::new(), messages),
+            };
+            messages.remove(0);
+            (prompt, messages)
+        }
     }
 }
 
