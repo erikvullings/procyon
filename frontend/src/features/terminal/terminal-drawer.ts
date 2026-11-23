@@ -243,6 +243,14 @@ type LiveTerminal = {
   fileCache: CompletionCache | undefined;
   /** The skill names for `/` completion. */
   skillCache: CompletionCache | undefined;
+  /** The listing being read for `@` completion, shared by a prefetch and a Tab that follows. */
+  fileLoad:
+    | {
+        readonly root: string;
+        readonly token: object;
+        readonly files: Promise<readonly string[]>;
+      }
+    | undefined;
   /** The models `/model` listed last, so `/model 2` picks from what was shown. */
   models: readonly ModelChoice[];
 };
@@ -1236,6 +1244,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
 
   /** Marks the completion listings as possibly out of date. */
   function markStale(live: LiveTerminal): void {
+    live.fileLoad = undefined;
     if (live.fileCache !== undefined) live.fileCache.stale = true;
     if (live.skillCache !== undefined) live.skillCache.stale = true;
   }
@@ -1248,9 +1257,36 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   ): Promise<readonly string[]> {
     const cached = live.fileCache;
     if (cached !== undefined && cached.root === root.uri && !cached.stale) return cached.names;
-    const listed = (await client.assistFiles?.(root.uri)) ?? { files: [], truncated: false };
-    live.fileCache = { root: root.uri, names: listed.files, stale: false };
-    return listed.files;
+    if (live.fileLoad?.root === root.uri) return live.fileLoad.files;
+    const token = {};
+    const read = async (): Promise<readonly string[]> => {
+      const listed = (await client.assistFiles?.(root.uri)) ?? { files: [], truncated: false };
+      // Kept only if nothing changed the tree while it was read.
+      if (live.fileLoad?.token === token) {
+        live.fileCache = { root: root.uri, names: listed.files, stale: false };
+        live.fileLoad = undefined;
+      }
+      return listed.files;
+    };
+    const load = { root: root.uri, token, files: read() };
+    live.fileLoad = load;
+    return load.files;
+  }
+
+  /**
+   * Starts reading the paths as soon as `@` is typed on a `#` line, so the listing is usually
+   * ready by the time Tab is pressed (over SSH a large tree takes a while). Nothing is read when
+   * the cached listing is still current.
+   */
+  function prefetchMentionFiles(live: LiveTerminal): void {
+    const attrs = currentAttrs;
+    const location = attrs?.location;
+    if (attrs?.client.assistFiles === undefined || location === undefined) return;
+    if (!assistantOn() || !live.typed.known || !/^#.*(?:^|\s)@$/.test(live.typed.text)) return;
+    void treeFiles(live, attrs.client, live.assistRoot ?? location).catch((error: unknown) => {
+      console.warn('Reading the paths for @ completion failed.', error);
+      live.fileLoad = undefined;
+    });
   }
 
   /** The skill names `/` completes in `root`, cached like the paths. */
@@ -1309,6 +1345,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         forget();
         live.assistRoot = attrs.location;
         live.fileCache = undefined;
+        live.fileLoad = undefined;
         live.skillCache = undefined;
         live.assistActive = false;
         const folder = attrs.location?.uri ?? '';
@@ -1426,6 +1463,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     const applied = applyTypedInput(live.typed, data);
     live.typed = applied.state;
     if (wasComposing !== live.typed.text.startsWith('#')) m.redraw();
+    if (data.endsWith('@')) prefetchMentionFiles(live);
     if (applied.submitted !== undefined && applied.submitted.trim() !== '') {
       const command = applied.submitted.trim();
       live.pendingCommand = command;
@@ -1525,6 +1563,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         assistRoot: undefined,
         fileCache: undefined,
         skillCache: undefined,
+        fileLoad: undefined,
         models: [],
       };
       terminals.set(key, live);

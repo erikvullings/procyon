@@ -1254,6 +1254,24 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     expect(assistFiles).toHaveBeenCalledTimes(2);
   });
 
+  it('starts reading the paths when @ is typed, and Tab then uses that one read', async () => {
+    let release: (() => void) | undefined;
+    const assistFiles = vi.fn(
+      () =>
+        new Promise<{ files: readonly string[]; truncated: boolean }>((resolve) => {
+          release = () => resolve({ files: ['src/deep/main.rs'], truncated: false });
+        }),
+    );
+    await mountWith({ assistFiles });
+    typeLine('# read @');
+    await vi.waitFor(() => expect(assistFiles).toHaveBeenCalledOnce());
+    typeLine('main');
+    key('Tab', 9);
+    release?.();
+    await vi.waitFor(() => expect(written()).toContain('@src/deep/main.rs '));
+    expect(assistFiles).toHaveBeenCalledOnce();
+  });
+
   async function mountWith(
     client: Partial<TerminalClient>,
     extra: Partial<TerminalDrawerAttrs> = {},

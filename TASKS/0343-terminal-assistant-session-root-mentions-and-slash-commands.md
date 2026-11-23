@@ -63,3 +63,7 @@ against the terminal's current folder only. The user asked (2026-11-23):
     boundary check, compact); frontend 4070 tests incl. new slash/mention/drawer tests; tsc and
     Biome clean.
   - Not verified in the running desktop app or over a real SSH connection.
+- 2026-11-23 Claude: The path listing now starts when `@` is typed on a `#` line (one read shared
+  with the Tab that follows; nothing is read while the cached listing is current, and a reply or
+  command that marks it stale also drops a read in flight). Test: `starts reading the paths when @
+  is typed`.
