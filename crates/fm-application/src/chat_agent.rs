@@ -18,7 +18,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::agent_host::{
     FolderTools, READ_FILE_DESCRIPTION, SkillFolderDocuments, SkillScope, chat_failure,
-    generation_parts, note_proposal_dto, skills_for, tool_calling,
+    generation_parts, note_proposal_dto, project_context, tool_calling,
 };
 use crate::chat::ChatGenerator;
 use crate::llm_profiles::{LlmChatGeneration, LlmImageAttachment, LlmRole};
@@ -79,16 +79,22 @@ pub(crate) async fn run(
     let mut registry = read_only_registry::<NoteProposal>();
     registry.describe("read_file", READ_FILE_DESCRIPTION);
     let files = FolderTools::open(tooling.providers, input.folder);
-    let catalogue = skills_for(
+    let project = project_context(
         tooling.skills,
+        tooling.providers,
         tooling.notes,
         input.folder,
         input.question,
         tooling.skill_scope,
     )
     .await;
+    let catalogue = project.skills;
     let calling = tool_calling(generator).await;
-    let base = format!("{}{TOOLS_INTRO}", input.system_prompt);
+    let mut base = format!("{}{TOOLS_INTRO}", input.system_prompt);
+    if !project.instructions.is_empty() {
+        base.push_str("\n\n");
+        base.push_str(&project.instructions);
+    }
     let mut turn = ChatTurn {
         generator,
         system_prompt: compose_system_prompt(&base, &registry, calling, &catalogue, input.question),

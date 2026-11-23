@@ -135,9 +135,15 @@ impl SkillFolderDocuments {
 impl fm_agent::SkillDocuments for SkillFolderDocuments {
     async fn read(
         &self,
-        path: &std::path::Path,
+        store: &fm_agent::StoreHandle,
+        path: &str,
         offset: usize,
     ) -> Option<Result<String, fm_agent::DocumentError>> {
+        // Documents of skills on another machine are read as plain text (task 0342).
+        if store.id() != fm_agent::LOCAL_STORE_ID {
+            return None;
+        }
+        let path = std::path::Path::new(path);
         let name = path.file_name()?.to_string_lossy().into_owned();
         if !is_document(&name) {
             return None;

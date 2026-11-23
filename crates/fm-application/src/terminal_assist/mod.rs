@@ -13,8 +13,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use fm_agent::{
-    Message, SkillCatalogue, SkillIndex, ToolCallRecord, ToolCalling, ToolContext, ToolRegistry,
-    ToolSpec, TurnEnd, TurnEvent, TurnHost, TurnOptions, compose_system_prompt, run_turn,
+    Message, SkillIndex, ToolCallRecord, ToolCalling, ToolContext, ToolRegistry, ToolSpec, TurnEnd,
+    TurnEvent, TurnHost, TurnOptions, compose_system_prompt, run_turn,
 };
 
 pub(crate) use fm_agent::{NotesAccess, redact_secrets};
@@ -31,8 +31,8 @@ use tokio_util::sync::CancellationToken;
 use fm_agent::{newest_bytes, truncate_to_bytes};
 
 use crate::agent_host::{
-    Documents, FolderTools, SkillFolderDocuments, SkillScope, ToolHost, chat_failure,
-    generation_parts, is_document, note_proposal_dto, skills_for, tool_calling,
+    Documents, FolderTools, ProjectContext, SkillFolderDocuments, SkillScope, ToolHost,
+    chat_failure, generation_parts, is_document, note_proposal_dto, project_context, tool_calling,
 };
 use crate::chat::ChatGenerator;
 use crate::llm_profiles::{LlmChatGeneration, LlmRole};
@@ -84,22 +84,26 @@ const ASK_NATIVE_TOOLS: &str = "\nYou may use the tools you are given, and call 
      any file you were asked to create is written. Never stop to report progress or to ask \
      whether to continue; a reply without a tool call ends the task.";
 
-/// The ask prompt: the fixed text, the tools generated from the registry (task 0339), and the
-/// skills catalogue for this question.
+/// The ask prompt: the fixed text, the project's instructions (task 0342), the tools generated
+/// from the registry (task 0339), and the skills catalogue for this question.
 fn ask_prompt(
     registry: &ToolRegistry<TerminalInterrupt>,
-    catalogue: &SkillCatalogue,
+    project: &ProjectContext,
     request: &str,
     calling: ToolCalling,
 ) -> String {
-    let intro = format!(
+    let mut intro = format!(
         "{ASK_INTRO}{}",
         match calling {
             ToolCalling::Native => ASK_NATIVE_TOOLS,
             ToolCalling::Text => ASK_TEXT_TOOLS,
         }
     );
-    compose_system_prompt(&intro, registry, calling, catalogue, request)
+    if !project.instructions.is_empty() {
+        intro.push_str("\n\n");
+        intro.push_str(&project.instructions);
+    }
+    compose_system_prompt(&intro, registry, calling, &project.skills, request)
 }
 
 /// How an `ask` turn runs: the answer cap, and secret redaction of every tool result.
@@ -318,8 +322,9 @@ async fn ask(
     } else {
         question_text.clone()
     };
-    let catalogue = skills_for(
+    let project = project_context(
         terminal.skills,
+        providers,
         notes,
         &request.working_directory,
         &skills_question,
@@ -330,7 +335,7 @@ async fn ask(
         generator,
         sessions,
         id: &id,
-        system_prompt: ask_prompt(&prompt_registry, &catalogue, &skills_question, calling),
+        system_prompt: ask_prompt(&prompt_registry, &project, &skills_question, calling),
         budget: session::conversation_budget(generator.context_window(LlmRole::Chat).await),
         calling,
         tools: prompt_registry.specs_for(calling),
@@ -340,7 +345,7 @@ async fn ask(
         notes,
         files: Some(&files),
         documents: Some(&skill_documents),
-        ..ToolContext::new(&catalogue)
+        ..ToolContext::new(&project.skills)
     };
     let options = turn_options();
     loop {
@@ -1683,11 +1688,14 @@ mod tests {
         let reply = ask_local(&fake, &sessions, ask_request("t", "go", dir.path())).await;
         assert!(reply.write_request.is_none());
         assert!(sessions.render("t").contains("turned off"));
-        let catalogue = SkillCatalogue::default();
+        let project = ProjectContext {
+            skills: fm_agent::SkillCatalogue::default(),
+            instructions: String::new(),
+        };
         let off = agent_tools::registry(false);
         let on = agent_tools::registry(true);
-        assert!(!ask_prompt(&off, &catalogue, "", ToolCalling::Text).contains("write_file"));
-        assert!(ask_prompt(&on, &catalogue, "", ToolCalling::Text).contains("write_file"));
+        assert!(!ask_prompt(&off, &project, "", ToolCalling::Text).contains("write_file"));
+        assert!(ask_prompt(&on, &project, "", ToolCalling::Text).contains("write_file"));
     }
 
     #[tokio::test]

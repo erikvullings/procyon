@@ -171,13 +171,20 @@ async fn a_document_inside_a_skill_folder_is_read_as_text() {
     std::fs::write(skill.join("notes.txt"), "plain").unwrap();
     let documents = super::SkillFolderDocuments::new(&registry());
 
+    let local = fm_agent::StoreHandle::local();
+    let path = |name: &str| skill.join(name).to_string_lossy().into_owned();
     let text = documents
-        .read(&skill.join("guide.epub"), 0)
+        .read(&local, &path("guide.epub"), 0)
         .await
         .expect("a document")
         .unwrap();
     assert!(text.contains("Paragraph number 0000"), "{text}");
     // Plain files are the skill reader's business. (The path itself was checked by the harness;
     // fm-agent's tests cover that a path outside the skill never reaches the converter.)
-    assert!(documents.read(&skill.join("notes.txt"), 0).await.is_none());
+    assert!(
+        documents
+            .read(&local, &path("notes.txt"), 0)
+            .await
+            .is_none()
+    );
 }

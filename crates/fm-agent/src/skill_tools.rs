@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 use crate::notes::NoteToolCall;
 use crate::redact::redact_secrets;
-use crate::skills::{Skill, SkillFileError, SkillLocation};
+use crate::skills::{Skill, SkillLocation};
 use crate::tool::{ToolContext, ToolEffect, ToolOutcome, ToolOutput, TypedTool};
 
 /// Names listed when a skill is not found.
@@ -47,21 +47,18 @@ impl<I: Send + 'static> TypedTool<I> for ReadSkill {
         };
         let output = match &skill.location {
             SkillLocation::Note(path) => read_note_skill(ctx, path, step).await,
-            SkillLocation::Folder(_) => read_folder_skill(skill.clone(), step).await,
+            SkillLocation::Folder { .. } => read_folder_skill(skill, step).await,
         };
         output.into()
     }
 }
 
-async fn read_folder_skill(skill: Skill, step: String) -> ToolOutput {
-    let name = skill.name.clone();
-    let loaded = tokio::task::spawn_blocking(move || {
-        let body = skill.read_body()?;
-        Some((body, skill.list_files()))
-    })
-    .await
-    .ok()
-    .flatten();
+async fn read_folder_skill(skill: &Skill, step: String) -> ToolOutput {
+    let name = &skill.name;
+    let loaded = match skill.read_body().await {
+        Some(body) => Some((body, skill.list_files().await)),
+        None => None,
+    };
     match loaded {
         Some((Ok(body), files)) => {
             let mut text = format!("Skill {name}:\n{}", redact_secrets(&body));
@@ -145,33 +142,22 @@ impl<I: Send + 'static> TypedTool<I> for ReadSkillFile {
         let Some(skill) = ctx.skills.find(&args.name) else {
             return ToolOutcome::output(step, not_found(ctx, &args.name));
         };
-        let skill = skill.clone();
         let offset = args.offset.unwrap_or(0);
         // The sandbox runs first, for documents too: the host converter only sees checked paths.
-        let checked = {
-            let wanted = relative.clone();
-            tokio::task::spawn_blocking(move || {
-                let path = skill.resolve_file(&wanted)?;
-                Ok::<_, SkillFileError>((skill, path))
-            })
-            .await
-            .unwrap_or_else(|_| Err(SkillFileError::NotAvailable(relative.clone())))
-        };
-        let (skill, path) = match checked {
-            Ok(found) => found,
+        let path = match skill.resolve_file(&relative).await {
+            Ok(path) => path,
             Err(error) => return ToolOutcome::error(step, error),
         };
         if let Some(documents) = ctx.documents
-            && let Some(result) = documents.read(&path, offset).await
+            && let Some((store, _)) = skill.folder()
+            && let Some(result) = documents.read(store, &path, offset).await
         {
             return match result {
                 Ok(text) => ToolOutcome::output(step, redact_secrets(&text)),
                 Err(error) => ToolOutcome::error(step, error),
             };
         }
-        let result = tokio::task::spawn_blocking(move || skill.read_checked(&path, offset))
-            .await
-            .unwrap_or(Err(SkillFileError::NotAvailable(relative)));
+        let result = skill.read_checked(&path, offset).await;
         match result {
             Ok(text) => ToolOutcome::output(step, redact_secrets(&text)),
             Err(error) => ToolOutcome::error(step, error),

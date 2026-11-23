@@ -45,6 +45,7 @@
 //! the built-in tools that interrupt need `I: From<CommandRequest>` or `I: From<NoteProposal>`.
 
 mod frontmatter;
+mod instructions;
 mod message;
 mod notes;
 mod paths;
@@ -53,12 +54,17 @@ mod redact;
 mod registry;
 mod skill_tools;
 mod skills;
+mod store;
 mod stream;
 mod text;
 mod tool;
 mod tools;
 mod turn;
 
+pub use self::instructions::{
+    INSTRUCTION_FILE_NAMES, InstructionFile, InstructionSource, MAX_INSTRUCTION_BYTES,
+    instruction_candidates, instructions_section, read_instructions,
+};
 pub use self::message::{
     Message, NOT_RUN_RESULT, OMITTED_NOTE, ToolCallRecord, fit_messages, render_text,
 };
@@ -70,6 +76,10 @@ pub use self::registry::{ParsedCall, ToolCalling, ToolRegistry, ToolSpec, compos
 pub use self::skills::{
     NoteSkill, Skill, SkillCatalogue, SkillFileError, SkillIndex, SkillLocation, SkillRoots,
     SkillSource,
+};
+pub use self::store::{
+    LOCAL_STORE_ID, LocalStore, SkillStore, StoreEntry, StoreEntryKind, StoreHandle, StoreMetadata,
+    file_name, join_path, relative_to,
 };
 pub use self::text::{newest_bytes, truncate_to_bytes};
 pub use self::tool::{

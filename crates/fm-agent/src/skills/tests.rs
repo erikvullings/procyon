@@ -21,13 +21,33 @@ async fn read_skill_file(ctx: &ToolContext<'_>, args: serde_json::Value) -> Stri
     outcome.expect_text()
 }
 
-fn folder_skill(dir: &Path) -> Skill {
-    let header = read_skill_header(dir).unwrap();
+fn text(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
+}
+
+async fn folder_skill(dir: &Path) -> Skill {
+    let store = StoreHandle::local();
+    let header = read_skill_header(&store, &text(dir)).await.unwrap();
     Skill {
         name: header.name,
         description: header.description,
         source: SkillSource::User,
-        location: SkillLocation::Folder(dir.to_path_buf()),
+        location: SkillLocation::Folder {
+            store,
+            path: text(dir),
+        },
+    }
+}
+
+/// The local folder of a skill found on the local disk.
+fn dir_of(skill: &Skill) -> PathBuf {
+    PathBuf::from(skill.folder().expect("a folder skill").1)
+}
+
+fn roots(project: &[&Path], user: &[&Path]) -> SkillRoots {
+    SkillRoots {
+        project: project.iter().map(|path| text(path)).collect(),
+        user: user.iter().map(|path| text(path)).collect(),
     }
 }
 
@@ -38,15 +58,12 @@ fn write_skill(root: &Path, folder: &str, text: &str) -> PathBuf {
     dir
 }
 
-fn catalogue(user: &Path, project: &Path) -> SkillCatalogue {
-    SkillCatalogue::discover(&SkillRoots {
-        project: vec![project.to_path_buf()],
-        user: vec![user.to_path_buf()],
-    })
+async fn catalogue(user: &Path, project: &Path) -> SkillCatalogue {
+    SkillCatalogue::discover(&StoreHandle::local(), &roots(&[project], &[user])).await
 }
 
-#[test]
-fn the_catalogue_lists_every_source_with_name_description_and_source() {
+#[tokio::test]
+async fn the_catalogue_lists_every_source_with_name_description_and_source() {
     let temp = tempfile::tempdir().unwrap();
     let (user, project) = (temp.path().join("user"), temp.path().join("project"));
     write_skill(
@@ -66,7 +83,7 @@ fn the_catalogue_lists_every_source_with_name_description_and_source() {
     );
     fs::create_dir_all(user.join("empty")).unwrap();
 
-    let mut catalogue = catalogue(&user, &project);
+    let mut catalogue = catalogue(&user, &project).await;
     catalogue.add_notes(vec![NoteSkill {
         name: "nginx-cert".into(),
         description: "Use when replacing a certificate".into(),
@@ -89,13 +106,13 @@ fn the_catalogue_lists_every_source_with_name_description_and_source() {
     assert!(prompt.contains("- nginx-cert: Use when replacing a certificate [note]"));
 }
 
-#[test]
-fn names_collide_project_then_user_then_note() {
+#[tokio::test]
+async fn names_collide_project_then_user_then_note() {
     let temp = tempfile::tempdir().unwrap();
     let (user, project) = (temp.path().join("user"), temp.path().join("project"));
     write_skill(&user, "same", "---\ndescription: from user\n---\n");
     write_skill(&project, "same", "---\ndescription: from project\n---\n");
-    let mut catalogue = catalogue(&user, &project);
+    let mut catalogue = catalogue(&user, &project).await;
     catalogue.add_notes(vec![NoteSkill {
         name: "same".into(),
         description: "from note".into(),
@@ -105,8 +122,8 @@ fn names_collide_project_then_user_then_note() {
     assert_eq!(catalogue.find("same").unwrap().description, "from project");
 }
 
-#[test]
-fn the_catalogue_stays_within_its_caps_and_keeps_the_closest_matches() {
+#[tokio::test]
+async fn the_catalogue_stays_within_its_caps_and_keeps_the_closest_matches() {
     let temp = tempfile::tempdir().unwrap();
     let user = temp.path().join("user");
     for number in 0..120 {
@@ -121,10 +138,7 @@ fn the_catalogue_stays_within_its_caps_and_keeps_the_closest_matches() {
             &format!("---\ndescription: {description}\n---\n"),
         );
     }
-    let catalogue = SkillCatalogue::discover(&SkillRoots {
-        project: vec![],
-        user: vec![user],
-    });
+    let catalogue = SkillCatalogue::discover(&StoreHandle::local(), &roots(&[], &[&user])).await;
 
     let prompt = catalogue.prompt_section("how do I use kubernetes");
     assert!(prompt.len() <= MAX_CATALOGUE_BYTES);
@@ -148,20 +162,17 @@ fn standard_roots_walk_up_to_the_git_root_and_stop_at_home() {
     fs::create_dir_all(repo.join(".git")).unwrap();
 
     let roots = SkillRoots::standard(Some(&inner), Some(&home), &[PathBuf::from("/extra")]);
-    assert_eq!(roots.user[0], home.join(".claude/skills"));
-    assert_eq!(roots.user[2], PathBuf::from("/extra"));
-    assert!(roots.project.contains(&repo.join(".claude/skills")));
-    assert!(roots.project.contains(&inner.join(".agents/skills")));
-    assert!(
-        !roots
-            .project
-            .iter()
-            .any(|root| root.starts_with(home.join("code")) && !root.starts_with(&repo))
-    );
-    assert!(!roots.project.contains(&home.join(".claude/skills")));
+    assert_eq!(roots.user[0], text(&home.join(".claude/skills")));
+    assert_eq!(roots.user[2], "/extra");
+    assert!(roots.project.contains(&text(&repo.join(".claude/skills"))));
+    assert!(roots.project.contains(&text(&inner.join(".agents/skills"))));
+    assert!(!roots.project.iter().any(|root| {
+        root.starts_with(&text(&home.join("code"))) && !root.starts_with(&text(&repo))
+    }));
+    assert!(!roots.project.contains(&text(&home.join(".claude/skills"))));
 }
 
-fn skill_with_files() -> (tempfile::TempDir, Skill) {
+async fn skill_with_files() -> (tempfile::TempDir, Skill) {
     let temp = tempfile::tempdir().unwrap();
     let dir = write_skill(
         temp.path(),
@@ -174,25 +185,31 @@ fn skill_with_files() -> (tempfile::TempDir, Skill) {
     fs::write(dir.join("server.key"), "private").unwrap();
     fs::write(dir.join("image.bin"), [0u8, 1, 2]).unwrap();
     fs::write(temp.path().join("outside.txt"), "outside").unwrap();
-    let skill = folder_skill(&dir);
+    let skill = folder_skill(&dir).await;
     (temp, skill)
 }
 
-#[test]
-fn files_inside_the_skill_are_read() {
-    let (_temp, skill) = skill_with_files();
-    assert_eq!(skill.read_file("references/guide.md").unwrap(), "the guide");
-    assert_eq!(skill.read_body().unwrap().unwrap(), "Use the template.\n");
-    let files = skill.list_files();
+#[tokio::test]
+async fn files_inside_the_skill_are_read() {
+    let (_temp, skill) = skill_with_files().await;
+    assert_eq!(
+        skill.read_file("references/guide.md").await.unwrap(),
+        "the guide"
+    );
+    assert_eq!(
+        skill.read_body().await.unwrap().unwrap(),
+        "Use the template.\n"
+    );
+    let files = skill.list_files().await;
     assert!(files.contains(&"references/guide.md".to_owned()));
     assert!(files.contains(&"run.sh".to_owned()));
     assert!(!files.contains(&"server.key".to_owned()));
     assert!(!files.contains(&"SKILL.md".to_owned()));
 }
 
-#[test]
-fn reading_cannot_leave_the_skill_folder() {
-    let (temp, skill) = skill_with_files();
+#[tokio::test]
+async fn reading_cannot_leave_the_skill_folder() {
+    let (temp, skill) = skill_with_files().await;
     for path in [
         "../outside.txt",
         "references/../../outside.txt",
@@ -200,56 +217,56 @@ fn reading_cannot_leave_the_skill_folder() {
         "",
     ] {
         assert!(
-            matches!(skill.read_file(path), Err(SkillFileError::NotAvailable(_))),
+            matches!(
+                skill.read_file(path).await,
+                Err(SkillFileError::NotAvailable(_))
+            ),
             "{path} must not be readable"
         );
     }
     assert!(matches!(
-        skill.read_file("server.key"),
+        skill.read_file("server.key").await,
         Err(SkillFileError::Secret(_))
     ));
     assert!(matches!(
-        skill.read_file("image.bin"),
+        skill.read_file("image.bin").await,
         Err(SkillFileError::NotText(_))
     ));
     assert!(matches!(
-        skill.read_file("references"),
+        skill.read_file("references").await,
         Err(SkillFileError::NotText(_))
     ));
     #[cfg(unix)]
     {
-        let SkillLocation::Folder(dir) = &skill.location else {
-            unreachable!()
-        };
+        let dir = dir_of(&skill);
         std::os::unix::fs::symlink(temp.path().join("outside.txt"), dir.join("link.txt")).unwrap();
         std::os::unix::fs::symlink(temp.path(), dir.join("up")).unwrap();
         assert!(matches!(
-            skill.read_file("link.txt"),
+            skill.read_file("link.txt").await,
             Err(SkillFileError::NotAvailable(_))
         ));
         assert!(matches!(
-            skill.read_file("up/outside.txt"),
+            skill.read_file("up/outside.txt").await,
             Err(SkillFileError::NotAvailable(_))
         ));
         assert!(
             !skill
                 .list_files()
+                .await
                 .iter()
                 .any(|file| file.contains("outside") || file.contains("link"))
         );
     }
 }
 
-#[test]
-fn credential_folders_inside_a_skill_are_not_read() {
-    let (_temp, skill) = skill_with_files();
-    let SkillLocation::Folder(dir) = &skill.location else {
-        unreachable!()
-    };
+#[tokio::test]
+async fn credential_folders_inside_a_skill_are_not_read() {
+    let (_temp, skill) = skill_with_files().await;
+    let dir = dir_of(&skill);
     fs::create_dir_all(dir.join(".ssh")).unwrap();
     fs::write(dir.join(".ssh/config"), "Host x").unwrap();
     assert!(matches!(
-        skill.read_file(".ssh/config"),
+        skill.read_file(".ssh/config").await,
         Err(SkillFileError::NotAvailable(_))
     ));
 }
@@ -270,7 +287,7 @@ impl NotesAccess for FakeNotes {
 
 #[tokio::test]
 async fn read_skill_loads_a_folder_skill_and_a_note_the_same_way() {
-    let (_temp, skill) = skill_with_files();
+    let (_temp, skill) = skill_with_files().await;
     let mut catalogue = SkillCatalogue::default();
     catalogue.add_notes(vec![NoteSkill {
         name: "nginx-cert".into(),
@@ -296,10 +313,8 @@ async fn read_skill_loads_a_folder_skill_and_a_note_the_same_way() {
 
 #[tokio::test]
 async fn read_skill_file_is_sandboxed_and_redacts() {
-    let (temp, skill) = skill_with_files();
-    let SkillLocation::Folder(dir) = &skill.location else {
-        unreachable!()
-    };
+    let (temp, skill) = skill_with_files().await;
+    let dir = dir_of(&skill);
     fs::write(
         dir.join("notes.txt"),
         "token=ghp_abcdefghijklmnopqrstuvwxyz0123456789",
@@ -323,8 +338,8 @@ async fn read_skill_file_is_sandboxed_and_redacts() {
     drop(temp);
 }
 
-#[test]
-fn symlinked_and_copied_skill_folders_list_each_name_once() {
+#[tokio::test]
+async fn symlinked_and_copied_skill_folders_list_each_name_once() {
     let temp = tempfile::tempdir().unwrap();
     let claude = temp.path().join(".claude/skills");
     let copy = temp.path().join(".agents/skills");
@@ -344,11 +359,8 @@ fn symlinked_and_copied_skill_folders_list_each_name_once() {
     #[cfg(unix)]
     std::os::unix::fs::symlink(&claude, &linked).unwrap();
 
-    let roots = SkillRoots {
-        project: vec![],
-        user: vec![claude, copy, linked],
-    };
-    let catalogue = SkillCatalogue::discover(&roots);
+    let roots = roots(&[], &[&claude, &copy, &linked]);
+    let catalogue = SkillCatalogue::discover(&StoreHandle::local(), &roots).await;
 
     assert_eq!(catalogue.skills().len(), 2);
     assert_eq!(catalogue.find("pdf").unwrap().description, "from claude");
@@ -357,25 +369,27 @@ fn symlinked_and_copied_skill_folders_list_each_name_once() {
 
 /// A converter that records the paths it was given.
 struct RecordingDocuments {
-    seen: std::sync::Mutex<Vec<PathBuf>>,
+    seen: std::sync::Mutex<Vec<String>>,
 }
 
 #[async_trait]
 impl SkillDocuments for RecordingDocuments {
-    async fn read(&self, path: &Path, offset: usize) -> Option<Result<String, DocumentError>> {
-        self.seen.lock().unwrap().push(path.to_path_buf());
-        path.extension()
-            .is_some_and(|extension| extension == "pdf")
+    async fn read(
+        &self,
+        _store: &StoreHandle,
+        path: &str,
+        offset: usize,
+    ) -> Option<Result<String, DocumentError>> {
+        self.seen.lock().unwrap().push(path.to_owned());
+        path.ends_with(".pdf")
             .then(|| Ok(format!("pdf text from {offset}")))
     }
 }
 
 #[tokio::test]
 async fn documents_reach_the_host_converter_only_after_the_sandbox() {
-    let (temp, skill) = skill_with_files();
-    let SkillLocation::Folder(dir) = &skill.location else {
-        unreachable!()
-    };
+    let (temp, skill) = skill_with_files().await;
+    let dir = dir_of(&skill);
     fs::write(dir.join("manual.pdf"), "%PDF").unwrap();
     fs::write(temp.path().join("outside.pdf"), "%PDF").unwrap();
     let mut catalogue = SkillCatalogue::default();
@@ -405,15 +419,13 @@ async fn documents_reach_the_host_converter_only_after_the_sandbox() {
     assert!(seen[0].ends_with("manual.pdf"));
 }
 
-#[test]
-fn a_long_skill_file_is_continued_from_the_offset_it_names() {
-    let (_temp, skill) = skill_with_files();
-    let SkillLocation::Folder(dir) = &skill.location else {
-        unreachable!()
-    };
+#[tokio::test]
+async fn a_long_skill_file_is_continued_from_the_offset_it_names() {
+    let (_temp, skill) = skill_with_files().await;
+    let dir = dir_of(&skill);
     let text = "é".repeat(MAX_SKILL_BYTES); // two bytes each: twice the limit
     fs::write(dir.join("long.md"), &text).unwrap();
-    let first = skill.read_file("long.md").unwrap();
+    let first = skill.read_file("long.md").await.unwrap();
     let marker = "[truncated: continue with offset ";
     let at = first.find(marker).expect("a continuation note");
     let offset: usize = first[at + marker.len()..]
@@ -421,8 +433,8 @@ fn a_long_skill_file_is_continued_from_the_offset_it_names() {
         .parse()
         .unwrap();
     assert_eq!(offset, MAX_SKILL_BYTES);
-    let path = skill.resolve_file("long.md").unwrap();
-    let rest = skill.read_checked(&path, offset).unwrap();
+    let path = skill.resolve_file("long.md").await.unwrap();
+    let rest = skill.read_checked(&path, offset).await.unwrap();
     assert!(rest.starts_with('é'));
     assert_eq!(
         first[..at].trim_end().len() + rest.find('\n').unwrap_or(rest.len()),
@@ -430,8 +442,8 @@ fn a_long_skill_file_is_continued_from_the_offset_it_names() {
     );
 }
 
-#[test]
-fn the_index_reads_a_skill_again_only_when_it_changed() {
+#[tokio::test]
+async fn the_index_reads_a_skill_again_only_when_it_changed() {
     let temp = tempfile::tempdir().unwrap();
     let user = temp.path().join("user");
     let dir = write_skill(
@@ -442,18 +454,26 @@ description: first
 ---
 ",
     );
-    let roots = SkillRoots {
-        project: vec![],
-        user: vec![user],
-    };
+    let roots = roots(&[], &[&user]);
+    let store = StoreHandle::local();
     let index = SkillIndex::new();
     assert_eq!(
-        index.discover(&roots).find("pdf").unwrap().description,
+        index
+            .discover(&store, &roots)
+            .await
+            .find("pdf")
+            .unwrap()
+            .description,
         "first"
     );
     // Same size and time: the cached header is used.
     assert_eq!(
-        index.discover(&roots).find("pdf").unwrap().description,
+        index
+            .discover(&store, &roots)
+            .await
+            .find("pdf")
+            .unwrap()
+            .description,
         "first"
     );
     fs::write(
@@ -465,9 +485,124 @@ description: second, longer
     )
     .unwrap();
     assert_eq!(
-        index.discover(&roots).find("pdf").unwrap().description,
+        index
+            .discover(&store, &roots)
+            .await
+            .find("pdf")
+            .unwrap()
+            .description,
         "second, longer"
     );
     fs::remove_dir_all(&dir).unwrap();
-    assert!(index.discover(&roots).find("pdf").is_none());
+    assert!(index.discover(&store, &roots).await.find("pdf").is_none());
+}
+
+/// A store like a remote connection's: paths relative to the working folder, no links.
+struct MemoryStore {
+    files: std::collections::HashMap<String, Vec<u8>>,
+}
+
+impl MemoryStore {
+    fn is_folder(&self, path: &str) -> bool {
+        path.is_empty()
+            || self
+                .files
+                .keys()
+                .any(|file| file.starts_with(&format!("{path}/")))
+    }
+}
+
+#[async_trait]
+impl crate::store::SkillStore for MemoryStore {
+    fn id(&self) -> &str {
+        "memory"
+    }
+
+    async fn list(&self, folder: &str) -> Option<Vec<crate::store::StoreEntry>> {
+        if !self.is_folder(folder) {
+            return None;
+        }
+        let mut entries: Vec<crate::store::StoreEntry> = Vec::new();
+        for file in self.files.keys() {
+            let Some(rest) = relative_to(folder, file).filter(|rest| !rest.is_empty()) else {
+                continue;
+            };
+            let (name, kind) = match rest.split_once('/') {
+                Some((name, _)) => (name, StoreEntryKind::Folder),
+                None => (rest, StoreEntryKind::File),
+            };
+            if !entries.iter().any(|entry| entry.name == name) {
+                entries.push(crate::store::StoreEntry {
+                    name: name.to_owned(),
+                    kind,
+                });
+            }
+        }
+        Some(entries)
+    }
+
+    async fn metadata(&self, path: &str) -> Option<crate::store::StoreMetadata> {
+        let (kind, len) = match self.files.get(path) {
+            Some(bytes) => (StoreEntryKind::File, bytes.len() as u64),
+            None if self.is_folder(path) => (StoreEntryKind::Folder, 0),
+            None => return None,
+        };
+        Some(crate::store::StoreMetadata {
+            kind,
+            len,
+            modified: None,
+        })
+    }
+
+    async fn read(&self, path: &str, offset: u64, max: usize) -> Option<Vec<u8>> {
+        let bytes = self.files.get(path)?;
+        let start = (offset as usize).min(bytes.len());
+        Some(bytes[start..(start + max).min(bytes.len())].to_vec())
+    }
+
+    async fn real_path(&self, path: &str) -> Option<String> {
+        (self.files.contains_key(path) || self.is_folder(path)).then(|| path.to_owned())
+    }
+}
+
+#[tokio::test]
+async fn skills_of_a_remote_working_folder_are_found_and_read_through_its_store() {
+    let files = [
+        (
+            ".claude/skills/deploy/SKILL.md",
+            "---\ndescription: Use when deploying\n---\nSteps.",
+        ),
+        (".claude/skills/deploy/ref/hosts.md", "web-1"),
+        (".agents/skills/lint/SKILL.md", "# Lint\n\nRun the linter."),
+        ("secret.txt", "outside the skill"),
+    ];
+    let store = StoreHandle::new(MemoryStore {
+        files: files
+            .iter()
+            .map(|(path, text)| ((*path).to_owned(), text.as_bytes().to_vec()))
+            .collect(),
+    });
+    let index = SkillIndex::new();
+    let catalogue = index
+        .discover(&store, &SkillRoots::working_folder(""))
+        .await;
+    assert_eq!(catalogue.len(), 2);
+    let deploy = catalogue.find("deploy").unwrap();
+    assert_eq!(deploy.source, SkillSource::Project);
+    assert_eq!(
+        catalogue.find("lint").unwrap().description,
+        "Run the linter."
+    );
+    assert_eq!(deploy.read_body().await.unwrap().unwrap(), "Steps.");
+    assert_eq!(deploy.list_files().await, ["ref/hosts.md"]);
+    assert_eq!(deploy.read_file("ref/hosts.md").await.unwrap(), "web-1");
+    assert!(matches!(
+        deploy.read_file("../../../secret.txt").await,
+        Err(SkillFileError::NotAvailable(_))
+    ));
+    // Without a modification time, the header is read again each time rather than trusted.
+    let again = index
+        .discover(&store, &SkillRoots::working_folder(""))
+        .await;
+    assert_eq!(again.len(), 2);
 }

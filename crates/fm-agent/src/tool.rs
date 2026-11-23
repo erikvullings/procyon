@@ -5,8 +5,6 @@
 //! interrupt; it ends the turn and gives it to the host. Built-in tools that interrupt ask for
 //! `I: From<TheirRequest>`, so a host enum with one variant per request works.
 
-use std::path::Path;
-
 use async_trait::async_trait;
 use schemars::JsonSchema;
 use schemars::generate::SchemaSettings;
@@ -16,6 +14,7 @@ use thiserror::Error;
 
 use crate::notes::NotesAccess;
 use crate::skills::SkillCatalogue;
+use crate::store::StoreHandle;
 
 /// What a tool shows the person and tells the model.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,9 +118,15 @@ pub struct DocumentError(pub String);
 /// file inside the skill folder, not secret-looking, reached without leaving the folder.
 #[async_trait]
 pub trait SkillDocuments: Send + Sync {
-    /// The text of the file at `path` from byte `offset`, or `None` when it is not a document this
-    /// host converts (the harness then reads it as plain text).
-    async fn read(&self, path: &Path, offset: usize) -> Option<Result<String, DocumentError>>;
+    /// The text of the file at `path` (already checked against the skill's sandbox, in `store`'s
+    /// path form) from byte `offset`, or `None` when it is not a document this host converts (the
+    /// harness then reads it as plain text).
+    async fn read(
+        &self,
+        store: &StoreHandle,
+        path: &str,
+        offset: usize,
+    ) -> Option<Result<String, DocumentError>>;
 }
 
 /// What tools may use during one request. Every capability is optional: a tool whose capability

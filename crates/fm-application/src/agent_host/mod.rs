@@ -6,19 +6,22 @@
 mod documents;
 mod remote;
 mod sandbox;
+mod skill_store;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use fm_agent::{
-    FileTools, Message, NoteProposal, NotesAccess, SkillCatalogue, SkillIndex, SkillRoots,
-    ToolCalling, ToolOutput, render_text,
+    FileTools, InstructionSource, MAX_INSTRUCTION_BYTES, Message, NoteProposal, NotesAccess,
+    SkillCatalogue, SkillIndex, SkillRoots, StoreHandle, ToolCalling, ToolOutput,
+    instruction_candidates, instructions_section, read_instructions, render_text,
 };
 use fm_transport_dto::{ChatFailureDto, NoteDraftDto, NoteProposalDto};
 use fm_vfs::ProviderRegistry;
 
 pub(crate) use self::documents::{Documents, SkillFolderDocuments, is_document};
 pub(crate) use self::sandbox::{FileCall, ToolHost};
+use self::skill_store::ProviderStore;
 use crate::chat::ChatGenerator;
 use crate::llm_profiles::{LlmProfileError, LlmRole};
 
@@ -107,41 +110,150 @@ pub(crate) enum SkillScope {
     WorkingFolder,
 }
 
-/// The skills for one request: skill folders, then the notes that match `question`. Blocking work
-/// runs off the async threads; `index` remembers the headers between requests.
-pub(crate) async fn skills_for(
-    index: &std::sync::Arc<SkillIndex>,
+/// What an agent knows about the project of one request: its skills and its instructions.
+pub(crate) struct ProjectContext {
+    /// Skill folders, then the notes that match the question.
+    pub(crate) skills: SkillCatalogue,
+    /// The prompt section with the `AGENTS.md`/`CLAUDE.md` instructions; empty without any.
+    pub(crate) instructions: String,
+}
+
+/// The skills and instructions for one request (task 0342). A local working folder: the
+/// project's skill folders and instruction files up to its git root, and on a desktop host the
+/// person's own. A folder on another machine: only its own skill folders and instruction files,
+/// read through its provider (never the remote home or the folders above), plus the person's own
+/// local ones on a desktop host. A browser client of a server sees only the working folder's own.
+/// `index` remembers the skill headers between requests.
+pub(crate) async fn project_context(
+    index: &SkillIndex,
+    providers: &ProviderRegistry,
     notes: Option<&dyn NotesAccess>,
     working_directory: &str,
     question: &str,
     scope: SkillScope,
-) -> SkillCatalogue {
-    let directory = path_from_location(working_directory);
-    let index = std::sync::Arc::clone(index);
-    let mut catalogue = tokio::task::spawn_blocking(move || {
-        let roots = match scope {
-            SkillScope::HostWide => {
-                // Tests never read the real home folder.
-                let home = if cfg!(test) { None } else { dirs::home_dir() };
-                SkillRoots::standard(directory.as_deref(), home.as_deref(), &[])
-            }
-            SkillScope::WorkingFolder => {
-                let mut roots = SkillRoots::default();
-                if let Some(folder) = &directory {
-                    roots.project.push(folder.join(".claude").join("skills"));
-                    roots.project.push(folder.join(".agents").join("skills"));
+) -> ProjectContext {
+    // Tests never read the real home folder.
+    let home = if cfg!(test) || scope == SkillScope::WorkingFolder {
+        None
+    } else {
+        dirs::home_dir()
+    };
+    let local = StoreHandle::local();
+    let (mut skills, project_instructions) = match path_from_location(working_directory) {
+        Some(directory) => {
+            let roots = match scope {
+                SkillScope::HostWide => SkillRoots {
+                    // The person's own folders are added below, for every kind of folder.
+                    user: Vec::new(),
+                    ..SkillRoots::standard(Some(&directory), home.as_deref(), &[])
+                },
+                SkillScope::WorkingFolder => {
+                    SkillRoots::working_folder(&directory.to_string_lossy())
                 }
-                roots
+            };
+            let folders = match scope {
+                SkillScope::HostWide => project_folders(&directory, home.as_deref()),
+                SkillScope::WorkingFolder => vec![directory.clone()],
+            };
+            let skills = index.discover(&local, &roots).await;
+            (
+                skills,
+                local_instruction_candidates(&local, &directory, &folders),
+            )
+        }
+        None => match ProviderStore::open(providers, working_directory) {
+            Some(remote) => {
+                let remote = StoreHandle::new(remote);
+                let skills = index
+                    .discover(&remote, &SkillRoots::working_folder(""))
+                    .await;
+                let candidates = instruction_candidates(&remote, &[String::new()], |_, name| {
+                    (name.to_owned(), Some(name.to_owned()))
+                });
+                (skills, candidates)
             }
-        };
-        index.discover(&roots)
-    })
-    .await
-    .unwrap_or_default();
-    if let Some(notes) = notes {
-        catalogue.add_notes(notes.skills(question).await);
+            None => (SkillCatalogue::default(), Vec::new()),
+        },
+    };
+    if let Some(home) = &home {
+        let mut user_roots = SkillRoots::standard(None, Some(home), &[]);
+        user_roots.project.clear();
+        skills.merge(index.discover(&local, &user_roots).await);
     }
-    catalogue
+    if let Some(notes) = notes {
+        skills.add_notes(notes.skills(question).await);
+    }
+    let mut candidates = home
+        .as_deref()
+        .map(|home| home_instruction_candidates(&local, home))
+        .unwrap_or_default();
+    candidates.extend(project_instructions);
+    let instructions =
+        instructions_section(&read_instructions(&candidates, MAX_INSTRUCTION_BYTES).await);
+    ProjectContext {
+        skills,
+        instructions,
+    }
+}
+
+/// The folders of the project, outermost first: the working folder and its parents up to the
+/// nearest git root, never the home folder or above it.
+fn project_folders(directory: &Path, home: Option<&Path>) -> Vec<PathBuf> {
+    let mut folders = Vec::new();
+    for folder in directory.ancestors() {
+        if Some(folder) == home {
+            break;
+        }
+        folders.push(folder.to_path_buf());
+        if folder.join(".git").exists() {
+            break;
+        }
+    }
+    if !folders
+        .last()
+        .is_some_and(|folder| folder.join(".git").exists())
+    {
+        // No git root: only the working folder itself.
+        folders.truncate(1);
+    }
+    folders.reverse();
+    folders
+}
+
+/// Instruction files in the project's folders, named relative to the working folder; only the
+/// working folder's own can be read further with `read_file`.
+fn local_instruction_candidates(
+    local: &StoreHandle,
+    directory: &Path,
+    folders: &[PathBuf],
+) -> Vec<InstructionSource> {
+    let texts: Vec<String> = folders
+        .iter()
+        .map(|folder| folder.to_string_lossy().into_owned())
+        .collect();
+    let working = directory.to_string_lossy().into_owned();
+    instruction_candidates(local, &texts, |folder, name| {
+        if folder == working {
+            return (name.to_owned(), Some(name.to_owned()));
+        }
+        let depth = Path::new(&working)
+            .strip_prefix(folder)
+            .map_or(0, |rest| rest.components().count());
+        (format!("{}{name}", "../".repeat(depth)), None)
+    })
+}
+
+/// The person's own instruction files.
+fn home_instruction_candidates(local: &StoreHandle, home: &Path) -> Vec<InstructionSource> {
+    [".claude/CLAUDE.md", ".agents/AGENTS.md"]
+        .into_iter()
+        .map(|name| InstructionSource {
+            store: local.clone(),
+            path: home.join(name).to_string_lossy().into_owned(),
+            label: format!("~/{name}"),
+            readable_as: None,
+        })
+        .collect()
 }
 
 /// How the chat role's model calls tools: natively once a probe found it can, else the text

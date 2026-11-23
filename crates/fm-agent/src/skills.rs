@@ -4,9 +4,7 @@
 //! scripts in a skill are never run by the harness.
 
 use std::collections::HashMap;
-use std::fs;
-use std::io::{Read as _, Seek as _, SeekFrom};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::SystemTime;
 
@@ -14,6 +12,7 @@ use thiserror::Error;
 
 use super::frontmatter::split_front_matter;
 use crate::paths::{is_credential_folder, is_secret_name};
+use crate::store::{StoreEntryKind, StoreHandle, file_name, join_path, relative_to};
 
 /// Most skills listed in the prompt.
 const MAX_PROMPT_SKILLS: usize = 40;
@@ -24,7 +23,7 @@ const MAX_CATALOGUE_BYTES: usize = 6 * 1024;
 /// Most skill folders looked at in one skills folder.
 const MAX_FOLDERS_PER_ROOT: usize = 500;
 /// How much of a `SKILL.md` is read to find its front matter.
-const MAX_HEADER_BYTES: u64 = 16 * 1024;
+const MAX_HEADER_BYTES: usize = 16 * 1024;
 /// Most bytes of a skill file returned.
 pub(crate) const MAX_SKILL_BYTES: usize = 32 * 1024;
 /// Most files listed for one skill.
@@ -59,8 +58,13 @@ impl SkillSource {
 /// Where a skill's text is read from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SkillLocation {
-    /// The folder that holds `SKILL.md`.
-    Folder(PathBuf),
+    /// The folder that holds `SKILL.md`, in the store it was found in.
+    Folder {
+        /// The store the folder is read through.
+        store: StoreHandle,
+        /// The folder, in the store's path form.
+        path: String,
+    },
     /// A note, by its path in the notes folder.
     Note(String),
 }
@@ -106,18 +110,35 @@ pub enum SkillFileError {
     NoteHasNoFiles,
 }
 
-/// The folders skills are looked for in.
+/// The folders skills are looked for in, in one store's path form.
 #[derive(Debug, Clone, Default)]
 pub struct SkillRoots {
     /// Nearest first.
-    pub project: Vec<PathBuf>,
+    pub project: Vec<String>,
     /// The person's folders.
-    pub user: Vec<PathBuf>,
+    pub user: Vec<String>,
+}
+
+fn path_text(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
 }
 
 impl SkillRoots {
-    /// The standard folders: `~/.claude/skills` and `~/.agents/skills`, the same two folders in
-    /// the project (the working folder up to the nearest git root), and extra user folders.
+    /// Only the working folder's own `.claude/skills` and `.agents/skills`, in any store's path
+    /// form (an empty folder is the store's root).
+    pub fn working_folder(folder: &str) -> Self {
+        Self {
+            project: vec![
+                join_path(folder, ".claude/skills"),
+                join_path(folder, ".agents/skills"),
+            ],
+            user: Vec::new(),
+        }
+    }
+
+    /// The standard local folders: `~/.claude/skills` and `~/.agents/skills`, the same two
+    /// folders in the project (the working folder up to the nearest git root), and extra user
+    /// folders.
     pub fn standard(
         working_directory: Option<&Path>,
         home: Option<&Path>,
@@ -125,17 +146,25 @@ impl SkillRoots {
     ) -> Self {
         let mut roots = Self::default();
         if let Some(home) = home {
-            roots.user.push(home.join(".claude").join("skills"));
-            roots.user.push(home.join(".agents").join("skills"));
+            roots
+                .user
+                .push(path_text(&home.join(".claude").join("skills")));
+            roots
+                .user
+                .push(path_text(&home.join(".agents").join("skills")));
         }
-        roots.user.extend(extra.iter().cloned());
+        roots.user.extend(extra.iter().map(|path| path_text(path)));
         if let Some(start) = working_directory {
             for folder in start.ancestors() {
                 if Some(folder) == home {
                     break;
                 }
-                roots.project.push(folder.join(".claude").join("skills"));
-                roots.project.push(folder.join(".agents").join("skills"));
+                roots
+                    .project
+                    .push(path_text(&folder.join(".claude").join("skills")));
+                roots
+                    .project
+                    .push(path_text(&folder.join(".agents").join("skills")));
                 if folder.join(".git").exists() {
                     break;
                 }
@@ -154,13 +183,17 @@ pub struct SkillCatalogue {
 }
 
 impl SkillCatalogue {
-    /// Reads every `<root>/<name>/SKILL.md`. Project skills win over user skills on a name clash.
-    /// Blocking: call it off the async threads. [`SkillIndex::discover`] does the same with a cache.
-    pub fn discover(roots: &SkillRoots) -> Self {
-        Self::discover_with(roots, None)
+    /// Reads every `<root>/<name>/SKILL.md` in `store`. Project skills win over user skills on a
+    /// name clash. [`SkillIndex::discover`] does the same with a cache.
+    pub async fn discover(store: &StoreHandle, roots: &SkillRoots) -> Self {
+        Self::discover_with(store, roots, None).await
     }
 
-    fn discover_with(roots: &SkillRoots, cache: Option<&SkillIndex>) -> Self {
+    async fn discover_with(
+        store: &StoreHandle,
+        roots: &SkillRoots,
+        cache: Option<&SkillIndex>,
+    ) -> Self {
         let mut catalogue = Self::default();
         // `~/.agents/skills` is often a symlink to (or a copy of) `~/.claude/skills`: a folder
         // is scanned once, and a name is listed once whichever folder it came from.
@@ -171,13 +204,22 @@ impl SkillCatalogue {
             .map(|root| (root, SkillSource::Project))
             .chain(roots.user.iter().map(|root| (root, SkillSource::User)))
         {
-            let real = root.canonicalize().unwrap_or_else(|_| root.clone());
+            let real = store.real_path(root).await.unwrap_or_else(|| root.clone());
             if !scanned.contains(&real) {
-                catalogue.add_folder_skills(root, source, cache);
+                catalogue
+                    .add_folder_skills(store, root, source, cache)
+                    .await;
                 scanned.push(real);
             }
         }
         catalogue
+    }
+
+    /// Adds the skills of `other` after these; a name already taken keeps its earlier skill.
+    pub fn merge(&mut self, other: Self) {
+        for skill in other.skills {
+            self.push(skill);
+        }
     }
 
     /// Adds notes as skills, below folder skills when a name is taken.
@@ -222,31 +264,37 @@ impl SkillCatalogue {
         }
     }
 
-    fn add_folder_skills(&mut self, root: &Path, source: SkillSource, cache: Option<&SkillIndex>) {
-        let Ok(entries) = fs::read_dir(root) else {
+    async fn add_folder_skills(
+        &mut self,
+        store: &StoreHandle,
+        root: &str,
+        source: SkillSource,
+        cache: Option<&SkillIndex>,
+    ) {
+        let Some(entries) = store.list(root).await else {
             return;
         };
-        let mut folders: Vec<PathBuf> = entries
-            .flatten()
-            .map(|entry| entry.path())
-            .filter(|path| {
-                !path
-                    .file_name()
-                    .is_some_and(|name| name.to_string_lossy().starts_with('.'))
-            })
+        let mut names: Vec<String> = entries
+            .into_iter()
+            .filter(|entry| entry.kind == StoreEntryKind::Folder && !entry.name.starts_with('.'))
+            .map(|entry| entry.name)
             .collect();
-        folders.sort();
-        for folder in folders.into_iter().take(MAX_FOLDERS_PER_ROOT) {
+        names.sort();
+        for name in names.into_iter().take(MAX_FOLDERS_PER_ROOT) {
+            let folder = join_path(root, &name);
             let header = match cache {
-                Some(cache) => cache.header(&folder),
-                None => read_skill_header(&folder),
+                Some(cache) => cache.header(store, &folder).await,
+                None => read_skill_header(store, &folder).await,
             };
             if let Some(header) = header {
                 self.push(Skill {
                     name: header.name,
                     description: header.description,
                     source,
-                    location: SkillLocation::Folder(folder),
+                    location: SkillLocation::Folder {
+                        store: store.clone(),
+                        path: folder,
+                    },
                 });
             }
         }
@@ -310,11 +358,11 @@ struct SkillHeader {
 }
 
 /// Remembers the headers of `SKILL.md` files between requests: a header is read again only when
-/// its file's size or modification time changed, so a request costs one `stat` per skill instead
-/// of one read. Share one index for the life of the host.
+/// its file's size or modification time changed, so a request costs one look at each skill instead
+/// of one read. Entries are kept per store. Share one index for the life of the host.
 #[derive(Debug, Default)]
 pub struct SkillIndex {
-    headers: Mutex<HashMap<PathBuf, CachedHeader>>,
+    headers: Mutex<HashMap<(String, String), CachedHeader>>,
 }
 
 #[derive(Debug, Clone)]
@@ -331,59 +379,54 @@ impl SkillIndex {
     }
 
     /// [`SkillCatalogue::discover`], reading only the `SKILL.md` files that changed since the last
-    /// call. Blocking: call it off the async threads.
-    pub fn discover(&self, roots: &SkillRoots) -> SkillCatalogue {
-        SkillCatalogue::discover_with(roots, Some(self))
+    /// call.
+    pub async fn discover(&self, store: &StoreHandle, roots: &SkillRoots) -> SkillCatalogue {
+        SkillCatalogue::discover_with(store, roots, Some(self)).await
     }
 
-    fn header(&self, folder: &Path) -> Option<SkillHeader> {
-        let manifest = folder.join("SKILL.md");
-        let metadata = fs::metadata(&manifest).ok()?;
-        let (modified, len) = (metadata.modified().ok(), metadata.len());
-        let mut headers = self
-            .headers
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        if let Some(cached) = headers.get(&manifest)
+    async fn header(&self, store: &StoreHandle, folder: &str) -> Option<SkillHeader> {
+        let manifest = join_path(folder, "SKILL.md");
+        let metadata = store.metadata(&manifest).await?;
+        let key = (store.id().to_owned(), manifest);
+        if let Some(cached) = self.lock().get(&key)
             && cached.modified.is_some()
-            && cached.modified == modified
-            && cached.len == len
+            && cached.modified == metadata.modified
+            && cached.len == metadata.len
         {
             return cached.header.clone();
         }
-        drop(headers);
-        let header = read_skill_header(folder);
-        headers = self
-            .headers
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        headers.insert(
-            manifest,
+        let header = read_skill_header(store, folder).await;
+        self.lock().insert(
+            key,
             CachedHeader {
-                modified,
-                len,
+                modified: metadata.modified,
+                len: metadata.len,
                 header: header.clone(),
             },
         );
         header
     }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<(String, String), CachedHeader>> {
+        self.headers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
 }
 
 /// The skill in `folder`, from the front matter of its `SKILL.md`.
-fn read_skill_header(folder: &Path) -> Option<SkillHeader> {
-    let manifest = folder.join("SKILL.md");
-    if !fs::metadata(&manifest).ok()?.is_file() || !fs::metadata(folder).ok()?.is_dir() {
+async fn read_skill_header(store: &StoreHandle, folder: &str) -> Option<SkillHeader> {
+    let manifest = join_path(folder, "SKILL.md");
+    if store.metadata(&manifest).await?.kind != StoreEntryKind::File {
         return None;
     }
-    let mut bytes = Vec::new();
-    fs::File::open(&manifest)
-        .ok()?
-        .take(MAX_HEADER_BYTES)
-        .read_to_end(&mut bytes)
-        .ok()?;
+    let bytes = store.read(&manifest, 0, MAX_HEADER_BYTES).await?;
     let text = String::from_utf8_lossy(&bytes);
     let (front, body) = split_front_matter(&text);
-    let folder_name = folder.file_name()?.to_string_lossy().into_owned();
+    let folder_name = file_name(folder).to_owned();
+    if folder_name.is_empty() {
+        return None;
+    }
     let name = front
         .as_ref()
         .and_then(|front| front.get("name"))
@@ -428,150 +471,139 @@ fn bounded_description(description: &str) -> String {
 
 impl Skill {
     /// The `SKILL.md` body (without front matter), bounded. `None` for a note.
-    pub fn read_body(&self) -> Option<Result<String, SkillFileError>> {
-        let SkillLocation::Folder(_) = &self.location else {
+    pub async fn read_body(&self) -> Option<Result<String, SkillFileError>> {
+        let SkillLocation::Folder { .. } = &self.location else {
             return None;
         };
-        Some(self.read_file("SKILL.md").map(|text| {
+        Some(self.read_file("SKILL.md").await.map(|text| {
             let (_, body) = split_front_matter(&text);
             body.trim_start().to_owned()
         }))
     }
 
-    /// The skill's folder, for a skill that lives in one (a note has none).
-    pub fn folder(&self) -> Option<&Path> {
+    /// The skill's store and folder, for a skill that lives in one (a note has none).
+    pub fn folder(&self) -> Option<(&StoreHandle, &str)> {
         match &self.location {
-            SkillLocation::Folder(folder) => Some(folder),
+            SkillLocation::Folder { store, path } => Some((store, path)),
             SkillLocation::Note(_) => None,
         }
     }
 
-    /// The real path of a file inside the skill's folder. It cannot leave the folder, not even
-    /// through a symlink or `..`; credential folders and secret-looking names are refused; it must
-    /// be a regular file.
-    pub fn resolve_file(&self, relative: &str) -> Result<PathBuf, SkillFileError> {
+    /// The real path of a file inside the skill's folder, in its store's path form. It cannot
+    /// leave the folder, not even through a symlink or `..`; credential folders and
+    /// secret-looking names are refused; it must be a regular file.
+    pub async fn resolve_file(&self, relative: &str) -> Result<String, SkillFileError> {
         match &self.location {
-            SkillLocation::Folder(folder) => resolve_inside(folder, relative),
+            SkillLocation::Folder { store, path } => resolve_inside(store, path, relative).await,
             SkillLocation::Note(_) => Err(SkillFileError::NoteHasNoFiles),
         }
     }
 
     /// The text of a file inside the skill's folder (see [`resolve_file`](Self::resolve_file)),
     /// bounded; binary files are refused.
-    pub fn read_file(&self, relative: &str) -> Result<String, SkillFileError> {
-        let path = self.resolve_file(relative)?;
-        self.read_checked(&path, 0)
+    pub async fn read_file(&self, relative: &str) -> Result<String, SkillFileError> {
+        let path = self.resolve_file(relative).await?;
+        self.read_checked(&path, 0).await
     }
 
     /// The text of a path [`resolve_file`](Self::resolve_file) returned, from byte `offset`,
     /// bounded; a cut-off text ends with the offset to continue from.
-    pub fn read_checked(&self, path: &Path, offset: usize) -> Result<String, SkillFileError> {
-        read_text(path, offset)
+    pub async fn read_checked(&self, path: &str, offset: usize) -> Result<String, SkillFileError> {
+        let name = file_name(path).to_owned();
+        let SkillLocation::Folder { store, .. } = &self.location else {
+            return Err(SkillFileError::NoteHasNoFiles);
+        };
+        let buffer = store
+            .read(path, offset as u64, MAX_SKILL_BYTES + 1)
+            .await
+            .ok_or_else(|| SkillFileError::NotText(name.clone()))?;
+        text_from(buffer, &name, offset)
     }
 
     /// The files inside the skill's folder worth reading, relative, bounded.
-    pub fn list_files(&self) -> Vec<String> {
-        let SkillLocation::Folder(folder) = &self.location else {
+    pub async fn list_files(&self) -> Vec<String> {
+        let SkillLocation::Folder { store, path } = &self.location else {
             return Vec::new();
         };
-        let Ok(base) = folder.canonicalize() else {
+        let Some(base) = store.real_path(path).await else {
             return Vec::new();
         };
         let mut files = Vec::new();
-        list_into(&base, &base, 0, &mut files);
-        files.retain(|file| file != "SKILL.md");
+        let mut pending = vec![(base.clone(), 0usize)];
+        while let Some((folder, depth)) = pending.pop() {
+            let Some(mut entries) = store.list(&folder).await else {
+                continue;
+            };
+            entries.sort_by(|a, b| a.name.cmp(&b.name));
+            for entry in entries {
+                if files.len() >= MAX_LISTED_FILES {
+                    break;
+                }
+                let name = &entry.name;
+                if name.starts_with('.') || is_secret_name(name) || is_credential_folder(name) {
+                    continue;
+                }
+                // A symlink pointing out of the skill is not listed.
+                let Some(real) = store.real_path(&join_path(&folder, name)).await else {
+                    continue;
+                };
+                let Some(relative) = relative_to(&base, &real) else {
+                    continue;
+                };
+                match entry.kind {
+                    StoreEntryKind::Folder if depth < MAX_LIST_DEPTH => {
+                        pending.push((real.clone(), depth + 1));
+                    }
+                    StoreEntryKind::File if relative != "SKILL.md" => {
+                        files.push(relative.replace('\\', "/"));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        files.sort();
         files
     }
 }
 
-fn list_into(base: &Path, folder: &Path, depth: usize, files: &mut Vec<String>) {
-    let Ok(entries) = fs::read_dir(folder) else {
-        return;
-    };
-    let mut paths: Vec<PathBuf> = entries.flatten().map(|entry| entry.path()).collect();
-    paths.sort();
-    for path in paths {
-        if files.len() >= MAX_LISTED_FILES {
-            return;
-        }
-        let name = path
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        if name.starts_with('.') || is_secret_name(&name) || is_credential_folder(&name) {
-            continue;
-        }
-        // A symlink pointing out of the skill is not listed.
-        let Ok(real) = path.canonicalize() else {
-            continue;
-        };
-        if !real.starts_with(base) {
-            continue;
-        }
-        if real.is_dir() {
-            if depth < MAX_LIST_DEPTH {
-                list_into(base, &real, depth + 1, files);
-            }
-        } else if let Ok(relative) = real.strip_prefix(base) {
-            files.push(relative.display().to_string());
-        }
-    }
-}
-
 /// The real path of `relative` inside `folder`, checked (see [`Skill::resolve_file`]).
-fn resolve_inside(folder: &Path, relative: &str) -> Result<PathBuf, SkillFileError> {
+async fn resolve_inside(
+    store: &StoreHandle,
+    folder: &str,
+    relative: &str,
+) -> Result<String, SkillFileError> {
     let relative = relative.trim();
     let unavailable = || SkillFileError::NotAvailable(relative.to_owned());
-    let candidate = Path::new(relative);
     if relative.is_empty()
-        || candidate.is_absolute()
-        || candidate
-            .components()
-            .any(|part| matches!(part, Component::ParentDir | Component::Prefix(_)))
+        || relative.starts_with(['/', '\\'])
+        || relative.split(['/', '\\']).any(|part| part == "..")
+        || relative.chars().nth(1) == Some(':')
     {
         return Err(unavailable());
     }
-    let base = folder.canonicalize().map_err(|_| unavailable())?;
-    let real = base
-        .join(candidate)
-        .canonicalize()
-        .map_err(|_| unavailable())?;
-    let inside = real.strip_prefix(&base).map_err(|_| unavailable())?;
-    if inside
-        .components()
-        .any(|part| is_credential_folder(&part.as_os_str().to_string_lossy()))
-    {
+    let base = store.real_path(folder).await.ok_or_else(unavailable)?;
+    let real = store
+        .real_path(&join_path(&base, relative))
+        .await
+        .ok_or_else(unavailable)?;
+    let inside = relative_to(&base, &real).ok_or_else(unavailable)?;
+    if inside.split(['/', '\\']).any(is_credential_folder) {
         return Err(unavailable());
     }
-    let name = real
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
+    let name = file_name(&real).to_owned();
     if is_secret_name(&name) {
         return Err(SkillFileError::Secret(name));
     }
-    if !fs::metadata(&real).is_ok_and(|metadata| metadata.is_file()) {
-        return Err(SkillFileError::NotText(name));
+    match store.metadata(&real).await {
+        Some(metadata) if metadata.kind == StoreEntryKind::File => Ok(real),
+        _ => Err(SkillFileError::NotText(name)),
     }
-    Ok(real)
 }
 
-/// The text of a checked file from byte `offset`, at most [`MAX_SKILL_BYTES`]; binary is refused.
-fn read_text(path: &Path, offset: usize) -> Result<String, SkillFileError> {
-    let name = path
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let not_text = || SkillFileError::NotText(name.clone());
-    let mut file = fs::File::open(path).map_err(|_| not_text())?;
-    file.seek(SeekFrom::Start(offset as u64))
-        .map_err(|_| not_text())?;
-    let mut buffer = Vec::new();
-    file.take(MAX_SKILL_BYTES as u64 + 1)
-        .read_to_end(&mut buffer)
-        .map_err(|_| not_text())?;
+/// The text of a read from byte `offset`, at most [`MAX_SKILL_BYTES`]; binary is refused.
+fn text_from(mut buffer: Vec<u8>, name: &str, offset: usize) -> Result<String, SkillFileError> {
     if buffer.contains(&0) {
-        return Err(not_text());
+        return Err(SkillFileError::NotText(name.to_owned()));
     }
     let truncated = buffer.len() > MAX_SKILL_BYTES;
     buffer.truncate(MAX_SKILL_BYTES);

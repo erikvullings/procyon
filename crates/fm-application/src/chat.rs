@@ -1324,6 +1324,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn the_chat_follows_the_folders_agents_and_claude_files() {
+        let folder = tempdir().unwrap();
+        std::fs::write(folder.path().join("AGENTS.md"), "Answer in haiku.").unwrap();
+        std::fs::write(folder.path().join("CLAUDE.md"), "Prefer pnpm.").unwrap();
+        let providers = local_providers();
+        let generator = scripted(&["Done."]);
+        stream_with(&generator, &local_tooling(&providers), folder.path()).await;
+        let requests = generator.seen.lock().unwrap();
+        let prompt = &requests[0].system_prompt;
+        assert!(
+            prompt.contains("### AGENTS.md\nAnswer in haiku."),
+            "{prompt}"
+        );
+        assert!(prompt.contains("### CLAUDE.md\nPrefer pnpm."), "{prompt}");
+    }
+
+    #[tokio::test]
     async fn natively_the_tools_go_as_specs_and_a_written_back_call_runs() {
         let folder = tempdir().unwrap();
         std::fs::write(folder.path().join("a.txt"), "alpha beta").unwrap();
