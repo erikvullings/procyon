@@ -37,12 +37,21 @@ use crate::file_editor::read_stream_error;
 /// work at once (task 0134 acceptance criteria: "...doesn't stall the UI").
 const MAX_CONCURRENT_GENERATIONS: usize = 4;
 
-/// Entries read from a folder when looking for its cover; one page, so a huge directory is
-/// never walked just to draw one tile.
+/// Entries read per listing page, and in total, when looking for a folder's cover, so a huge
+/// directory is never walked just to draw one tile.
 const FOLDER_PROBE_PAGE_SIZE: usize = 512;
+const FOLDER_PROBE_MAX_ENTRIES: usize = 2048;
+
+/// Longest a folder or audio probe may take; a slow remote listing gives up (icon fallback)
+/// instead of holding one of the few generation slots.
+const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// Leading bytes read from an audio file when looking for its embedded picture.
 const AUDIO_PICTURE_PROBE_BYTES: usize = 4 * 1024 * 1024;
+
+/// Second, larger read tried only when the first found no picture and was cut short, because a
+/// tag with big artwork can run past the first read.
+const AUDIO_PICTURE_RETRY_BYTES: usize = 16 * 1024 * 1024;
 
 /// Tracks of one folder tried for an embedded picture before giving up.
 const MAX_TRACKS_PROBED: usize = 3;
@@ -129,17 +138,22 @@ async fn read_source_bytes(
     providers: &ProviderRegistry,
     location: &Location,
 ) -> Result<(Vec<u8>, SourceKind), ApplicationError> {
-    if is_directory(providers, location).await {
-        return Ok((
-            read_folder_cover(providers, location).await?,
-            SourceKind::Image,
-        ));
-    }
     let name = location
         .name()
         .map_err(|_| map_thumbnail_error(ThumbnailError::UnsupportedFormat))?;
-    let extension = extension_of(&name)
-        .ok_or_else(|| map_thumbnail_error(ThumbnailError::UnsupportedFormat))?;
+    let extension = extension_of(&name);
+    let known_file = extension.as_deref().is_some_and(is_known_file_extension);
+
+    // A known file extension is taken at its word, which saves one `inspect` round trip per tile
+    // on remote providers; anything else might be a folder (`Vol. 1`), so ask.
+    if !known_file && is_directory(providers, location).await {
+        let cover = tokio::time::timeout(PROBE_TIMEOUT, read_folder_cover(providers, location))
+            .await
+            .map_err(|_| map_thumbnail_error(ThumbnailError::UnsupportedFormat))??;
+        return Ok((cover, SourceKind::Image));
+    }
+    let extension =
+        extension.ok_or_else(|| map_thumbnail_error(ThumbnailError::UnsupportedFormat))?;
 
     if is_supported_image_extension(&extension) {
         Ok((
@@ -159,13 +173,24 @@ async fn read_source_bytes(
     } else if is_supported_pdf_extension(&extension) {
         Ok((read_whole_file(providers, location).await?, SourceKind::Pdf))
     } else if is_supported_audio_extension(&extension) {
-        let picture = read_audio_picture(providers, location)
-            .await?
+        let picture = tokio::time::timeout(PROBE_TIMEOUT, read_audio_picture(providers, location))
+            .await
+            .map_err(|_| map_thumbnail_error(ThumbnailError::UnsupportedFormat))??
             .ok_or_else(|| map_thumbnail_error(ThumbnailError::UnsupportedFormat))?;
         Ok((picture, SourceKind::Image))
     } else {
         Err(map_thumbnail_error(ThumbnailError::UnsupportedFormat))
     }
+}
+
+/// Whether `extension` is one `read_source_bytes` handles as a file.
+fn is_known_file_extension(extension: &str) -> bool {
+    is_supported_image_extension(extension)
+        || extension.eq_ignore_ascii_case("cbz")
+        || extension.eq_ignore_ascii_case("cbr")
+        || is_supported_video_extension(extension)
+        || is_supported_pdf_extension(extension)
+        || is_supported_audio_extension(extension)
 }
 
 /// Whether `location` is a real directory. Symlinks are not followed (`inspect` reports the link
@@ -208,19 +233,29 @@ async fn read_folder_cover(
     folder: &Location,
 ) -> Result<Vec<u8>, ApplicationError> {
     let provider = providers.resolve(folder).map_err(ApplicationError::from)?;
-    let page = provider
-        .list(
-            folder,
-            ListOptions {
-                page_size: FOLDER_PROBE_PAGE_SIZE,
-                continuation_token: None,
-            },
-            CancellationToken::new(),
-        )
-        .await
-        .map_err(ApplicationError::from)?;
-    let files: Vec<_> = page
-        .entries
+    let mut entries = Vec::new();
+    let mut continuation_token = None;
+    loop {
+        let page = provider
+            .list(
+                folder,
+                ListOptions {
+                    page_size: FOLDER_PROBE_PAGE_SIZE,
+                    continuation_token: continuation_token.take(),
+                },
+                CancellationToken::new(),
+            )
+            .await
+            .map_err(ApplicationError::from)?;
+        entries.extend(page.entries);
+        match page.continuation_token {
+            Some(token) if page.has_more && entries.len() < FOLDER_PROBE_MAX_ENTRIES => {
+                continuation_token = Some(token);
+            }
+            _ => break,
+        }
+    }
+    let files: Vec<_> = entries
         .iter()
         .filter(|entry| entry.kind == EntryKind::File)
         .collect();
@@ -256,10 +291,17 @@ async fn read_audio_picture(
     providers: &ProviderRegistry,
     location: &Location,
 ) -> Result<Option<Vec<u8>>, ApplicationError> {
-    let head = read_file_prefix(providers, location, AUDIO_PICTURE_PROBE_BYTES).await?;
-    tokio::task::spawn_blocking(move || read_embedded_picture(&head))
-        .await
-        .map_err(|_| ApplicationError::Internal)
+    for limit in [AUDIO_PICTURE_PROBE_BYTES, AUDIO_PICTURE_RETRY_BYTES] {
+        let head = read_file_prefix(providers, location, limit).await?;
+        let cut_short = head.len() >= limit;
+        let picture = tokio::task::spawn_blocking(move || read_embedded_picture(&head))
+            .await
+            .map_err(|_| ApplicationError::Internal)?;
+        if picture.is_some() || !cut_short {
+            return Ok(picture);
+        }
+    }
+    Ok(None)
 }
 
 /// Reads at most `limit` leading bytes of a file; a longer file is cut, not rejected.
@@ -639,6 +681,34 @@ mod tests {
 
         let decoded = image::load_from_memory(&thumbnail.bytes).expect("decode result");
         assert_eq!(decoded.height(), decoded.width() * 2);
+    }
+
+    #[tokio::test]
+    async fn a_picture_larger_than_the_first_read_is_still_found() {
+        // Incompressible noise keeps the PNG above the 4 MiB first read.
+        let mut noise = image::RgbImage::new(1300, 1100);
+        let mut state = 0x2545_f491_u32;
+        for pixel in noise.pixels_mut() {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            *pixel = image::Rgb([state as u8, (state >> 8) as u8, (state >> 16) as u8]);
+        }
+        let mut picture = Vec::new();
+        image::DynamicImage::ImageRgb8(noise)
+            .write_to(&mut Cursor::new(&mut picture), image::ImageFormat::Png)
+            .expect("encode noise png");
+        assert!(picture.len() > AUDIO_PICTURE_PROBE_BYTES);
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let track = dir.path().join("big.wav");
+        std::fs::write(&track, wav_with_cover(picture)).expect("write track");
+
+        let service = ThumbnailService::new(dir.path().join("cache"));
+        service
+            .thumbnail(&providers(), &location_for(&track), ThumbnailSize::Small)
+            .await
+            .expect("a large embedded picture must be found");
     }
 
     #[tokio::test]
