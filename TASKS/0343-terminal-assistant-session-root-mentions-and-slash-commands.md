@@ -1,6 +1,6 @@
 # 0343 Terminal assistant: session root, @ files, / skills and commands
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: frontend
 Depends on: 0342
@@ -29,7 +29,9 @@ against the terminal's current folder only. The user asked (2026-11-23):
   forgets the conversation but keeps the root; `/compact` replaces the conversation with a
   model-written summary; `/model` lists the chat models of the configured profiles and switches
   the chat role to the one chosen.
-- Browser (HTTP) and Tauri behave the same; the mock client supports all of it.
+- The terminal is desktop-only (`TerminalClient` is Tauri IPC; the browser host has no PTY), so
+  the new calls are Tauri commands; the client methods are optional so other clients degrade to
+  the old one-folder completion.
 - Tests for completion, cache refresh, skill invocation and each command; lint and tests pass.
 
 ## Implementation Notes
@@ -40,3 +42,24 @@ against the terminal's current folder only. The user asked (2026-11-23):
 - Regenerate `openapi.json` and the Orval client.
 
 ## Agent Notes
+- 2026-11-23 Claude: Done.
+  - Backend (`fm-application/src/terminal_assist/commands.rs`): `list_files` (breadth first
+    through the location's provider, so SSH works; 5000 paths, depth 8; dot entries, links and
+    `node_modules`/`target`/`dist`/`build`/`out`/`__pycache__`/`venv`/`vendor`/`coverage` left
+    out), `list_skills` (project context skills plus `NotesAccess::list_skills`, a new default
+    trait method; `AssistantNotes` lists up to 200 notes by name), `invoked_skill` (folder skill
+    body or note text, 16 KiB, redacted, added to the person's context; an unknown name says so),
+    `compact` (model summary replaces the session: `Sessions::replace_with_summary`).
+  - `TerminalAssistRequestDto` gains `root` and `skill`; `tools_folder` uses the root while the
+    working folder lies inside it (folder-boundary check), for tools, mentions, skills and
+    instructions. Output files (`write_file`) still go to the working folder.
+  - Tauri: `terminal_assist_files`, `terminal_assist_skills`, `terminal_assist_compact`.
+  - Frontend: `slash-commands.ts` (parse, complete, `/model` choices), `completeMentionInTree`,
+    drawer session root (`assistRoot`, set at the first question or `/new`), completion caches
+    marked stale after each reply and each shell command, `/new` `/clear` `/compact` `/model`
+    `/help`, `TerminalModels` wired in `app-shell.ts` (profiles, discovered models, `setLlmRole`
+    keeping `allowCloud`). Strings in all 8 languages.
+  - Verified: Rust 6 new tests (files listing incl. a new file, skill invocation, root rule,
+    boundary check, compact); frontend 4070 tests incl. new slash/mention/drawer tests; tsc and
+    Biome clean.
+  - Not verified in the running desktop app or over a real SSH connection.

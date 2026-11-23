@@ -39,6 +39,42 @@ impl NotesAccess for AssistantNotes<'_> {
         }
     }
 
+    async fn list_skills(&self, limit: usize) -> Vec<NoteSkill> {
+        let Some(store) = &self.store else {
+            return Vec::new();
+        };
+        let mut skills = Vec::new();
+        for file in store
+            .walk(&CancellationToken::new())
+            .await
+            .into_iter()
+            .take(limit)
+        {
+            let Ok(note) = store.read(&file.path).await else {
+                continue;
+            };
+            let (meta, body) = split_note(&note.text);
+            let stem = file.path.rsplit('/').next().unwrap_or(&file.path);
+            let stem = stem.rsplit_once('.').map_or(stem, |(stem, _)| stem);
+            let title = note_title(meta.as_ref(), body, stem);
+            let name = meta
+                .as_ref()
+                .and_then(|meta| meta.name.clone())
+                .filter(|name| !name.trim().is_empty() && !name.contains(char::is_whitespace))
+                .unwrap_or_else(|| slugify(&title));
+            let description = meta
+                .and_then(|meta| meta.description)
+                .filter(|text| !text.trim().is_empty())
+                .unwrap_or(title);
+            skills.push(NoteSkill {
+                name,
+                description: redact_secrets(&description),
+                path: file.path,
+            });
+        }
+        skills
+    }
+
     async fn run(&self, call: NoteToolCall) -> ToolOutcome<NoteProposal> {
         let Some(store) = &self.store else {
             return output(

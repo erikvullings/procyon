@@ -2,8 +2,10 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import type { Location } from '../../models';
 import type {
   TerminalAssistEvent,
+  TerminalAssistFiles,
   TerminalAssistReply,
   TerminalAssistRequest,
+  TerminalAssistSkill,
 } from './terminal-assist';
 
 export type TerminalEvent =
@@ -37,6 +39,12 @@ export interface TerminalClient {
   assistClose(sessionId: string): Promise<void>;
   /** Stops the request the tab's assistant is running (ESC while it works). */
   assistCancel?(sessionId: string): Promise<void>;
+  /** The paths under a session's root, for `@` completion (task 0343). */
+  assistFiles?(root: string): Promise<TerminalAssistFiles>;
+  /** The skills `/` can invoke in a folder: folder skills and notes (task 0343). */
+  assistSkills?(workingDirectory: string): Promise<readonly TerminalAssistSkill[]>;
+  /** Replaces a session's conversation with a model-written summary (`/compact`). */
+  assistCompact?(sessionId: string): Promise<void>;
 }
 
 /** Desktop PTY IPC boundary; the browser host deliberately has no PTY implementation. */
@@ -64,4 +72,8 @@ export const tauriTerminalClient: TerminalClient = {
   },
   assistClose: (sessionId) => invoke<void>('terminal_assist_close', { sessionId }),
   assistCancel: (sessionId) => invoke<void>('terminal_assist_cancel', { sessionId }),
+  assistFiles: (root) => invoke<TerminalAssistFiles>('terminal_assist_files', { root }),
+  assistSkills: (workingDirectory) =>
+    invoke<TerminalAssistSkill[]>('terminal_assist_skills', { workingDirectory }),
+  assistCompact: (sessionId) => invoke<void>('terminal_assist_compact', { sessionId }),
 };

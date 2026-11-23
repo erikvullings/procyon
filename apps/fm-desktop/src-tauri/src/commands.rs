@@ -2987,6 +2987,36 @@ pub(crate) fn terminal_assist_cancel(state: State<'_, AppState>, session_id: Str
     state.service.terminal_assist_cancel(&session_id);
 }
 
+/// The files under a terminal session's root, for `@` completion (task 0343).
+#[tauri::command]
+pub(crate) async fn terminal_assist_files(
+    state: State<'_, AppState>,
+    root: String,
+) -> Result<fm_transport_dto::TerminalAssistFilesDto, ()> {
+    Ok(state.service.terminal_assist_files(&root).await)
+}
+
+/// The skills `/` can invoke in a terminal's folder (task 0343).
+#[tauri::command]
+pub(crate) async fn terminal_assist_skills(
+    state: State<'_, AppState>,
+    working_directory: String,
+) -> Result<Vec<fm_transport_dto::TerminalAssistSkillDto>, ()> {
+    Ok(state
+        .service
+        .terminal_assist_skills(&desktop_semantic_access(), &working_directory)
+        .await)
+}
+
+/// Replaces a terminal session's conversation with a summary (`/compact`, task 0343).
+#[tauri::command]
+pub(crate) async fn terminal_assist_compact(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<(), fm_transport_dto::ChatFailureDto> {
+    state.service.terminal_assist_compact(&session_id).await
+}
+
 /// Where notes live, whether that folder exists, and what setup suggests (task 0337).
 #[tauri::command]
 pub(crate) async fn get_notes_setup(

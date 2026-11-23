@@ -61,6 +61,23 @@ export interface TerminalAssistRequest {
   readonly allowFileWrites?: boolean;
   /** The active workspace, so `search_notes` may use the notes index (task 0337). */
   readonly workspaceId?: string;
+  /** The session's trusted root: the folder it started in (task 0343). */
+  readonly root?: string;
+  /** A skill invoked with `/name`; its instructions go with the question (task 0343). */
+  readonly skill?: string;
+}
+
+/** The paths under a session's root (folders end with `/`), for `@` completion (task 0343). */
+export interface TerminalAssistFiles {
+  readonly files: readonly string[];
+  readonly truncated: boolean;
+}
+
+/** A skill `/` can invoke (task 0343). */
+export interface TerminalAssistSkill {
+  readonly name: string;
+  readonly description: string;
+  readonly source: 'project' | 'user' | 'note';
 }
 
 /** The assistant's answer: text, what it looked at, and a command it asks to run. */
@@ -215,6 +232,35 @@ export function completeMention(
   if (!quoted && space >= 0) common = common.slice(0, space);
   const insert = common.slice(partial.length);
   return insert === '' ? undefined : { erase: 0, insert };
+}
+
+/**
+ * Tab completion of `@name` against every path under the session's root (task 0343): paths that
+ * start with what is typed complete like a shell; otherwise a single path whose file or folder
+ * name starts with it replaces it (`@main` becomes `@src/deep/main.rs`).
+ */
+export function completeMentionInTree(
+  typed: string,
+  paths: readonly string[],
+): MentionCompletion | undefined {
+  const match = /(?:^|\s)@(?:"([^"]*)|'([^']*)|(\S*))$/.exec(typed);
+  if (match === null) return undefined;
+  const quoted = match[1] !== undefined || match[2] !== undefined;
+  const partial = match[1] ?? match[2] ?? match[3] ?? '';
+  const lower = partial.toLowerCase();
+  if (partial === '' || paths.some((path) => path.toLowerCase().startsWith(lower)))
+    return completeMention(typed, paths);
+  const byName = paths.filter((path) => {
+    const name = path.replace(/\/$/, '').split('/').pop() ?? '';
+    return name.toLowerCase().startsWith(lower);
+  });
+  const only = byName.length === 1 ? byName[0] : undefined;
+  if (only === undefined) return undefined;
+  const folder = only.endsWith('/');
+  const text = mentionText(only);
+  // A folder stays open so the path can continue; a quoted folder keeps its quote open.
+  const insert = folder ? text.replace(/"$/, '') : `${text} `;
+  return { erase: partial.length + (quoted ? 1 : 0) + 1, insert };
 }
 
 const NO_MENTIONS: Mentions = { files: [] };

@@ -176,6 +176,7 @@ import { SyncProfilesDialog } from '../features/sync-profiles/sync-profiles-dial
 import { tauriTerminalClient } from '../features/terminal/terminal-client';
 import {
   TerminalDrawer,
+  type TerminalModels,
   type TerminalPaneContext,
   terminalHost,
 } from '../features/terminal/terminal-drawer';
@@ -1517,6 +1518,26 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
    * active pane's own listing answers when it shows that folder (always so while the terminal and
    * pane follow each other); any other folder is listed in a session of its own.
    */
+  /** The chat models the terminal's `/model` lists and switches between (task 0343). */
+  const terminalModels: TerminalModels = {
+    list: async () => {
+      const [profiles, roles] = await Promise.all([
+        shellState.client.listLlmProfiles(),
+        shellState.client.listLlmRoles(),
+      ]);
+      return { profiles, chat: roles.chat };
+    },
+    discover: (profileId) => shellState.client.discoverLlmProfileModels(profileId),
+    select: async (choice) => {
+      const roles = await shellState.client.listLlmRoles();
+      await shellState.client.setLlmRole('chat', {
+        profileId: choice.profileId,
+        model: choice.model,
+        allowCloud: roles.chat?.allowCloud ?? false,
+      });
+    },
+  };
+
   async function terminalFolderNames(location: Location): Promise<readonly string[]> {
     const label = (entry: EntrySummary) =>
       entry.kind === 'directory' ? `${entry.name}/` : entry.name;
@@ -4903,6 +4924,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 shellIntegration: shellState.currentSettings?.terminalShellIntegration ?? 'unset',
                 paneContext: terminalPaneContext,
                 listFolder: terminalFolderNames,
+                models: terminalModels,
                 followPane: shellState.currentSettings?.terminalFollowPane ?? true,
                 autoRunReadOnly: shellState.currentSettings?.terminalAutoRunReadOnly ?? true,
                 allowFileWrites: shellState.currentSettings?.terminalAllowFileWrites ?? true,

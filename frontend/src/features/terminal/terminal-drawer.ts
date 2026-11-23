@@ -11,10 +11,17 @@ import {
   wrenchIcon,
 } from '../../components/tabler-icons';
 import { t } from '../../i18n';
-import type { DraftNoteRequest, Location, NoteProposal } from '../../models';
+import type {
+  DraftNoteRequest,
+  LlmProfile,
+  LlmRoleAssignment,
+  Location,
+  NoteProposal,
+} from '../../models';
 import type { TerminalShellIntegration } from '../../models/settings';
 import {
   createAnswerStream,
+  infoAnsi,
   noticeAnsi,
   questionAnsi,
   renderAnswerAnsi,
@@ -25,12 +32,25 @@ import { isReadOnlyCommand } from './read-only-command';
 import { highlightShell } from './shell-highlight';
 import { parseShellMark } from './shell-integration';
 import {
+  completeSlash,
+  type ModelChoice,
+  modelChoices,
+  modelLines,
+  parseSlash,
+  pickModel,
+  SLASH_COMMANDS,
+  type SlashCommandName,
+  slashNames,
+  typedSlash,
+} from './slash-commands';
+import {
   assistContext,
   byteSize,
   type ContextChip,
   cleanCommand,
   commandFromAnswer,
   completeMention,
+  completeMentionInTree,
   contextChips,
   EXPLAIN_REQUEST,
   effectiveRemoved,
@@ -102,6 +122,26 @@ export interface TerminalDrawerAttrs {
   readonly onNoteProposal?: (proposal: NoteProposal) => void;
   /** Saves the choice; `undefined` hides the consent prompt. */
   readonly onShellIntegrationChoice?: (choice: 'enabled' | 'disabled') => Promise<void>;
+  /** The chat models `/model` lists and switches between (task 0343). */
+  readonly models?: TerminalModels;
+}
+
+/** What `/model` needs from the owner: the saved endpoints and a way to switch the chat role. */
+export interface TerminalModels {
+  readonly list: () => Promise<{
+    readonly profiles: readonly LlmProfile[];
+    readonly chat: LlmRoleAssignment | null | undefined;
+  }>;
+  /** The models an endpoint reports; may be empty. */
+  readonly discover: (profileId: string) => Promise<readonly string[]>;
+  readonly select: (choice: ModelChoice) => Promise<void>;
+}
+
+/** A listing kept for completion until something may have changed it. */
+interface CompletionCache {
+  readonly root: string;
+  readonly names: readonly string[];
+  stale: boolean;
 }
 
 /**
@@ -111,6 +151,22 @@ export interface TerminalDrawerAttrs {
 export function terminalHost(location: Location): string {
   const match = /^sftp:\/\/[^/]+/.exec(location.uri);
   return match?.[0] ?? 'local';
+}
+
+/** What `/help` says about each command. */
+function slashHelp(command: SlashCommandName): string {
+  switch (command) {
+    case 'new':
+      return t('terminal', 'slashHelpNew');
+    case 'clear':
+      return t('terminal', 'slashHelpClear');
+    case 'compact':
+      return t('terminal', 'slashHelpCompact');
+    case 'model':
+      return t('terminal', 'slashHelpModel');
+    case 'help':
+      return t('terminal', 'slashHelpHelp');
+  }
 }
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent);
@@ -181,6 +237,14 @@ type LiveTerminal = {
   /** Keys typed before the shell was ready. */
   pendingInput: string[];
   readyTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The session's trusted root: the folder of its first question or of `/new` (task 0343). */
+  assistRoot: Location | undefined;
+  /** The paths under the root, for `@` completion. */
+  fileCache: CompletionCache | undefined;
+  /** The skill names for `/` completion. */
+  skillCache: CompletionCache | undefined;
+  /** The models `/model` listed last, so `/model 2` picks from what was shown. */
+  models: readonly ModelChoice[];
 };
 
 export interface TerminalKeyHandlers {
@@ -539,10 +603,13 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       readonly display?: string;
       /** Set a half-typed command aside and put it back after the answer. */
       readonly keepTypedLine?: boolean;
+      /** A skill invoked with `/name` (task 0343). */
+      readonly skill?: string;
     } = {},
   ): void {
     if (isBusy(live)) return;
     live.assistActive = true;
+    if (currentAttrs?.location !== undefined) live.assistRoot ??= currentAttrs.location;
     live.held = [];
     if (options.keepTypedLine === true && (live.typed.text !== '' || !live.typed.known)) {
       writeToShell(live, '\x15');
@@ -553,6 +620,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     live.terminal.write(`\r\x1b[2K${questionAnsi(options.display ?? question)}`);
     sendToSession(live, {
       question,
+      ...(options.skill === undefined ? {} : { skill: options.skill }),
       context: assistContext(
         assistSource(live, options.upTo, options.scrollback),
         removedFor(live, assistSource(live, options.upTo, options.scrollback)),
@@ -569,6 +637,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       readonly context?: TerminalAssistContext;
       readonly toolResult?: TerminalToolResult;
       readonly writeDecision?: TerminalWriteDecision;
+      readonly skill?: string;
     },
   ): void {
     const attrs = currentAttrs;
@@ -600,11 +669,17 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           ...(input.context === undefined ? {} : { context: input.context }),
           ...(input.toolResult === undefined ? {} : { toolResult: input.toolResult }),
           ...(input.writeDecision === undefined ? {} : { writeDecision: input.writeDecision }),
+          ...(input.skill === undefined ? {} : { skill: input.skill }),
+          ...(live.assistRoot === undefined ? {} : { root: live.assistRoot.uri }),
           allowFileWrites: attrs.allowFileWrites !== false,
         },
         onEvent,
       )
-      .then((reply) => presentReply(live, token, reply, streamed))
+      .then((reply) => {
+        // The assistant may have created files or run commands.
+        markStale(live);
+        presentReply(live, token, reply, streamed);
+      })
       .catch((error: unknown) =>
         present(live, token, noticeAnsi(assistFailureText(String(error))), undefined),
       )
@@ -1118,32 +1193,209 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     return true;
   }
 
-  /** Tab after `# ... @par` completes the name from the terminal's current folder. */
+  /**
+   * Tab on a `#` line: `# /par` completes a command or skill name; `@par` completes a path under
+   * the session's root (task 0343), or in the terminal's folder when the host cannot list a tree.
+   */
   function completeMentionInShell(live: LiveTerminal): boolean {
     const attrs = currentAttrs;
     const location = attrs?.location;
-    if (!assistantOn() || !live.ready || isBusy(live)) return false;
-    if (attrs?.listFolder === undefined || location === undefined) return false;
+    if (attrs === undefined || !assistantOn() || !live.ready || isBusy(live)) return false;
+    if (location === undefined) return false;
     const typed = live.typed;
-    if (
-      !typed.known ||
-      !typed.text.startsWith('#') ||
-      !/(?:^|\s)@(?:"[^"]*|'[^']*|\S*)$/.test(typed.text)
-    )
-      return false;
+    if (!typed.known || !typed.text.startsWith('#')) return false;
+    const apply = (completion: { erase: number; insert: string } | undefined): void => {
+      // The line may have changed while the names were read.
+      if (completion === undefined || live.typed.text !== typed.text) return;
+      typeInput(live, '\x7f'.repeat(completion.erase) + completion.insert);
+    };
+    const warn = (error: unknown): void => {
+      console.warn('Reading names for completion failed.', error);
+    };
+    if (typedSlash(typed.text) !== undefined) {
+      void skillNames(live, attrs.client, live.assistRoot ?? location)
+        .then((skills) => apply(completeSlash(typed.text, slashNames(skills))))
+        .catch(warn);
+      return true;
+    }
+    if (!/(?:^|\s)@(?:"[^"]*|'[^']*|\S*)$/.test(typed.text)) return false;
+    if (attrs.client.assistFiles !== undefined) {
+      const root = live.assistRoot ?? location;
+      void treeFiles(live, attrs.client, root)
+        .then((files) => apply(completeMentionInTree(typed.text, files)))
+        .catch(warn);
+      return true;
+    }
+    if (attrs.listFolder === undefined) return false;
     void attrs
       .listFolder(location)
-      .then((names) => {
-        // The line may have changed while the folder was read.
-        if (live.typed.text !== typed.text) return;
-        const completion = completeMention(typed.text, names);
-        if (completion === undefined) return;
-        typeInput(live, '\x7f'.repeat(completion.erase) + completion.insert);
-      })
-      .catch((error: unknown) => {
-        console.warn('Listing the folder for @ completion failed.', error);
-      });
+      .then((names) => apply(completeMention(typed.text, names)))
+      .catch(warn);
     return true;
+  }
+
+  /** Marks the completion listings as possibly out of date. */
+  function markStale(live: LiveTerminal): void {
+    if (live.fileCache !== undefined) live.fileCache.stale = true;
+    if (live.skillCache !== undefined) live.skillCache.stale = true;
+  }
+
+  /** The paths under `root`, from the cache unless something may have changed them. */
+  async function treeFiles(
+    live: LiveTerminal,
+    client: TerminalClient,
+    root: Location,
+  ): Promise<readonly string[]> {
+    const cached = live.fileCache;
+    if (cached !== undefined && cached.root === root.uri && !cached.stale) return cached.names;
+    const listed = (await client.assistFiles?.(root.uri)) ?? { files: [], truncated: false };
+    live.fileCache = { root: root.uri, names: listed.files, stale: false };
+    return listed.files;
+  }
+
+  /** The skill names `/` completes in `root`, cached like the paths. */
+  async function skillNames(
+    live: LiveTerminal,
+    client: TerminalClient,
+    root: Location,
+  ): Promise<readonly string[]> {
+    const cached = live.skillCache;
+    if (cached !== undefined && cached.root === root.uri && !cached.stale) return cached.names;
+    const skills = (await client.assistSkills?.(root.uri)) ?? [];
+    const names = skills.map((skill) => skill.name);
+    live.skillCache = { root: root.uri, names, stale: false };
+    return names;
+  }
+
+  /** A `#` question: a `/` command runs here, `/skill rest` asks with that skill, else it is asked. */
+  function submitQuestion(live: LiveTerminal, question: string): void {
+    const slash = parseSlash(question);
+    if (slash === undefined) {
+      askAssistant(live, question);
+      return;
+    }
+    if (slash.kind === 'skill') {
+      const asked =
+        slash.rest === '' ? t('terminal', 'slashUseSkill', { name: slash.name }) : slash.rest;
+      askAssistant(live, asked, { display: question, skill: slash.name });
+      return;
+    }
+    runSlashCommand(live, question, slash.name, slash.argument);
+  }
+
+  /** Writes a command's output under its question line, then gives the prompt back. */
+  function showCommandOutput(live: LiveTerminal, question: string, text: string): void {
+    live.terminal.write(`\r\x1b[2K${questionAnsi(question)}${text}`, () => releasePrompt(live));
+  }
+
+  /** Runs `/new`, `/clear`, `/compact`, `/model` or `/help` (task 0343). */
+  function runSlashCommand(
+    live: LiveTerminal,
+    question: string,
+    name: SlashCommandName,
+    argument: string,
+  ): void {
+    const attrs = currentAttrs;
+    if (attrs === undefined) return;
+    live.typed = EMPTY_INPUT;
+    live.suggestion = undefined;
+    const forget = (): void => {
+      live.requestId += 1;
+      void attrs.client.assistClose(live.assistSession).catch(() => undefined);
+      live.models = [];
+    };
+    switch (name) {
+      case 'new': {
+        forget();
+        live.assistRoot = attrs.location;
+        live.fileCache = undefined;
+        live.skillCache = undefined;
+        live.assistActive = false;
+        const folder = attrs.location?.uri ?? '';
+        showCommandOutput(live, question, infoAnsi([t('terminal', 'slashNew', { folder })]));
+        return;
+      }
+      case 'clear':
+        forget();
+        showCommandOutput(live, question, infoAnsi([t('terminal', 'slashCleared')]));
+        return;
+      case 'help':
+        showCommandOutput(
+          live,
+          question,
+          infoAnsi(SLASH_COMMANDS.map((command) => `/${command}  ${slashHelp(command)}`)),
+        );
+        return;
+      case 'compact':
+        runAsyncCommand(live, question, async () => {
+          if (attrs.client.assistCompact === undefined)
+            return noticeAnsi(t('terminal', 'slashUnsupported'));
+          await attrs.client.assistCompact(live.assistSession);
+          return infoAnsi([t('terminal', 'slashCompacted')]);
+        });
+        return;
+      case 'model':
+        runAsyncCommand(live, question, () => switchModel(live, attrs.models, argument));
+        return;
+    }
+  }
+
+  /** Runs a command that waits on the host, showing it as busy meanwhile. */
+  function runAsyncCommand(
+    live: LiveTerminal,
+    question: string,
+    work: () => Promise<string>,
+  ): void {
+    live.requestId += 1;
+    const token = live.requestId;
+    panel = { status: 'busy', tabKey: live.key };
+    live.terminal.write(`\r\x1b[2K${questionAnsi(question)}`);
+    m.redraw();
+    work()
+      .then((text) => present(live, token, text, undefined))
+      .catch((error: unknown) =>
+        present(live, token, noticeAnsi(assistFailureText(String(error))), undefined),
+      )
+      .finally(() => m.redraw());
+  }
+
+  /** `/model`: lists the chat models; `/model <n|name>` switches the chat role to one. */
+  async function switchModel(
+    live: LiveTerminal,
+    models: TerminalModels | undefined,
+    argument: string,
+  ): Promise<string> {
+    if (models === undefined) return noticeAnsi(t('terminal', 'slashUnsupported'));
+    if (argument !== '' && live.models.length > 0) {
+      const choice = pickModel(live.models, argument);
+      if (choice !== undefined) {
+        await models.select(choice);
+        live.models = live.models.map((known) => ({
+          ...known,
+          current: known.profileId === choice.profileId && known.model === choice.model,
+        }));
+        return infoAnsi([
+          t('terminal', 'slashModelSet', { model: choice.model, profile: choice.profileName }),
+        ]);
+      }
+    }
+    const { profiles, chat } = await models.list();
+    const discovered = new Map<string, readonly string[]>();
+    await Promise.all(
+      profiles.map(async (profile) => {
+        const found = await models.discover(profile.id).catch(() => []);
+        discovered.set(profile.id, found);
+      }),
+    );
+    live.models = modelChoices(profiles, chat, discovered);
+    if (argument !== '') {
+      const choice = pickModel(live.models, argument);
+      if (choice === undefined)
+        return noticeAnsi(t('terminal', 'slashModelUnknown', { name: argument }));
+      return switchModel(live, models, argument);
+    }
+    if (live.models.length === 0) return noticeAnsi(t('terminal', 'assistRoleNotAssigned'));
+    return infoAnsi([...modelLines(live.models), t('terminal', 'slashModelPick')]);
   }
 
   function onTypedData(live: LiveTerminal, data: string): void {
@@ -1165,7 +1417,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       if (question !== '') {
         if (live.questions.at(-1) !== question) live.questions.push(question);
         if (live.questions.length > MAX_QUESTIONS) live.questions.shift();
-        askAssistant(live, question);
+        submitQuestion(live, question);
       }
       m.redraw();
       return;
@@ -1177,6 +1429,8 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     if (applied.submitted !== undefined && applied.submitted.trim() !== '') {
       const command = applied.submitted.trim();
       live.pendingCommand = command;
+      // The command may create or remove files.
+      markStale(live);
       live.history.push(command);
       if (live.history.length > MAX_HISTORY)
         live.history.splice(0, live.history.length - MAX_HISTORY);
@@ -1268,6 +1522,10 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         ready: false,
         pendingInput: [],
         readyTimer: undefined,
+        assistRoot: undefined,
+        fileCache: undefined,
+        skillCache: undefined,
+        models: [],
       };
       terminals.set(key, live);
       const current = live;

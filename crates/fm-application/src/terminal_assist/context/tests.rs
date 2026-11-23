@@ -12,6 +12,8 @@ fn request(context: TerminalContextDto) -> TerminalAssistRequestDto {
         transcript: String::new(),
         request: Some("q".into()),
         working_directory: "file:///tmp/my%20dir".into(),
+        root: None,
+        skill: None,
         shell: Some("zsh".into()),
         session_id: Some("t1".into()),
         context,

@@ -114,6 +114,13 @@ pub struct TerminalAssistRequestDto {
     pub request: Option<String>,
     /// Where the terminal's shell is working, as the location URI.
     pub working_directory: String,
+    /// The session's trusted root (task 0343): the folder the session started in. When the
+    /// working folder lies inside it, the tools, `@` mentions, skills and instructions use it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root: Option<String>,
+    /// A skill the person invoked with `/name` (task 0343); its instructions go with the question.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skill: Option<String>,
     /// The shell's name when known, for example `zsh`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shell: Option<String>,
@@ -176,4 +183,26 @@ pub enum TerminalAssistEventDto {
         /// The one-line description.
         text: String,
     },
+}
+
+/// The files under a session's root, for `@` completion (task 0343).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalAssistFilesDto {
+    /// Paths relative to the root with `/` separators; folders end with `/`.
+    pub files: Vec<String>,
+    /// Whether the listing stopped at its bound.
+    pub truncated: bool,
+}
+
+/// A skill offered for `/` completion (task 0343).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalAssistSkillDto {
+    /// The name typed after `/`.
+    pub name: String,
+    /// When to use it.
+    pub description: String,
+    /// `project`, `user` or `note`.
+    pub source: String,
 }

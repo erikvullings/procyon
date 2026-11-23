@@ -412,6 +412,24 @@ only reaches your terminal as a proposal you approve. Your notes count as skills
 that match your question appear in the same list, marked `note`, and new captures get a
 `description: Use when …` line. Project skills win over user skills, and both win over notes.
 
+### Terminal assistant sessions and commands
+
+A terminal tab's assistant session starts in the folder of its first `#` question and treats it as
+the trusted root of the project: while the shell stays inside it, the tools, `@` mentions, skills
+and instructions use that root. `@` with Tab completes paths anywhere under it (`@main` finds
+`src/deep/main.rs`); the listing is cached and read again after a command ran or the assistant
+answered, so new files show up. `# /` with Tab completes skill names (folder skills and notes) and
+these commands:
+
+| Command | What it does |
+| --- | --- |
+| `/<skill> question` | Asks with that skill's instructions loaded up front |
+| `/new` | Starts a new session rooted at the current folder |
+| `/clear` | Forgets the conversation, keeps the root |
+| `/compact` | Replaces the conversation by a summary the model writes |
+| `/model`, `/model <n\|name>` | Lists the chat models of your endpoints, or switches the chat role to one |
+| `/help` | Lists the commands |
+
 The chat uses the same tools: switch on "Let the assistant look things up" in a chat tab and the
 model may list, read and search the other pane's folder, your notes and skills, and propose a note
 for review. It cannot write or run anything. What it reads goes to the chat endpoint, so the switch

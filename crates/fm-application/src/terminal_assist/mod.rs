@@ -4,6 +4,7 @@
 //! proposed, and runs after the person approves it. Nothing is saved to disk.
 
 mod agent_tools;
+mod commands;
 mod context;
 mod session;
 mod write;
@@ -21,9 +22,9 @@ pub(crate) use fm_agent::{NotesAccess, redact_secrets};
 pub(crate) use session::Sessions;
 
 use fm_transport_dto::{
-    ChatFailureDto, TerminalAssistEventDto, TerminalAssistKindDto, TerminalAssistReplyDto,
-    TerminalAssistRequestDto, TerminalToolResultDto, TerminalWriteDecisionDto,
-    TerminalWriteRequestDto,
+    ChatFailureDto, TerminalAssistEventDto, TerminalAssistFilesDto, TerminalAssistKindDto,
+    TerminalAssistReplyDto, TerminalAssistRequestDto, TerminalAssistSkillDto,
+    TerminalToolResultDto, TerminalWriteDecisionDto, TerminalWriteRequestDto,
 };
 use fm_vfs::ProviderRegistry;
 use tokio_util::sync::CancellationToken;
@@ -147,6 +148,46 @@ pub(crate) struct TerminalHost<'a> {
     pub(crate) skills: &'a Arc<SkillIndex>,
 }
 
+/// The folder an `ask` works in: the session's root when the working folder lies inside it
+/// (task 0343), else the working folder.
+fn tools_folder(request: &TerminalAssistRequestDto) -> &str {
+    let working = request.working_directory.as_str();
+    match request.root.as_deref() {
+        Some(root) if !root.is_empty() && within(root, working) => root,
+        _ => working,
+    }
+}
+
+/// Whether location `inner` is `outer` or lies inside it.
+fn within(outer: &str, inner: &str) -> bool {
+    let outer = outer.trim_end_matches('/');
+    inner
+        .strip_prefix(outer)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+}
+
+/// The files under a session's root, for `@` completion (task 0343).
+pub(crate) async fn files(providers: &ProviderRegistry, root: &str) -> TerminalAssistFilesDto {
+    commands::list_files(providers, root).await
+}
+
+/// The skills `/` can invoke in a folder (task 0343).
+pub(crate) async fn skills(
+    terminal: &TerminalHost<'_>,
+    working_directory: &str,
+) -> Vec<TerminalAssistSkillDto> {
+    commands::list_skills(terminal, working_directory).await
+}
+
+/// Replaces a session's conversation with a summary (`/compact`, task 0343).
+pub(crate) async fn compact(
+    generator: &impl ChatGenerator,
+    sessions: &Sessions,
+    id: &str,
+) -> Result<(), ChatFailureDto> {
+    commands::compact(generator, sessions, id).await
+}
+
 /// Like [`reply`], and for an `ask` also reports each finished line of the answer, and each step,
 /// to `on_event` while the model is still writing.
 pub(crate) async fn reply_streaming(
@@ -233,7 +274,9 @@ async fn ask(
         })
         .ok_or(ChatFailureDto::InvalidRequest)?
         .to_owned();
-    let files = FolderTools::open(providers, &request.working_directory);
+    // The session's root, when the shell is still inside it, is the folder the tools may read.
+    let folder = tools_folder(&request);
+    let files = FolderTools::open(providers, folder);
     let (host, documents) = (files.host(), files.documents());
     // Calls are understood for every tool; the prompt describes `write_file` only when allowed.
     let registry = agent_tools::registry(true);
@@ -306,7 +349,17 @@ async fn ask(
         let blocks = sessions.unsent_blocks(&id, &request.context.blocks);
         let state = sessions.state_update(&id, &state_sections(&request));
         let activity = render_activity(&blocks, &files);
-        let context = [state, activity]
+        let skill = match request
+            .skill
+            .as_deref()
+            .filter(|name| !name.trim().is_empty())
+        {
+            Some(name) => commands::invoked_skill(terminal, folder, name)
+                .await
+                .unwrap_or_else(|| format!("There is no skill called `{}`.", name.trim())),
+            None => String::new(),
+        };
+        let context = [state, activity, skill]
             .into_iter()
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>()
@@ -326,7 +379,7 @@ async fn ask(
         terminal.skills,
         providers,
         notes,
-        &request.working_directory,
+        folder,
         &skills_question,
         SkillScope::HostWide,
     )
@@ -747,6 +800,8 @@ mod tests {
             transcript: String::new(),
             request: Some(request.to_owned()),
             working_directory: "file:///projects/app".to_owned(),
+            root: None,
+            skill: None,
             shell: Some("zsh".to_owned()),
             session_id: None,
             context: TerminalContextDto::default(),
@@ -763,6 +818,8 @@ mod tests {
             transcript: transcript.to_owned(),
             request: None,
             working_directory: "file:///projects/app".to_owned(),
+            root: None,
+            skill: None,
             shell: None,
             session_id: None,
             context: TerminalContextDto::default(),
@@ -896,6 +953,8 @@ mod tests {
             working_directory: url::Url::from_directory_path(directory)
                 .unwrap()
                 .to_string(),
+            root: None,
+            skill: None,
             shell: Some("zsh".to_owned()),
             session_id: Some(session.to_owned()),
             context: TerminalContextDto::default(),
@@ -1551,6 +1610,95 @@ mod tests {
         reply_in(fake, &local_providers(), sessions, None, request)
             .await
             .unwrap()
+    }
+
+    #[tokio::test]
+    async fn an_invoked_skill_goes_with_the_question() {
+        let dir = tempfile::tempdir().unwrap();
+        let skill = dir.path().join(".claude/skills/release");
+        std::fs::create_dir_all(&skill).unwrap();
+        std::fs::write(
+            skill.join("SKILL.md"),
+            "---\ndescription: Releases\n---\nBump, tag, push.",
+        )
+        .unwrap();
+        let fake = scripted(&["Done."]);
+        let sessions = Sessions::default();
+        let request = TerminalAssistRequestDto {
+            skill: Some("release".to_owned()),
+            ..ask_request("t", "do it", dir.path())
+        };
+        ask_local(&fake, &sessions, request).await;
+        let prompt = fake.seen.lock().unwrap()[0].1.user_prompt.clone();
+        assert!(prompt.contains("invoked the skill `release`"), "{prompt}");
+        assert!(prompt.contains("Bump, tag, push."), "{prompt}");
+
+        let request = TerminalAssistRequestDto {
+            skill: Some("missing".to_owned()),
+            ..ask_request("t2", "do it", dir.path())
+        };
+        let fake = scripted(&["Done."]);
+        ask_local(&fake, &sessions, request).await;
+        let prompt = fake.seen.lock().unwrap()[0].1.user_prompt.clone();
+        assert!(
+            prompt.contains("There is no skill called `missing`."),
+            "{prompt}"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_session_root_is_the_tools_folder_while_the_shell_is_inside_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(dir.path().join("top.txt"), "from the root").unwrap();
+        let root = url::Url::from_directory_path(dir.path())
+            .unwrap()
+            .to_string();
+        let fake = scripted(&[r#"TOOL {"tool":"read_file","path":"top.txt"}"#, "ok"]);
+        let sessions = Sessions::default();
+        let request = TerminalAssistRequestDto {
+            root: Some(root.clone()),
+            ..ask_request("t", "read it", &sub)
+        };
+        ask_local(&fake, &sessions, request).await;
+        assert!(sessions.render("t").contains("from the root"));
+
+        // Outside the root, the working folder is used.
+        let elsewhere = tempfile::tempdir().unwrap();
+        let fake = scripted(&[r#"TOOL {"tool":"read_file","path":"top.txt"}"#, "ok"]);
+        let request = TerminalAssistRequestDto {
+            root: Some(root),
+            ..ask_request("t2", "read it", elsewhere.path())
+        };
+        ask_local(&fake, &sessions, request).await;
+        assert!(!sessions.render("t2").contains("from the root"));
+    }
+
+    #[test]
+    fn a_location_is_within_its_root_only_at_a_folder_boundary() {
+        assert!(within("file:///a/b/", "file:///a/b/c/"));
+        assert!(within("file:///a/b", "file:///a/b"));
+        assert!(!within("file:///a/b", "file:///a/bc"));
+    }
+
+    #[tokio::test]
+    async fn compacting_replaces_the_conversation_with_the_summary() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&["It is a Rust project.", "SUMMARY: a Rust project."]);
+        let sessions = Sessions::default();
+        ask_local(
+            &fake,
+            &sessions,
+            ask_request("t", "what is this?", dir.path()),
+        )
+        .await;
+        compact(&fake, &sessions, "t").await.unwrap();
+        let rendered = sessions.render("t");
+        assert!(rendered.contains("SUMMARY: a Rust project."), "{rendered}");
+        assert!(!rendered.contains("what is this?"), "{rendered}");
+        // Nothing to compact is not an error.
+        compact(&fake, &sessions, "unknown").await.unwrap();
     }
 
     const WRITE_A: &str = r##"TOOL {"tool":"write_file","path":"a.md","content":"# A"}"##;

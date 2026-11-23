@@ -3542,6 +3542,34 @@ impl FileManagerService {
         }
     }
 
+    /// The files under a terminal session's root, for `@` completion (task 0343).
+    pub async fn terminal_assist_files(
+        &self,
+        root: &str,
+    ) -> fm_transport_dto::TerminalAssistFilesDto {
+        crate::terminal_assist::files(&self.providers, root).await
+    }
+
+    /// The skills (folder skills and notes) `/` can invoke in a terminal's folder (task 0343).
+    pub async fn terminal_assist_skills(
+        &self,
+        access: &SemanticAccessContext,
+        working_directory: &str,
+    ) -> Vec<fm_transport_dto::TerminalAssistSkillDto> {
+        let notes = self.assistant_notes(access, None).await;
+        crate::terminal_assist::skills(&self.terminal_host(&notes), working_directory).await
+    }
+
+    /// Replaces a terminal session's conversation with a model-written summary (`/compact`,
+    /// task 0343).
+    pub async fn terminal_assist_compact(
+        &self,
+        session_id: &str,
+    ) -> Result<(), fm_transport_dto::ChatFailureDto> {
+        crate::terminal_assist::compact(&self.llm_profiles, &self.terminal_sessions, session_id)
+            .await
+    }
+
     /// Forgets one terminal tab's assistant session, when the tab closes.
     pub fn terminal_assist_close(&self, session_id: &str) {
         self.terminal_sessions.close(session_id);

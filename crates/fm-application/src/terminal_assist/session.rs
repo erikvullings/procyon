@@ -375,6 +375,19 @@ impl Sessions {
         fit_messages(&messages, limit)
     }
 
+    /// Replaces the conversation with `summary` (`/compact`); what waited for the person is
+    /// dropped with it.
+    pub(super) fn replace_with_summary(&self, id: &str, summary: &str) {
+        self.with(id, |session| {
+            session.pending_call = None;
+            session.pending_write = None;
+            session.turns = vec![Turn::Agent(Message::Note(format!(
+                "Summary of the conversation so far:\n{}",
+                truncate_to_bytes(summary, MAX_TURN_BYTES)
+            )))];
+        });
+    }
+
     /// The conversation so far, as the model sees it; empty for an unknown session. Used to turn
     /// a session into a draft note (task 0337).
     pub(crate) fn transcript(&self, id: &str) -> String {

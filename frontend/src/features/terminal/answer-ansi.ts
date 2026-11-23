@@ -222,6 +222,11 @@ export function stepsAnsi(steps: readonly string[]): string {
 }
 
 /** A failure or note in red, on its own line. */
+/** Plain information lines (a command's output, a list to pick from), one per line. */
+export function infoAnsi(lines: readonly string[]): string {
+  return lines.map((line) => `${INDENT}${clean(line).replace(/\n/g, ' ')}${NEWLINE}`).join('');
+}
+
 export function noticeAnsi(text: string): string {
   return `\x1b[31m${INDENT}${clean(text).replace(/\n/g, ' ')}\x1b[39m${NEWLINE}`;
 }

@@ -60,4 +60,10 @@ pub trait NotesAccess: Send + Sync {
     async fn skills(&self, _query: &str) -> Vec<NoteSkill> {
         Vec::new()
     }
+
+    /// Up to `limit` notes offered as skills whatever the request, for a host that lets the person
+    /// pick one by name (`/name`). None by default.
+    async fn list_skills(&self, _limit: usize) -> Vec<NoteSkill> {
+        Vec::new()
+    }
 }

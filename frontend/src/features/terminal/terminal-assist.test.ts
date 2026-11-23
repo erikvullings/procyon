@@ -4,6 +4,7 @@ import {
   cleanCommand,
   commandFromAnswer,
   completeMention,
+  completeMentionInTree,
   contextChips,
   EXPLAIN_REQUEST,
   effectiveRemoved,
@@ -278,5 +279,29 @@ describe('mentionText', () => {
   it('quotes only names with whitespace', () => {
     expect(mentionText('a.txt')).toBe('@a.txt');
     expect(mentionText('My File.md')).toBe('@"My File.md"');
+  });
+});
+
+describe('completeMentionInTree (task 0343)', () => {
+  const paths = ['README.md', 'src/', 'src/deep/', 'src/deep/main.rs', 'docs/My Guide.md'];
+
+  it('completes a path prefix like a shell', () => {
+    expect(completeMentionInTree('# @src/de', paths)).toEqual({ erase: 0, insert: 'ep/' });
+  });
+
+  it('finds a single file by its name anywhere under the root', () => {
+    expect(completeMentionInTree('# read @main', paths)).toEqual({
+      erase: 5,
+      insert: '@src/deep/main.rs ',
+    });
+    expect(completeMentionInTree('# read @my', paths)).toEqual({
+      erase: 3,
+      insert: '@"docs/My Guide.md" ',
+    });
+  });
+
+  it('leaves an ambiguous or unknown name alone', () => {
+    expect(completeMentionInTree('# @zzz', paths)).toBeUndefined();
+    expect(completeMentionInTree('# @d', ['a/deep/', 'b/docs.md'])).toBeUndefined();
   });
 });

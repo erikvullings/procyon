@@ -1,5 +1,6 @@
 import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { LlmProfile } from '../../models';
 import type { TerminalClient } from './terminal-client';
 import {
   handleTerminalKeyEvent,
@@ -8,6 +9,7 @@ import {
   showTerminalSurface,
   TerminalDrawer,
   type TerminalDrawerAttrs,
+  type TerminalModels,
   terminalHost,
 } from './terminal-drawer';
 
@@ -1221,6 +1223,130 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
         '"ATP 7-100.1 Russian Tactics  2024.pdf" ',
       ),
     );
+  });
+
+  const typeLine = (text: string) => {
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', { value: { getData: () => text } });
+    textarea().dispatchEvent(paste);
+    echo?.({ type: 'output', data: bytes(`user % ${text}`) });
+  };
+  const written = () => write.mock.calls.map(([, data]) => new TextDecoder().decode(data)).join('');
+
+  it('completes an @path anywhere under the session root and lists again after a change', async () => {
+    let files = ['README.md', 'src/', 'src/deep/', 'src/deep/main.rs'];
+    const assistFiles = vi.fn(async () => ({ files, truncated: false }));
+    await mountWith({ assistFiles });
+    typeLine('# read @main');
+    key('Tab', 9);
+    await vi.waitFor(() => expect(written()).toContain('@src/deep/main.rs '));
+    expect(assistFiles).toHaveBeenCalledWith('file:///home/repo');
+
+    // A command ran: the next completion lists the tree again and sees the new file.
+    files = [...files, 'src/new.rs'];
+    ask('# where is it?');
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledOnce());
+    expect(sentAt(0)?.root).toBe('file:///home/repo');
+    await markPrompt();
+    typeLine('# open @new');
+    key('Tab', 9);
+    await vi.waitFor(() => expect(written()).toContain('@src/new.rs '));
+    expect(assistFiles).toHaveBeenCalledTimes(2);
+  });
+
+  async function mountWith(
+    client: Partial<TerminalClient>,
+    extra: Partial<TerminalDrawerAttrs> = {},
+  ) {
+    m.mount(root, {
+      view: () =>
+        m(TerminalDrawer, {
+          ...extra,
+          open: true,
+          tabKey: 'pane-1:tab-1',
+          location: { providerId: 'local', uri: 'file:///home/repo' },
+          client: {
+            open: vi.fn(async (_location, _cols, _rows, output) => {
+              echo = output;
+              return 'session-1';
+            }),
+            write,
+            resize: vi.fn(async () => undefined),
+            close: vi.fn(async () => true),
+            assist,
+            assistClose,
+            ...client,
+          },
+          onToggle: vi.fn(),
+          shellIntegration: 'disabled',
+          assistantEnabled: true,
+        }),
+    });
+    await vi.waitFor(() => expect(root.querySelector('.xterm-helper-textarea')).not.toBeNull());
+    await vi.waitFor(() => expect(echo).toBeDefined());
+    await markPrompt();
+  }
+
+  it('completes / with commands and skills, and asks with an invoked skill', async () => {
+    const assistSkills = vi.fn(async () => [
+      { name: 'release', description: 'Releases', source: 'project' as const },
+      { name: 'nginx-cert', description: 'Certs', source: 'note' as const },
+    ]);
+    await mountWith({ assistSkills });
+    ask('# /release v1.2');
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledOnce());
+    expect(sentAt(0)).toMatchObject({
+      request: 'v1.2',
+      skill: 'release',
+      root: 'file:///home/repo',
+    });
+
+    await markPrompt();
+    typeLine('# /rel');
+    key('Tab', 9);
+    await vi.waitFor(() => expect(written()).toContain('ease '));
+    expect(assistSkills).toHaveBeenCalledWith('file:///home/repo');
+  });
+
+  it('runs /clear, /new and /compact without asking the model', async () => {
+    const assistCompact = vi.fn(async () => undefined);
+    await mountWith({ assistCompact });
+    ask('# /compact');
+    await vi.waitFor(() => expect(assistCompact).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(root.textContent).toContain('replaced by a summary'));
+    await markPrompt();
+    ask('# /clear');
+    await vi.waitFor(() => expect(assistClose).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(root.textContent).toContain('Conversation cleared.'));
+    await markPrompt();
+    ask('# /new');
+    await vi.waitFor(() => expect(assistClose).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(root.textContent).toContain('New session in file:///home/repo'));
+    expect(assist).not.toHaveBeenCalled();
+  });
+
+  it('lists the chat models with /model and switches with /model <number>', async () => {
+    const select = vi.fn<TerminalModels['select']>(async () => undefined);
+    const models: TerminalModels = {
+      list: async () => ({
+        profiles: [
+          { id: 'p1', name: 'Local', model: 'qwen' } as unknown as LlmProfile,
+          { id: 'p2', name: 'Cloud', model: 'big' } as unknown as LlmProfile,
+        ],
+        chat: { profileId: 'p1', model: 'qwen', allowCloud: false },
+      }),
+      discover: async (id) => (id === 'p1' ? ['qwen', 'llama'] : []),
+      select,
+    };
+    await mountWith({}, { models });
+    ask('# /model');
+    await vi.waitFor(() => expect(root.textContent).toContain('2. llama (Local)'));
+    expect(root.textContent).toContain('* 1. qwen (Local)');
+    await markPrompt();
+    ask('# /model 3');
+    await vi.waitFor(() => expect(select).toHaveBeenCalledOnce());
+    expect(select.mock.calls[0]?.[0]).toMatchObject({ profileId: 'p2', model: 'big' });
+    await vi.waitFor(() => expect(root.textContent).toContain('Chat model: big (Cloud).'));
   });
 
   it('saves the session as a note with Ctrl+Shift+S', async () => {
