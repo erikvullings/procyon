@@ -94,6 +94,7 @@ fm-platform-macos.workspace = true
 ed25519-dalek.workspace = true
 fm-ssh.workspace = true
 git2.workspace = true
+lofty.workspace = true
 mp4.workspace = true
 openh264.workspace = true
 russh.workspace = true

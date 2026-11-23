@@ -75,7 +75,11 @@ import {
   isBrowsable,
   remoteRootLocation,
 } from '../connections/connections-model';
-import { DirectoryGrid, type GridIconSize } from '../directory-table/directory-grid';
+import {
+  DirectoryGrid,
+  type FolderThumbnailStyle,
+  type GridIconSize,
+} from '../directory-table/directory-grid';
 import {
   type ColumnWidthEntry,
   type CursorClickModifiers,
@@ -206,6 +210,9 @@ export interface TableConfigAttrs {
   readonly onViewModeChange?:
     | ((viewMode: 'table' | 'grid', iconSize: GridIconSize) => void)
     | undefined;
+  /** How folders with cover art are drawn in the grid (task 0346). Defaults to `'off'`. */
+  readonly folderThumbnails?: FolderThumbnailStyle | undefined;
+  readonly onFolderThumbnailsChange?: ((style: FolderThumbnailStyle) => void) | undefined;
   /** This folder's view was restored from a remembered choice (task 0270). */
   readonly viewRemembered?: boolean | undefined;
   /** Drops the remembered view of this folder. */
@@ -2044,6 +2051,34 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                       option.label,
                     );
                   }),
+                  (attrs.tableConfig.viewMode ?? 'table') === 'grid' &&
+                    attrs.tableConfig.onFolderThumbnailsChange !== undefined
+                    ? (
+                        [
+                          { label: t('pane', 'folderCoversOff'), style: 'off' },
+                          { label: t('pane', 'folderCoversPlain'), style: 'plain' },
+                          { label: t('pane', 'folderCoversCdCase'), style: 'cdCase' },
+                        ] as const
+                      ).map((option, optionIndex) =>
+                        m(
+                          'button.fm-view-mode-menu-item.fm-folder-covers-item',
+                          {
+                            key: `folder-covers-${option.style}`,
+                            class: optionIndex === 0 ? 'fm-view-mode-menu-separated' : '',
+                            type: 'button',
+                            role: 'menuitemradio',
+                            'aria-checked': String(
+                              (attrs.tableConfig.folderThumbnails ?? 'off') === option.style,
+                            ),
+                            onclick: () => {
+                              viewMenuOpen = false;
+                              attrs.tableConfig.onFolderThumbnailsChange?.(option.style);
+                            },
+                          },
+                          option.label,
+                        ),
+                      )
+                    : undefined,
                   attrs.tableConfig.viewRemembered === true &&
                     attrs.tableConfig.onForgetView !== undefined
                     ? m(
@@ -2345,6 +2380,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               ? m(DirectoryGrid, {
                   ...sharedListAttrs,
                   iconSize: attrs.tableConfig.iconSize ?? 'medium',
+                  folderThumbnails: attrs.tableConfig.folderThumbnails ?? 'off',
                   photoMode: photoModeByTab.get(attrs.activeTabId) === true,
                 })
               : m(DirectoryTable, {

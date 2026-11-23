@@ -164,6 +164,22 @@ pub struct DirectoryViewConfiguration {
     /// (task 0134).
     #[serde(default)]
     pub icon_size: IconSize,
+    /// How folders with cover art are drawn in the grid (task 0346). `#[serde(default)]` so older
+    /// workspaces keep showing plain folder icons.
+    #[serde(default)]
+    pub folder_thumbnails: FolderThumbnailStyle,
+}
+
+/// How a folder tile shows the cover art found inside the folder (task 0346).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum FolderThumbnailStyle {
+    /// The generic folder icon; nothing is probed.
+    #[default]
+    Off,
+    /// The cover picture as the folder's thumbnail.
+    Plain,
+    /// The cover picture inside a jewel-case frame, as for an album.
+    CdCase,
 }
 
 /// The active view mode for a directory listing tab (task 0134): the
@@ -547,6 +563,7 @@ mod tests {
             quick_filter: None,
             view_mode: DirectoryViewMode::Table,
             icon_size: IconSize::Medium,
+            folder_thumbnails: FolderThumbnailStyle::Off,
         }
     }
 

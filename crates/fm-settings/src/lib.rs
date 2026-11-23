@@ -35,7 +35,8 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use fm_domain::{
-    ColumnConfiguration, DirectoryViewMode, IconSize, Location, SavedSearch, SortDescriptor,
+    ColumnConfiguration, DirectoryViewMode, FolderThumbnailStyle, IconSize, Location, SavedSearch,
+    SortDescriptor,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -595,6 +596,9 @@ pub struct FolderViewMemory {
     pub view_mode: DirectoryViewMode,
     /// Grid tile size.
     pub icon_size: IconSize,
+    /// How folders with cover art are drawn (task 0346).
+    #[serde(default)]
+    pub folder_thumbnails: FolderThumbnailStyle,
 }
 
 fn same_folder(left: &Location, right: &Location) -> bool {
@@ -2193,6 +2197,7 @@ mod tests {
             folders_first: true,
             view_mode: mode,
             icon_size: IconSize::default(),
+            folder_thumbnails: FolderThumbnailStyle::default(),
         }
     }
 

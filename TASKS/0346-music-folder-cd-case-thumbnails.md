@@ -1,6 +1,6 @@
 # 0346 Music folder view with CD-case album thumbnails
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: backend, frontend
 Depends on: 0134
@@ -26,4 +26,10 @@ Reference: Directory Opus "Nick Cave and the Bad Seeds" folder, one tile per alb
 - Keep browser/Tauri/mock parity (mock client needs a fake cover fixture).
 
 ## Agent Notes
-- Created 2026-11-23 from the Directory Opus comparison screenshots. Not started.
+- Created 2026-11-23 from the Directory Opus comparison screenshots.
+- 2026-11-23 claude: Implemented. Test seam agreed with the user: `ThumbnailService` only (8 new tests in `crates/fm-application/src/thumbnails.rs`: cover file, name priority, embedded picture in first track, audio file itself, no artwork -> NotFound, symlinked folder not probed). No other tests were added (user chose that one seam); the plumbing and frontend are covered only by existing tests plus tsc/lint and are not exercised in a browser or the Tauri app.
+  **Backend:** `ThumbnailService` now treats a directory (`provider.inspect`, so symlinks are never followed) as a source: one bounded listing (512 entries), cover file by priority `cover` > `folder` > `front` > `album` > `albumart*` (jpg/jpeg/png/webp/etc., case-insensitive), else the embedded picture of the first of at most 3 audio tracks (by name). Embedded pictures are read from only the first 4 MiB of a file (`read_embedded_picture` in `fm-metadata/src/audio.rs`, lofty, front cover preferred, properties not parsed). Audio files themselves thumbnail from their own picture. The disk cache stays content-keyed on the picture bytes, so the plain cover is cached and the frame is CSS only. No HTTP route change: folders reuse `GET /api/v1/thumbnails`; "no art" is the existing 404 -> icon fallback.
+  **Setting:** `FolderThumbnailStyle` (`off` | `plain` | `cdCase`, default `off`) added to `DirectoryViewConfiguration`, `DirectoryViewPatch`, per-folder view memory (`FolderViewMemory`, serde default) and the DTOs; OpenAPI and Orval client regenerated. Set from the grid's View menu ("Folders: icon / cover / CD case", i18n in all 8 locales). Folder tiles request thumbnails only when the style is not `off`.
+  **Frontend:** `thumbnail-loader.ts` accepts directories and audio files for medium/large sizes; `directory-grid.ts` wraps folder covers in `.fm-cd-case` (spine strip, border, highlight; CSS in `directory-grid.css`).
+  **Deviations from the acceptance criteria:** (1) no automatic "CD case when folder contains audio" default: it would need probing every folder; the style is an explicit per-folder choice (remembered per folder by 0270's view memory). (2) Audio covers are not shown in the table's 16px icon column, only in grid tiles, because each row would read up to 4 MiB of tags. (3) The artist/year caption line is left to 0347. (4) The mock client has no cover fixture, so the mock runtime shows no folder covers.
+  **Watch for:** negative results (folders without art) are cached by the loader only for the grid TTL (60 s), so non-album folders are re-probed about once a minute while visible with a style switched on. M4A files with `moov` at the end of the file have their `covr` beyond the 4 MiB head and show no cover.

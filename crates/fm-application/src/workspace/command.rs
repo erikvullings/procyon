@@ -362,6 +362,9 @@ fn apply_view_patch(view: &mut DirectoryViewConfiguration, patch: DirectoryViewP
     if let Some(icon_size) = patch.icon_size {
         view.icon_size = icon_size;
     }
+    if let Some(folder_thumbnails) = patch.folder_thumbnails {
+        view.folder_thumbnails = folder_thumbnails;
+    }
 }
 
 #[cfg(test)]

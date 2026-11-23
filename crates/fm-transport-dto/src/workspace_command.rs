@@ -10,8 +10,8 @@ use uuid::Uuid;
 
 use crate::location::LocationDto;
 use crate::workspace::{
-    ColumnConfigurationDto, DirectoryViewModeDto, IconSizeDto, OperationCentrePreferencesDto,
-    PersistedFilterDto, SortDescriptorDto, WorkspaceLayoutDto,
+    ColumnConfigurationDto, DirectoryViewModeDto, FolderThumbnailStyleDto, IconSizeDto,
+    OperationCentrePreferencesDto, PersistedFilterDto, SortDescriptorDto, WorkspaceLayoutDto,
 };
 
 /// How a tab's location changed, so navigation history can be updated
@@ -105,6 +105,8 @@ pub struct DirectoryViewPatchDto {
     pub view_mode: Option<DirectoryViewModeDto>,
     /// Replace the grid tile size, if present (task 0134).
     pub icon_size: Option<IconSizeDto>,
+    /// Replace how folders with cover art are drawn, if present (task 0346).
+    pub folder_thumbnails: Option<FolderThumbnailStyleDto>,
 }
 
 impl From<DirectoryViewPatch> for DirectoryViewPatchDto {
@@ -121,6 +123,7 @@ impl From<DirectoryViewPatch> for DirectoryViewPatchDto {
             quick_filter: patch.quick_filter.map(Into::into),
             view_mode: patch.view_mode.map(Into::into),
             icon_size: patch.icon_size.map(Into::into),
+            folder_thumbnails: patch.folder_thumbnails.map(Into::into),
         }
     }
 }
@@ -139,6 +142,7 @@ impl From<DirectoryViewPatchDto> for DirectoryViewPatch {
             quick_filter: dto.quick_filter.map(Into::into),
             view_mode: dto.view_mode.map(Into::into),
             icon_size: dto.icon_size.map(Into::into),
+            folder_thumbnails: dto.folder_thumbnails.map(Into::into),
         }
     }
 }

@@ -1005,6 +1005,23 @@ export function createPaneContentBuilder(
       },
       viewMode: tab?.view.viewMode ?? 'table',
       iconSize: tab?.view.iconSize ?? 'medium',
+      folderThumbnails: tab?.view.folderThumbnails ?? 'off',
+      onFolderThumbnailsChange: (folderThumbnails) => {
+        const liveWorkspace = context.getWorkspace();
+        if (liveWorkspace === undefined || tab === undefined) return;
+        void dispatchWorkspaceCommand(
+          client,
+          {
+            type: 'updateView',
+            workspaceId: liveWorkspace.id,
+            paneId,
+            tabId: tab.id,
+            patch: { folderThumbnails },
+            expectedRevision: liveWorkspace.revision,
+          },
+          context.replaceWorkspace,
+        ).catch(() => undefined);
+      },
       viewRemembered: directory.viewRemembered === true,
       onForgetView: () => {
         if (tab === undefined) return;

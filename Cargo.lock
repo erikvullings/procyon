@@ -2867,6 +2867,7 @@ dependencies = [
  "futures",
  "git2",
  "image",
+ "lofty",
  "lopdf 0.47.0",
  "mp4",
  "openh264",

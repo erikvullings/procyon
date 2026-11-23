@@ -149,6 +149,7 @@ mod tests {
             quick_filter: None,
             view_mode: DirectoryViewMode::Table,
             icon_size: IconSize::Medium,
+            folder_thumbnails: fm_domain::FolderThumbnailStyle::Off,
         };
         let now = Utc::now();
         Workspace {

@@ -4,6 +4,7 @@
  */
 import type { ColumnConfigurationDto } from './columnConfigurationDto.ts';
 import type { DirectoryViewModeDto } from './directoryViewModeDto.ts';
+import type { FolderThumbnailStyleDto } from './folderThumbnailStyleDto.ts';
 import type { IconSizeDto } from './iconSizeDto.ts';
 import type { PersistedFilterDto } from './persistedFilterDto.ts';
 import type { SortDescriptorDto } from './sortDescriptorDto.ts';
@@ -15,6 +16,8 @@ import type { SortDescriptorDto } from './sortDescriptorDto.ts';
 export interface DirectoryViewConfigurationDto {
   /** Per-column width and visibility. */
   columns: ColumnConfigurationDto[];
+  /** How folders with cover art are drawn in the grid (task 0346). */
+  folderThumbnails?: FolderThumbnailStyleDto;
   /** Whether directories are grouped before files. */
   foldersFirst: boolean;
   /** Grid tile size, used only when `view_mode` is `grid` (task 0134). */

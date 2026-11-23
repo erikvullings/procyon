@@ -13563,6 +13563,10 @@
             },
             "description": "Per-column width and visibility."
           },
+          "folderThumbnails": {
+            "$ref": "#/components/schemas/FolderThumbnailStyleDto",
+            "description": "How folders with cover art are drawn in the grid (task 0346)."
+          },
           "foldersFirst": {
             "type": "boolean",
             "description": "Whether directories are grouped before files."
@@ -13620,6 +13624,17 @@
               "$ref": "#/components/schemas/ColumnConfigurationDto"
             },
             "description": "Replace the column configuration, if present."
+          },
+          "folderThumbnails": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FolderThumbnailStyleDto",
+                "description": "Replace how folders with cover art are drawn, if present (task 0346)."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "foldersFirst": {
             "type": [
@@ -15313,6 +15328,15 @@
             "description": "The entry's tags, in Finder's own display order."
           }
         }
+      },
+      "FolderThumbnailStyleDto": {
+        "type": "string",
+        "description": "How a folder tile shows the cover art found inside the folder (task 0346).",
+        "enum": [
+          "off",
+          "plain",
+          "cdCase"
+        ]
       },
       "ForgetFolderViewRequestDto": {
         "type": "object",

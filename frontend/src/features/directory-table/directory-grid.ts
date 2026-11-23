@@ -32,6 +32,9 @@ const DAY_HEADER_HEIGHT = 40;
  * its on-screen tile size are the same three steps. */
 export type GridIconSize = ThumbnailSize;
 
+/** How a folder tile shows the cover art found inside the folder (task 0346). */
+export type FolderThumbnailStyle = 'off' | 'plain' | 'cdCase';
+
 /** Rendering inputs, mirroring `DirectoryTableAttrs` (task 0024) closely
  * enough that a pane can swap between the two views with the same callback
  * wiring. Selection/cursor semantics, entry source and loading states are
@@ -58,6 +61,8 @@ export interface DirectoryGridAttrs {
   readonly nativeIconLoader?: NativeIconLoader;
   readonly thumbnailLoader?: ThumbnailLoader;
   readonly thumbnailAllowed?: (entry: EntrySummary) => boolean;
+  /** How folders with cover art are drawn (task 0346); folders keep the plain icon when `off`. */
+  readonly folderThumbnails?: FolderThumbnailStyle;
   readonly onCursorChange?: (index: number, modifiers?: CursorClickModifiers) => void;
   readonly onActivate?: (index: number) => void;
   readonly onRetry?: () => void;
@@ -80,6 +85,10 @@ function tileDimensions(element: HTMLElement | undefined): { width: number; heig
     width: Number.isFinite(width) && width > 0 ? width : DEFAULT_TILE_WIDTH,
     height: Number.isFinite(height) && height > 0 ? height : DEFAULT_TILE_HEIGHT,
   };
+}
+
+function thumbnailImage(src: string): m.Vnode {
+  return m('img.fm-grid-thumbnail', { src, alt: '', 'aria-hidden': 'true' });
 }
 
 function stateView(attrs: DirectoryGridAttrs): m.Children | undefined {
@@ -146,10 +155,14 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
       entry.kind === 'directory'
         ? attrs.activeSourceStates?.get(`${entry.location.providerId}:${entry.location.uri}`)
         : undefined;
+    const folderStyle = attrs.folderThumbnails ?? 'off';
     const thumbnailDataUri =
-      attrs.thumbnailAllowed?.(entry) === false
+      attrs.thumbnailAllowed?.(entry) === false ||
+      (entry.kind === 'directory' && folderStyle === 'off')
         ? undefined
         : thumbnailViewport?.thumbnailDataUri(entry, size);
+    const cdCase =
+      thumbnailDataUri !== undefined && entry.kind === 'directory' && folderStyle === 'cdCase';
     const nativeIconDataUri = attrs.nativeIconLoader?.iconDataUri(entry);
     return m(
       '.fm-grid-tile',
@@ -215,11 +228,9 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
       },
       [
         thumbnailDataUri !== undefined
-          ? m('img.fm-grid-thumbnail', {
-              src: thumbnailDataUri,
-              alt: '',
-              'aria-hidden': 'true',
-            })
+          ? cdCase
+            ? m('.fm-cd-case', thumbnailImage(thumbnailDataUri))
+            : thumbnailImage(thumbnailDataUri)
           : nativeIconDataUri === undefined
             ? entryIcon(entry, { className: 'fm-grid-icon', size: 32 })
             : m('img.fm-grid-icon.fm-native-grid-icon', {

@@ -999,3 +999,8 @@ button.fm-breadcrumb-scheme:hover {
     justify-content: safe center;
   }
 }
+
+.fm-view-mode-menu-separated {
+  margin-top: 4px;
+  border-top: 1px solid var(--fm-border);
+}

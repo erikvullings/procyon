@@ -97,6 +97,32 @@ pub fn read_audio_info_from_bytes(bytes: &[u8]) -> Result<AudioInfo, AudioReadEr
     info_from_probe(probe)
 }
 
+/// Returns the embedded cover picture of audio bytes (ID3 `APIC`, MP4 `covr`, FLAC/Vorbis
+/// picture), preferring a front cover. Stream properties are not parsed, so a truncated prefix
+/// that still contains the tag is enough. `None` when there is no picture or the bytes are not
+/// recognised audio.
+#[must_use]
+pub fn read_embedded_picture(bytes: &[u8]) -> Option<Vec<u8>> {
+    use lofty::picture::PictureType;
+
+    let tagged = Probe::new(std::io::Cursor::new(bytes))
+        .guess_file_type()
+        .ok()?
+        .options(ParseOptions::new().read_properties(false))
+        .read()
+        .ok()?;
+    let mut pictures = tagged
+        .tags()
+        .iter()
+        .flat_map(lofty::tag::Tag::pictures)
+        .filter(|picture| !picture.data().is_empty());
+    let first = pictures.next()?;
+    let front = std::iter::once(first)
+        .chain(pictures)
+        .min_by_key(|picture| picture.pic_type() != PictureType::CoverFront)?;
+    Some(front.data().to_vec())
+}
+
 fn info_from_probe<R: std::io::Read + std::io::Seek>(
     probe: Probe<R>,
 ) -> Result<AudioInfo, AudioReadError> {

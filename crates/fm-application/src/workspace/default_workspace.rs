@@ -61,6 +61,7 @@ fn default_directory_view() -> DirectoryViewConfiguration {
         quick_filter: None,
         view_mode: DirectoryViewMode::Table,
         icon_size: IconSize::Medium,
+        folder_thumbnails: fm_domain::FolderThumbnailStyle::Off,
     }
 }
 

@@ -4,6 +4,7 @@
  */
 import type { ColumnConfigurationDto } from './columnConfigurationDto.ts';
 import type { DirectoryViewModeDto } from './directoryViewModeDto.ts';
+import type { FolderThumbnailStyleDto } from './folderThumbnailStyleDto.ts';
 import type { IconSizeDto } from './iconSizeDto.ts';
 import type { QuickFilterPatchDto } from './quickFilterPatchDto.ts';
 import type { SortDescriptorDto } from './sortDescriptorDto.ts';
@@ -18,6 +19,7 @@ export interface DirectoryViewPatchDto {
      * @nullable
      */
   columns?: ColumnConfigurationDto[] | null;
+  folderThumbnails?: FolderThumbnailStyleDto | null;
   /**
      * Replace whether directories are grouped before files, if present.
      * @nullable

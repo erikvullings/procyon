@@ -3,8 +3,8 @@
 
 use chrono::{DateTime, Utc};
 use fm_domain::{
-    ColumnConfiguration, DirectoryViewConfiguration, DirectoryViewMode, IconSize,
-    NavigationHistory, OperationCentrePreferences, PaneId, PaneState, PersistedFilter,
+    ColumnConfiguration, DirectoryViewConfiguration, DirectoryViewMode, FolderThumbnailStyle,
+    IconSize, NavigationHistory, OperationCentrePreferences, PaneId, PaneState, PersistedFilter,
     SortDescriptor, SortDirection, SplitAxis, TabId, TabState, Workspace, WorkspaceId,
     WorkspaceLayout,
 };
@@ -214,6 +214,39 @@ impl From<IconSizeDto> for IconSize {
     }
 }
 
+/// How a folder tile shows the cover art found inside the folder (task 0346).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum FolderThumbnailStyleDto {
+    /// The generic folder icon; nothing is probed.
+    #[default]
+    Off,
+    /// The cover picture as the folder's thumbnail.
+    Plain,
+    /// The cover picture inside a jewel-case frame.
+    CdCase,
+}
+
+impl From<FolderThumbnailStyle> for FolderThumbnailStyleDto {
+    fn from(style: FolderThumbnailStyle) -> Self {
+        match style {
+            FolderThumbnailStyle::Off => Self::Off,
+            FolderThumbnailStyle::Plain => Self::Plain,
+            FolderThumbnailStyle::CdCase => Self::CdCase,
+        }
+    }
+}
+
+impl From<FolderThumbnailStyleDto> for FolderThumbnailStyle {
+    fn from(dto: FolderThumbnailStyleDto) -> Self {
+        match dto {
+            FolderThumbnailStyleDto::Off => Self::Off,
+            FolderThumbnailStyleDto::Plain => Self::Plain,
+            FolderThumbnailStyleDto::CdCase => Self::CdCase,
+        }
+    }
+}
+
 /// Persisted view configuration for a directory listing: sorting, columns
 /// and filters. Contains no frontend-only selection/cursor fields.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -235,6 +268,9 @@ pub struct DirectoryViewConfigurationDto {
     /// Grid tile size, used only when `view_mode` is `grid` (task 0134).
     #[serde(default)]
     pub icon_size: IconSizeDto,
+    /// How folders with cover art are drawn in the grid (task 0346).
+    #[serde(default)]
+    pub folder_thumbnails: FolderThumbnailStyleDto,
 }
 
 impl From<DirectoryViewConfiguration> for DirectoryViewConfigurationDto {
@@ -247,6 +283,7 @@ impl From<DirectoryViewConfiguration> for DirectoryViewConfigurationDto {
             quick_filter: view.quick_filter.map(Into::into),
             view_mode: view.view_mode.into(),
             icon_size: view.icon_size.into(),
+            folder_thumbnails: view.folder_thumbnails.into(),
         }
     }
 }
@@ -261,6 +298,7 @@ impl From<DirectoryViewConfigurationDto> for DirectoryViewConfiguration {
             quick_filter: dto.quick_filter.map(Into::into),
             view_mode: dto.view_mode.into(),
             icon_size: dto.icon_size.into(),
+            folder_thumbnails: dto.folder_thumbnails.into(),
         }
     }
 }
@@ -628,6 +666,7 @@ mod tests {
             quick_filter: None,
             view_mode: DirectoryViewMode::Table,
             icon_size: IconSize::Medium,
+            folder_thumbnails: fm_domain::FolderThumbnailStyle::Off,
         }
     }
 

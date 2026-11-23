@@ -24,7 +24,7 @@ import {
   isBrowsable,
   remoteRootLocation,
 } from '../connections/connections-model';
-import type { GridIconSize } from '../directory-table/directory-grid';
+import type { FolderThumbnailStyle, GridIconSize } from '../directory-table/directory-grid';
 import type {
   ColumnWidthEntry,
   DirectoryColumnDescriptor,
@@ -149,6 +149,9 @@ export interface WorkspacePaneContent {
   readonly viewMode?: 'table' | 'grid';
   readonly iconSize?: GridIconSize;
   readonly onViewModeChange?: (viewMode: 'table' | 'grid', iconSize: GridIconSize) => void;
+  /** How folders with cover art are drawn in the grid (task 0346). */
+  readonly folderThumbnails?: FolderThumbnailStyle;
+  readonly onFolderThumbnailsChange?: (style: FolderThumbnailStyle) => void;
   /** This folder's view was restored from a remembered choice (task 0270). */
   readonly viewRemembered?: boolean;
   readonly onForgetView?: () => void;
@@ -693,6 +696,8 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
             viewMode: content.viewMode,
             iconSize: content.iconSize,
             onViewModeChange: content.onViewModeChange,
+            folderThumbnails: content.folderThumbnails,
+            onFolderThumbnailsChange: content.onFolderThumbnailsChange,
             viewRemembered: content.viewRemembered,
             onForgetView: content.onForgetView,
             columnWidths: content.columnWidths,

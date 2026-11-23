@@ -31,6 +31,7 @@ fn touches_remembered_fields(patch: &DirectoryViewPatch) -> bool {
         || patch.folders_first.is_some()
         || patch.view_mode.is_some()
         || patch.icon_size.is_some()
+        || patch.folder_thumbnails.is_some()
 }
 
 pub(crate) fn hook_for(command: &WorkspaceCommand) -> ViewMemoryHook {
@@ -81,6 +82,7 @@ pub(crate) fn memory_from_view(
         folders_first: view.folders_first,
         view_mode: view.view_mode,
         icon_size: view.icon_size,
+        folder_thumbnails: view.folder_thumbnails,
     }
 }
 
@@ -97,6 +99,8 @@ pub(crate) fn patch_to_restore(
         quick_filter: None,
         view_mode: (memory.view_mode != view.view_mode).then_some(memory.view_mode),
         icon_size: (memory.icon_size != view.icon_size).then_some(memory.icon_size),
+        folder_thumbnails: (memory.folder_thumbnails != view.folder_thumbnails)
+            .then_some(memory.folder_thumbnails),
     };
     touches_remembered_fields(&patch).then_some(patch)
 }
@@ -126,6 +130,7 @@ mod tests {
             quick_filter: None,
             view_mode: DirectoryViewMode::Table,
             icon_size: IconSize::default(),
+            folder_thumbnails: fm_domain::FolderThumbnailStyle::default(),
         }
     }
 

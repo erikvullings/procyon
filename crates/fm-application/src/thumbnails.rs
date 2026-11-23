@@ -21,8 +21,8 @@ use fm_domain::{EntryId, EntryKind, Location};
 use fm_metadata::{
     GeneratedThumbnail, MAX_SOURCE_BYTES, ThumbnailCache, ThumbnailError, ThumbnailSize,
     generate_image_thumbnail, generate_pdf_thumbnail, generate_video_thumbnail,
-    is_supported_image_extension, is_supported_pdf_extension, is_supported_video_extension,
-    thumbnail_content_type,
+    is_supported_audio_extension, is_supported_image_extension, is_supported_pdf_extension,
+    is_supported_video_extension, read_embedded_picture, thumbnail_content_type,
 };
 use fm_vfs::{EntryRef, ListOptions, ProviderCapabilities, ProviderRegistry};
 use tokio::io::AsyncReadExt;
@@ -36,6 +36,16 @@ use crate::file_editor::read_stream_error;
 /// directory of thousands of images doesn't spawn unbounded CPU-bound decode
 /// work at once (task 0134 acceptance criteria: "...doesn't stall the UI").
 const MAX_CONCURRENT_GENERATIONS: usize = 4;
+
+/// Entries read from a folder when looking for its cover; one page, so a huge directory is
+/// never walked just to draw one tile.
+const FOLDER_PROBE_PAGE_SIZE: usize = 512;
+
+/// Leading bytes read from an audio file when looking for its embedded picture.
+const AUDIO_PICTURE_PROBE_BYTES: usize = 4 * 1024 * 1024;
+
+/// Tracks of one folder tried for an embedded picture before giving up.
+const MAX_TRACKS_PROBED: usize = 3;
 
 /// Maximum total bytes the on-disk thumbnail cache may occupy.
 const MAX_CACHE_BYTES: u64 = 200 * 1024 * 1024;
@@ -119,6 +129,12 @@ async fn read_source_bytes(
     providers: &ProviderRegistry,
     location: &Location,
 ) -> Result<(Vec<u8>, SourceKind), ApplicationError> {
+    if is_directory(providers, location).await {
+        return Ok((
+            read_folder_cover(providers, location).await?,
+            SourceKind::Image,
+        ));
+    }
     let name = location
         .name()
         .map_err(|_| map_thumbnail_error(ThumbnailError::UnsupportedFormat))?;
@@ -142,9 +158,142 @@ async fn read_source_bytes(
         ))
     } else if is_supported_pdf_extension(&extension) {
         Ok((read_whole_file(providers, location).await?, SourceKind::Pdf))
+    } else if is_supported_audio_extension(&extension) {
+        let picture = read_audio_picture(providers, location)
+            .await?
+            .ok_or_else(|| map_thumbnail_error(ThumbnailError::UnsupportedFormat))?;
+        Ok((picture, SourceKind::Image))
     } else {
         Err(map_thumbnail_error(ThumbnailError::UnsupportedFormat))
     }
+}
+
+/// Whether `location` is a real directory. Symlinks are not followed (`inspect` reports the link
+/// itself), and a provider that cannot inspect simply is not treated as a folder source.
+async fn is_directory(providers: &ProviderRegistry, location: &Location) -> bool {
+    let Ok(provider) = providers.resolve(location) else {
+        return false;
+    };
+    let entry = EntryRef {
+        id: EntryId::new(),
+        location: location.clone(),
+    };
+    provider
+        .inspect(&entry, CancellationToken::new())
+        .await
+        .is_ok_and(|summary| summary.kind == EntryKind::Directory)
+}
+
+/// Cover-art file names in priority order; the last one matches by prefix (`AlbumArtSmall.jpg`).
+const COVER_STEMS: [&str; 4] = ["cover", "folder", "front", "album"];
+const COVER_PREFIX: &str = "albumart";
+
+/// Priority of `name` as a cover file: lower is better, `None` when it is not one.
+fn cover_rank(name: &str) -> Option<usize> {
+    let path = Path::new(name);
+    let extension = path.extension()?.to_string_lossy().to_lowercase();
+    if !is_supported_image_extension(&extension) {
+        return None;
+    }
+    let stem = path.file_stem()?.to_string_lossy().to_lowercase();
+    COVER_STEMS
+        .iter()
+        .position(|candidate| *candidate == stem)
+        .or_else(|| stem.starts_with(COVER_PREFIX).then_some(COVER_STEMS.len()))
+}
+
+/// Lists one bounded page of the folder and returns the best cover image's bytes.
+async fn read_folder_cover(
+    providers: &ProviderRegistry,
+    folder: &Location,
+) -> Result<Vec<u8>, ApplicationError> {
+    let provider = providers.resolve(folder).map_err(ApplicationError::from)?;
+    let page = provider
+        .list(
+            folder,
+            ListOptions {
+                page_size: FOLDER_PROBE_PAGE_SIZE,
+                continuation_token: None,
+            },
+            CancellationToken::new(),
+        )
+        .await
+        .map_err(ApplicationError::from)?;
+    let files: Vec<_> = page
+        .entries
+        .iter()
+        .filter(|entry| entry.kind == EntryKind::File)
+        .collect();
+    if let Some(cover) = files
+        .iter()
+        .filter_map(|entry| cover_rank(&entry.name).map(|rank| (rank, entry)))
+        .min_by_key(|(rank, entry)| (*rank, entry.name.to_lowercase()))
+        .map(|(_, entry)| entry)
+    {
+        return read_whole_file(providers, &cover.location).await;
+    }
+
+    // No cover file: the first track (by name) that carries a picture of its own. Only the head
+    // of each file is read, where tags live, and only a few tracks are tried.
+    let mut tracks: Vec<_> = files
+        .iter()
+        .filter(|entry| {
+            extension_of(&entry.name)
+                .is_some_and(|extension| is_supported_audio_extension(&extension))
+        })
+        .collect();
+    tracks.sort_by_key(|entry| entry.name.to_lowercase());
+    for track in tracks.into_iter().take(MAX_TRACKS_PROBED) {
+        if let Some(picture) = read_audio_picture(providers, &track.location).await? {
+            return Ok(picture);
+        }
+    }
+    Err(map_thumbnail_error(ThumbnailError::UnsupportedFormat))
+}
+
+/// The picture embedded in an audio file, reading only the head of the file where tags live.
+async fn read_audio_picture(
+    providers: &ProviderRegistry,
+    location: &Location,
+) -> Result<Option<Vec<u8>>, ApplicationError> {
+    let head = read_file_prefix(providers, location, AUDIO_PICTURE_PROBE_BYTES).await?;
+    tokio::task::spawn_blocking(move || read_embedded_picture(&head))
+        .await
+        .map_err(|_| ApplicationError::Internal)
+}
+
+/// Reads at most `limit` leading bytes of a file; a longer file is cut, not rejected.
+async fn read_file_prefix(
+    providers: &ProviderRegistry,
+    location: &Location,
+    limit: usize,
+) -> Result<Vec<u8>, ApplicationError> {
+    let provider = providers
+        .resolve(location)
+        .map_err(ApplicationError::from)?;
+    provider
+        .capabilities_for(location)
+        .map_err(ApplicationError::from)?
+        .require(ProviderCapabilities::READ)
+        .map_err(ApplicationError::from)?;
+    let entry = EntryRef {
+        id: EntryId::new(),
+        location: location.clone(),
+    };
+    let mut reader = provider
+        .open_read(&entry, CancellationToken::new())
+        .await
+        .map_err(ApplicationError::from)?;
+    let mut bytes = Vec::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    while bytes.len() < limit {
+        let read = reader.read(&mut buffer).await.map_err(read_stream_error)?;
+        if read == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&buffer[..read.min(limit - bytes.len())]);
+    }
+    Ok(bytes)
 }
 
 fn extension_of(name: &str) -> Option<String> {
@@ -402,6 +551,149 @@ mod tests {
         let decoded_after = image::load_from_memory(&after.bytes).expect("decode after");
         assert_ne!(before.bytes, after.bytes);
         assert_eq!(decoded_after.width(), decoded_after.height() * 2);
+    }
+
+    #[tokio::test]
+    async fn a_folder_with_a_cover_file_is_thumbnailed_from_that_cover() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let album = dir.path().join("Abattoir Blues");
+        std::fs::create_dir(&album).expect("album dir");
+        std::fs::write(album.join("01 track.txt"), b"not art").expect("write decoy");
+        std::fs::write(album.join("Cover.PNG"), png_bytes(80, 40)).expect("write cover");
+
+        let service = ThumbnailService::new(dir.path().join("cache"));
+        let thumbnail = service
+            .thumbnail(&providers(), &location_for(&album), ThumbnailSize::Small)
+            .await
+            .expect("folder thumbnail must succeed");
+
+        let decoded = image::load_from_memory(&thumbnail.bytes).expect("decode result");
+        assert_eq!(decoded.width(), decoded.height() * 2);
+    }
+
+    /// A silent 8 kHz WAV with `picture` embedded in an ID3v2 tag.
+    fn wav_with_cover(picture: Vec<u8>) -> Vec<u8> {
+        use lofty::config::WriteOptions;
+        use lofty::picture::{MimeType, Picture, PictureType};
+        use lofty::tag::{Tag, TagExt, TagType};
+
+        let samples = 8000_u32;
+        let mut wav = Vec::new();
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&(36 + samples).to_le_bytes());
+        wav.extend_from_slice(b"WAVEfmt ");
+        for field in [16_u32, 0x0001_0001, 8000, 8000, 0x0008_0001] {
+            wav.extend_from_slice(&field.to_le_bytes());
+        }
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&samples.to_le_bytes());
+        wav.extend(std::iter::repeat_n(128_u8, samples as usize));
+
+        let directory = tempfile::tempdir().expect("temp dir");
+        let path = directory.path().join("fixture.wav");
+        std::fs::write(&path, wav).expect("write wav");
+        let mut tag = Tag::new(TagType::Id3v2);
+        tag.push_picture(
+            Picture::unchecked(picture)
+                .pic_type(PictureType::CoverFront)
+                .mime_type(MimeType::Png)
+                .build(),
+        );
+        tag.save_to_path(&path, WriteOptions::default())
+            .expect("write tag");
+        std::fs::read(&path).expect("read back fixture")
+    }
+
+    #[tokio::test]
+    async fn a_folder_without_a_cover_file_uses_the_picture_embedded_in_its_first_track() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let album = dir.path().join("Murder Ballads");
+        std::fs::create_dir(&album).expect("album dir");
+        std::fs::write(
+            album.join("01 intro.wav"),
+            wav_with_cover(png_bytes(80, 40)),
+        )
+        .expect("write track");
+
+        let service = ThumbnailService::new(dir.path().join("cache"));
+        let thumbnail = service
+            .thumbnail(&providers(), &location_for(&album), ThumbnailSize::Small)
+            .await
+            .expect("embedded cover must be used");
+
+        let decoded = image::load_from_memory(&thumbnail.bytes).expect("decode result");
+        assert_eq!(decoded.width(), decoded.height() * 2);
+    }
+
+    #[tokio::test]
+    async fn an_audio_file_is_thumbnailed_from_its_embedded_picture() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let track = dir.path().join("song.wav");
+        std::fs::write(&track, wav_with_cover(png_bytes(40, 80))).expect("write track");
+
+        let service = ThumbnailService::new(dir.path().join("cache"));
+        let thumbnail = service
+            .thumbnail(&providers(), &location_for(&track), ThumbnailSize::Small)
+            .await
+            .expect("embedded cover must be used");
+
+        let decoded = image::load_from_memory(&thumbnail.bytes).expect("decode result");
+        assert_eq!(decoded.height(), decoded.width() * 2);
+    }
+
+    #[tokio::test]
+    async fn a_cover_file_beats_a_picture_embedded_in_a_track_and_names_follow_priority() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let album = dir.path().join("Album");
+        std::fs::create_dir(&album).expect("album dir");
+        std::fs::write(album.join("01.wav"), wav_with_cover(png_bytes(20, 20))).expect("track");
+        std::fs::write(album.join("folder.png"), png_bytes(20, 40)).expect("folder art");
+        std::fs::write(album.join("cover.png"), png_bytes(80, 20)).expect("cover art");
+
+        let service = ThumbnailService::new(dir.path().join("cache"));
+        let thumbnail = service
+            .thumbnail(&providers(), &location_for(&album), ThumbnailSize::Small)
+            .await
+            .expect("folder thumbnail");
+
+        // cover.png (4:1) wins over folder.png (1:2) and the embedded square picture.
+        let decoded = image::load_from_memory(&thumbnail.bytes).expect("decode result");
+        assert_eq!(decoded.width(), decoded.height() * 4);
+    }
+
+    #[tokio::test]
+    async fn a_folder_without_any_artwork_is_not_found() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let folder = dir.path().join("Documents");
+        std::fs::create_dir(&folder).expect("dir");
+        std::fs::write(folder.join("notes.txt"), b"text").expect("file");
+
+        let service = ThumbnailService::new(dir.path().join("cache"));
+        let error = service
+            .thumbnail(&providers(), &location_for(&folder), ThumbnailSize::Small)
+            .await
+            .unwrap_err();
+
+        assert_eq!(error, ApplicationError::NotFound);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_symlinked_folder_is_not_probed_for_a_cover() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let real = dir.path().join("real");
+        std::fs::create_dir(&real).expect("real dir");
+        std::fs::write(real.join("cover.png"), png_bytes(40, 40)).expect("cover");
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).expect("symlink");
+
+        let service = ThumbnailService::new(dir.path().join("cache"));
+        let error = service
+            .thumbnail(&providers(), &location_for(&link), ThumbnailSize::Small)
+            .await
+            .unwrap_err();
+
+        assert_eq!(error, ApplicationError::NotFound);
     }
 
     #[tokio::test]

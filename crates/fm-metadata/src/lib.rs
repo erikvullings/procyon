@@ -15,7 +15,7 @@ mod video;
 
 pub use audio::{
     AudioInfo, AudioReadError, SUPPORTED_AUDIO_EXTENSIONS, is_supported_audio_extension,
-    read_audio_info, read_audio_info_from_bytes,
+    read_audio_info, read_audio_info_from_bytes, read_embedded_picture,
 };
 pub use cache::{ThumbnailCache, ThumbnailCacheError};
 pub use image_edit::{

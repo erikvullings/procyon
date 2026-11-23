@@ -9,8 +9,8 @@
 use crate::ids::{PaneId, TabId, WorkspaceId};
 use crate::location::Location;
 use crate::workspace::{
-    ColumnConfiguration, DirectoryViewMode, IconSize, OperationCentrePreferences, PersistedFilter,
-    SortDescriptor, WorkspaceLayout,
+    ColumnConfiguration, DirectoryViewMode, FolderThumbnailStyle, IconSize,
+    OperationCentrePreferences, PersistedFilter, SortDescriptor, WorkspaceLayout,
 };
 
 /// A focused workspace mutation, exactly per spec §5.3.9.
@@ -240,6 +240,8 @@ pub struct DirectoryViewPatch {
     pub view_mode: Option<DirectoryViewMode>,
     /// Replaces the grid tile size, if present (task 0134).
     pub icon_size: Option<IconSize>,
+    /// Replaces how folders with cover art are drawn, if present (task 0346).
+    pub folder_thumbnails: Option<FolderThumbnailStyle>,
 }
 
 /// A patch to a tab's persisted quick filter: either clear it or set a new

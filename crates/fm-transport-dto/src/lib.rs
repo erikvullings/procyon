@@ -294,9 +294,10 @@ pub use transfer_recovery::{
 };
 pub use workspace::{
     ColumnConfigurationDto, CreateWorkspaceRequestDto, DirectoryViewConfigurationDto,
-    DirectoryViewModeDto, IconSizeDto, NavigationHistoryDto, OperationCentrePreferencesDto,
-    PaneStateDto, PersistedFilterDto, SortDescriptorDto, SortDirectionDto, SplitAxisDto,
-    TabStateDto, WorkspaceDto, WorkspaceLayoutDto, WorkspaceSummaryDto,
+    DirectoryViewModeDto, FolderThumbnailStyleDto, IconSizeDto, NavigationHistoryDto,
+    OperationCentrePreferencesDto, PaneStateDto, PersistedFilterDto, SortDescriptorDto,
+    SortDirectionDto, SplitAxisDto, TabStateDto, WorkspaceDto, WorkspaceLayoutDto,
+    WorkspaceSummaryDto,
 };
 pub use workspace_command::{
     DirectoryViewPatchDto, ForgetFolderViewRequestDto, NavigationModeDto, QuickFilterPatchDto,

@@ -35,6 +35,25 @@ const THUMBNAILABLE_EXTENSIONS = new Set([
   'svg',
 ]);
 
+/** Audio formats whose embedded cover picture the backend can extract (task 0346). Kept in sync
+ * with `fm_metadata::SUPPORTED_AUDIO_EXTENSIONS`. Only requested for grid tiles: reading tags off
+ * every audio row of a long list would cost far more than a 16px icon is worth. */
+const AUDIO_THUMBNAIL_EXTENSIONS = new Set([
+  'mp3',
+  'flac',
+  'm4a',
+  'aac',
+  'ogg',
+  'oga',
+  'opus',
+  'wav',
+  'wma',
+  'ape',
+  'wv',
+  'aiff',
+  'aif',
+]);
+
 /** Large images are not useful as 16px list-row previews, but grid tiles must request them:
  * opening a cloud-backed placeholder is what lets OneDrive produce the visible thumbnail. */
 const LIST_THUMBNAIL_SIZE_LIMIT_BYTES = 3 * 1024;
@@ -57,8 +76,14 @@ function exceedsThumbnailSizeLimit(entry: EntrySummary, size: ThumbnailSize): bo
 }
 
 function isThumbnailable(entry: EntrySummary, size: ThumbnailSize): boolean {
-  if (entry.kind !== 'file') return false;
   if (isParentEntry(entry.id)) return false;
+  // A folder's thumbnail is the cover art found inside it (task 0346). The backend answers 404
+  // for folders without any, so callers only ask for tiles whose folder style is switched on.
+  if (entry.kind === 'directory') return size !== 'small';
+  if (entry.kind !== 'file') return false;
+  if (AUDIO_THUMBNAIL_EXTENSIONS.has((entry.extension ?? '').toLocaleLowerCase())) {
+    return size !== 'small';
+  }
   if (!THUMBNAILABLE_EXTENSIONS.has((entry.extension ?? '').toLocaleLowerCase())) return false;
   return !exceedsThumbnailSizeLimit(entry, size);
 }
