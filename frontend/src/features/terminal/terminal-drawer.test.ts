@@ -1212,11 +1212,14 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     await vi.waitFor(() => expect(button('Run')).toBeDefined());
     expect(write).not.toHaveBeenCalledWith(
       'session-1',
-      new TextEncoder().encode('\x15cargo test\r'),
+      new TextEncoder().encode('\x15 cargo test\r'),
     );
     button('Run')?.click();
     await vi.waitFor(() =>
-      expect(write).toHaveBeenCalledWith('session-1', new TextEncoder().encode('\x15cargo test\r')),
+      expect(write).toHaveBeenCalledWith(
+        'session-1',
+        new TextEncoder().encode('\x15 cargo test\r'),
+      ),
     );
 
     echo?.({ type: 'output', data: bytes('\x1b]133;C\x07\r\n1 failed\r\n\x1b]133;D;3\x07') });
@@ -1234,7 +1237,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     await vi.waitFor(() =>
       expect(write).toHaveBeenCalledWith(
         'session-1',
-        new TextEncoder().encode('\x15grep -n foo src | head -5\r'),
+        new TextEncoder().encode('\x15 grep -n foo src | head -5\r'),
       ),
     );
     expect(button('Run')).toBeUndefined();
@@ -1252,7 +1255,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     ask('# list');
 
     await vi.waitFor(() => expect(button('Run')).toBeDefined());
-    expect(write).not.toHaveBeenCalledWith('session-1', new TextEncoder().encode('\x15ls -la\r'));
+    expect(write).not.toHaveBeenCalledWith('session-1', new TextEncoder().encode('\x15 ls -la\r'));
   });
 
   it('completes an @name with Tab from the folder, quoting a name with spaces', async () => {

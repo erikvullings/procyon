@@ -218,8 +218,8 @@ impl<G: ChatGenerator> SideModel for ModelSideCalls<'_, G> {
 
 /// What `read_file` is described as here: the folder tools convert documents to text.
 pub(crate) const READ_FILE_DESCRIPTION: &str = "Reads a text file, or the text of an EPUB, Word, \
-     PDF, PowerPoint or Excel document. A long file is cut off with a note: continue with the \
-     offset it names.";
+     PDF, PowerPoint or Excel document or a web page (HTML, without its markup). A long file is \
+     cut off with a note: continue with the offset it names.";
 
 /// Which skill folders a request may read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

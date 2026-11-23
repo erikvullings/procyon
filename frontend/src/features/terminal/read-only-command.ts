@@ -14,7 +14,16 @@ const MAX_STAGES = 5;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: control bytes are refused on purpose
 const FORBIDDEN_ANYWHERE = /[\u0000-\u001f\u007f$`\\!]/;
 /** Characters that need quotes: they redirect, chain, group, expand or comment. */
-const FORBIDDEN_UNQUOTED = /[;&<>(){}*?[\]~#]/;
+const FORBIDDEN_UNQUOTED = /[;&<>(){}[\]~#]/;
+/** File name patterns: allowed unquoted only for programs in {@link GLOB_SAFE}. */
+const GLOB = /[*?]/;
+/**
+ * Programs that only print names, sizes or counts, so a pattern may expand to any file in the
+ * folder: whatever it matches (a credential, or a name that starts with `-`) is not read or run.
+ */
+const GLOB_SAFE: ReadonlySet<string> = new Set(['ls', 'wc', 'file', 'stat', 'du']);
+/** Hiding error messages writes nothing; allowed unquoted, as a word of its own. */
+const DISCARD_ERRORS = '2>/dev/null';
 /** Names that hold credentials; an argument naming one is never auto-run. */
 const CREDENTIAL =
   /(^|\/)(\.env[^/]*|\.ssh|\.aws|\.gnupg|\.netrc|\.npmrc|\.pypirc|\.kube|\.docker|\.git-credentials|id_(rsa|ed25519|ecdsa|dsa)[^/]*|[^/]*\.(pem|key|p12|pfx|kdbx)|[^/]*(secret|credential|password|token)[^/]*)(\/|$)/i;
@@ -22,6 +31,8 @@ const CREDENTIAL =
 interface Stage {
   readonly program: string;
   readonly args: readonly string[];
+  /** Whether an argument has an unquoted `*` or `?` that the shell expands to file names. */
+  readonly globbed: boolean;
 }
 
 /** Splits a line into pipeline stages of words, or `undefined` when it uses anything beyond that. */
@@ -29,31 +40,41 @@ function parsePipeline(line: string): Stage[] | undefined {
   if (line.trim() === '' || line.length > MAX_LENGTH || FORBIDDEN_ANYWHERE.test(line)) {
     return undefined;
   }
-  const stages: string[][] = [[]];
+  const stages: { words: string[]; globbed: boolean }[] = [{ words: [], globbed: false }];
+  const current = () => stages[stages.length - 1] ?? { words: [], globbed: false };
   let word: string | undefined;
   let quote: '"' | "'" | undefined;
   const endWord = () => {
-    if (word !== undefined) stages[stages.length - 1]?.push(word);
+    if (word !== undefined) current().words.push(word);
     word = undefined;
   };
-  for (const character of line) {
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index] ?? '';
     if (quote !== undefined) {
       if (character === quote) quote = undefined;
       else word = (word ?? '') + character;
       continue;
+    }
+    if (word === undefined && line.startsWith(DISCARD_ERRORS, index)) {
+      const after = line[index + DISCARD_ERRORS.length];
+      if (after === undefined || after === '|' || /\s/.test(after)) {
+        index += DISCARD_ERRORS.length - 1;
+        continue;
+      }
     }
     if (character === '"' || character === "'") {
       quote = character;
       word = word ?? '';
     } else if (character === '|') {
       endWord();
-      if ((stages[stages.length - 1]?.length ?? 0) === 0) return undefined;
-      stages.push([]);
+      if (current().words.length === 0) return undefined;
+      stages.push({ words: [], globbed: false });
     } else if (/\s/.test(character)) {
       endWord();
     } else if (FORBIDDEN_UNQUOTED.test(character)) {
       return undefined;
     } else {
+      if (GLOB.test(character)) current().globbed = true;
       word = (word ?? '') + character;
     }
   }
@@ -61,10 +82,10 @@ function parsePipeline(line: string): Stage[] | undefined {
   endWord();
   if (stages.length > MAX_STAGES) return undefined;
   const result: Stage[] = [];
-  for (const words of stages) {
+  for (const { words, globbed } of stages) {
     const [program, ...args] = words;
     if (program === undefined) return undefined;
-    result.push({ program, args });
+    result.push({ program, args, globbed });
   }
   return result;
 }
@@ -181,6 +202,7 @@ export function isReadOnlyCommand(line: string): boolean {
   return stages.every((stage, index) => {
     const rule = Object.hasOwn(RULES, stage.program) ? RULES[stage.program] : undefined;
     if (rule === undefined) return false;
+    if (stage.globbed && !GLOB_SAFE.has(stage.program)) return false;
     if (stage.args.some(reachesOutside)) return false;
     if (!rule.allowed(stage.args)) return false;
     // Only the first stage reads the terminal when it has nothing to read; later stages read the pipe.

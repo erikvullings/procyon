@@ -1,5 +1,5 @@
-//! Documents as text for the file tools and `@file` mentions: EPUB, Word, PDF, PowerPoint and
-//! Excel files are converted by the same bounded engine that indexes them, so the model reads the
+//! Documents as text for the file tools and `@file` mentions: EPUB, Word, PDF, PowerPoint, Excel
+//! and HTML files are converted by the same bounded engine that indexes them, so the model reads the
 //! words of a book or report instead of a refusal for a "binary" file.
 
 use std::sync::Arc;
@@ -16,7 +16,10 @@ use crate::document_conversion::DocumentConversionService;
 use fm_agent::redact_secrets;
 
 /// File name extensions read as documents.
-const EXTENSIONS: &[&str] = &["epub", "docx", "pdf", "pptx", "xlsx"];
+/// HTML is among them so a saved web page reads as its words, not as markup, scripts and styles.
+const EXTENSIONS: &[&str] = &[
+    "epub", "docx", "pdf", "pptx", "xlsx", "html", "htm", "xhtml",
+];
 
 /// Whether a path names a document rather than a plain text file.
 pub(crate) fn is_document(path: &str) -> bool {

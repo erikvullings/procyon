@@ -817,8 +817,9 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     live.awaiting = waitForResult;
     live.pendingCommand = command;
     live.history.push(command);
-    // Ctrl+U first, so the command never runs appended to something half typed.
-    writeToShell(live, `\x15${command}\r`);
+    // Ctrl+U first, so the command never runs appended to something half typed. The leading
+    // space keeps it out of the shell's saved history (the shell integration ignores such lines).
+    writeToShell(live, `\x15 ${command}\r`);
     m.redraw();
   }
 
@@ -971,7 +972,8 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       !isBusy(live) &&
       live.typed.known &&
       live.typed.text === '';
-    if (idle) writeToShell(live, `${cdCommand(path)}\r`);
+    // A leading space: following the pane is not something the person typed.
+    if (idle) writeToShell(live, ` ${cdCommand(path)}\r`);
   }
 
   function onShellMark(live: LiveTerminal, payload: string): void {

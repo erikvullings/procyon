@@ -18,6 +18,10 @@ describe('isReadOnlyCommand', () => {
     'sort names.txt | uniq -c | sort -rn | head',
     'du -sh .',
     'pwd',
+    'ls *.pdf *.epub *.html 2>/dev/null',
+    'ls -1 *.pdf | wc -l',
+    'wc -c report?.md',
+    'grep -rn TODO src 2>/dev/null | head',
   ])('runs %s without asking', (line) => {
     expect(isReadOnlyCommand(line)).toBe(true);
   });
@@ -40,6 +44,15 @@ describe('isReadOnlyCommand', () => {
     'cat <file',
     'ls (sub)',
     'cat *.md',
+    'head -n 5 *.md',
+    'sort -o *.txt',
+    'ls | sed -n p *.md',
+    'ls /etc/*',
+    'ls ../*.pdf',
+    'ls x 2>/tmp/err',
+    'ls x 2>/dev/nullx',
+    'ls x >/dev/null',
+    'ls [ab].md',
     'cat ~/notes.md',
     'cat /etc/passwd',
     'cat ../x.md',

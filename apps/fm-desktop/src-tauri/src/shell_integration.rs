@@ -26,6 +26,8 @@ __procyon_preexec() {
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd __procyon_precmd
 add-zsh-hook preexec __procyon_preexec
+# Lines the assistant runs start with a space, so they stay out of the saved history.
+setopt HIST_IGNORE_SPACE
 "#;
 
 /// Startup for zsh's interactive shell: the person's `.zshrc`, then the hooks.
@@ -75,10 +77,13 @@ __procyon_preexec() {
 }
 trap '__procyon_preexec' DEBUG
 PROMPT_COMMAND="__procyon_begin${PROMPT_COMMAND:+; $PROMPT_COMMAND}; __procyon_end"
+# Lines the assistant runs start with a space, so they stay out of the saved history.
+HISTCONTROL="${HISTCONTROL:+$HISTCONTROL:}ignorespace"
 "#;
 
 /// Hooks for fish, loaded before the person's `config.fish` with `-C`. They use fish events, so a
-/// person's own prompt function cannot remove them.
+/// person's own prompt function cannot remove them. Fish already keeps a line that starts with a
+/// space out of its history.
 const FISH_HOOKS: &str = r#"# Procyon shell integration (command blocks)
 function __procyon_prompt --on-event fish_prompt
     set -l exit_code $status
@@ -102,7 +107,7 @@ pub(crate) const REMOTE_HOOK_LINE: &str = concat!(
     "if [ -n \"$ZSH_VERSION\" ]; then ",
     "__py_prompt() { printf \"\\033]133;D;%d\\007\\033]133;P;Cwd=%s\\007\\033]133;A\\007\" \"$?\" \"$PWD\"; }; ",
     "__py_preexec() { printf \"\\033]133;C\\007\"; }; ",
-    "precmd_functions+=(__py_prompt); preexec_functions+=(__py_preexec); ",
+    "precmd_functions+=(__py_prompt); preexec_functions+=(__py_preexec); setopt histignorespace; ",
     "else ",
     "__py_begin() { __py_status=$?; }; ",
     "__py_end() { printf \"\\033]133;D;%d\\007\\033]133;P;Cwd=%s\\007\\033]133;A\\007\" \"$__py_status\" \"$PWD\"; __py_at_prompt=1; }; ",
@@ -110,6 +115,7 @@ pub(crate) const REMOTE_HOOK_LINE: &str = concat!(
     "__py_preexec() { if [ \"$__py_at_prompt\" = 1 ]; then __py_at_prompt=0; printf \"\\033]133;C\\007\"; fi; }; ",
     "trap __py_preexec DEBUG; ",
     "PROMPT_COMMAND=\"__py_begin${PROMPT_COMMAND:+; $PROMPT_COMMAND}; __py_end\"; ",
+    "HISTCONTROL+=:ignorespace; ",
     "fi'; ",
     // Fish parses the whole line first, so its hooks sit in a second guarded `eval` of their own.
     "[ -n \"$FISH_VERSION\" ] && eval '",

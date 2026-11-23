@@ -159,7 +159,9 @@ impl<I: From<CommandRequest> + Send + 'static> TypedTool<I> for RunCommand {
 
     fn description(&self) -> &'static str {
         "Asks the person to run a command in their terminal. They may decline, and the result \
-         returns with its exit status and output."
+         returns with its exit status and output. Use it only for what your other tools cannot \
+         do: never to list, find, read, convert, summarise or create files, and never write a \
+         script (python, node, shell) for such work; compare file names yourself."
     }
 
     async fn run_typed(&self, _ctx: &ToolContext<'_>, args: RunCommandArgs) -> ToolOutcome<I> {

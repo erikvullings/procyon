@@ -52,6 +52,7 @@ fn documents_are_recognised_by_extension() {
     assert!(is_document("book.epub"));
     assert!(is_document("Report.PDF"));
     assert!(is_document("dir/a.docx"));
+    assert!(is_document("page.html") && is_document("old.HTM"));
     assert!(!is_document("notes.md"));
     assert!(!is_document("epub"));
 }
@@ -126,6 +127,39 @@ async fn an_epub_is_read_as_text_and_continues_with_an_offset() {
         1,
         "the second window must come from the cache"
     );
+}
+
+#[tokio::test]
+async fn a_saved_web_page_is_read_as_its_words() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("page.html"),
+        "<html><head><style>p{color:red}</style><script>track()</script></head><body>\
+         <nav><a href=\"/\">Home</a></nav><article><h1>Decoy warfare</h1>\
+         <p>Decoys &amp; deception win time.</p></article></body></html>",
+    )
+    .unwrap();
+    let providers = registry();
+    let working = url::Url::from_directory_path(dir.path())
+        .unwrap()
+        .to_string();
+    let host = ToolHost::open(&providers, &working).unwrap();
+
+    let output = Documents::new(&providers)
+        .run(
+            &host,
+            &FileCall::ReadFile {
+                path: "page.html".into(),
+                offset: None,
+            },
+        )
+        .await
+        .expect("a document read");
+    assert!(output.text.contains("Decoy warfare"), "{}", output.text);
+    assert!(output.text.contains("Decoys & deception win time."));
+    for markup in ["<p>", "track()", "color:red"] {
+        assert!(!output.text.contains(markup), "{markup}: {}", output.text);
+    }
 }
 
 #[tokio::test]
