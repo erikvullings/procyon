@@ -28,6 +28,7 @@ import type { ActiveSourceState } from '../operations/operation-state';
 import { isParentEntry } from '../panes/parent-entry';
 import { fileAgeColumn } from '../plugin-columns/file-age-column';
 import { entryIcon } from './entry-icons';
+import { extensionGroupKey } from './extension-groups';
 import { finderTagColorSwatch } from './finder-tag-colors';
 import type { FinderTagsLoader } from './finder-tags-loader';
 import type { NativeIconLoader } from './native-icon-loader';
@@ -102,12 +103,19 @@ type DirectoryDisplayRow =
       readonly path: string;
       readonly key: string;
       readonly entryIndex: number;
+      /** Files in the group, shown in the heading of extension groups. */
+      readonly count?: number;
     }
   | { readonly type: 'entry'; readonly entry: EntrySummary; readonly entryIndex: number };
 
 function groupKey(entry: EntrySummary): string {
   const uri = new URL(entry.location.uri);
   return `${entry.location.providerId}:${uri.host}:${parentPath(entry)}`;
+}
+
+/** The group an entry falls in: its extension in the document hub, else its parent folder. */
+function entryGroupKey(entry: EntrySummary, byExtension: boolean): string {
+  return byExtension ? `ext:${extensionGroupKey(entry)}` : groupKey(entry);
 }
 
 function fullParentPath(entry: EntrySummary): string {
@@ -121,9 +129,18 @@ function fullParentPath(entry: EntrySummary): string {
 function directoryDisplayRows(
   source: DirectoryEntrySource,
   collapsed?: ReadonlySet<string>,
+  byExtension = false,
 ): readonly DirectoryDisplayRow[] {
   const rows: DirectoryDisplayRow[] = [];
   let previousKey: string | undefined;
+  const counts = new Map<string, number>();
+  if (byExtension) {
+    for (let index = 0; index < (source.loadedLength ?? source.length); index += 1) {
+      const entry = source.entryAt(index);
+      if (entry === undefined) break;
+      counts.set(extensionGroupKey(entry), (counts.get(extensionGroupKey(entry)) ?? 0) + 1);
+    }
+  }
   for (let index = 0; index < (source.loadedLength ?? source.length); index += 1) {
     const entry = source.entryAt(index);
     if (entry === undefined) break;
@@ -132,11 +149,24 @@ function directoryDisplayRows(
       previousKey = undefined;
       continue;
     }
-    const label = parentPathLabel(entry);
-    const path = fullParentPath(entry);
-    const key = groupKey(entry);
+    const extension = byExtension ? extensionGroupKey(entry) : undefined;
+    const label =
+      extension === undefined
+        ? parentPathLabel(entry)
+        : extension === ''
+          ? t('table', 'noExtensionGroup')
+          : extension;
+    const path = extension === undefined ? fullParentPath(entry) : label;
+    const key = extension === undefined ? groupKey(entry) : `ext:${extension}`;
     if (key !== previousKey) {
-      rows.push({ type: 'group', label, path, key, entryIndex: index });
+      rows.push({
+        type: 'group',
+        label,
+        path,
+        key,
+        entryIndex: index,
+        ...(extension === undefined ? {} : { count: counts.get(extension) ?? 0 }),
+      });
       previousKey = key;
     }
     if (!collapsed?.has(key)) rows.push({ type: 'entry', entry, entryIndex: index });
@@ -201,6 +231,8 @@ export interface DirectoryTableAttrs {
   readonly showFullPath?: boolean;
   /** Inserts non-interactive parent-folder rows before groups; entry indices remain unchanged. */
   readonly groupByParent?: boolean;
+  /** With `groupByParent`: headings are extensions with a file count, not parent folders. */
+  readonly groupByExtension?: boolean;
   /** Search-only collapsible parent headings; other grouped virtual folders stay unchanged. */
   readonly collapsibleGroups?: boolean;
   readonly groupScope?: string;
@@ -910,6 +942,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
         ? directoryDisplayRows(
             attrs.source,
             attrs.collapsibleGroups === true ? collapsedGroups : undefined,
+            attrs.groupByExtension === true,
           )
         : undefined;
     const rowIndex =
@@ -950,7 +983,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
     if (attrs.collapsibleGroups === true && attrs.groupByParent === true) {
       const entry = attrs.source.entryAt(attrs.cursorIndex);
       if (entry !== undefined && attrs.cursorIndex !== previousCursorIndex) {
-        collapsedGroups.delete(groupKey(entry));
+        collapsedGroups.delete(entryGroupKey(entry, attrs.groupByExtension === true));
       }
     }
     previousCursorIndex = attrs.cursorIndex;
@@ -1007,6 +1040,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
           ? directoryDisplayRows(
               source,
               attrs.collapsibleGroups === true ? collapsedGroups : undefined,
+              attrs.groupByExtension === true,
             )
           : undefined;
       const displayLength = displayRows?.length ?? source?.length;
@@ -1050,7 +1084,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
               const visible =
                 collapsedGroups.size === 0
                   ? undefined
-                  : directoryDisplayRows(source, collapsedGroups)
+                  : directoryDisplayRows(source, collapsedGroups, attrs.groupByExtension === true)
                       .filter((row) => row.type === 'entry')
                       .map((row) => row.entryIndex);
               attrs.onGroupVisibilityChange?.(visible, true);
@@ -1080,13 +1114,22 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                           {
                             type: 'button',
                             title: displayRow.path,
-                            'aria-label': t(
-                              'table',
-                              collapsedGroups.has(displayRow.key)
-                                ? 'expandFolder'
-                                : 'collapseFolder',
-                              { path: displayRow.path },
-                            ),
+                            'aria-label':
+                              displayRow.count === undefined
+                                ? t(
+                                    'table',
+                                    collapsedGroups.has(displayRow.key)
+                                      ? 'expandFolder'
+                                      : 'collapseFolder',
+                                    { path: displayRow.path },
+                                  )
+                                : t(
+                                    'table',
+                                    collapsedGroups.has(displayRow.key)
+                                      ? 'expandGroup'
+                                      : 'collapseGroup',
+                                    { name: displayRow.label },
+                                  ),
                             'aria-expanded': collapsedGroups.has(displayRow.key) ? 'false' : 'true',
                             onclick: () => setGroupCollapsed(!collapsedGroups.has(displayRow.key)),
                             onkeydown: (event: KeyboardEvent) => {
@@ -1105,26 +1148,36 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                             { 'aria-hidden': 'true' },
                             chevronDownIcon({ size: 14 }),
                           ),
-                          m('span.fm-directory-group-label', displayRow.label),
+                          m(
+                            'span.fm-directory-group-label',
+                            displayRow.count === undefined
+                              ? displayRow.label
+                              : `${displayRow.label} (${displayRow.count})`,
+                          ),
                         ),
-                        m(
-                          'button.fm-directory-group-copy',
-                          {
-                            type: 'button',
-                            title: t('table', 'copyFolderPath'),
-                            'aria-label': `${t('table', 'copyFolderPath')}: ${displayRow.path}`,
-                            onclick: () => {
-                              void writeSystemClipboardText(displayRow.path).catch(
-                                (error: unknown) => {
-                                  const message = document.createElement('span');
-                                  message.textContent = errorText(error);
-                                  toast({ html: message.outerHTML, className: 'fm-toast-warning' });
+                        displayRow.count !== undefined
+                          ? undefined
+                          : m(
+                              'button.fm-directory-group-copy',
+                              {
+                                type: 'button',
+                                title: t('table', 'copyFolderPath'),
+                                'aria-label': `${t('table', 'copyFolderPath')}: ${displayRow.path}`,
+                                onclick: () => {
+                                  void writeSystemClipboardText(displayRow.path).catch(
+                                    (error: unknown) => {
+                                      const message = document.createElement('span');
+                                      message.textContent = errorText(error);
+                                      toast({
+                                        html: message.outerHTML,
+                                        className: 'fm-toast-warning',
+                                      });
+                                    },
+                                  );
                                 },
-                              );
-                            },
-                          },
-                          copyIcon({ size: 14 }),
-                        ),
+                              },
+                              copyIcon({ size: 14 }),
+                            ),
                       ]
                     : displayRow.label,
                 ),
@@ -1338,7 +1391,8 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
               'aria-colcount': columns.length,
               'aria-activedescendant':
                 cursorEntry === undefined ||
-                (attrs.collapsibleGroups === true && collapsedGroups.has(groupKey(cursorEntry)))
+                (attrs.collapsibleGroups === true &&
+                  collapsedGroups.has(entryGroupKey(cursorEntry, attrs.groupByExtension === true)))
                   ? undefined
                   : rowId(cursorEntry.id),
               'aria-busy': attrs.state.type === 'loading' ? 'true' : undefined,

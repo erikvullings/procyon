@@ -88,6 +88,7 @@ function fakeContext(
     openPropertiesForActivePane: () => {},
     openMultiRenameForActivePane: () => {},
     toggleBranchView: () => {},
+    openDocumentHub: () => {},
     toggleSyncBrowsing: () => {},
     openSemanticAssistant: () => {},
     openChat: () => {},

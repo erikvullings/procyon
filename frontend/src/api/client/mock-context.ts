@@ -56,7 +56,10 @@ import type {
   WorkspaceProjection,
 } from '../../models';
 import { defaultKnowledgeSearchOptions } from '../../models';
-import { DEFAULT_PICTURE_INFO_SETTINGS } from '../../models/settings';
+import {
+  DEFAULT_DOCUMENT_HUB_SETTINGS,
+  DEFAULT_PICTURE_INFO_SETTINGS,
+} from '../../models/settings';
 import { EventStreamSignalRegistry, MutableEventStreamStatus } from '../events/event-stream';
 import type { MockConnectionClient } from './mock-connection-client';
 import type { GeneratedDirectorySize } from './mock-directory-generator';
@@ -253,6 +256,7 @@ export class MockContext {
     checkForBetaUpdates: false,
     viewerInSeparateWindow: false,
     pictureInfo: DEFAULT_PICTURE_INFO_SETTINGS,
+    documentHub: DEFAULT_DOCUMENT_HUB_SETTINGS,
     terminalShellIntegration: 'unset',
     terminalAssistant: true,
     terminalFollowPane: true,

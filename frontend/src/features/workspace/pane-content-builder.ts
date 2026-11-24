@@ -307,6 +307,7 @@ export interface PaneContentContext {
     sort: readonly SortDescriptor[],
     foldersFirst: boolean,
     groupByParentPath?: boolean,
+    groupByExtension?: boolean,
   ): readonly EntrySummary[];
   entriesFilteredFor(
     key: string,
@@ -341,6 +342,8 @@ export interface PaneContentContext {
   getWorkspaceController(): WorkspaceController;
   getOpsController(): OperationsController;
   openSavedSearch(saved: SavedSearch): void;
+  /** Whether `locationUri` is the document hub's result list (grouped by extension, task 0357). */
+  isDocumentHub(locationUri: string): boolean;
 
   // Action functions
   openViewer(
@@ -428,6 +431,7 @@ export function createPaneContentBuilder(
             context.effectiveSort(tab.view.sort),
             tab.view.foldersFirst,
             tab.location.uri.startsWith('search://') || directory.location?.providerId === 'basket',
+            context.isDocumentHub(tab.location.uri),
           );
     const quickFilterQuery = key === undefined ? '' : context.quickFilterQueryFor(key, tab);
     const filtered =
@@ -461,6 +465,7 @@ export function createPaneContentBuilder(
             sortDescriptors,
             tab.view.foldersFirst,
             groupByParentPath,
+            context.isDocumentHub(tab.location.uri),
           ]);
           // Invalidate any in-flight sort of an earlier (smaller) entries snapshot so it can't
           // overwrite the fresh result seeded below once it resolves.
@@ -469,7 +474,7 @@ export function createPaneContentBuilder(
             freshDirectory.entries,
             context.frontendSort(sortDescriptors),
             tab.view.foldersFirst,
-            { groupByParentPath },
+            { groupByParentPath, groupByExtension: context.isDocumentHub(tab.location.uri) },
           );
           context.getSortedEntries().set(key, {
             input: freshDirectory.entries,
@@ -489,6 +494,7 @@ export function createPaneContentBuilder(
               tab.view.foldersFirst,
               tab.location.uri.startsWith('search://') ||
                 context.getDirectories().get(key)?.location?.providerId === 'basket',
+              context.isDocumentHub(tab.location.uri),
             );
       const filteredFresh =
         key === undefined
@@ -729,6 +735,9 @@ export function createPaneContentBuilder(
       toggleQuickFilterMatchMode: () => context.toggleQuickFilterMatchMode(),
       onInsertEntryPath: (entry: EntrySummary) => context.insertEntryPath(entry),
       formatSettings: entryFormatSettings,
+      ...(tab !== undefined && context.isDocumentHub(tab.location.uri)
+        ? { groupByExtension: true }
+        : {}),
       ...(nativeIconLoader === undefined ? {} : { nativeIconLoader }),
       ...(thumbnailLoader === undefined ? {} : { thumbnailLoader }),
       ...(pictureInfo === undefined ? {} : { pictureInfo }),

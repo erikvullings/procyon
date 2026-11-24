@@ -320,6 +320,7 @@ describe('MockFileManagerClient API', () => {
       'core.focusLocation',
       'core.quickFilter',
       'core.branchView',
+      'core.documentHub',
       'core.syncBrowsing',
       'core.findFiles',
       'core.newTab',

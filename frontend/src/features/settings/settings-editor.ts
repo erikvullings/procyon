@@ -28,6 +28,7 @@ import type {
   Settings,
   WorkspaceId,
 } from '../../models';
+import { DEFAULT_DOCUMENT_HUB_SETTINGS } from '../../models/settings';
 import { perfEndAfterRender, perfStart } from '../../utilities/perf';
 import { DiagnosticsViewComponent } from '../diagnostics/diagnostics-view';
 import {
@@ -145,6 +146,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
   let draft: Settings | undefined;
   let startLocationsText = '';
   let terminalAppsText = '';
+  let hubExtensionsText = '';
   let saving = false;
   let saveError: string | undefined;
   let activeSection: SettingsSection = 'appearance';
@@ -168,6 +170,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
     draft = cloneSettings(current.settings);
     startLocationsText = formatListInput(draft.defaultStartLocations);
     terminalAppsText = formatTerminalApps(draft.terminalApps);
+    hubExtensionsText = draft.documentHub.extensions.join(' ');
     saveError = undefined;
   }
 
@@ -548,6 +551,59 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                       'tooltipFields',
                       t('settings', 'pictureTooltipFields'),
                       TOOLTIP_FIELD_CHOICES,
+                    ),
+
+                    m(
+                      '.row',
+                      m(
+                        'h4.fm-settings-section-heading.col.s12',
+                        t('settings', 'documentHubSection'),
+                      ),
+                    ),
+                    m('.row', [
+                      m(TextInput, {
+                        className: 'col s12 m6',
+                        label: t('settings', 'documentHubExtensions'),
+                        helperText: t('settings', 'documentHubExtensionsHint'),
+                        value: hubExtensionsText,
+                        oninput: (value: string) => {
+                          hubExtensionsText = value;
+                          update(current, {
+                            documentHub: {
+                              ...activeDraft.documentHub,
+                              extensions: value.split(/[\s,]+/u).filter((item) => item.length > 0),
+                            },
+                          });
+                        },
+                      }),
+                      m(TextInput, {
+                        className: 'col s12 m6',
+                        label: t('settings', 'documentHubBasePath'),
+                        helperText: t('settings', 'documentHubBasePathHint'),
+                        value: activeDraft.documentHub.basePath,
+                        oninput: (value: string) =>
+                          update(current, {
+                            documentHub: { ...activeDraft.documentHub, basePath: value },
+                          }),
+                      }),
+                    ]),
+                    m(
+                      '.row',
+                      m(
+                        '.col.s12',
+                        m(
+                          'button.btn-flat',
+                          {
+                            type: 'button',
+                            onclick: () => {
+                              hubExtensionsText =
+                                DEFAULT_DOCUMENT_HUB_SETTINGS.extensions.join(' ');
+                              update(current, { documentHub: DEFAULT_DOCUMENT_HUB_SETTINGS });
+                            },
+                          },
+                          t('settings', 'documentHubReset'),
+                        ),
+                      ),
                     ),
 
                     m(

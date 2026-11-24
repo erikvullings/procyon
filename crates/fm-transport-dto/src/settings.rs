@@ -516,6 +516,36 @@ pub struct SettingsDto {
     /// Picture captions under grid tiles and hover tooltips (task 0347).
     #[serde(default)]
     pub picture_info: PictureInfoSettingsDto,
+    /// The document hub virtual folder (task 0357).
+    #[serde(default)]
+    pub document_hub: DocumentHubSettingsDto,
+}
+
+/// What the document hub virtual folder collects (task 0357).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentHubSettingsDto {
+    /// Extensions to include, lower case, without the dot.
+    pub extensions: Vec<String>,
+    /// Folder searched recursively; `~` is the home folder.
+    pub base_path: String,
+}
+
+/// Mirrors `fm_settings::DocumentHubSettings::default()`; a test in `fm-application` keeps the two
+/// in step.
+impl Default for DocumentHubSettingsDto {
+    fn default() -> Self {
+        Self {
+            extensions: [
+                "pdf", "docx", "doc", "pptx", "ppt", "xlsx", "xls", "odt", "ods", "odp", "rtf",
+                "txt", "md", "epub",
+            ]
+            .iter()
+            .map(|extension| (*extension).to_owned())
+            .collect(),
+            base_path: "~".to_owned(),
+        }
+    }
 }
 
 /// Which picture facts grid tiles and hover tooltips show (task 0347).

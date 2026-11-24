@@ -595,4 +595,4 @@ subtask block (0299–0303) and the earlier corpus-themes follow-ups.
 - [ ] 0354 Saved, resumable and forkable agent sessions *(backend, agent, frontend — terminal sessions persisted, chat keeps tool history, fork from here; needs 0353; part of 0351)*
 - [ ] 0355 Steering a running agent turn *(backend, agent, frontend — messages typed during a turn delivered between tool rounds; part of 0351)*
 - [x] 0356 Assistant auto-approve mode *(frontend, agent, high — per-session `/auto`: commands, writes and edits run without asking unless very dangerous; part of 0351)*
-- [ ] 0357 Document hub virtual folder with per-extension subfolders *(backend, frontend, settings, medium — one-click "Documents" virtual folder over a configurable base path (default ~) and extension list, with a virtual subfolder per extension; extends 0162, shares plumbing with 0330)*
+- [x] 0357 Document hub virtual folder with per-extension subfolders *(backend, frontend, settings, medium — one-click "Documents" virtual folder over a configurable base path (default ~) and extension list, with a virtual subfolder per extension; extends 0162, shares plumbing with 0330)*

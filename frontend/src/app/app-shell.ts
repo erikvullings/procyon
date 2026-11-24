@@ -220,6 +220,7 @@ import type {
   WorkspaceProjection,
 } from '../models';
 import { CHECKSUM_ALGORITHMS } from '../models';
+import { DEFAULT_DOCUMENT_HUB_SETTINGS } from '../models/settings';
 import {
   applyAppPatches,
   cacheContentMatchesPatch,
@@ -308,6 +309,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         effectiveSort(tab.view.sort),
         tab.view.foldersFirst,
         tab.location.uri.startsWith('search://'),
+        shellState.findFilesController.isDocumentHub(tab.location.uri),
       ),
       quickFilterQueryFor(key, tab),
     );
@@ -774,29 +776,34 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     sort: readonly SortDescriptor[],
     foldersFirst: boolean,
     groupByParentPath = false,
+    groupByExtension = false,
   ): readonly EntrySummary[] {
-    const cacheKey = JSON.stringify([sort, foldersFirst, groupByParentPath]);
+    const cacheKey = JSON.stringify([sort, foldersFirst, groupByParentPath, groupByExtension]);
     const cached = shellState.sortedEntries.get(key);
     if (cached?.input === entries && cached.key === cacheKey) {
       return cached.entries;
     }
     const model = frontendSort(sort);
     if (entries.length < 10_000) {
-      const sorted = sortEntries(entries, model, foldersFirst, { groupByParentPath });
+      const sorted = sortEntries(entries, model, foldersFirst, {
+        groupByParentPath,
+        groupByExtension,
+      });
       shellState.sortedEntries.set(key, { input: entries, key: cacheKey, entries: sorted });
       return sorted;
     }
     const request = {};
     shellState.sortRequests.set(key, request);
-    void sortEntriesResponsive(entries, model, foldersFirst, { groupByParentPath }).then(
-      (sorted) => {
-        if (shellState.sortRequests.get(key) === request) {
-          shellState.sortedEntries.set(key, { input: entries, key: cacheKey, entries: sorted });
-          shellState.sortRequests.delete(key);
-          m.redraw();
-        }
-      },
-    );
+    void sortEntriesResponsive(entries, model, foldersFirst, {
+      groupByParentPath,
+      groupByExtension,
+    }).then((sorted) => {
+      if (shellState.sortRequests.get(key) === request) {
+        shellState.sortedEntries.set(key, { input: entries, key: cacheKey, entries: sorted });
+        shellState.sortRequests.delete(key);
+        m.redraw();
+      }
+    });
     return cached?.entries ?? entries;
   }
 
@@ -1443,6 +1450,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         effectiveSort(tab?.view.sort ?? []),
         tab?.view.foldersFirst ?? false,
         tab?.location.uri.startsWith('search://') === true,
+        shellState.findFilesController.isDocumentHub(tab?.location.uri ?? ''),
       ),
       quickFilterQueryFor(key, tab),
     );
@@ -2434,6 +2442,24 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       shellState.tabController.openTabAt(paneId, location, historyOrigin),
     navigateTo: (paneId, location) => void shellState.navigation.navigate(paneId, location),
     reportLimitations: (message) => toast({ html: t('search', 'filterLimitations', { message }) }),
+    notify: (message) => {
+      const text = document.createElement('span');
+      text.textContent = message;
+      toast({ html: text.outerHTML });
+    },
+    getDocumentHubSettings: () =>
+      shellState.currentSettings?.documentHub ?? DEFAULT_DOCUMENT_HUB_SETTINGS,
+    resolveHubRoot: (path) => {
+      const active = activeDirectory()?.location;
+      // Resolve against the active folder when it is on the local file system (or the mock one),
+      // whatever the provider calls itself; otherwise against the local root.
+      const base =
+        active !== undefined && /^(file|mock):/u.test(active.uri)
+          ? active
+          : { providerId: 'local', uri: 'file:///' };
+      if (path.startsWith('~') && shellState.homeDirectory === undefined) return undefined;
+      return locationForPath(base, path, shellState.homeDirectory);
+    },
     redraw: () => m.redraw(),
   };
 
@@ -2585,6 +2611,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     openPropertiesForActivePane: () => globalKeydownHandlerContext.openPropertiesForActivePane(),
     openMultiRenameForActivePane: () => globalKeydownHandlerContext.openMultiRenameForActivePane(),
     toggleBranchView: () => shellState.findFilesController.toggleBranchView(),
+    openDocumentHub: () => shellState.findFilesController.openDocumentHub(),
     toggleSyncBrowsing: () => shellState.syncedBrowsing?.toggle(),
     openDocumentSummary: (_paneId, entry) => {
       if (!shellState.semanticAssistantAvailable) return;
@@ -2775,6 +2802,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     getOpsController: () => shellState.opsController,
     openSavedSearch: (saved) =>
       shellState.findFilesController.startSavedSearch(saved, 'currentPane'),
+    isDocumentHub: (locationUri) => shellState.findFilesController.isDocumentHub(locationUri),
     openViewer: (paneId, entry, initialSearch, openMetadata, initialPage) =>
       previewWiring.openViewer(
         shellState.client,
@@ -3426,6 +3454,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                       effectiveSort(tab?.view.sort ?? []),
                       tab?.view.foldersFirst ?? false,
                       tab?.location.uri.startsWith('search://') === true,
+                      shellState.findFilesController.isDocumentHub(tab?.location.uri ?? ''),
                     );
                     const filtered = entriesFilteredFor(key, sorted, quickFilterQueryFor(key, tab));
                     const preferredEntry = filtered.find(

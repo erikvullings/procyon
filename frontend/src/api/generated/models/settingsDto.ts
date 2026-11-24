@@ -5,6 +5,7 @@
 import type { ConflictPolicyDto } from './conflictPolicyDto.ts';
 import type { DateFormatDto } from './dateFormatDto.ts';
 import type { DefaultPaneLayoutDto } from './defaultPaneLayoutDto.ts';
+import type { DocumentHubSettingsDto } from './documentHubSettingsDto.ts';
 import type { FavouriteLocationDto } from './favouriteLocationDto.ts';
 import type { FileTemplateDto } from './fileTemplateDto.ts';
 import type { FilterPresetDto } from './filterPresetDto.ts';
@@ -50,6 +51,8 @@ export interface SettingsDto {
   defaultPaneLayout: DefaultPaneLayoutDto;
   /** Locations inherited by new panes. */
   defaultStartLocations: string[];
+  /** The document hub virtual folder (task 0357). */
+  documentHub?: DocumentHubSettingsDto;
   /**
      * Optional text-editor command for `core.edit`; `None` uses the platform default.
      * @nullable

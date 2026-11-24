@@ -584,6 +584,13 @@ fn core_actions(capabilities: PlatformCapabilities) -> Vec<ActionDescriptor> {
             ActionContextRequirements::none(),
         ),
         core_action(
+            "core.documentHub",
+            "Document Hub",
+            "navigation",
+            vec![],
+            ActionContextRequirements::none(),
+        ),
+        core_action(
             "core.syncBrowsing",
             "Synchronized Browsing",
             "navigation",
@@ -1092,6 +1099,7 @@ mod tests {
             "core.quickFilter",
             "core.findFiles",
             "core.branchView",
+            "core.documentHub",
             "core.syncBrowsing",
             "core.newTab",
             "core.closeTab",

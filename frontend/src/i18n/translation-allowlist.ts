@@ -22,6 +22,7 @@ export const ENGLISH_IDENTICAL_ALLOWLIST: Readonly<Record<string, Allowlisted>> 
   'connections.webDavAuthBasic': 'all',
   'connections.webDavAuthDigest': 'all',
   // "Style" and "Source" are the same words in French.
+  'settings.documentHubExtensions': ['fr'],
   'imageMeta.album': ['nl', 'de', 'fr', 'it', 'pl'],
   'imageMeta.bitrate': ['nl', 'de', 'it'],
   'imageMeta.camera': ['nl'],

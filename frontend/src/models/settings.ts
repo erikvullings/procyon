@@ -183,6 +183,35 @@ export const DEFAULT_PICTURE_INFO_SETTINGS: PictureInfoSettings = {
   ],
 };
 
+/** What the "Document hub" virtual folder collects (task 0357). */
+export interface DocumentHubSettings {
+  /** Extensions to include, lower case, without the dot. */
+  readonly extensions: readonly string[];
+  /** Folder searched recursively; `~` is the home folder. */
+  readonly basePath: string;
+}
+
+/** Mirrors the backend default: common office and text documents under the home folder. */
+export const DEFAULT_DOCUMENT_HUB_SETTINGS: DocumentHubSettings = {
+  extensions: [
+    'pdf',
+    'docx',
+    'doc',
+    'pptx',
+    'ppt',
+    'xlsx',
+    'xls',
+    'odt',
+    'ods',
+    'odp',
+    'rtf',
+    'txt',
+    'md',
+    'epub',
+  ],
+  basePath: '~',
+};
+
 /** Versioned application-wide settings returned by both backend transports. */
 export interface Settings {
   readonly schemaVersion: number;
@@ -229,6 +258,7 @@ export interface Settings {
   readonly viewerInSeparateWindow: boolean;
   /** Picture captions under grid tiles and hover tooltips (task 0347). */
   readonly pictureInfo: PictureInfoSettings;
+  readonly documentHub: DocumentHubSettings;
   /** Largest source file semantic indexing reads, in MiB; 0 means no limit. */
   readonly semanticMaxSourceMib: number;
   /** Indexed roots the themes view analyses; empty means the whole library (task 0298). */

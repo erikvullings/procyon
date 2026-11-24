@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import type { Location, SearchQuery, WorkspaceProjection } from '../../models';
+import { DEFAULT_DOCUMENT_HUB_SETTINGS } from '../../models/settings';
 import {
   createFindFilesController,
   type FindFilesControllerContext,
@@ -256,6 +257,9 @@ describe('FindFilesController refresh', () => {
       openTabAt: vi.fn(),
       navigateTo: vi.fn(),
       reportLimitations: vi.fn(),
+      notify: vi.fn(),
+      getDocumentHubSettings: () => DEFAULT_DOCUMENT_HUB_SETTINGS,
+      resolveHubRoot: () => undefined,
     };
 
     createFindFilesController(context).refreshSearch(locationUri, 'pane-1');
@@ -339,6 +343,9 @@ describe('FindFilesController refresh', () => {
         openTabAt,
         navigateTo: vi.fn(),
         reportLimitations: vi.fn(),
+        notify: vi.fn(),
+        getDocumentHubSettings: () => DEFAULT_DOCUMENT_HUB_SETTINGS,
+        resolveHubRoot: () => undefined,
       } satisfies FindFilesControllerContext;
 
       createFindFilesController(context).startSavedSearch(
@@ -409,6 +416,9 @@ describe('FindFilesController branch view', () => {
       openTabAt: vi.fn(),
       navigateTo,
       reportLimitations: vi.fn(),
+      notify: vi.fn(),
+      getDocumentHubSettings: () => DEFAULT_DOCUMENT_HUB_SETTINGS,
+      resolveHubRoot: () => undefined,
     };
     return {
       context,

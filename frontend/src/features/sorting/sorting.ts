@@ -1,4 +1,5 @@
 import type { EntrySummary } from '../../models/entry';
+import { extensionGroupKey } from '../directory-table/extension-groups';
 
 export type SortColumn = 'name' | 'extension' | 'size' | 'modified';
 export type SortDirection = 'ascending' | 'descending';
@@ -15,6 +16,9 @@ export interface ResponsiveSortOptions {
   readonly frameBudgetMs?: number;
   readonly yieldToMain?: () => Promise<void>;
   readonly groupByParentPath?: boolean;
+  /** Keeps files with the same extension together (the document hub, task 0357); wins over
+   * `groupByParentPath`. */
+  readonly groupByExtension?: boolean;
 }
 
 interface IndexedEntry {
@@ -75,20 +79,14 @@ export function sortEntries(
   entries: readonly EntrySummary[],
   sort: SortModel,
   foldersFirst: boolean,
-  options: Pick<ResponsiveSortOptions, 'groupByParentPath'> = {},
+  options: Pick<ResponsiveSortOptions, 'groupByParentPath' | 'groupByExtension'> = {},
 ): EntrySummary[] {
   const descriptor = sort[0];
   return entries
     .map((entry, index) => ({ entry, index }))
     .sort((left, right) => {
-      if (options.groupByParentPath === true) {
-        const pathComparison = compareNames(parentPath(left.entry), parentPath(right.entry));
-        if (pathComparison !== 0) {
-          return descriptor?.column === 'name' && descriptor.direction === 'descending'
-            ? -pathComparison
-            : pathComparison;
-        }
-      }
+      const groupComparison = compareGroups(left.entry, right.entry, descriptor, options);
+      if (groupComparison !== 0) return groupComparison;
       if (foldersFirst && left.entry.kind !== right.entry.kind) {
         if (left.entry.kind === 'directory') return -1;
         if (right.entry.kind === 'directory') return 1;
@@ -105,21 +103,40 @@ export function sortEntries(
     .map(({ entry }) => entry);
 }
 
+/** Orders two entries by their group (extension, else parent folder) before any column sort, so
+ * each group stays contiguous; files without an extension come last. Descending name sorts flip
+ * the group order too, as the parent-folder grouping always has. */
+function compareGroups(
+  left: EntrySummary,
+  right: EntrySummary,
+  descriptor: EntrySort | undefined,
+  grouping: Pick<ResponsiveSortOptions, 'groupByParentPath' | 'groupByExtension'>,
+): number {
+  let comparison = 0;
+  if (grouping.groupByExtension === true) {
+    const leftKey = extensionGroupKey(left);
+    const rightKey = extensionGroupKey(right);
+    comparison =
+      leftKey === '' || rightKey === ''
+        ? Number(leftKey === '') - Number(rightKey === '')
+        : compareNames(leftKey, rightKey);
+  } else if (grouping.groupByParentPath === true) {
+    comparison = compareNames(parentPath(left), parentPath(right));
+  }
+  return comparison !== 0 && descriptor?.column === 'name' && descriptor.direction === 'descending'
+    ? -comparison
+    : comparison;
+}
+
 function compareIndexed(
   left: IndexedEntry,
   right: IndexedEntry,
   descriptor: EntrySort | undefined,
   foldersFirst: boolean,
-  groupByParentPath: boolean,
+  grouping: Pick<ResponsiveSortOptions, 'groupByParentPath' | 'groupByExtension'>,
 ): number {
-  if (groupByParentPath) {
-    const pathComparison = compareNames(parentPath(left.entry), parentPath(right.entry));
-    if (pathComparison !== 0) {
-      return descriptor?.column === 'name' && descriptor.direction === 'descending'
-        ? -pathComparison
-        : pathComparison;
-    }
-  }
+  const groupComparison = compareGroups(left.entry, right.entry, descriptor, grouping);
+  if (groupComparison !== 0) return groupComparison;
   if (foldersFirst && left.entry.kind !== right.entry.kind) {
     if (left.entry.kind === 'directory') return -1;
     if (right.entry.kind === 'directory') return 1;
@@ -191,7 +208,7 @@ export async function sortEntriesResponsive(
               source[right] as IndexedEntry,
               descriptor,
               foldersFirst,
-              options.groupByParentPath === true,
+              options,
             ) <= 0);
         target[output] = source[takeLeft ? left++ : right++] as IndexedEntry;
         if ((output & 511) === 0) await checkpoint();

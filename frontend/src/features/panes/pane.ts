@@ -202,6 +202,8 @@ export interface TableConfigAttrs {
   readonly showGitStatusColumn?: boolean | undefined;
   /** Shows non-selectable parent-folder group rows in the table. */
   readonly groupByParent?: boolean | undefined;
+  /** Shows collapsible extension group rows instead (the document hub, task 0357). */
+  readonly groupByExtension?: boolean | undefined;
   readonly nativeIconLoader?: NativeIconLoader | undefined;
   readonly thumbnailLoader?: ThumbnailLoader | undefined;
   readonly pictureInfo?: GridPictureInfo | undefined;
@@ -2442,6 +2444,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                   showGitStatusColumn: attrs.tableConfig.showGitStatusColumn === true,
                   showFullPath: isSearchLocation,
                   groupByParent: isSearchLocation || attrs.tableConfig.groupByParent === true,
+                  groupByExtension: attrs.tableConfig.groupByExtension === true,
                   collapsibleGroups: isSearchLocation,
                   ...(isSearchLocation ? { groupScope: activeLocationUri } : {}),
                   ...(isSearchLocation

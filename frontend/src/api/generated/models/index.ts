@@ -123,6 +123,7 @@ export * from './diskUsageTreeDto.ts';
 export * from './diskUsageTreeDtoUriOverrides.ts';
 export * from './diskUsageUnreadableEntryDto.ts';
 export * from './diskUsageUnreadableReasonDto.ts';
+export * from './documentHubSettingsDto.ts';
 export * from './documentSummaryDto.ts';
 export * from './documentSummaryPreviewDto.ts';
 export * from './documentSummarySelectionModeDto.ts';

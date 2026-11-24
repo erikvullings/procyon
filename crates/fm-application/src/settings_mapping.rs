@@ -5,20 +5,20 @@
 
 use crate::sync_profile_mapping::{sync_profile_from_dto, sync_profile_to_dto};
 use fm_settings::{
-    ConflictPolicy, DateFormat, DefaultPaneLayout, FilterCriteria, FilterKind, FilterPreset,
-    FilterToggle, Language, MapBasemap, MapSettings, MultiRenameCaseTransform, MultiRenamePreset,
-    MultiRenameRules, MultiRenameSequence, PictureInfoSettings, QuickFilterMatchMode, Settings,
-    SizeFormat, TerminalShellIntegration, Theme,
+    ConflictPolicy, DateFormat, DefaultPaneLayout, DocumentHubSettings, FilterCriteria, FilterKind,
+    FilterPreset, FilterToggle, Language, MapBasemap, MapSettings, MultiRenameCaseTransform,
+    MultiRenamePreset, MultiRenameRules, MultiRenameSequence, PictureInfoSettings,
+    QuickFilterMatchMode, Settings, SizeFormat, TerminalShellIntegration, Theme,
 };
 use fm_transport_dto::{
     ConceptHierarchyScopeDto, ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto,
-    FilterCriteriaDto, FilterKindDto, FilterPresetDto, FilterToggleDto, LanguageDto,
-    MapBasemapKindDto, MapSettingsDto, MultiRenameCaseTransformDto, MultiRenamePresetDto,
-    MultiRenameRulesDto, MultiRenameSequenceDto, PictureInfoSettingsDto, QuickFilterMatchModeDto,
-    SavedSearchDto, SearchConceptPredicateDto, SearchContentPredicateDto, SearchEntryKindDto,
-    SearchGitStatusDto, SearchModeDto, SearchNameModeDto, SearchNamePredicateDto, SearchQueryDto,
-    SearchScopeDto, SearchSemanticPredicateDto, SemanticSearchScopeDto, SettingsDto, SizeFormatDto,
-    TerminalShellIntegrationDto, ThemeDto,
+    DocumentHubSettingsDto, FilterCriteriaDto, FilterKindDto, FilterPresetDto, FilterToggleDto,
+    LanguageDto, MapBasemapKindDto, MapSettingsDto, MultiRenameCaseTransformDto,
+    MultiRenamePresetDto, MultiRenameRulesDto, MultiRenameSequenceDto, PictureInfoSettingsDto,
+    QuickFilterMatchModeDto, SavedSearchDto, SearchConceptPredicateDto, SearchContentPredicateDto,
+    SearchEntryKindDto, SearchGitStatusDto, SearchModeDto, SearchNameModeDto,
+    SearchNamePredicateDto, SearchQueryDto, SearchScopeDto, SearchSemanticPredicateDto,
+    SemanticSearchScopeDto, SettingsDto, SizeFormatDto, TerminalShellIntegrationDto, ThemeDto,
 };
 
 pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
@@ -204,6 +204,10 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
             tooltip_enabled: settings.picture_info.tooltip_enabled,
             tooltip_delay_ms: settings.picture_info.tooltip_delay_ms,
             tooltip_fields: settings.picture_info.tooltip_fields,
+        },
+        document_hub: DocumentHubSettingsDto {
+            extensions: settings.document_hub.extensions,
+            base_path: settings.document_hub.base_path,
         },
     }
 }
@@ -394,6 +398,10 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
             tooltip_enabled: settings.picture_info.tooltip_enabled,
             tooltip_delay_ms: settings.picture_info.tooltip_delay_ms,
             tooltip_fields: settings.picture_info.tooltip_fields,
+        },
+        document_hub: DocumentHubSettings {
+            extensions: settings.document_hub.extensions,
+            base_path: settings.document_hub.base_path,
         },
     }
 }
@@ -775,5 +783,23 @@ mod filter_preset_tests {
         };
         let round_tripped = settings_from_dto(settings_to_dto(settings.clone()));
         assert_eq!(round_tripped.picture_info, settings.picture_info);
+    }
+
+    #[test]
+    fn document_hub_defaults_agree_between_settings_and_dto_and_round_trip() {
+        assert_eq!(
+            settings_to_dto(Settings::default()).document_hub,
+            DocumentHubSettingsDto::default()
+        );
+
+        let settings = Settings {
+            document_hub: DocumentHubSettings {
+                extensions: vec!["pdf".into(), "odt".into()],
+                base_path: "/Users/me/Work".into(),
+            },
+            ..Settings::default()
+        };
+        let round_tripped = settings_from_dto(settings_to_dto(settings.clone()));
+        assert_eq!(round_tripped.document_hub, settings.document_hub);
     }
 }

@@ -93,6 +93,8 @@ export interface WorkspacePaneContent {
   /** Shows the Git-status column; hidden unless enabled and the directory is inside a git repo. */
   readonly showGitStatusColumn?: boolean;
   readonly groupByParent?: boolean;
+  /** Groups the list under collapsible extension headings (the document hub, task 0357). */
+  readonly groupByExtension?: boolean;
   /** Fixed, non-navigable breadcrumb text for virtual folders such as the basket. */
   readonly breadcrumbLabel?: string;
   readonly nativeIconLoader?: NativeIconLoader;
@@ -692,6 +694,7 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
             visibleColumnIds: content.visibleColumnIds,
             showGitStatusColumn: content.showGitStatusColumn,
             groupByParent: content.groupByParent,
+            groupByExtension: content.groupByExtension,
             nativeIconLoader: content.nativeIconLoader,
             thumbnailLoader: content.thumbnailLoader,
             pictureInfo: content.pictureInfo,

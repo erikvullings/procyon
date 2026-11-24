@@ -14014,6 +14014,27 @@
           "unsupportedName"
         ]
       },
+      "DocumentHubSettingsDto": {
+        "type": "object",
+        "description": "What the document hub virtual folder collects (task 0357).",
+        "required": [
+          "extensions",
+          "basePath"
+        ],
+        "properties": {
+          "basePath": {
+            "type": "string",
+            "description": "Folder searched recursively; `~` is the home folder."
+          },
+          "extensions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Extensions to include, lower case, without the dot."
+          }
+        }
+      },
       "DocumentSummaryDto": {
         "type": "object",
         "description": "Persisted generated summary with source-evidence identities.",
@@ -28163,6 +28184,10 @@
               "type": "string"
             },
             "description": "Locations inherited by new panes."
+          },
+          "documentHub": {
+            "$ref": "#/components/schemas/DocumentHubSettingsDto",
+            "description": "The document hub virtual folder (task 0357)."
           },
           "editorCommand": {
             "type": [

@@ -2,6 +2,8 @@ import type { OperationClient } from '../../api/client/operation-client.ts';
 import type { WorkspaceClient } from '../../api/client/workspace-client.ts';
 import { t } from '../../i18n';
 import type { Location, PaneId, SavedSearch, SearchQuery, WorkspaceProjection } from '../../models';
+import type { DocumentHubSettings } from '../../models/settings';
+import { documentHubQuery } from './document-hub';
 import type { FindFilesSearchParams } from './find-files-dialog';
 import { type SearchPresentation, searchPresentation } from './search-presentation';
 
@@ -40,6 +42,13 @@ export interface FindFilesControllerContext {
   /** Navigates a pane's active tab to `location` (used to leave a branch view). */
   navigateTo(paneId: PaneId, location: Location): void;
   reportLimitations(message: string): void;
+  /** Shows a short message to the person (a toast). */
+  notify(message: string): void;
+  /** The document hub's current settings (task 0357). */
+  getDocumentHubSettings(): DocumentHubSettings;
+  /** Turns the hub's base path (`~` or a native path) into a location, `undefined` when it
+   * cannot be resolved yet (for example the home folder is not known). */
+  resolveHubRoot(path: string): Location | undefined;
 }
 
 /** Controller interface for find-files operations. */
@@ -70,6 +79,11 @@ export interface FindFilesController {
    * an empty name filter, task 0254); invoked again from that list, restores the folder.
    */
   toggleBranchView(): void;
+  /** Opens the document hub: the configured extensions below the base path, grouped by
+   * extension (task 0357). */
+  openDocumentHub(target?: SavedSearchOpenTarget): void;
+  /** Whether `locationUri` is a document hub result list. */
+  isDocumentHub(locationUri: string): boolean;
   /** Starts the same request again, producing a fresh indexed/live result set. */
   refreshSearch(searchLocationUri: string, paneId: PaneId): void;
 
@@ -157,6 +171,8 @@ export function createFindFilesController(
   const refreshGenerationBySearchId = new Map<string, number>();
   /** Result locations that are branch views rather than user-entered searches. */
   const branchLocationUris = new Set<string>();
+  /** Result locations that are the document hub, grouped by extension (task 0357). */
+  const hubLocationUris = new Set<string>();
 
   function runSearch(
     query: SearchQuery,
@@ -169,6 +185,7 @@ export function createFindFilesController(
     },
     presentationLabel?: string,
     branch = false,
+    hub = false,
   ): void {
     const workspace = context.getWorkspace();
     const root = query.scope.locations[0];
@@ -244,6 +261,7 @@ export function createFindFilesController(
         context.getFindFilesParamsByLocationUri().set(result.location.uri, params);
         context.getFindFilesQueriesByLocationUri().set(result.location.uri, query);
         if (branch) branchLocationUris.add(result.location.uri);
+        if (hub) hubLocationUris.add(result.location.uri);
         if (result.limitations.length > 0) {
           context.reportLimitations(
             result.limitations
@@ -336,6 +354,39 @@ export function createFindFilesController(
               concept: params.conceptLabel,
             }),
       );
+    },
+
+    openDocumentHub(target: SavedSearchOpenTarget = 'currentPane'): void {
+      const settings = context.getDocumentHubSettings();
+      const root = context.resolveHubRoot(settings.basePath);
+      if (root === undefined) {
+        context.notify(t('search', 'documentHubRootUnknown', { path: settings.basePath }));
+        return;
+      }
+      const paneId = context.getActiveDirectory()?.paneId ?? context.getWorkspace()?.activePaneId;
+      const query = documentHubQuery(
+        settings,
+        root,
+        paneId === undefined ? false : this.activeShowHidden(paneId),
+      );
+      const params: FindFilesSearchParams = {
+        mode: 'name',
+        filenameQuery: query.name?.pattern ?? '',
+        contentRegex: false,
+        contentCaseSensitive: false,
+        contentWholeWord: false,
+        recurse: true,
+        entryKinds: ['file'],
+        mimeTypes: [],
+        gitStatuses: [],
+        tags: [],
+        metadata: {},
+      };
+      runSearch(query, params, target, undefined, t('search', 'documentHubLabel'), false, true);
+    },
+
+    isDocumentHub(locationUri: string): boolean {
+      return hubLocationUris.has(locationUri);
     },
 
     toggleBranchView(): void {

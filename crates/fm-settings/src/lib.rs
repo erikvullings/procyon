@@ -680,6 +680,76 @@ impl PictureInfoSettings {
     }
 }
 
+/// Most extensions kept for the document hub.
+const MAX_HUB_EXTENSIONS: usize = 64;
+/// Longest extension kept for the document hub, in bytes.
+const MAX_HUB_EXTENSION_LEN: usize = 16;
+/// Longest document hub base path, in bytes.
+const MAX_HUB_BASE_PATH_LEN: usize = 4_096;
+/// Base path meaning "the user's home folder", resolved by the host.
+const HUB_HOME_PATH: &str = "~";
+
+/// The "Document hub" virtual folder (task 0357): every file with one of `extensions` below
+/// `base_path`, in one list grouped by extension.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DocumentHubSettings {
+    /// Extensions to include, lower case, without the dot.
+    pub extensions: Vec<String>,
+    /// Folder searched recursively; `~` is the home folder.
+    pub base_path: String,
+}
+
+impl Default for DocumentHubSettings {
+    fn default() -> Self {
+        Self {
+            extensions: [
+                "pdf", "docx", "doc", "pptx", "ppt", "xlsx", "xls", "odt", "ods", "odp", "rtf",
+                "txt", "md", "epub",
+            ]
+            .iter()
+            .map(|extension| (*extension).to_owned())
+            .collect(),
+            base_path: HUB_HOME_PATH.to_owned(),
+        }
+    }
+}
+
+impl DocumentHubSettings {
+    /// A plain suffix: letters, digits, `_`, `+` or `-`, so it can never act as a glob or path.
+    fn normalise_extension(raw: &str) -> Option<String> {
+        let extension = raw.trim().trim_start_matches('.').to_ascii_lowercase();
+        let plain = !extension.is_empty()
+            && extension.len() <= MAX_HUB_EXTENSION_LEN
+            && extension
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'+' | b'-'));
+        plain.then_some(extension)
+    }
+
+    /// Normalises and deduplicates the extensions, bounds their number, restores the defaults
+    /// when none survive, and turns a blank base path into the home folder.
+    fn sanitize(&mut self) {
+        let mut seen = std::collections::BTreeSet::new();
+        self.extensions = self
+            .extensions
+            .iter()
+            .filter_map(|raw| Self::normalise_extension(raw))
+            .filter(|extension| seen.insert(extension.clone()))
+            .take(MAX_HUB_EXTENSIONS)
+            .collect();
+        if self.extensions.is_empty() {
+            self.extensions = Self::default().extensions;
+        }
+        let base_path = self.base_path.trim();
+        self.base_path = if base_path.is_empty() || base_path.len() > MAX_HUB_BASE_PATH_LEN {
+            HUB_HOME_PATH.to_owned()
+        } else {
+            base_path.to_owned()
+        };
+    }
+}
+
 /// Versioned, application-wide settings. Live workspace content is excluded.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -796,6 +866,8 @@ pub struct Settings {
     pub terminal_hide_function_keys: bool,
     /// Picture captions under grid tiles and hover tooltips (task 0347).
     pub picture_info: PictureInfoSettings,
+    /// The document hub virtual folder (task 0357).
+    pub document_hub: DocumentHubSettings,
 }
 
 impl Settings {
@@ -899,6 +971,7 @@ impl Default for Settings {
             terminal_allow_file_writes: true,
             terminal_hide_function_keys: true,
             picture_info: PictureInfoSettings::default(),
+            document_hub: DocumentHubSettings::default(),
         }
     }
 }
@@ -988,6 +1061,7 @@ impl SettingsStore {
                 sanitize_file_templates(&mut settings.file_templates);
                 sanitize_template_folder(&mut settings.template_folder);
                 settings.picture_info.sanitize();
+                settings.document_hub.sanitize();
                 sync_profile::sanitize_sync_profiles(&mut settings.sync_profiles);
                 Ok(LoadOutcome {
                     settings,
@@ -1044,6 +1118,7 @@ impl SettingsStore {
         sanitize_file_templates(&mut current.file_templates);
         sanitize_template_folder(&mut current.template_folder);
         current.picture_info.sanitize();
+        current.document_hub.sanitize();
         sync_profile::sanitize_sync_profiles(&mut current.sync_profiles);
         let bytes = serde_json::to_vec_pretty(&current)?;
         atomic_write(&self.directory, SETTINGS_FILE_NAME, &bytes)?;
@@ -1692,6 +1767,118 @@ mod tests {
             })
             .expect("save");
         assert_eq!(store.load().expect("reload").settings.template_folder, None);
+    }
+
+    fn round_trip_document_hub(hub: DocumentHubSettings) -> DocumentHubSettings {
+        let directory = tempdir().expect("temp directory");
+        let store = SettingsStore::new(directory.path());
+        store
+            .save(&Settings {
+                document_hub: hub,
+                ..Settings::default()
+            })
+            .expect("save");
+        store.load().expect("reload").settings.document_hub
+    }
+
+    #[test]
+    fn the_document_hub_defaults_to_common_documents_under_the_home_folder() {
+        let hub = Settings::default().document_hub;
+
+        assert_eq!(hub.base_path, "~");
+        for extension in ["pdf", "docx", "pptx", "xlsx", "odt", "epub", "md"] {
+            assert!(
+                hub.extensions
+                    .iter()
+                    .any(|candidate| candidate == extension),
+                "{extension} missing from the default extensions"
+            );
+        }
+    }
+
+    #[test]
+    fn document_hub_extensions_are_normalised_and_deduplicated() {
+        let hub = round_trip_document_hub(DocumentHubSettings {
+            extensions: vec![
+                " .PDF ".into(),
+                "pdf".into(),
+                "Docx".into(),
+                "tar.gz".into(),
+            ],
+            base_path: "~".into(),
+        });
+
+        assert_eq!(hub.extensions, ["pdf", "docx"]);
+    }
+
+    #[test]
+    fn document_hub_drops_extensions_that_are_not_plain_suffixes() {
+        let hub = round_trip_document_hub(DocumentHubSettings {
+            extensions: vec![
+                "*.pdf".into(),
+                "a/b".into(),
+                "x,y".into(),
+                String::new(),
+                "o\u{308}dt".into(),
+                "p".repeat(17),
+                "odt".into(),
+            ],
+            base_path: "~".into(),
+        });
+
+        assert_eq!(hub.extensions, ["odt"]);
+    }
+
+    #[test]
+    fn an_empty_document_hub_extension_list_restores_the_defaults() {
+        let hub = round_trip_document_hub(DocumentHubSettings {
+            extensions: vec!["  ".into()],
+            base_path: "~".into(),
+        });
+
+        assert_eq!(hub.extensions, DocumentHubSettings::default().extensions);
+    }
+
+    #[test]
+    fn document_hub_keeps_a_bounded_number_of_extensions() {
+        let hub = round_trip_document_hub(DocumentHubSettings {
+            extensions: (0..200).map(|index| format!("e{index}")).collect(),
+            base_path: "~".into(),
+        });
+
+        assert_eq!(hub.extensions.len(), 64);
+        assert_eq!(hub.extensions[0], "e0");
+    }
+
+    #[test]
+    fn the_document_hub_base_path_is_trimmed_and_a_blank_one_means_home() {
+        let trimmed = round_trip_document_hub(DocumentHubSettings {
+            base_path: "  /Users/me/Work  ".into(),
+            ..DocumentHubSettings::default()
+        });
+        let blank = round_trip_document_hub(DocumentHubSettings {
+            base_path: "   ".into(),
+            ..DocumentHubSettings::default()
+        });
+
+        assert_eq!(trimmed.base_path, "/Users/me/Work");
+        assert_eq!(blank.base_path, "~");
+    }
+
+    #[test]
+    fn settings_files_from_before_the_document_hub_load_with_its_defaults() {
+        let directory = tempdir().expect("temp directory");
+        let store = SettingsStore::new(directory.path());
+        store.save(&Settings::default()).expect("save");
+        let path = directory.path().join("settings.json");
+        let mut json: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).expect("read")).expect("json");
+        json.as_object_mut().expect("object").remove("documentHub");
+        fs::write(&path, serde_json::to_vec(&json).expect("encode")).expect("write");
+
+        let loaded = store.load().expect("reload").settings;
+
+        assert_eq!(loaded.document_hub, DocumentHubSettings::default());
     }
 
     #[test]

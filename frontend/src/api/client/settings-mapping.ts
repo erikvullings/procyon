@@ -2,6 +2,7 @@ import { DEFAULT_MAP_SETTINGS } from '../../features/map/map-settings';
 import type { Location as FileLocation, SearchQuery, Settings } from '../../models';
 import type { FilterCriteria, SyncProfile } from '../../models/settings';
 import {
+  DEFAULT_DOCUMENT_HUB_SETTINGS,
   DEFAULT_PICTURE_INFO_SETTINGS,
   DEFAULT_QUICK_FILTER_MATCH_MODE,
 } from '../../models/settings';
@@ -62,6 +63,7 @@ export function settingsFromDto(settings: SettingsDto): Settings {
     terminalAllowFileWrites: settings.terminalAllowFileWrites ?? true,
     terminalHideFunctionKeys: settings.terminalHideFunctionKeys ?? true,
     pictureInfo: settings.pictureInfo ?? DEFAULT_PICTURE_INFO_SETTINGS,
+    documentHub: settings.documentHub ?? DEFAULT_DOCUMENT_HUB_SETTINGS,
     map: settings.map ?? DEFAULT_MAP_SETTINGS,
   };
 }
@@ -203,6 +205,10 @@ export function settingsToDto(settings: Settings): SettingsDto {
       ...settings.pictureInfo,
       captionFields: [...settings.pictureInfo.captionFields],
       tooltipFields: [...settings.pictureInfo.tooltipFields],
+    },
+    documentHub: {
+      ...settings.documentHub,
+      extensions: [...settings.documentHub.extensions],
     },
     recentLocationsByWorkspace: Object.fromEntries(
       Object.entries(settings.recentLocationsByWorkspace).map(([workspaceId, locations]) => [
