@@ -158,8 +158,19 @@ impl WindowStateSaveDebouncer {
         }
         *pending = Some(tauri::async_runtime::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            if let Err(error) = app.save_window_state(StateFlags::all()) {
-                tracing::warn!(%error, "could not save window geometry");
+            // On the main thread: `save_window_state` holds the plugin's state lock while it asks
+            // the window for its geometry. From a worker thread that question waits for the main
+            // thread, which may itself be waiting for the lock in the plugin's window-event
+            // handler (a move or resize): a deadlock that froze the app. On the main thread the
+            // question is answered directly and the two never overlap.
+            let handle = app.clone();
+            let scheduled = app.run_on_main_thread(move || {
+                if let Err(error) = handle.save_window_state(StateFlags::all()) {
+                    tracing::warn!(%error, "could not save window geometry");
+                }
+            });
+            if let Err(error) = scheduled {
+                tracing::warn!(%error, "could not schedule saving the window geometry");
             }
         }));
     }
