@@ -8,6 +8,7 @@ use std::sync::{Mutex, MutexGuard};
 use fm_agent::{Message, ToolCallRecord, fit_messages, render_text};
 use fm_transport_dto::TerminalBlockDto;
 
+use super::edit::PendingEdit;
 use crate::file_assistant::truncate_to_bytes;
 
 /// Most sessions kept; the least recently used is dropped first.
@@ -78,6 +79,10 @@ struct WriteGrant {
 struct Session {
     /// The file waiting for approval.
     pending_write: Option<PendingWrite>,
+    /// The edit waiting for approval (task 0352).
+    pending_edit: Option<PendingEdit>,
+    /// Edits allowed without asking: `Some(true)` for the session, `Some(false)` for the question.
+    edit_grant: Option<bool>,
     /// The call that stopped the turn for the person; what they decide is its result.
     pending_call: Option<ToolCallRecord>,
     write_grant: Option<WriteGrant>,
@@ -199,6 +204,10 @@ impl Sessions {
             session.cancelled = false;
             // A new question starts with fresh limits and only a session-wide grant survives.
             session.pending_write = None;
+            session.pending_edit = None;
+            if session.edit_grant == Some(false) {
+                session.edit_grant = None;
+            }
             session.written_files = 0;
             session.written_bytes = 0;
             if session
@@ -230,6 +239,30 @@ impl Sessions {
         let mut taken = None;
         self.with(id, |session| taken = session.pending_write.take());
         taken
+    }
+
+    /// Holds an edit until the person decides.
+    pub(super) fn hold_edit(&self, id: &str, pending: PendingEdit) {
+        self.with(id, |session| session.pending_edit = Some(pending));
+    }
+
+    /// The held edit, which is no longer held.
+    pub(super) fn take_edit(&self, id: &str) -> Option<PendingEdit> {
+        let mut taken = None;
+        self.with(id, |session| taken = session.pending_edit.take());
+        taken
+    }
+
+    /// Allows edits without asking for this question or the whole session.
+    pub(super) fn grant_edits(&self, id: &str, whole_session: bool) {
+        self.with(id, |session| session.edit_grant = Some(whole_session));
+    }
+
+    /// Whether edits may be written without asking.
+    pub(super) fn edits_granted(&self, id: &str) -> bool {
+        let mut granted = false;
+        self.with(id, |session| granted = session.edit_grant.is_some());
+        granted
     }
 
     /// Allows creating files in `folder` for this question or the whole session.
@@ -381,6 +414,7 @@ impl Sessions {
         self.with(id, |session| {
             session.pending_call = None;
             session.pending_write = None;
+            session.pending_edit = None;
             session.turns = vec![Turn::Agent(Message::Note(format!(
                 "Summary of the conversation so far:\n{}",
                 truncate_to_bytes(summary, MAX_TURN_BYTES)

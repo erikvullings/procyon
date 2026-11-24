@@ -1634,6 +1634,29 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     await vi.waitFor(() => expect(button('Decline')).toBeUndefined());
   });
 
+  it('shows a proposed edit as a diff and sends the answer back', async () => {
+    assist.mockResolvedValueOnce({
+      text: '',
+      editRequest: {
+        path: 'notes.md',
+        diff: '--- notes.md\n+++ notes.md\n@@ -1 +1 @@\n-Old line.\n+New line.\n',
+        added: 1,
+        removed: 1,
+      },
+    });
+    await mount();
+    ask('# fix the note');
+
+    await vi.waitFor(() => expect(root.querySelector('.fm-terminal-assist-diff')).not.toBeNull());
+    expect(root.textContent).toContain('Change notes.md?');
+    expect(
+      root.querySelector('.fm-terminal-assist-diff .fm-terminal-diff-added')?.textContent,
+    ).toBe('+New line.\n');
+    button('This session')?.click();
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
+    expect(sentAt(1)?.editDecision).toBe('session');
+  });
+
   it('tells the host not to offer file creation when the setting is off', async () => {
     await mount({ allowFileWrites: false });
     ask('# summarise');

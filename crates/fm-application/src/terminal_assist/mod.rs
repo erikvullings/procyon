@@ -6,6 +6,7 @@
 mod agent_tools;
 mod commands;
 mod context;
+mod edit;
 mod session;
 mod write;
 
@@ -24,7 +25,8 @@ pub(crate) use session::Sessions;
 use fm_transport_dto::{
     ChatFailureDto, TerminalAssistEventDto, TerminalAssistFilesDto, TerminalAssistKindDto,
     TerminalAssistReplyDto, TerminalAssistRequestDto, TerminalAssistSkillDto,
-    TerminalToolResultDto, TerminalWriteDecisionDto, TerminalWriteRequestDto,
+    TerminalEditRequestDto, TerminalToolResultDto, TerminalWriteDecisionDto,
+    TerminalWriteRequestDto,
 };
 use fm_vfs::ProviderRegistry;
 use tokio_util::sync::CancellationToken;
@@ -220,6 +222,7 @@ pub(crate) async fn reply_streaming(
         run_command: None,
         note_proposal: None,
         write_request: None,
+        edit_request: None,
     })
 }
 
@@ -311,6 +314,26 @@ async fn ask(
             &mut steps,
         )
         .await;
+        if sessions.is_cancelled(&id) {
+            return Ok(stopped(String::new(), steps));
+        }
+    } else if let Some(decision) = request.edit_decision {
+        let pending = sessions
+            .take_edit(&id)
+            .ok_or(ChatFailureDto::InvalidRequest)?;
+        if decision == TerminalWriteDecisionDto::Decline {
+            sessions.push_tool(
+                &id,
+                &format!(
+                    "The person declined the edit to {}. Do not try again. Stop and wait for \
+                     their next message.",
+                    pending.path
+                ),
+            );
+            return Ok(stopped(String::new(), steps));
+        }
+        sessions.grant_edits(&id, decision == TerminalWriteDecisionDto::Session);
+        write_edit(providers, sessions, &id, &pending, on_event, &mut steps).await;
         if sessions.is_cancelled(&id) {
             return Ok(stopped(String::new(), steps));
         }
@@ -448,6 +471,31 @@ async fn ask(
                     ..stopped(String::new(), steps)
                 });
             }
+            TerminalInterrupt::Edit(edit_request) => {
+                if !request.allow_file_writes {
+                    sessions.push_tool(&id, "Error: changing files is turned off.");
+                    continue;
+                }
+                match edit::prepare(host, providers, &edit_request).await {
+                    Err(error) => sessions.push_tool(&id, &format!("Error: {error}")),
+                    Ok(pending) if request.auto_approve || sessions.edits_granted(&id) => {
+                        write_edit(providers, sessions, &id, &pending, on_event, &mut steps).await;
+                    }
+                    Ok(pending) => {
+                        let asked = TerminalEditRequestDto {
+                            path: pending.path.clone(),
+                            diff: pending.diff.clone(),
+                            added: u32::try_from(pending.added).unwrap_or(u32::MAX),
+                            removed: u32::try_from(pending.removed).unwrap_or(u32::MAX),
+                        };
+                        sessions.hold_edit(&id, pending);
+                        return Ok(TerminalAssistReplyDto {
+                            edit_request: Some(asked),
+                            ..stopped(String::new(), steps)
+                        });
+                    }
+                }
+            }
             TerminalInterrupt::WriteFile(pending) => {
                 if !request.allow_file_writes {
                     sessions.push_tool(&id, "Error: creating files is turned off.");
@@ -562,6 +610,27 @@ async fn create_file(
     sessions.push_tool(id, &text);
 }
 
+/// Writes an approved edit; its outcome becomes the call's result.
+async fn write_edit(
+    providers: &ProviderRegistry,
+    sessions: &Sessions,
+    id: &str,
+    pending: &edit::PendingEdit,
+    on_event: &mut (dyn FnMut(TerminalAssistEventDto) + Send),
+    steps: &mut Vec<String>,
+) {
+    let (step, text) = match edit::apply(providers, pending).await {
+        Ok(()) => (pending.step(), pending.result()),
+        Err(error) => (
+            format!("Could not edit {}", pending.path),
+            format!("Error: {error}"),
+        ),
+    };
+    on_event(TerminalAssistEventDto::Step { text: step.clone() });
+    steps.push(step);
+    sessions.push_tool(id, &text);
+}
+
 fn stopped(text: String, steps: Vec<String>) -> TerminalAssistReplyDto {
     TerminalAssistReplyDto {
         text,
@@ -569,6 +638,7 @@ fn stopped(text: String, steps: Vec<String>) -> TerminalAssistReplyDto {
         run_command: None,
         note_proposal: None,
         write_request: None,
+        edit_request: None,
     }
 }
 
@@ -811,6 +881,7 @@ mod tests {
             context: TerminalContextDto::default(),
             tool_result: None,
             write_decision: None,
+            edit_decision: None,
             allow_file_writes: false,
             auto_approve: false,
             workspace_id: None,
@@ -830,6 +901,7 @@ mod tests {
             context: TerminalContextDto::default(),
             tool_result: None,
             write_decision: None,
+            edit_decision: None,
             allow_file_writes: false,
             auto_approve: false,
             workspace_id: None,
@@ -966,6 +1038,7 @@ mod tests {
             context: TerminalContextDto::default(),
             tool_result: None,
             write_decision: None,
+            edit_decision: None,
             allow_file_writes: false,
             auto_approve: false,
             workspace_id: None,
@@ -1851,6 +1924,132 @@ mod tests {
         let next = ask_local(&fake, &sessions, writing_request("s", "two", dir.path())).await;
         assert!(next.write_request.is_none());
         assert!(dir.path().join("summaries/b.md").exists());
+    }
+
+    const EDIT_NOTES: &str = r##"TOOL {"tool":"edit_file","path":"notes.md","old_text":"Old line.","new_text":"New line."}"##;
+
+    fn edit_decision(
+        session: &str,
+        directory: &std::path::Path,
+        decision: TerminalWriteDecisionDto,
+    ) -> TerminalAssistRequestDto {
+        TerminalAssistRequestDto {
+            request: None,
+            edit_decision: Some(decision),
+            ..writing_request(session, "", directory)
+        }
+    }
+
+    #[tokio::test]
+    async fn an_edit_shows_its_diff_and_writes_only_after_approval() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("notes.md");
+        std::fs::write(&file, "# Notes\nOld line.\nEnd.\n").unwrap();
+        let fake = scripted(&[EDIT_NOTES, "Done."]);
+        let sessions = Sessions::default();
+        let reply = ask_local(&fake, &sessions, writing_request("t", "fix it", dir.path())).await;
+        let asked = reply.edit_request.unwrap();
+        assert_eq!(asked.path, "notes.md");
+        assert_eq!((asked.added, asked.removed), (1, 1));
+        assert!(
+            asked.diff.contains("-Old line.\n+New line.\n"),
+            "{}",
+            asked.diff
+        );
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            "# Notes\nOld line.\nEnd.\n"
+        );
+
+        let reply = ask_local(
+            &fake,
+            &sessions,
+            edit_decision("t", dir.path(), TerminalWriteDecisionDto::Question),
+        )
+        .await;
+        assert_eq!(reply.text, "Done.");
+        assert_eq!(reply.steps, vec!["Edited notes.md (+1 −1)"]);
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            "# Notes\nNew line.\nEnd.\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_file_changed_after_the_proposal_is_not_overwritten() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("notes.md");
+        std::fs::write(&file, "Old line.\n").unwrap();
+        let fake = scripted(&[EDIT_NOTES, "Ok."]);
+        let sessions = Sessions::default();
+        ask_local(&fake, &sessions, writing_request("t", "fix it", dir.path())).await;
+        std::fs::write(&file, "Old line.\nSomeone else wrote this.\n").unwrap();
+        ask_local(
+            &fake,
+            &sessions,
+            edit_decision("t", dir.path(), TerminalWriteDecisionDto::Question),
+        )
+        .await;
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            "Old line.\nSomeone else wrote this.\n"
+        );
+        assert!(
+            sessions
+                .render("t")
+                .contains("changed after the edit was proposed")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_declined_edit_leaves_the_file_and_stops() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("notes.md");
+        std::fs::write(&file, "Old line.\n").unwrap();
+        let fake = scripted(&[EDIT_NOTES]);
+        let sessions = Sessions::default();
+        ask_local(&fake, &sessions, writing_request("t", "fix it", dir.path())).await;
+        let reply = ask_local(
+            &fake,
+            &sessions,
+            edit_decision("t", dir.path(), TerminalWriteDecisionDto::Decline),
+        )
+        .await;
+        assert_eq!(reply.text, "");
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "Old line.\n");
+        assert!(
+            sessions
+                .render("t")
+                .contains("declined the edit to notes.md")
+        );
+    }
+
+    #[tokio::test]
+    async fn auto_approve_edits_without_asking_and_errors_reach_the_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("notes.md");
+        std::fs::write(&file, "Old line.\n").unwrap();
+        std::fs::write(dir.path().join(".env"), "TOKEN=x\n").unwrap();
+        let secret = r##"TOOL {"tool":"edit_file","path":".env","old_text":"x","new_text":"y"}"##;
+        let missing =
+            r##"TOOL {"tool":"edit_file","path":"notes.md","old_text":"Absent","new_text":"y"}"##;
+        let fake = scripted(&[EDIT_NOTES, secret, missing, "Done."]);
+        let sessions = Sessions::default();
+        let request = TerminalAssistRequestDto {
+            auto_approve: true,
+            ..writing_request("t", "fix it", dir.path())
+        };
+        let reply = ask_local(&fake, &sessions, request).await;
+        assert!(reply.edit_request.is_none());
+        assert_eq!(reply.text, "Done.");
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "New line.\n");
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join(".env")).unwrap(),
+            "TOKEN=x\n"
+        );
+        let conversation = sessions.render_within("t", 64 * 1024);
+        assert!(conversation.contains("may hold secrets"), "{conversation}");
+        assert!(conversation.contains("was not found"), "{conversation}");
     }
 
     #[tokio::test]

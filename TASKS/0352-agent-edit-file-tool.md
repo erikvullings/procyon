@@ -1,6 +1,6 @@
 # 0352 Agent edit_file tool with approval
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: backend, agent, frontend
 Depends on: none
@@ -46,3 +46,30 @@ unseen: Procyon's write rule (the person approves) stays.
   operation in `fm-operations`; record the decision here.
 
 ## Agent Notes
+- 2026-11-24 claude: done.
+  - `fm-agent/src/edit.rs`: public `EditFile` tool (`I: From<EditRequest>`), `EditRequest`,
+    `apply_edit` (exact match; `replace_all`; CRLF files matched and kept with `\n` in the
+    model's text; `EditError::{NotFound{closest line}, Ambiguous{count}, Unchanged}`), bounds
+    `MAX_EDIT_TEXT_BYTES` 64 KiB and `MAX_EDITED_FILE_BYTES` 1 MiB. The tool refuses secret names
+    and empty `old_text` before interrupting.
+  - Host `terminal_assist/edit.rs`: `prepare` resolves the path with the sandbox's
+    `document_location` (inside the folder, no credential folders, symlinks canonicalised),
+    refuses converted documents and non-UTF-8, applies the edit and builds a unified diff with
+    `similar` (3 lines of context, 24 KiB shown). `apply` re-reads and compares a fingerprint;
+    a changed file is not written and the model is told to read it again.
+  - Decisions:
+    - The grant is per question or per session for all edits (the same `question`/`session`/
+      `decline` answer as `write_file`), not per file: simpler, and consistent with writes.
+    - Not an operation-engine job, like `write_file` (task 0338): one bounded text write the
+      person approved, through the VFS provider (`open_write` with overwrite). Not atomic
+      (temp + rename) and not undoable; the diff is the record. Revisit if edits get bigger.
+    - `edit_file` is offered with `write_file` under the same "allow file changes" terminal
+      setting; auto-approve (0356) writes without asking.
+    - Chat has no write tools, so the tool is terminal-only for now.
+  - DTOs: `TerminalEditRequestDto`, reply `edit_request`, request `edit_decision`.
+  - Frontend: `edit` panel with `+a −r`, a scrollable coloured diff, Allow (Enter) / This session /
+    Decline (Ctrl+C, Esc).
+  - Verified: fm-agent `edit::tests` 6; terminal_assist 85 (4 new edit-flow tests: approval, file
+    changed meanwhile, decline, auto-approve with secret and not-found errors); drawer test for
+    the edit panel; terminal + i18n frontend tests 462; clippy `-D warnings` on fm-agent,
+    fm-application, fm-transport-dto clean. Not tried in the running app.

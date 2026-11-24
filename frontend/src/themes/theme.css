@@ -835,6 +835,33 @@ main.fm-workspace {
   color: var(--fm-warning);
 }
 
+/* A proposed edit (task 0352): the diff under the question, scrollable, in the terminal's font. */
+.fm-terminal-assist-diff {
+  margin: 0.25rem 0 0;
+  max-height: 14rem;
+  overflow: auto;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--fm-border);
+  border-radius: 4px;
+  font-family: var(--fm-font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  white-space: pre;
+}
+
+.fm-terminal-diff-added {
+  color: var(--fm-success);
+}
+
+.fm-terminal-diff-removed {
+  color: var(--fm-error);
+}
+
+.fm-terminal-diff-hunk,
+.fm-terminal-diff-file {
+  color: var(--fm-text-muted);
+}
+
 /* Quiet actions in the strip: text with a faint key hint, no boxes. The first action of a
    status row (Run, Insert) is the one to take, so it is the only emphasised one. */
 .fm-terminal-strip .fm-terminal-assist-action {

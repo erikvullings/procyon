@@ -100,6 +100,20 @@ pub struct TerminalWriteRequestDto {
     pub bytes: u32,
 }
 
+/// A change to an existing file, waiting for the person's approval (task 0352).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalEditRequestDto {
+    /// The file, relative to the working folder.
+    pub path: String,
+    /// The change as a unified diff.
+    pub diff: String,
+    /// Lines added.
+    pub added: u32,
+    /// Lines removed.
+    pub removed: u32,
+}
+
 /// One terminal assistance request. The transcript is the recent output as shown on screen.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -137,6 +151,10 @@ pub struct TerminalAssistRequestDto {
     /// The answer to a `writeRequest` of the previous reply (task 0338).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub write_decision: Option<TerminalWriteDecisionDto>,
+    /// The answer to an `editRequest` of the previous reply (task 0352): `question` allows the
+    /// later edits of this question too, `session` those of the whole session.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edit_decision: Option<TerminalWriteDecisionDto>,
     /// Whether the assistant may offer to create files (the terminal setting, task 0338).
     #[serde(default)]
     pub allow_file_writes: bool,
@@ -171,6 +189,10 @@ pub struct TerminalAssistReplyDto {
     /// answers with a `writeDecision`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub write_request: Option<TerminalWriteRequestDto>,
+    /// A change to an existing file (task 0352). Nothing is written until the person answers
+    /// with an `editDecision`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edit_request: Option<TerminalEditRequestDto>,
 }
 
 /// Something shown while an `ask` is answered, so the terminal can write it as it happens.

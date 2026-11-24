@@ -260,13 +260,14 @@ pub use semantic_library::*;
 pub use semantic_ocr::*;
 pub use semantic_vocabulary::*;
 pub use settings::{
-    ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto, FavouriteLocationDto, FileTemplateDto,
-    FileTemplateEntryDto, FileTemplateSourceDto, FilterCriteriaDto, FilterKindDto, FilterPresetDto,
-    FilterToggleDto, LanguageDto, MapBasemapKindDto, MapSettingsDto, MultiRenameCaseTransformDto,
-    MultiRenamePresetDto, MultiRenameRulesDto, MultiRenameSequenceDto, PictureInfoSettingsDto,
-    QuickFilterMatchModeDto, SavedSearchDto, SettingsDto, SizeFormatDto, SyncProfileDto,
-    SyncRunOutcomeDto, SyncRunSummaryDto, SyncRunTriggerDto, SyncScheduleConfirmationDto,
-    SyncScheduleDto, TerminalAppDto, TerminalShellIntegrationDto, ThemeDto,
+    ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto, DocumentHubSettingsDto,
+    FavouriteLocationDto, FileTemplateDto, FileTemplateEntryDto, FileTemplateSourceDto,
+    FilterCriteriaDto, FilterKindDto, FilterPresetDto, FilterToggleDto, LanguageDto,
+    MapBasemapKindDto, MapSettingsDto, MultiRenameCaseTransformDto, MultiRenamePresetDto,
+    MultiRenameRulesDto, MultiRenameSequenceDto, PictureInfoSettingsDto, QuickFilterMatchModeDto,
+    SavedSearchDto, SettingsDto, SizeFormatDto, SyncProfileDto, SyncRunOutcomeDto,
+    SyncRunSummaryDto, SyncRunTriggerDto, SyncScheduleConfirmationDto, SyncScheduleDto,
+    TerminalAppDto, TerminalShellIntegrationDto, ThemeDto,
 };
 pub use snapshot::{DirectorySnapshotDto, LoadingStateDto, VolumeCapacityDto};
 pub use snapshots::{
@@ -287,7 +288,8 @@ pub use system_location::{SystemLocationDto, SystemLocationKindDto, VolumeDto};
 pub use terminal_assist::{
     TerminalAssistEventDto, TerminalAssistFilesDto, TerminalAssistKindDto, TerminalAssistReplyDto,
     TerminalAssistRequestDto, TerminalAssistSkillDto, TerminalBlockDto, TerminalContextDto,
-    TerminalToolResultDto, TerminalWriteDecisionDto, TerminalWriteRequestDto,
+    TerminalEditRequestDto, TerminalToolResultDto, TerminalWriteDecisionDto,
+    TerminalWriteRequestDto,
 };
 pub use transfer_recovery::{
     InterruptedTransferDto, InterruptedTransfersDto, TransferRecoveryClassDto,

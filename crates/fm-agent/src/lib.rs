@@ -44,6 +44,7 @@
 //! must act (approve a command, review a draft). Interrupts are the registry's type parameter `I`;
 //! the built-in tools that interrupt need `I: From<CommandRequest>` or `I: From<NoteProposal>`.
 
+mod edit;
 mod frontmatter;
 mod instructions;
 mod message;
@@ -62,6 +63,9 @@ mod tool;
 mod tools;
 mod turn;
 
+pub use self::edit::{
+    EditError, EditFile, EditRequest, MAX_EDIT_TEXT_BYTES, MAX_EDITED_FILE_BYTES, apply_edit,
+};
 pub use self::instructions::{
     INSTRUCTION_FILE_NAMES, InstructionFile, InstructionSource, MAX_INSTRUCTION_BYTES,
     instruction_candidates, instructions_section, read_instructions,

@@ -3,8 +3,8 @@
 
 use async_trait::async_trait;
 use fm_agent::{
-    CommandRequest, NoteProposal, ToolContext, ToolOutcome, ToolRegistry, Typed, TypedTool,
-    command_registry,
+    CommandRequest, EditFile, EditRequest, NoteProposal, ToolContext, ToolOutcome, ToolRegistry,
+    Typed, TypedTool, command_registry,
 };
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -21,6 +21,14 @@ pub(super) enum TerminalInterrupt {
     Command(CommandRequest),
     /// A file to create, after the checks and the person's approval.
     WriteFile(PendingWrite),
+    /// A change to an existing file, after the person's approval (task 0352).
+    Edit(EditRequest),
+}
+
+impl From<EditRequest> for TerminalInterrupt {
+    fn from(request: EditRequest) -> Self {
+        Self::Edit(request)
+    }
 }
 
 impl From<NoteProposal> for TerminalInterrupt {
@@ -35,14 +43,16 @@ impl From<CommandRequest> for TerminalInterrupt {
     }
 }
 
-/// The registry of the terminal assistant: the shared read-only tools, `run_command`, and
-/// `write_file`. `write_file` is only described to the model when the person allows file
-/// creation; a call to it is still understood and answered when it is not allowed.
+/// The registry of the terminal assistant: the shared read-only tools, `run_command`,
+/// `write_file` and `edit_file`. The two writing tools are only described to the model when the
+/// person allows file changes; a call to either is still understood and answered when not.
 pub(super) fn registry(describe_write_file: bool) -> ToolRegistry<TerminalInterrupt> {
     let mut registry = command_registry();
     registry.describe("read_file", READ_FILE_DESCRIPTION);
     if describe_write_file {
-        registry.register(Typed(WriteFile));
+        registry
+            .register(Typed(WriteFile))
+            .register(Typed(EditFile));
     }
     registry
 }

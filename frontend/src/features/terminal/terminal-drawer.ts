@@ -197,6 +197,27 @@ export function nativeFolder(uri: string): string | undefined {
   return /^\/[A-Za-z]:/.test(path) ? path.slice(1) : path;
 }
 
+/** A unified diff with added and removed lines marked, for the person to review. */
+function diffView(diff: string): m.Children {
+  return m(
+    'pre.fm-terminal-assist-diff',
+    { 'aria-label': t('terminal', 'assistEditDiff') },
+    diff.split('\n').map((line) => {
+      const kind =
+        line.startsWith('+++') || line.startsWith('---')
+          ? '.fm-terminal-diff-file'
+          : line.startsWith('+')
+            ? '.fm-terminal-diff-added'
+            : line.startsWith('-')
+              ? '.fm-terminal-diff-removed'
+              : line.startsWith('@@')
+                ? '.fm-terminal-diff-hunk'
+                : '';
+      return m(`span${kind}`, `${line}\n`);
+    }),
+  );
+}
+
 /** Why a command still asks in auto-approve mode, in words. */
 function dangerText(kind: DangerKind): string {
   switch (kind) {
@@ -540,6 +561,14 @@ type AssistPanel =
       readonly folder: string;
       readonly name: string;
       readonly bytes: number;
+    }
+  | {
+      readonly status: 'edit';
+      readonly tabKey: string;
+      readonly path: string;
+      readonly diff: string;
+      readonly added: number;
+      readonly removed: number;
     };
 
 /** A bottom drawer whose xterm instances remain mounted and keyed by backing location. */
@@ -704,6 +733,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       readonly context?: TerminalAssistContext;
       readonly toolResult?: TerminalToolResult;
       readonly writeDecision?: TerminalWriteDecision;
+      readonly editDecision?: TerminalWriteDecision;
       readonly skill?: string;
     },
   ): void {
@@ -743,6 +773,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           ...(input.context === undefined ? {} : { context: input.context }),
           ...(input.toolResult === undefined ? {} : { toolResult: input.toolResult }),
           ...(input.writeDecision === undefined ? {} : { writeDecision: input.writeDecision }),
+          ...(input.editDecision === undefined ? {} : { editDecision: input.editDecision }),
           ...(input.skill === undefined ? {} : { skill: input.skill }),
           ...(live.assistRoot === undefined ? {} : { root: live.assistRoot.uri }),
           allowFileWrites: attrs.allowFileWrites !== false,
@@ -778,6 +809,8 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     let autoRun: string | undefined;
     if (reply.writeRequest !== undefined) {
       next = { status: 'write', tabKey: live.key, ...reply.writeRequest };
+    } else if (reply.editRequest !== undefined) {
+      next = { status: 'edit', tabKey: live.key, ...reply.editRequest };
     } else if (reply.runCommand !== undefined) {
       const command = cleanCommand(reply.runCommand);
       // A read-only command runs at once, and in auto-approve mode any command that is not very
@@ -913,6 +946,25 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   }
 
   /** Answers the request to create files; declining makes the assistant stop. */
+  /** Answers a proposed edit: allow it (and later ones), or decline and stop. */
+  function answerEdit(live: LiveTerminal, decision: TerminalWriteDecision): void {
+    if (decision !== 'decline') {
+      sendToSession(live, { editDecision: decision });
+      return;
+    }
+    panel = undefined;
+    void currentAttrs?.client
+      .assist({
+        kind: 'ask',
+        transcript: '',
+        workingDirectory: currentAttrs.location?.uri ?? '',
+        sessionId: live.assistSession,
+        editDecision: 'decline',
+      })
+      .catch(() => undefined);
+    m.redraw();
+  }
+
   function answerWrite(live: LiveTerminal, decision: TerminalWriteDecision): void {
     if (decision !== 'decline') {
       sendToSession(live, { writeDecision: decision });
@@ -1192,6 +1244,16 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       }
       if ((plain && event.key === 'Escape') || (ctrl && name === 'c')) {
         answerWrite(live, 'decline');
+        return true;
+      }
+    }
+    if (shown?.status === 'edit' && live !== undefined) {
+      if (plain && event.key === 'Enter' && lineEmpty) {
+        answerEdit(live, 'question');
+        return true;
+      }
+      if ((plain && event.key === 'Escape') || (ctrl && name === 'c')) {
+        answerEdit(live, 'decline');
         return true;
       }
     }
@@ -2250,6 +2312,32 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
             ),
           ]),
         ]);
+      case 'edit':
+        return [
+          m('.fm-terminal-assist-row', [
+            m('span.fm-terminal-assist-status', [
+              t('terminal', 'assistEditAsk', { path: shown.path }),
+              ' ',
+              m('span.fm-terminal-diff-added', `+${shown.added}`),
+              ' ',
+              m('span.fm-terminal-diff-removed', `−${shown.removed}`),
+            ]),
+            m('.fm-terminal-assist-buttons', [
+              shortcutButton(t('terminal', 'assistWriteAllow'), 'Enter', () =>
+                answerEdit(live, 'question'),
+              ),
+              m(
+                'button.fm-terminal-assist-action',
+                { type: 'button', onclick: () => answerEdit(live, 'session') },
+                t('terminal', 'assistWriteSession'),
+              ),
+              shortcutButton(t('terminal', 'assistDecline'), 'Ctrl+C', () =>
+                answerEdit(live, 'decline'),
+              ),
+            ]),
+          ]),
+          diffView(shown.diff),
+        ];
       case 'running':
         return m('.fm-terminal-assist-row', [
           command(shown.command),

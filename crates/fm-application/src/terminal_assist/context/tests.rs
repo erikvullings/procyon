@@ -19,6 +19,7 @@ fn request(context: TerminalContextDto) -> TerminalAssistRequestDto {
         context,
         tool_result: None,
         write_decision: None,
+        edit_decision: None,
         allow_file_writes: false,
         auto_approve: false,
         workspace_id: None,

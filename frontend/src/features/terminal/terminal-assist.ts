@@ -45,6 +45,16 @@ export interface TerminalWriteRequest {
   readonly bytes: number;
 }
 
+/** A change to an existing file, waiting for approval (task 0352). */
+export interface TerminalEditRequest {
+  /** The file, relative to the working folder. */
+  readonly path: string;
+  /** The change as a unified diff. */
+  readonly diff: string;
+  readonly added: number;
+  readonly removed: number;
+}
+
 /** One request to the assistant, as the desktop host receives it. */
 export interface TerminalAssistRequest {
   readonly kind: TerminalAssistKind;
@@ -57,6 +67,8 @@ export interface TerminalAssistRequest {
   readonly toolResult?: TerminalToolResult;
   /** The answer to the previous reply's `writeRequest`. */
   readonly writeDecision?: TerminalWriteDecision;
+  /** The answer to the previous reply's `editRequest` (task 0352). */
+  readonly editDecision?: TerminalWriteDecision;
   /** Whether the assistant may offer to create files (the terminal setting). */
   readonly allowFileWrites?: boolean;
   /** Auto-approve mode (task 0356): files are created and edits applied without asking. */
@@ -91,6 +103,8 @@ export interface TerminalAssistReply {
   readonly noteProposal?: NoteProposal;
   /** Files the assistant wants to create; nothing is written until the person answers. */
   readonly writeRequest?: TerminalWriteRequest;
+  /** A change to a file; nothing is written until the person answers (task 0352). */
+  readonly editRequest?: TerminalEditRequest;
 }
 
 /**
