@@ -162,14 +162,26 @@ fn standard_roots_walk_up_to_the_git_root_and_stop_at_home() {
     fs::create_dir_all(repo.join(".git")).unwrap();
 
     let roots = SkillRoots::standard(Some(&inner), Some(&home), &[PathBuf::from("/extra")]);
-    assert_eq!(roots.user[0], text(&home.join(".claude/skills")));
+    assert_eq!(roots.user[0], text(&home.join(".claude").join("skills")));
     assert_eq!(roots.user[2], "/extra");
-    assert!(roots.project.contains(&text(&repo.join(".claude/skills"))));
-    assert!(roots.project.contains(&text(&inner.join(".agents/skills"))));
+    assert!(
+        roots
+            .project
+            .contains(&text(&repo.join(".claude").join("skills")))
+    );
+    assert!(
+        roots
+            .project
+            .contains(&text(&inner.join(".agents").join("skills")))
+    );
     assert!(!roots.project.iter().any(|root| {
         root.starts_with(&text(&home.join("code"))) && !root.starts_with(&text(&repo))
     }));
-    assert!(!roots.project.contains(&text(&home.join(".claude/skills"))));
+    assert!(
+        !roots
+            .project
+            .contains(&text(&home.join(".claude").join("skills")))
+    );
 }
 
 async fn skill_with_files() -> (tempfile::TempDir, Skill) {
