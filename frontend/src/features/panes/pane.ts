@@ -90,6 +90,7 @@ import {
 import type { FinderTagsLoader } from '../directory-table/finder-tags-loader';
 import type { NativeIconLoader } from '../directory-table/native-icon-loader';
 import type { GridPictureInfo } from '../directory-table/picture-info';
+import { pictureTooltip } from '../directory-table/picture-tooltip';
 import type { ThumbnailLoader, ThumbnailViewport } from '../directory-table/thumbnail-loader';
 import type { DropEventState, DropModifiers } from '../drag-drop/drag-drop';
 import type { EntryFormatSettings } from '../entry-formatting/entry-formatting';
@@ -1144,6 +1145,36 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               else openFavourites(attrs);
               m.redraw();
               return;
+            }
+            if (
+              hasPrimaryModifier(event, attrs.platform) &&
+              !event.altKey &&
+              !event.shiftKey &&
+              event.key.toLowerCase() === 'i'
+            ) {
+              // Task 0347: show (or hide) the info tooltip of the cursor entry from the keyboard.
+              const cursorEntry =
+                attrs.cursorIndex === undefined ? undefined : attrs.entries[attrs.cursorIndex];
+              const cursorElement = sectionElement?.querySelector<HTMLElement>(
+                '.fm-cursor-row, .fm-cursor-tile',
+              );
+              const anchor = cursorElement?.matches('.fm-cursor-row')
+                ? (cursorElement.querySelector<HTMLElement>('[role=gridcell]') ?? cursorElement)
+                : cursorElement;
+              if (
+                cursorEntry !== undefined &&
+                anchor !== undefined &&
+                anchor !== null &&
+                pictureTooltip.toggle(
+                  cursorEntry,
+                  anchor,
+                  attrs.tableConfig.pictureInfo,
+                  attrs.tableConfig.thumbnailLoader,
+                )
+              ) {
+                event.preventDefault();
+                return;
+              }
             }
             const typeaheadConsumesSpace =
               event.key === ' ' &&

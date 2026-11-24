@@ -1,13 +1,18 @@
-//! Short display summaries of many images for grid captions and tooltips (task 0347).
+//! Short display summaries of many pictures, tracks and videos for grid captions and tooltips
+//! (task 0347).
 //!
-//! Reads only the leading bytes of each file through the VFS provider, so local, archive and
-//! remote images are handled alike and a huge file is never loaded whole. Failures are reported
-//! per image, never for the whole batch.
+//! Images read only the leading bytes of each file through the VFS provider, so local, archive
+//! and remote images are handled alike and a huge file is never loaded whole. Audio and video
+//! need the container's length, which a truncated prefix cannot give: local files are parsed in
+//! place, while remote ones fall back to the prefix and drop what it cannot vouch for. Failures
+//! are reported per file, never for the whole batch.
 
 use crate::error::ApplicationError;
 use crate::rejection::{Rejection, reason};
 use fm_domain::{EntryId, Location};
-use fm_metadata::ImageSummary;
+use fm_metadata::{
+    AudioInfo, ImageSummary, VideoInfo, is_supported_audio_extension, is_supported_video_extension,
+};
 use fm_transport_dto::{
     ImageSummaryEntryDto, LocationDto, ReadImageSummariesRequestDto, ReadImageSummariesResponseDto,
 };
@@ -54,16 +59,122 @@ pub(crate) async fn read_image_summaries(
     let mut entries = Vec::with_capacity(request.locations.len());
     for dto in request.locations {
         let location: Location = dto.clone().into();
-        let entry = match read_head(providers, &location).await {
-            Ok(bytes) => entry_from(dto, &fm_metadata::read_image_summary(&bytes)),
-            Err(_) => ImageSummaryEntryDto {
+        let summary = match MediaKind::of(&location) {
+            MediaKind::Image => read_image(providers, &location).await,
+            MediaKind::Audio => read_audio(providers, &location).await,
+            MediaKind::Video => read_video(providers, &location).await,
+        };
+        entries.push(match summary {
+            Some(summary) => summary.into_entry(dto),
+            None => ImageSummaryEntryDto {
                 unreadable: true,
                 ..entry_from(dto, &ImageSummary::default())
             },
-        };
-        entries.push(entry);
+        });
     }
     Ok(ReadImageSummariesResponseDto { entries })
+}
+
+#[derive(Clone, Copy)]
+enum MediaKind {
+    Image,
+    Audio,
+    Video,
+}
+
+impl MediaKind {
+    fn of(location: &Location) -> Self {
+        let name = location.name().unwrap_or_default();
+        let extension = name.rsplit_once('.').map_or("", |(_, extension)| extension);
+        if is_supported_audio_extension(extension) {
+            Self::Audio
+        } else if is_supported_video_extension(extension) {
+            Self::Video
+        } else {
+            Self::Image
+        }
+    }
+}
+
+/// What one file yielded, whatever its kind.
+enum Summary {
+    Image(ImageSummary),
+    Audio(AudioInfo),
+    Video(VideoInfo),
+}
+
+impl Summary {
+    fn into_entry(self, location: LocationDto) -> ImageSummaryEntryDto {
+        match self {
+            Self::Image(summary) => entry_from(location, &summary),
+            Self::Audio(info) => ImageSummaryEntryDto {
+                duration_seconds: info.duration.map(|duration| duration.as_secs_f64()),
+                bitrate_kbps: info.bitrate_kbps,
+                sample_rate_hz: info.sample_rate_hz,
+                title: info.title,
+                artist: info.artist,
+                album: info.album,
+                genre: info.genre,
+                year: info.year,
+                track_number: info.track_number,
+                audio_format: Some(info.format).filter(|format| !format.is_empty()),
+                ..entry_from(location, &ImageSummary::default())
+            },
+            Self::Video(info) => ImageSummaryEntryDto {
+                width: info.width,
+                height: info.height,
+                duration_seconds: info.duration.map(|duration| duration.as_secs_f64()),
+                frame_rate: info.frame_rate,
+                video_codec: info.codec,
+                ..entry_from(location, &ImageSummary::default())
+            },
+        }
+    }
+}
+
+async fn read_image(providers: &ProviderRegistry, location: &Location) -> Option<Summary> {
+    let bytes = read_head(providers, location).await.ok()?;
+    Some(Summary::Image(fm_metadata::read_image_summary(&bytes)))
+}
+
+/// Formats whose playing time comes from a header the prefix contains, so it stays exact even
+/// when the file was cut at [`SUMMARY_HEAD_BYTES`].
+fn duration_survives_truncation(format: &str) -> bool {
+    matches!(format, "flac" | "wav" | "aiff")
+}
+
+async fn read_audio(providers: &ProviderRegistry, location: &Location) -> Option<Summary> {
+    if let Ok(path) = location.to_native_path() {
+        let info = tokio::task::spawn_blocking(move || fm_metadata::read_audio_info(&path))
+            .await
+            .ok()?
+            .ok()?;
+        return Some(Summary::Audio(info));
+    }
+    let bytes = read_head(providers, location).await.ok()?;
+    let cut_short = bytes.len() as u64 >= SUMMARY_HEAD_BYTES;
+    let mut info = fm_metadata::read_audio_info_from_bytes(&bytes).ok()?;
+    if cut_short && !duration_survives_truncation(&info.format) {
+        info.duration = None;
+    }
+    Some(Summary::Audio(info))
+}
+
+async fn read_video(providers: &ProviderRegistry, location: &Location) -> Option<Summary> {
+    if let Ok(path) = location.to_native_path() {
+        let info = tokio::task::spawn_blocking(move || {
+            let file = std::fs::File::open(&path).ok()?;
+            let size = file.metadata().ok()?.len();
+            fm_metadata::read_video_info(std::io::BufReader::new(file), size)
+        })
+        .await
+        .ok()?;
+        return Some(Summary::Video(info.unwrap_or_default()));
+    }
+    let bytes = read_head(providers, location).await.ok()?;
+    let size = bytes.len() as u64;
+    let info = fm_metadata::read_video_info(std::io::Cursor::new(bytes), size);
+    Some(Summary::Video(info.unwrap_or_default()))
 }
 
 fn entry_from(location: LocationDto, summary: &ImageSummary) -> ImageSummaryEntryDto {
@@ -87,6 +198,18 @@ fn entry_from(location: LocationDto, summary: &ImageSummary) -> ImageSummaryEntr
         flash_fired: summary.flash_fired,
         white_balance_auto: summary.white_balance_auto,
         rating: summary.rating,
+        duration_seconds: None,
+        frame_rate: None,
+        video_codec: None,
+        title: None,
+        artist: None,
+        album: None,
+        genre: None,
+        year: None,
+        track_number: None,
+        bitrate_kbps: None,
+        sample_rate_hz: None,
+        audio_format: None,
         unreadable: false,
     }
 }
@@ -273,6 +396,62 @@ mod tests {
         assert!(response.entries[0].unreadable);
         assert!(!response.entries[1].unreadable);
         assert_eq!(response.entries[1].width, Some(2));
+    }
+
+    /// One second of 8 kHz mono 16-bit silence as a WAV file.
+    fn silent_wav() -> Vec<u8> {
+        let data_len: u32 = 16_000;
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIFF");
+        bytes.extend_from_slice(&(36 + data_len).to_le_bytes());
+        bytes.extend_from_slice(b"WAVEfmt ");
+        bytes.extend_from_slice(&16_u32.to_le_bytes());
+        bytes.extend_from_slice(&1_u16.to_le_bytes()); // PCM
+        bytes.extend_from_slice(&1_u16.to_le_bytes()); // mono
+        bytes.extend_from_slice(&8_000_u32.to_le_bytes());
+        bytes.extend_from_slice(&16_000_u32.to_le_bytes());
+        bytes.extend_from_slice(&2_u16.to_le_bytes());
+        bytes.extend_from_slice(&16_u16.to_le_bytes());
+        bytes.extend_from_slice(b"data");
+        bytes.extend_from_slice(&data_len.to_le_bytes());
+        bytes.resize(bytes.len() + data_len as usize, 0);
+        bytes
+    }
+
+    #[tokio::test]
+    async fn an_audio_file_reports_its_playing_time_and_stream_properties() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let target = dir.path().join("tone.wav");
+        std::fs::write(&target, silent_wav()).expect("write fixture");
+
+        let entry = summarise(&target).await;
+
+        assert_eq!(entry.duration_seconds.map(f64::round), Some(1.0));
+        assert_eq!(entry.sample_rate_hz, Some(8_000));
+        assert_eq!(entry.audio_format.as_deref(), Some("wav"));
+        assert_eq!((entry.width, entry.camera.as_deref()), (None, None));
+        assert!(!entry.unreadable);
+    }
+
+    #[tokio::test]
+    async fn a_corrupt_audio_file_is_flagged_unreadable() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let target = dir.path().join("broken.mp3");
+        std::fs::write(&target, b"not audio at all").expect("write fixture");
+
+        assert!(summarise(&target).await.unreadable);
+    }
+
+    #[tokio::test]
+    async fn a_video_that_is_not_a_container_reports_nothing_without_failing() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let target = dir.path().join("clip.mp4");
+        std::fs::write(&target, b"not a video").expect("write fixture");
+
+        let entry = summarise(&target).await;
+
+        assert_eq!((entry.width, entry.duration_seconds), (None, None));
+        assert!(!entry.unreadable);
     }
 
     #[tokio::test]

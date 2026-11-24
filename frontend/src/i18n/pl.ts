@@ -1223,6 +1223,18 @@ export const pl = {
     whiteBalance: 'Balans bieli',
     flash: 'Lampa błyskowa',
     rating: 'Ocena',
+    title: 'Tytuł',
+    artist: 'Wykonawca',
+    album: 'Album',
+    genre: 'Gatunek',
+    year: 'Rok',
+    track: 'Utwór',
+    duration: 'Czas trwania',
+    bitrate: 'Przepływność',
+    sampleRate: 'Częstotliwość próbkowania',
+    audioFormat: 'Format audio',
+    frameRate: 'Liczba klatek na sekundę',
+    videoCodec: 'Kodek wideo',
     exposure: 'Ekspozycja',
     flashFired: 'Błysk użyty',
     flashOff: 'Bez błysku',
@@ -2082,6 +2094,7 @@ export const pl = {
     advanced: 'Ustawienia zaawansowane',
     contextWindow: 'Okno kontekstu',
     maximumAnswerTokens: 'Maksymalna liczba tokenów odpowiedzi',
+    noAnswerLimit: 'Bez limitu',
     customLimit: 'Własny…',
     currentLimit: 'Bieżący: {tokens} tokenów',
     customContextWindow: 'Własna liczba tokenów kontekstu',
@@ -2089,7 +2102,7 @@ export const pl = {
     contextLimitHint:
       'Maksymalna łączna liczba tokenów wejścia i wyjścia. Wybierz limit obsługiwany przez model; większe limity mogą zużywać więcej pamięci.',
     outputLimitHint:
-      'Maksymalna długość wygenerowanej odpowiedzi. Wlicza się ona również do okna kontekstu.',
+      'Limit każdej odpowiedzi. Najlepiej bez limitu: ograniczona odpowiedź zostaje ucięta. Ustaw go tylko, by ograniczyć koszt.',
     modelLimitsUnknown:
       'Nie udało się ustalić limitów modelu. To bezpieczne wartości początkowe; sprawdź swój model przed ich zwiększeniem.',
     modelLimitsKnown:

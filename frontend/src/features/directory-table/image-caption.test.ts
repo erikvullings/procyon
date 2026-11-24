@@ -136,3 +136,69 @@ describe('tooltipRows', () => {
     ]);
   });
 });
+
+describe('audio and video fields', () => {
+  const track = entry({ name: 'song.flac', extension: 'flac' });
+
+  it('shows a track as artist, title and a minutes:seconds length', () => {
+    const lines = captionLines(
+      ['artist', 'title', 'duration'],
+      track,
+      summary({ artist: 'Miles Davis', title: 'So What', durationSeconds: 562.4 }),
+      SETTINGS,
+    );
+
+    expect(lines).toEqual(['Miles Davis', 'So What', '9:22']);
+  });
+
+  it('writes lengths of an hour or more with hours', () => {
+    expect(
+      captionLines(['duration'], track, summary({ durationSeconds: 3_725 }), SETTINGS),
+    ).toEqual(['1:02:05']);
+  });
+
+  it('describes the stream with bitrate, sample rate, format and release data', () => {
+    const rows = tooltipRows(
+      ['album', 'year', 'track', 'genre', 'bitrate', 'sampleRate', 'audioFormat'],
+      track,
+      summary({
+        album: 'Kind of Blue',
+        year: 1959,
+        trackNumber: 1,
+        genre: 'Jazz',
+        bitrateKbps: 935,
+        sampleRateHz: 44_100,
+        audioFormat: 'flac',
+      }),
+      SETTINGS,
+    );
+
+    expect(rows.map((row) => row.value)).toEqual([
+      'Kind of Blue',
+      '1959',
+      '1',
+      'Jazz',
+      '935 kbps',
+      '44.1 kHz',
+      'FLAC',
+    ]);
+  });
+
+  it('describes a video with its dimensions, frame rate and codec', () => {
+    const clip = entry({ name: 'clip.mp4', extension: 'mp4' });
+    const rows = tooltipRows(
+      ['dimensions', 'duration', 'frameRate', 'videoCodec'],
+      clip,
+      summary({
+        width: 1920,
+        height: 1080,
+        durationSeconds: 61,
+        frameRate: 29.97,
+        videoCodec: 'H264',
+      }),
+      SETTINGS,
+    );
+
+    expect(rows.map((row) => row.value)).toEqual(['1920 × 1080', '1:01', '30 fps', 'H264']);
+  });
+});

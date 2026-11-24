@@ -30,7 +30,19 @@ export type ImageFieldId =
   | 'focalLength'
   | 'whiteBalance'
   | 'flash'
-  | 'rating';
+  | 'rating'
+  | 'title'
+  | 'artist'
+  | 'album'
+  | 'genre'
+  | 'year'
+  | 'track'
+  | 'duration'
+  | 'bitrate'
+  | 'sampleRate'
+  | 'audioFormat'
+  | 'frameRate'
+  | 'videoCodec';
 
 /** A field renders to its value, or `undefined` when the file has none, so nothing blank shows. */
 type FieldFormatter = (context: FieldContext) => string | undefined;
@@ -81,6 +93,18 @@ function wallClock(takenAt: string, settings: EntryFormatSettings): string | und
   return formatEntryModifiedAt(instant.toISOString(), { ...settings, timeZone: 'UTC' });
 }
 
+const SECONDS_PER_MINUTE = 60;
+const SECONDS_PER_HOUR = 3_600;
+
+/** Playing time as `m:ss`, or `h:mm:ss` from one hour on. */
+function playingTime(totalSeconds: number): string {
+  const seconds = Math.round(totalSeconds);
+  const hours = Math.floor(seconds / SECONDS_PER_HOUR);
+  const minutes = Math.floor((seconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
+  const rest = String(seconds % SECONDS_PER_MINUTE).padStart(2, '0');
+  return hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${rest}` : `${minutes}:${rest}`;
+}
+
 const MAX_RATING = 5;
 
 function rating({ summary }: FieldContext): string | undefined {
@@ -127,6 +151,26 @@ const FORMATTERS: Readonly<Record<ImageFieldId, FieldFormatter>> = {
   exposure,
   rating,
   camera: ({ summary }) => summary?.camera ?? undefined,
+  title: ({ summary }) => summary?.title ?? undefined,
+  artist: ({ summary }) => summary?.artist ?? undefined,
+  album: ({ summary }) => summary?.album ?? undefined,
+  genre: ({ summary }) => summary?.genre ?? undefined,
+  year: ({ summary }) => (summary?.year == null ? undefined : String(summary.year)),
+  track: ({ summary }) => (summary?.trackNumber == null ? undefined : String(summary.trackNumber)),
+  duration: ({ summary }) =>
+    summary?.durationSeconds == null || summary.durationSeconds <= 0
+      ? undefined
+      : playingTime(summary.durationSeconds),
+  bitrate: ({ summary }) =>
+    summary?.bitrateKbps == null ? undefined : `${summary.bitrateKbps} kbps`,
+  sampleRate: ({ summary, settings }) =>
+    summary?.sampleRateHz == null
+      ? undefined
+      : `${number(summary.sampleRateHz / 1000, settings)} kHz`,
+  audioFormat: ({ summary }) => summary?.audioFormat?.toLocaleUpperCase() || undefined,
+  frameRate: ({ summary, settings }) =>
+    summary?.frameRate == null ? undefined : `${number(summary.frameRate, settings)} fps`,
+  videoCodec: ({ summary }) => summary?.videoCodec ?? undefined,
 };
 
 /** The chosen fields the file has, in order; empty ones are dropped so nothing renders blank. */
@@ -180,6 +224,10 @@ export const CAPTION_FIELD_CHOICES: readonly ImageFieldId[] = [
   'camera',
   'exposure',
   'rating',
+  'artist',
+  'title',
+  'album',
+  'duration',
 ];
 
 /** Fields the tooltip table can show, in display order. */
@@ -197,6 +245,18 @@ export const TOOLTIP_FIELD_CHOICES: readonly ImageFieldId[] = [
   'whiteBalance',
   'flash',
   'rating',
+  'title',
+  'artist',
+  'album',
+  'genre',
+  'year',
+  'track',
+  'duration',
+  'bitrate',
+  'sampleRate',
+  'audioFormat',
+  'frameRate',
+  'videoCodec',
 ];
 
 /** Keeps the ids this build knows, so a setting written by a newer version cannot break rendering. */

@@ -176,7 +176,8 @@ pub struct ReadImageSummariesRequestDto {
     pub locations: Vec<LocationDto>,
 }
 
-/// Display summary of one image. Values are typed, not formatted, so the UI can localize units.
+/// Display summary of one picture, audio track or video: the fields that do not apply to the
+/// file's kind stay absent. Values are typed, not formatted, so the UI can localize units.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ImageSummaryEntryDto {
@@ -221,6 +222,42 @@ pub struct ImageSummaryEntryDto {
     /// XMP rating 0-5.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rating: Option<u8>,
+    /// Playing time in seconds (audio and video).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_seconds: Option<f64>,
+    /// Frames per second (video).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame_rate: Option<f64>,
+    /// Video codec, for example `H264`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video_codec: Option<String>,
+    /// Track title (audio).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Track artist (audio).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artist: Option<String>,
+    /// Album title (audio).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub album: Option<String>,
+    /// Genre (audio).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub genre: Option<String>,
+    /// Release year (audio).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub year: Option<u32>,
+    /// Track number on the disc (audio).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_number: Option<u32>,
+    /// Overall bitrate in kilobits per second (audio).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bitrate_kbps: Option<u32>,
+    /// Sampling rate in hertz (audio).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sample_rate_hz: Option<u32>,
+    /// Container or codec family of an audio file, for example `flac`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio_format: Option<String>,
     /// True when the file could not be read (missing, unreadable).
     #[serde(default)]
     pub unreadable: bool,

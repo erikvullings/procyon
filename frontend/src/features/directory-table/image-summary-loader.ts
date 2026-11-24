@@ -7,7 +7,9 @@ import { isParentEntry } from '../panes/parent-entry';
 
 type SummaryClient = Pick<WorkspaceClient, 'readImageSummaries'>;
 
-/** Formats the backend reads headers and EXIF from (SVG is vector markup, not a photo). */
+/** Formats the backend summarises: pictures (headers and EXIF; SVG is vector markup, not a
+ * photo), audio (tags and stream properties) and MP4/MOV video (container header). Mirrors
+ * `fm_metadata::SUPPORTED_AUDIO_EXTENSIONS` and `SUPPORTED_VIDEO_EXTENSIONS`. */
 const SUMMARY_EXTENSIONS = new Set([
   'jpg',
   'jpeg',
@@ -19,6 +21,22 @@ const SUMMARY_EXTENSIONS = new Set([
   'heic',
   'heif',
   'avif',
+  'mp3',
+  'flac',
+  'm4a',
+  'aac',
+  'ogg',
+  'oga',
+  'opus',
+  'wav',
+  'wma',
+  'ape',
+  'wv',
+  'aiff',
+  'aif',
+  'mp4',
+  'm4v',
+  'mov',
 ]);
 
 /** The backend rejects larger batches (`MAX_SUMMARY_LOCATIONS`). */
@@ -41,8 +59,8 @@ interface Batch {
   readonly controller: AbortController;
 }
 
-/** True for files whose picture metadata the backend can read. */
-export function isImageEntry(entry: EntrySummary): boolean {
+/** True for files whose picture, audio or video metadata the backend can read. */
+export function isMediaEntry(entry: EntrySummary): boolean {
   return (
     entry.kind === 'file' &&
     !isParentEntry(entry.id) &&
@@ -81,7 +99,7 @@ export class ImageSummaryLoader {
     entry: EntrySummary,
     subscriber: symbol = UNSCOPED_SUBSCRIBER,
   ): ImageSummary | undefined {
-    if (!isImageEntry(entry)) return undefined;
+    if (!isMediaEntry(entry)) return undefined;
     const key = summaryKey(entry);
     if (this.cache.has(key)) return this.cache.get(key);
     const wanted = this.queued.get(key) ?? this.inFlight.get(key);
@@ -169,7 +187,7 @@ export class ImageSummaryViewport {
   }
 
   summaryFor(entry: EntrySummary): ImageSummary | undefined {
-    if (isImageEntry(entry)) this.currentKeys.add(summaryKey(entry));
+    if (isMediaEntry(entry)) this.currentKeys.add(summaryKey(entry));
     return this.loader.summaryFor(entry, this.subscriber);
   }
 

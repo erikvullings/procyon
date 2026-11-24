@@ -649,6 +649,18 @@ impl Default for PictureInfoSettings {
                 "whiteBalance",
                 "flash",
                 "rating",
+                "title",
+                "artist",
+                "album",
+                "genre",
+                "year",
+                "track",
+                "duration",
+                "bitrate",
+                "sampleRate",
+                "audioFormat",
+                "frameRate",
+                "videoCodec",
             ]),
         }
     }

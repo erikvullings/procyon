@@ -22,9 +22,12 @@ export const ENGLISH_IDENTICAL_ALLOWLIST: Readonly<Record<string, Allowlisted>> 
   'connections.webDavAuthBasic': 'all',
   'connections.webDavAuthDigest': 'all',
   // "Style" and "Source" are the same words in French.
+  'imageMeta.album': ['nl', 'de', 'fr', 'it', 'pl'],
+  'imageMeta.bitrate': ['nl', 'de', 'it'],
   'imageMeta.camera': ['nl'],
   'imageMeta.dimensions': ['fr'],
   'imageMeta.flash': ['fr', 'es', 'it', 'pt'],
+  'imageMeta.genre': ['nl', 'de', 'fr'],
   'imageMeta.iso': ['nl', 'de', 'fr', 'es', 'it', 'pt', 'pl'],
   'imageMeta.whiteBalanceManual': ['es', 'pt'],
   'image.seedPlaceholder': ['nl', 'fr', 'es', 'it', 'pt', 'pl'],

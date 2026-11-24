@@ -1635,6 +1635,18 @@ export const nl = {
     whiteBalance: 'Witbalans',
     flash: 'Flits',
     rating: 'Beoordeling',
+    title: 'Titel',
+    artist: 'Artiest',
+    album: 'Album',
+    genre: 'Genre',
+    year: 'Jaar',
+    track: 'Nummer',
+    duration: 'Duur',
+    bitrate: 'Bitrate',
+    sampleRate: 'Samplefrequentie',
+    audioFormat: 'Audioformaat',
+    frameRate: 'Framesnelheid',
+    videoCodec: 'Videocodec',
     exposure: 'Belichting',
     flashFired: 'Flits afgegaan',
     flashOff: 'Geen flits',
@@ -2494,6 +2506,7 @@ export const nl = {
     advanced: 'Geavanceerde instellingen',
     contextWindow: 'Contextvenster',
     maximumAnswerTokens: 'Maximum aantal antwoordtokens',
+    noAnswerLimit: 'Geen limiet',
     customLimit: 'Aangepast…',
     currentLimit: 'Huidig: {tokens} tokens',
     customContextWindow: 'Aangepast aantal contexttokens',
@@ -2501,7 +2514,7 @@ export const nl = {
     contextLimitHint:
       'Maximaal aantal invoer- en uitvoertokens samen. Kies een limiet die je model ondersteunt; hogere limieten kunnen meer geheugen gebruiken.',
     outputLimitHint:
-      'Maximale lengte van het gegenereerde antwoord. Dit telt ook mee voor het contextvenster.',
+      'Maximum per antwoord. Geen limiet is het beste: een begrensd antwoord wordt afgekapt. Stel er alleen een in om kosten te beperken.',
     modelLimitsUnknown:
       'De modellimieten konden niet worden bepaald. Dit zijn veilige startwaarden; controleer je model voordat je ze verhoogt.',
     modelLimitsKnown:

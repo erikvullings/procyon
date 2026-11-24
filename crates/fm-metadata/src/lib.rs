@@ -13,6 +13,7 @@ mod pdf;
 mod photo;
 mod thumbnail;
 mod video;
+mod video_info;
 
 pub use audio::{
     AudioInfo, AudioReadError, SUPPORTED_AUDIO_EXTENSIONS, is_supported_audio_extension,
@@ -37,3 +38,4 @@ pub use video::{
     SUPPORTED_VIDEO_EXTENSIONS, SampledVideoFrame, VideoSamplingError, generate_video_thumbnail,
     is_supported_video_extension, sample_video_frames, sample_video_frames_cancellable,
 };
+pub use video_info::{VideoInfo, read_video_info};

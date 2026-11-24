@@ -699,20 +699,48 @@ export class MockWorkspaceClient implements WorkspaceClient {
     locations: readonly Location[],
     signal?: AbortSignal,
   ): Promise<ImageSummary[]> {
-    // Deterministic fake: a 4000x3000 24-bit photo from a fictional camera.
+    // Deterministic fakes: a 4000x3000 24-bit photo from a fictional camera, a track, or a clip.
     return this.ctx.perform('readImageSummaries', signal, () =>
-      locations.map((location) => ({
-        location,
-        width: 4000,
-        height: 3000,
-        bitDepth: 24,
-        takenAt: '2024-03-05T14:07:09',
-        camera: 'ACME Cam 9000',
-        aperture: 2.8,
-        shutterSeconds: 0.004,
-        iso: 400,
-        focalLengthMm: 35,
-      })),
+      locations.map((location) => {
+        const extension = location.uri.split('.').pop()?.toLowerCase() ?? '';
+        if (['mp3', 'flac', 'm4a', 'wav', 'ogg'].includes(extension)) {
+          return {
+            location,
+            title: 'So What',
+            artist: 'Miles Davis',
+            album: 'Kind of Blue',
+            genre: 'Jazz',
+            year: 1959,
+            trackNumber: 1,
+            durationSeconds: 562,
+            bitrateKbps: 935,
+            sampleRateHz: 44_100,
+            audioFormat: extension,
+          };
+        }
+        if (['mp4', 'mov', 'm4v'].includes(extension)) {
+          return {
+            location,
+            width: 1920,
+            height: 1080,
+            durationSeconds: 61,
+            frameRate: 29.97,
+            videoCodec: 'H264',
+          };
+        }
+        return {
+          location,
+          width: 4000,
+          height: 3000,
+          bitDepth: 24,
+          takenAt: '2024-03-05T14:07:09',
+          camera: 'ACME Cam 9000',
+          aperture: 2.8,
+          shutterSeconds: 0.004,
+          iso: 400,
+          focalLengthMm: 35,
+        };
+      }),
     );
   }
 

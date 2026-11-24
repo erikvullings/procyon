@@ -17180,11 +17180,18 @@
       },
       "ImageSummaryEntryDto": {
         "type": "object",
-        "description": "Display summary of one image. Values are typed, not formatted, so the UI can localize units.",
+        "description": "Display summary of one picture, audio track or video: the fields that do not apply to the\nfile's kind stay absent. Values are typed, not formatted, so the UI can localize units.",
         "required": [
           "location"
         ],
         "properties": {
+          "album": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Album title (audio)."
+          },
           "aperture": {
             "type": [
               "number",
@@ -17192,6 +17199,20 @@
             ],
             "format": "double",
             "description": "Aperture as an f-number, for example 2.8."
+          },
+          "artist": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Track artist (audio)."
+          },
+          "audioFormat": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Container or codec family of an audio file, for example `flac`."
           },
           "bitDepth": {
             "type": [
@@ -17202,12 +17223,29 @@
             "description": "Bits per pixel (for example 24 for 8-bit RGB) when known.",
             "minimum": 0
           },
+          "bitrateKbps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Overall bitrate in kilobits per second (audio).",
+            "minimum": 0
+          },
           "camera": {
             "type": [
               "string",
               "null"
             ],
             "description": "Camera maker and model as one label."
+          },
+          "durationSeconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Playing time in seconds (audio and video)."
           },
           "exposureBiasEv": {
             "type": [
@@ -17231,6 +17269,21 @@
             ],
             "format": "double",
             "description": "Focal length in millimetres."
+          },
+          "frameRate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Frames per second (video)."
+          },
+          "genre": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Genre (audio)."
           },
           "height": {
             "type": [
@@ -17263,6 +17316,15 @@
             "description": "XMP rating 0-5.",
             "minimum": 0
           },
+          "sampleRateHz": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Sampling rate in hertz (audio).",
+            "minimum": 0
+          },
           "shutterSeconds": {
             "type": [
               "number",
@@ -17278,9 +17340,32 @@
             ],
             "description": "Capture time as `YYYY-MM-DDTHH:MM:SS` (no time zone) when recorded."
           },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Track title (audio)."
+          },
+          "trackNumber": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Track number on the disc (audio).",
+            "minimum": 0
+          },
           "unreadable": {
             "type": "boolean",
             "description": "True when the file could not be read (missing, unreadable)."
+          },
+          "videoCodec": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Video codec, for example `H264`."
           },
           "whiteBalanceAuto": {
             "type": [
@@ -17296,6 +17381,15 @@
             ],
             "format": "int32",
             "description": "Pixel width when it could be read from the header.",
+            "minimum": 0
+          },
+          "year": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Release year (audio).",
             "minimum": 0
           }
         }
@@ -19582,7 +19676,6 @@
         "description": "Conservative generation and transport settings.",
         "required": [
           "contextWindow",
-          "maximumAnswerTokens",
           "temperature",
           "timeoutSeconds",
           "tlsPolicy",
@@ -19604,8 +19697,12 @@
             }
           },
           "maximumAnswerTokens": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
+            "description": "A cap on each answer's tokens; `null` sends none, so answers are never cut off.",
             "minimum": 0
           },
           "temperature": {

@@ -168,6 +168,18 @@ export const DEFAULT_PICTURE_INFO_SETTINGS: PictureInfoSettings = {
     'whiteBalance',
     'flash',
     'rating',
+    'title',
+    'artist',
+    'album',
+    'genre',
+    'year',
+    'track',
+    'duration',
+    'bitrate',
+    'sampleRate',
+    'audioFormat',
+    'frameRate',
+    'videoCodec',
   ],
 };
 

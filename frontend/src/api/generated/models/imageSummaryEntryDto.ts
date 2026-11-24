@@ -5,14 +5,30 @@
 import type { LocationDto } from './locationDto.ts';
 
 /**
- * Display summary of one image. Values are typed, not formatted, so the UI can localize units.
+ * Display summary of one picture, audio track or video: the fields that do not apply to the
+ * file's kind stay absent. Values are typed, not formatted, so the UI can localize units.
  */
 export interface ImageSummaryEntryDto {
+  /**
+     * Album title (audio).
+     * @nullable
+     */
+  album?: string | null;
   /**
      * Aperture as an f-number, for example 2.8.
      * @nullable
      */
   aperture?: number | null;
+  /**
+     * Track artist (audio).
+     * @nullable
+     */
+  artist?: string | null;
+  /**
+     * Container or codec family of an audio file, for example `flac`.
+     * @nullable
+     */
+  audioFormat?: string | null;
   /**
      * Bits per pixel (for example 24 for 8-bit RGB) when known.
      * @minimum 0
@@ -20,10 +36,21 @@ export interface ImageSummaryEntryDto {
      */
   bitDepth?: number | null;
   /**
+     * Overall bitrate in kilobits per second (audio).
+     * @minimum 0
+     * @nullable
+     */
+  bitrateKbps?: number | null;
+  /**
      * Camera maker and model as one label.
      * @nullable
      */
   camera?: string | null;
+  /**
+     * Playing time in seconds (audio and video).
+     * @nullable
+     */
+  durationSeconds?: number | null;
   /**
      * Exposure bias in EV steps.
      * @nullable
@@ -39,6 +66,16 @@ export interface ImageSummaryEntryDto {
      * @nullable
      */
   focalLengthMm?: number | null;
+  /**
+     * Frames per second (video).
+     * @nullable
+     */
+  frameRate?: number | null;
+  /**
+     * Genre (audio).
+     * @nullable
+     */
+  genre?: string | null;
   /**
      * Pixel height when it could be read from the header.
      * @minimum 0
@@ -60,6 +97,12 @@ export interface ImageSummaryEntryDto {
      */
   rating?: number | null;
   /**
+     * Sampling rate in hertz (audio).
+     * @minimum 0
+     * @nullable
+     */
+  sampleRateHz?: number | null;
+  /**
      * Exposure time in seconds, for example 0.004 for 1/250 s.
      * @nullable
      */
@@ -69,8 +112,24 @@ export interface ImageSummaryEntryDto {
      * @nullable
      */
   takenAt?: string | null;
+  /**
+     * Track title (audio).
+     * @nullable
+     */
+  title?: string | null;
+  /**
+     * Track number on the disc (audio).
+     * @minimum 0
+     * @nullable
+     */
+  trackNumber?: number | null;
   /** True when the file could not be read (missing, unreadable). */
   unreadable?: boolean;
+  /**
+     * Video codec, for example `H264`.
+     * @nullable
+     */
+  videoCodec?: string | null;
   /**
      * True for automatic white balance, false for manual.
      * @nullable
@@ -82,4 +141,10 @@ export interface ImageSummaryEntryDto {
      * @nullable
      */
   width?: number | null;
+  /**
+     * Release year (audio).
+     * @minimum 0
+     * @nullable
+     */
+  year?: number | null;
 }

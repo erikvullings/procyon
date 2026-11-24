@@ -2,7 +2,7 @@ import m from 'mithril';
 import { t } from '../../i18n';
 import type { EntrySummary } from '../../models';
 import { type ImageFieldId, tooltipRows } from './image-caption';
-import { isImageEntry } from './image-summary-loader';
+import { isMediaEntry } from './image-summary-loader';
 import type { GridPictureInfo } from './picture-info';
 import type { ThumbnailLoader } from './thumbnail-loader';
 import './picture-tooltip.css';
@@ -63,22 +63,26 @@ function view(shown: ShownTooltip): m.Children {
   );
 }
 
+/** Keys that only prepare a shortcut; pressing one must not dismiss the tooltip. */
+const MODIFIER_KEYS: ReadonlySet<string> = new Set(['Shift', 'Control', 'Alt', 'Meta']);
+
 /**
- * The hover tooltip of picture tiles (task 0347). One instance serves every grid: hovering a tile
- * starts a timer, the tooltip appears after the configured delay, and it goes away on leaving the
- * tile, scrolling, any pointer press (which may start a drag) or Escape. Hover state is local to
- * this controller; only the settings live in the state tree.
+ * The info tooltip of pictures, tracks and videos (task 0347), shown by hovering a grid tile or a
+ * table name cell, or on demand for the cursor entry from the keyboard. One instance serves
+ * every pane: hovering starts a timer and the tooltip appears after the configured delay; it
+ * goes away on leaving the anchor, scrolling, any pointer press (which may start a drag) or any
+ * key. Hover state is local to this controller; only the settings live in the state tree.
  */
 export class PictureTooltipController {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private shown: ShownTooltip | undefined;
   private root: HTMLElement | undefined;
   private readonly dismiss = (): void => this.hide();
-  private readonly dismissOnEscape = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape') this.hide();
+  private readonly dismissOnKey = (event: KeyboardEvent): void => {
+    if (!MODIFIER_KEYS.has(event.key)) this.hide();
   };
 
-  /** Arms the tooltip for `entry`; ignored for non-pictures and while a button is held. */
+  /** Arms the tooltip for `entry`; ignored for unsupported files and while a button is held. */
   schedule(
     entry: EntrySummary,
     anchor: HTMLElement,
@@ -88,11 +92,31 @@ export class PictureTooltipController {
   ): void {
     this.hide();
     if (info === undefined || !info.tooltip.enabled || buttonsPressed !== 0) return;
-    if (!isImageEntry(entry)) return;
+    if (!isMediaEntry(entry)) return;
     this.timer = setTimeout(() => {
       this.timer = undefined;
       this.show({ entry, info, thumbnails, ...placement(anchor.getBoundingClientRect()) });
     }, info.tooltip.delayMs);
+  }
+
+  /**
+   * Shows the tooltip for `entry` at once, ignoring the hover delay and the hover setting: the
+   * user asked for it. A second call for the same entry hides it again. Returns whether the
+   * entry is one the tooltip can describe.
+   */
+  toggle(
+    entry: EntrySummary,
+    anchor: HTMLElement,
+    info: GridPictureInfo | undefined,
+    thumbnails: ThumbnailLoader | undefined,
+  ): boolean {
+    if (info === undefined || !isMediaEntry(entry)) return false;
+    const wasShowingThis = this.shown?.entry.id === entry.id;
+    this.hide();
+    if (!wasShowingThis) {
+      this.show({ entry, info, thumbnails, ...placement(anchor.getBoundingClientRect()) });
+    }
+    return true;
   }
 
   hide(): void {
@@ -102,7 +126,7 @@ export class PictureTooltipController {
     }
     if (this.shown === undefined) return;
     this.shown = undefined;
-    document.removeEventListener('keydown', this.dismissOnEscape, true);
+    document.removeEventListener('keydown', this.dismissOnKey, true);
     document.removeEventListener('pointerdown', this.dismiss, true);
     document.removeEventListener('scroll', this.dismiss, true);
     document.removeEventListener('dragstart', this.dismiss, true);
@@ -117,7 +141,7 @@ export class PictureTooltipController {
       m.mount(this.root, { view: () => (this.shown === undefined ? null : view(this.shown)) });
     }
     this.shown = tooltip;
-    document.addEventListener('keydown', this.dismissOnEscape, true);
+    document.addEventListener('keydown', this.dismissOnKey, true);
     document.addEventListener('pointerdown', this.dismiss, true);
     document.addEventListener('scroll', this.dismiss, true);
     document.addEventListener('dragstart', this.dismiss, true);

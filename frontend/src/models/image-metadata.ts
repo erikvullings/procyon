@@ -40,7 +40,8 @@ export interface ImageGpsEntry {
   readonly unreadable?: boolean;
 }
 
-/** Display summary of one image for grid captions and tooltips (task 0347); values are typed. */
+/** Display summary of one picture, track or video for grid captions and tooltips (task 0347);
+ * values are typed and fields not applying to the file's kind are absent. */
 export interface ImageSummary {
   readonly location: Location;
   readonly width?: number | null;
@@ -61,6 +62,19 @@ export interface ImageSummary {
   readonly whiteBalanceAuto?: boolean | null;
   /** XMP rating 0-5. */
   readonly rating?: number | null;
+  /** Playing time in seconds (audio and video). */
+  readonly durationSeconds?: number | null;
+  readonly frameRate?: number | null;
+  readonly videoCodec?: string | null;
+  readonly title?: string | null;
+  readonly artist?: string | null;
+  readonly album?: string | null;
+  readonly genre?: string | null;
+  readonly year?: number | null;
+  readonly trackNumber?: number | null;
+  readonly bitrateKbps?: number | null;
+  readonly sampleRateHz?: number | null;
+  readonly audioFormat?: string | null;
   /** True when the file could not be read. */
   readonly unreadable?: boolean;
 }

@@ -31,6 +31,8 @@ import { entryIcon } from './entry-icons';
 import { finderTagColorSwatch } from './finder-tag-colors';
 import type { FinderTagsLoader } from './finder-tags-loader';
 import type { NativeIconLoader } from './native-icon-loader';
+import type { GridPictureInfo } from './picture-info';
+import { pictureTooltip } from './picture-tooltip';
 import type { ThumbnailLoader } from './thumbnail-loader';
 import { calculateVisibleWindow, scrollOffsetForIndex } from './windowing';
 import './directory-table.css';
@@ -212,6 +214,8 @@ export interface DirectoryTableAttrs {
   readonly nativeIconLoader?: NativeIconLoader;
   /** Overlays a downscaled preview onto the icon column for supported files (task 0134). */
   readonly thumbnailLoader?: ThumbnailLoader;
+  /** Info tooltip of pictures, tracks and videos on the name cell (task 0347). */
+  readonly pictureInfo?: GridPictureInfo;
   /** Suppresses previews for results whose indexed source is stale or unavailable. */
   readonly thumbnailAllowed?: (entry: EntrySummary) => boolean;
   /** Overlays Finder-tag color dots next to the name for supported hosts (task 0136). */
@@ -977,6 +981,7 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
       resizeObserver?.disconnect();
       stopColumnResize?.();
       unregisterPointerDropTarget?.();
+      pictureTooltip.hide();
     },
     view: ({ attrs }) => {
       currentAttrs = attrs;
@@ -1225,7 +1230,25 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
               columns.map((column) =>
                 m(
                   `.fm-directory-cell.${column.cellClass}`,
-                  { key: column.id, role: 'gridcell' },
+                  {
+                    key: column.id,
+                    role: 'gridcell',
+                    ...(column.id === 'core.name'
+                      ? {
+                          onpointerenter: (event: PointerEvent) =>
+                            pictureTooltip.schedule(
+                              entry,
+                              event.currentTarget as HTMLElement,
+                              attrs.pictureInfo,
+                              attrs.thumbnailAllowed?.(entry) === false
+                                ? undefined
+                                : attrs.thumbnailLoader,
+                              event.buttons,
+                            ),
+                          onpointerleave: () => pictureTooltip.hide(),
+                        }
+                      : {}),
+                  },
                   column.id === 'core.name' && attrs.renamingEntryId === entry.id
                     ? [
                         listEntryIcon(
