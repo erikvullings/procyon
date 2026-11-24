@@ -137,6 +137,40 @@ export interface FileTemplateEntry {
   readonly sourceName: string | null;
 }
 
+/** Which picture facts grid tiles and hover tooltips show (task 0347). Ids the field registry
+ * does not know are ignored. */
+export interface PictureInfoSettings {
+  /** Fields shown as extra lines under a grid tile's name; empty shows only the name. */
+  readonly captionFields: readonly string[];
+  readonly tooltipEnabled: boolean;
+  /** Hover time before the tooltip appears, in milliseconds. */
+  readonly tooltipDelayMs: number;
+  /** Fields listed in the tooltip's table. */
+  readonly tooltipFields: readonly string[];
+}
+
+/** Mirrors the backend default: size and dimensions under thumbnails, tooltip after 600 ms. */
+export const DEFAULT_PICTURE_INFO_SETTINGS: PictureInfoSettings = {
+  captionFields: ['size', 'dimensions'],
+  tooltipEnabled: true,
+  tooltipDelayMs: 600,
+  tooltipFields: [
+    'size',
+    'dimensions',
+    'modified',
+    'dateTaken',
+    'camera',
+    'aperture',
+    'shutterSpeed',
+    'iso',
+    'exposureBias',
+    'focalLength',
+    'whiteBalance',
+    'flash',
+    'rating',
+  ],
+};
+
 /** Versioned application-wide settings returned by both backend transports. */
 export interface Settings {
   readonly schemaVersion: number;
@@ -181,6 +215,8 @@ export interface Settings {
   readonly checkForBetaUpdates: boolean;
   /** Opens F3 in its own window instead of a tab in the active pane. */
   readonly viewerInSeparateWindow: boolean;
+  /** Picture captions under grid tiles and hover tooltips (task 0347). */
+  readonly pictureInfo: PictureInfoSettings;
   /** Largest source file semantic indexing reads, in MiB; 0 means no limit. */
   readonly semanticMaxSourceMib: number;
   /** Indexed roots the themes view analyses; empty means the whole library (task 0298). */

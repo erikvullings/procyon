@@ -14,8 +14,18 @@ import {
   type DirectoryEntrySource,
 } from './directory-table';
 import { entryIcon } from './entry-icons';
+import {
+  CAPTION_LINE_HEIGHT_PX,
+  captionBlockHeight,
+  captionFieldsFor,
+  captionLines,
+  needsImageSummary,
+} from './image-caption';
+import type { ImageSummaryViewport } from './image-summary-loader';
 import type { NativeIconLoader } from './native-icon-loader';
 import { type GridLine, layoutPhotoLines } from './photo-grouping';
+import type { GridPictureInfo } from './picture-info';
+import { pictureTooltip } from './picture-tooltip';
 import type { ThumbnailLoader, ThumbnailSize, ThumbnailViewport } from './thumbnail-loader';
 import { calculateVisibleWindow } from './windowing';
 import './directory-grid.css';
@@ -61,6 +71,8 @@ export interface DirectoryGridAttrs {
   readonly nativeIconLoader?: NativeIconLoader;
   readonly thumbnailLoader?: ThumbnailLoader;
   readonly thumbnailAllowed?: (entry: EntrySummary) => boolean;
+  /** Caption lines under tiles and the hover tooltip (task 0347). */
+  readonly pictureInfo?: GridPictureInfo;
   /** How folders with cover art are drawn (task 0346); folders keep the plain icon when `off`. */
   readonly folderThumbnails?: FolderThumbnailStyle;
   readonly onCursorChange?: (index: number, modifiers?: CursorClickModifiers) => void;
@@ -138,6 +150,8 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
   let scrollTop = 0;
   let thumbnailLoader: ThumbnailLoader | undefined;
   let thumbnailViewport: ThumbnailViewport | undefined;
+  let summaryViewport: ImageSummaryViewport | undefined;
+  let summaryLoaderInUse: GridPictureInfo['summaryLoader'] | undefined;
 
   function renderTile(
     attrs: DirectoryGridAttrs,
@@ -164,6 +178,16 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
     const cdCase =
       thumbnailDataUri !== undefined && entry.kind === 'directory' && folderStyle === 'cdCase';
     const nativeIconDataUri = attrs.nativeIconLoader?.iconDataUri(entry);
+    const captionFields = captionFieldsFor(size, attrs.pictureInfo?.captionFields);
+    const captions =
+      attrs.pictureInfo === undefined || captionFields.length === 0
+        ? []
+        : captionLines(
+            captionFields,
+            entry,
+            needsImageSummary(captionFields) ? summaryViewport?.summaryFor(entry) : undefined,
+            attrs.pictureInfo.formatSettings,
+          );
     return m(
       '.fm-grid-tile',
       {
@@ -179,6 +203,15 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
               ? undefined
               : true,
         ondragstart: (event: DragEvent) => attrs.onDragStart?.(index, event),
+        onpointerenter: (event: PointerEvent) =>
+          pictureTooltip.schedule(
+            entry,
+            event.currentTarget as HTMLElement,
+            attrs.pictureInfo,
+            attrs.thumbnailLoader,
+            event.buttons,
+          ),
+        onpointerleave: () => pictureTooltip.hide(),
         onpointerdown: (event: PointerEvent) => {
           if (attrs.onPointerDragStart === undefined) return;
           beginPointerFileDrag(event, {
@@ -244,6 +277,13 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
             ? undefined
             : m('span.fm-source-state', ` · ${activeSourceLabel(activeSource)}`),
         ]),
+        captionFields.length === 0
+          ? undefined
+          : m(
+              '.fm-grid-tile-captions',
+              { style: { height: `${captionFields.length * CAPTION_LINE_HEIGHT_PX}px` } },
+              captions.map((line) => m('span.fm-grid-tile-caption', { title: line }, line)),
+            ),
       ],
     );
   }
@@ -251,6 +291,8 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
   return {
     onremove: () => {
       thumbnailViewport?.dispose();
+      summaryViewport?.dispose();
+      pictureTooltip.hide();
       unregisterPointerDropTarget?.();
     },
     view: ({ attrs }) => {
@@ -261,10 +303,20 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
         thumbnailViewport = thumbnailLoader?.createViewport();
       }
       thumbnailViewport?.beginFrame();
+      if (attrs.pictureInfo?.summaryLoader !== summaryLoaderInUse) {
+        summaryViewport?.dispose();
+        summaryLoaderInUse = attrs.pictureInfo?.summaryLoader;
+        summaryViewport = summaryLoaderInUse?.createViewport();
+      }
+      summaryViewport?.beginFrame();
       const state = stateView(attrs);
       const source = attrs.source;
       const size: GridIconSize = attrs.iconSize ?? 'medium';
-      const { width: tileWidth, height: tileHeight } = tileDimensions(element);
+      const { width: tileWidth, height: baseTileHeight } = tileDimensions(element);
+      // Captions make every tile the same amount taller; the small size shows none.
+      const tileHeight =
+        baseTileHeight +
+        captionBlockHeight(captionFieldsFor(size, attrs.pictureInfo?.captionFields).length);
       const viewportHeight =
         attrs.viewportHeight ?? (element?.clientHeight || DEFAULT_VIEWPORT_HEIGHT);
       const viewportWidth = element?.clientWidth || DEFAULT_VIEWPORT_WIDTH;
@@ -371,6 +423,7 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
       }
       if (sawUnloadedEntry) attrs.onEndReached?.();
       thumbnailViewport?.endFrame();
+      summaryViewport?.endFrame();
 
       return m('.fm-directory-grid', { class: `fm-grid-icon-size-${size}` }, [
         state,
@@ -390,6 +443,7 @@ export const DirectoryGrid: FactoryComponent<DirectoryGridAttrs> = () => {
             onscroll: (event: UIEvent) => {
               const target = event.currentTarget as HTMLElement;
               scrollTop = target.scrollTop;
+              pictureTooltip.hide();
               const nearBottom =
                 target.scrollTop + target.clientHeight >= target.scrollHeight - tileHeight * 2;
               if (nearBottom) attrs.onEndReached?.();

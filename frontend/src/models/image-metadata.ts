@@ -40,6 +40,31 @@ export interface ImageGpsEntry {
   readonly unreadable?: boolean;
 }
 
+/** Display summary of one image for grid captions and tooltips (task 0347); values are typed. */
+export interface ImageSummary {
+  readonly location: Location;
+  readonly width?: number | null;
+  readonly height?: number | null;
+  /** Bits per pixel, for example 24 for 8-bit RGB. */
+  readonly bitDepth?: number | null;
+  /** Capture time `YYYY-MM-DDTHH:MM:SS` without a time zone. */
+  readonly takenAt?: string | null;
+  readonly camera?: string | null;
+  /** f-number, for example 2.8. */
+  readonly aperture?: number | null;
+  /** Exposure time in seconds. */
+  readonly shutterSeconds?: number | null;
+  readonly iso?: number | null;
+  readonly focalLengthMm?: number | null;
+  readonly exposureBiasEv?: number | null;
+  readonly flashFired?: boolean | null;
+  readonly whiteBalanceAuto?: boolean | null;
+  /** XMP rating 0-5. */
+  readonly rating?: number | null;
+  /** True when the file could not be read. */
+  readonly unreadable?: boolean;
+}
+
 export interface CaptureTime {
   year: number;
   month: number;

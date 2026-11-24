@@ -1859,6 +1859,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     setThumbnailLoader: (loader) => {
       shellState.thumbnailLoader = loader;
     },
+    setImageSummaryLoader: (loader) => {
+      shellState.imageSummaryLoader = loader;
+    },
     setFinderTagsLoader: (loader) => {
       shellState.finderTagsLoader = loader;
     },
@@ -2622,6 +2625,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     getUnavailableLocations: () => shellState.unavailableLocations,
     getNativeIconLoader: () => shellState.nativeIconLoader,
     getThumbnailLoader: () => shellState.thumbnailLoader,
+    getImageSummaryLoader: () => shellState.imageSummaryLoader,
     getFinderTagsLoader: () => shellState.finderTagsLoader,
     getPlugins: () => shellState.plugins,
     getPlatform: () => shellState.platform,

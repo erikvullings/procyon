@@ -170,8 +170,9 @@ pub use image_generation::{
 };
 pub use image_metadata::{
     CaptureTimeDto, GpsPositionDto, ImageGpsEntryDto, ImageMetadataDto, ImageMetadataEditDto,
-    ImageTagDto, ImageTagGroupDto, ReadImageGpsRequestDto, ReadImageGpsResponseDto,
-    ReadImageMetadataRequestDto,
+    ImageSummaryEntryDto, ImageTagDto, ImageTagGroupDto, ReadImageGpsRequestDto,
+    ReadImageGpsResponseDto, ReadImageMetadataRequestDto, ReadImageSummariesRequestDto,
+    ReadImageSummariesResponseDto,
 };
 pub use image_prompts::ImagePromptDto;
 pub use knowledge::{
@@ -262,10 +263,10 @@ pub use settings::{
     ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto, FavouriteLocationDto, FileTemplateDto,
     FileTemplateEntryDto, FileTemplateSourceDto, FilterCriteriaDto, FilterKindDto, FilterPresetDto,
     FilterToggleDto, LanguageDto, MapBasemapKindDto, MapSettingsDto, MultiRenameCaseTransformDto,
-    MultiRenamePresetDto, MultiRenameRulesDto, MultiRenameSequenceDto, QuickFilterMatchModeDto,
-    SavedSearchDto, SettingsDto, SizeFormatDto, SyncProfileDto, SyncRunOutcomeDto,
-    SyncRunSummaryDto, SyncRunTriggerDto, SyncScheduleConfirmationDto, SyncScheduleDto,
-    TerminalAppDto, TerminalShellIntegrationDto, ThemeDto,
+    MultiRenamePresetDto, MultiRenameRulesDto, MultiRenameSequenceDto, PictureInfoSettingsDto,
+    QuickFilterMatchModeDto, SavedSearchDto, SettingsDto, SizeFormatDto, SyncProfileDto,
+    SyncRunOutcomeDto, SyncRunSummaryDto, SyncRunTriggerDto, SyncScheduleConfirmationDto,
+    SyncScheduleDto, TerminalAppDto, TerminalShellIntegrationDto, ThemeDto,
 };
 pub use snapshot::{DirectorySnapshotDto, LoadingStateDto, VolumeCapacityDto};
 pub use snapshots::{

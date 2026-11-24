@@ -4782,6 +4782,15 @@ impl FileManagerService {
         crate::attribute_change::preview_attribute_change(&self.providers, request).await
     }
 
+    /// Reads a short display summary (size, depth, camera, exposure, rating) of up to 64 images
+    /// from their leading bytes (task 0347).
+    pub async fn read_image_summaries(
+        &self,
+        request: fm_transport_dto::ReadImageSummariesRequestDto,
+    ) -> Result<fm_transport_dto::ReadImageSummariesResponseDto, ApplicationError> {
+        crate::image_summary::read_image_summaries(&self.providers, request).await
+    }
+
     /// Reads every EXIF/GPS/IPTC/XMP/ICC tag of an image from its leading bytes (task 0273).
     pub async fn read_image_metadata(
         &self,

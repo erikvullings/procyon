@@ -167,3 +167,69 @@ pub struct ReadImageGpsResponseDto {
     /// One entry per requested location.
     pub entries: Vec<ImageGpsEntryDto>,
 }
+
+/// Reads a short display summary of many images (`POST /api/v1/files/image-summaries`, task 0347).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadImageSummariesRequestDto {
+    /// Images to read, at most 64 per request.
+    pub locations: Vec<LocationDto>,
+}
+
+/// Display summary of one image. Values are typed, not formatted, so the UI can localize units.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageSummaryEntryDto {
+    /// The image.
+    pub location: LocationDto,
+    /// Pixel width when it could be read from the header.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+    /// Pixel height when it could be read from the header.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
+    /// Bits per pixel (for example 24 for 8-bit RGB) when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bit_depth: Option<u8>,
+    /// Capture time as `YYYY-MM-DDTHH:MM:SS` (no time zone) when recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub taken_at: Option<String>,
+    /// Camera maker and model as one label.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub camera: Option<String>,
+    /// Aperture as an f-number, for example 2.8.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aperture: Option<f64>,
+    /// Exposure time in seconds, for example 0.004 for 1/250 s.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shutter_seconds: Option<f64>,
+    /// ISO sensitivity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub iso: Option<u32>,
+    /// Focal length in millimetres.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focal_length_mm: Option<f64>,
+    /// Exposure bias in EV steps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exposure_bias_ev: Option<f64>,
+    /// Whether the flash fired.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flash_fired: Option<bool>,
+    /// True for automatic white balance, false for manual.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub white_balance_auto: Option<bool>,
+    /// XMP rating 0-5.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rating: Option<u8>,
+    /// True when the file could not be read (missing, unreadable).
+    #[serde(default)]
+    pub unreadable: bool,
+}
+
+/// Summaries in request order.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadImageSummariesResponseDto {
+    /// One entry per requested location.
+    pub entries: Vec<ImageSummaryEntryDto>,
+}

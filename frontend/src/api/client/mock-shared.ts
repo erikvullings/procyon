@@ -155,6 +155,7 @@ export type MockClientMethod =
   | 'parseGeoText'
   | 'readGeoFile'
   | 'readImageGps'
+  | 'readImageSummaries'
   | 'readImageMetadata'
   | 'inspectAttributes'
   | 'inspectSplitSet'

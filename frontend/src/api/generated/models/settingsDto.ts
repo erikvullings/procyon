@@ -11,6 +11,7 @@ import type { FilterPresetDto } from './filterPresetDto.ts';
 import type { LanguageDto } from './languageDto.ts';
 import type { MapSettingsDto } from './mapSettingsDto.ts';
 import type { MultiRenamePresetDto } from './multiRenamePresetDto.ts';
+import type { PictureInfoSettingsDto } from './pictureInfoSettingsDto.ts';
 import type { QuickFilterMatchModeDto } from './quickFilterMatchModeDto.ts';
 import type { SavedSearchDto } from './savedSearchDto.ts';
 import type { SettingsDtoColumnWidths } from './settingsDtoColumnWidths.ts';
@@ -82,6 +83,8 @@ export interface SettingsDto {
      * @minimum 0
      */
   operationConcurrency: number;
+  /** Picture captions under grid tiles and hover tooltips (task 0347). */
+  pictureInfo?: PictureInfoSettingsDto;
   /** Non-secret plugin settings keyed by plugin identifier. */
   pluginSettings: SettingsDtoPluginSettings;
   /** Quick-filter (and type-to-select) match mode; global for every tab (task 0314). */

@@ -606,6 +606,68 @@ fn same_folder(left: &Location, right: &Location) -> bool {
         && left.uri.trim_end_matches('/') == right.uri.trim_end_matches('/')
 }
 
+/// Most field ids kept per picture-info list; the frontend owns the set of known ids.
+const MAX_PICTURE_FIELDS: usize = 32;
+/// Longest field id kept in a picture-info list, in bytes.
+const MAX_PICTURE_FIELD_ID_LEN: usize = 32;
+/// Longest hover-tooltip delay, in milliseconds.
+const MAX_TOOLTIP_DELAY_MS: u32 = 5_000;
+
+/// Which picture facts grid tiles and hover tooltips show (task 0347). Field ids are opaque here:
+/// the frontend's field registry owns them and ignores ids it does not know.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PictureInfoSettings {
+    /// Fields shown as extra lines under a grid tile's name; empty shows only the name.
+    pub caption_fields: Vec<String>,
+    /// Whether hovering a grid tile shows the picture tooltip.
+    pub tooltip_enabled: bool,
+    /// Hover time before the tooltip appears, in milliseconds.
+    pub tooltip_delay_ms: u32,
+    /// Fields listed in the tooltip's table.
+    pub tooltip_fields: Vec<String>,
+}
+
+impl Default for PictureInfoSettings {
+    fn default() -> Self {
+        let ids = |ids: &[&str]| ids.iter().map(|id| (*id).to_owned()).collect();
+        Self {
+            caption_fields: ids(&["size", "dimensions"]),
+            tooltip_enabled: true,
+            tooltip_delay_ms: 600,
+            tooltip_fields: ids(&[
+                "size",
+                "dimensions",
+                "modified",
+                "dateTaken",
+                "camera",
+                "aperture",
+                "shutterSpeed",
+                "iso",
+                "exposureBias",
+                "focalLength",
+                "whiteBalance",
+                "flash",
+                "rating",
+            ]),
+        }
+    }
+}
+
+impl PictureInfoSettings {
+    /// Drops duplicate and oversized field lists and clamps the delay.
+    fn sanitize(&mut self) {
+        for fields in [&mut self.caption_fields, &mut self.tooltip_fields] {
+            let mut seen = std::collections::BTreeSet::new();
+            fields.retain(|id| {
+                !id.is_empty() && id.len() <= MAX_PICTURE_FIELD_ID_LEN && seen.insert(id.clone())
+            });
+            fields.truncate(MAX_PICTURE_FIELDS);
+        }
+        self.tooltip_delay_ms = self.tooltip_delay_ms.min(MAX_TOOLTIP_DELAY_MS);
+    }
+}
+
 /// Versioned, application-wide settings. Live workspace content is excluded.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -720,6 +782,8 @@ pub struct Settings {
     pub terminal_allow_file_writes: bool,
     /// Whether the function-key bar is hidden while the terminal is open.
     pub terminal_hide_function_keys: bool,
+    /// Picture captions under grid tiles and hover tooltips (task 0347).
+    pub picture_info: PictureInfoSettings,
 }
 
 impl Settings {
@@ -822,6 +886,7 @@ impl Default for Settings {
             terminal_auto_run_read_only: true,
             terminal_allow_file_writes: true,
             terminal_hide_function_keys: true,
+            picture_info: PictureInfoSettings::default(),
         }
     }
 }
@@ -910,6 +975,7 @@ impl SettingsStore {
                 sanitize_terminal_apps(&mut settings.terminal_apps);
                 sanitize_file_templates(&mut settings.file_templates);
                 sanitize_template_folder(&mut settings.template_folder);
+                settings.picture_info.sanitize();
                 sync_profile::sanitize_sync_profiles(&mut settings.sync_profiles);
                 Ok(LoadOutcome {
                     settings,
@@ -965,6 +1031,7 @@ impl SettingsStore {
         sanitize_terminal_apps(&mut current.terminal_apps);
         sanitize_file_templates(&mut current.file_templates);
         sanitize_template_folder(&mut current.template_folder);
+        current.picture_info.sanitize();
         sync_profile::sanitize_sync_profiles(&mut current.sync_profiles);
         let bytes = serde_json::to_vec_pretty(&current)?;
         atomic_write(&self.directory, SETTINGS_FILE_NAME, &bytes)?;

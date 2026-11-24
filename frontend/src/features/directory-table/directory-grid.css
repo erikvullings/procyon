@@ -153,3 +153,28 @@
   color: var(--fm-text);
   background: var(--fm-surface);
 }
+
+/* Extra lines under a tile's name (task 0347): the block has a fixed height so every tile of the
+ * virtualized grid stays the same size whether or not a line has a value. */
+.fm-grid-tile-captions {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  overflow: hidden;
+}
+
+.fm-grid-tile-caption {
+  flex: 0 0 auto;
+  height: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  color: var(--fm-text-muted);
+  font-size: 0.78em;
+  line-height: 14px;
+}
+
+.fm-grid-tile.fm-selected-tile .fm-grid-tile-caption {
+  color: var(--fm-selected-row-text);
+}

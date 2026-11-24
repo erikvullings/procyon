@@ -16,7 +16,8 @@ use fm_transport_dto::{
     PreviewGeoMinifyResponseDto, QuerySqliteViewRequestDto, QuerySqliteViewResponseDto,
     ReadDocxPreviewResourceRequestDto, ReadDocxPreviewResourceResponseDto, ReadFileRangeRequestDto,
     ReadFileRangeResponseDto, ReadGeoFileRequestDto, ReadImageGpsRequestDto,
-    ReadImageGpsResponseDto, ReadImageMetadataRequestDto, ReadPptxPreviewPdfRequestDto,
+    ReadImageGpsResponseDto, ReadImageMetadataRequestDto, ReadImageSummariesRequestDto,
+    ReadImageSummariesResponseDto, ReadPptxPreviewPdfRequestDto,
     ReadStructuredJsonWindowRequestDto, ReadStructuredJsonWindowResponseDto,
     ReadStructuredRowsRequestDto, ReadStructuredRowsResponseDto, ResolveArchiveEditRequestDto,
     ResolveMetadataTokensRequestDto, ResolveMetadataTokensResponseDto, SaveEditableFileRequestDto,
@@ -201,6 +202,35 @@ pub(crate) async fn read_image_gps(
     state
         .service
         .read_image_gps(request)
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, request_id))
+}
+
+/// Reads a short display summary of many images for grid captions and tooltips (task 0347).
+#[utoipa::path(
+    post,
+    path = "/api/v1/files/image-summaries",
+    operation_id = "readImageSummaries",
+    request_body = ReadImageSummariesRequestDto,
+    responses(
+        (status = 200, description = "Display summary per image", body = ReadImageSummariesResponseDto),
+        (status = 400, description = "Too many images", body = ApplicationErrorDto),
+        (status = 403, description = "An image is outside the accessible roots", body = ApplicationErrorDto),
+    )
+)]
+pub(crate) async fn read_image_summaries(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(request): Json<ReadImageSummariesRequestDto>,
+) -> Result<Json<ReadImageSummariesResponseDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    for location in &request.locations {
+        crate::error::require_within_roots(location, &state.accessible_roots, request_id)?;
+    }
+    state
+        .service
+        .read_image_summaries(request)
         .await
         .map(Json)
         .map_err(|error| ApiError::new(error, request_id))

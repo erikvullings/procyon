@@ -1,7 +1,10 @@
 import { DEFAULT_MAP_SETTINGS } from '../../features/map/map-settings';
 import type { Location as FileLocation, SearchQuery, Settings } from '../../models';
 import type { FilterCriteria, SyncProfile } from '../../models/settings';
-import { DEFAULT_QUICK_FILTER_MATCH_MODE } from '../../models/settings';
+import {
+  DEFAULT_PICTURE_INFO_SETTINGS,
+  DEFAULT_QUICK_FILTER_MATCH_MODE,
+} from '../../models/settings';
 import type { FilterCriteriaDto } from '../generated/models/filterCriteriaDto';
 import type { SettingsDto } from '../generated/models/settingsDto';
 import type { SyncProfileDto } from '../generated/models/syncProfileDto';
@@ -58,6 +61,7 @@ export function settingsFromDto(settings: SettingsDto): Settings {
     terminalAutoRunReadOnly: settings.terminalAutoRunReadOnly ?? true,
     terminalAllowFileWrites: settings.terminalAllowFileWrites ?? true,
     terminalHideFunctionKeys: settings.terminalHideFunctionKeys ?? true,
+    pictureInfo: settings.pictureInfo ?? DEFAULT_PICTURE_INFO_SETTINGS,
     map: settings.map ?? DEFAULT_MAP_SETTINGS,
   };
 }
@@ -195,6 +199,11 @@ export function settingsToDto(settings: Settings): SettingsDto {
     })),
     keybindings: { ...settings.keybindings },
     pluginSettings: { ...settings.pluginSettings },
+    pictureInfo: {
+      ...settings.pictureInfo,
+      captionFields: [...settings.pictureInfo.captionFields],
+      tooltipFields: [...settings.pictureInfo.tooltipFields],
+    },
     recentLocationsByWorkspace: Object.fromEntries(
       Object.entries(settings.recentLocationsByWorkspace).map(([workspaceId, locations]) => [
         workspaceId,

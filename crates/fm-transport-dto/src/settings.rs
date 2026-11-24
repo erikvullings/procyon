@@ -513,6 +513,52 @@ pub struct SettingsDto {
     /// Whether the function-key bar is hidden while the terminal is open.
     #[serde(default = "terminal_hide_function_keys_default")]
     pub terminal_hide_function_keys: bool,
+    /// Picture captions under grid tiles and hover tooltips (task 0347).
+    #[serde(default)]
+    pub picture_info: PictureInfoSettingsDto,
+}
+
+/// Which picture facts grid tiles and hover tooltips show (task 0347).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PictureInfoSettingsDto {
+    /// Field ids shown under a grid tile's name; empty shows only the name. Ids the frontend does
+    /// not know are ignored.
+    pub caption_fields: Vec<String>,
+    /// Whether hovering a grid tile shows the picture tooltip.
+    pub tooltip_enabled: bool,
+    /// Hover time before the tooltip appears, in milliseconds.
+    pub tooltip_delay_ms: u32,
+    /// Field ids listed in the tooltip's table.
+    pub tooltip_fields: Vec<String>,
+}
+
+/// Mirrors `fm_settings::PictureInfoSettings::default()`; a test in `fm-application` keeps the two
+/// in step.
+impl Default for PictureInfoSettingsDto {
+    fn default() -> Self {
+        let ids = |ids: &[&str]| ids.iter().map(|id| (*id).to_owned()).collect();
+        Self {
+            caption_fields: ids(&["size", "dimensions"]),
+            tooltip_enabled: true,
+            tooltip_delay_ms: 600,
+            tooltip_fields: ids(&[
+                "size",
+                "dimensions",
+                "modified",
+                "dateTaken",
+                "camera",
+                "aperture",
+                "shutterSpeed",
+                "iso",
+                "exposureBias",
+                "focalLength",
+                "whiteBalance",
+                "flash",
+                "rating",
+            ]),
+        }
+    }
 }
 
 const fn default_semantic_max_source_mib() -> u32 {

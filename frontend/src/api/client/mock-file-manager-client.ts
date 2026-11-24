@@ -98,6 +98,7 @@ import type {
   ImageGpsEntry,
   ImageMetadata,
   ImagePrompt,
+  ImageSummary,
   ImportSemanticLocalModelRequest,
   InspectAttributesResult,
   InspectSplitSetResult,
@@ -735,6 +736,12 @@ export class MockFileManagerClient implements FileManagerClient {
   }
   readImageGps(locations: readonly Location[], signal?: AbortSignal): Promise<ImageGpsEntry[]> {
     return this.workspaceClient.readImageGps(locations, signal);
+  }
+  readImageSummaries(
+    locations: readonly Location[],
+    signal?: AbortSignal,
+  ): Promise<ImageSummary[]> {
+    return this.workspaceClient.readImageSummaries(locations, signal);
   }
   inspectAttributes(
     locations: readonly Location[],

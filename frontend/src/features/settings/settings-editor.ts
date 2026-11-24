@@ -1,5 +1,12 @@
 import m, { type FactoryComponent } from 'mithril';
-import { NumberInput, Select, Switch, TextInput, ThemeSwitcher } from 'mithril-materialized';
+import {
+  InputCheckbox,
+  NumberInput,
+  Select,
+  Switch,
+  TextInput,
+  ThemeSwitcher,
+} from 'mithril-materialized';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { displayShortcut } from '../../app/shell-helpers';
 import type { Locale } from '../../i18n';
@@ -23,6 +30,11 @@ import type {
 } from '../../models';
 import { perfEndAfterRender, perfStart } from '../../utilities/perf';
 import { DiagnosticsViewComponent } from '../diagnostics/diagnostics-view';
+import {
+  CAPTION_FIELD_CHOICES,
+  type ImageFieldId,
+  TOOLTIP_FIELD_CHOICES,
+} from '../directory-table/image-caption';
 import { MapSettingsSection } from '../map/map-settings-section';
 import { NotesSettingsSection } from '../notes/notes-settings';
 import { PluginManagement } from '../plugin-management/plugin-management';
@@ -172,6 +184,37 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
         nextIds.has(id),
       ),
     });
+  }
+
+  /** A labelled checkbox group editing one picture-field list of the settings draft. */
+  function pictureFieldChoices(
+    current: SettingsEditorAttrs,
+    draft: Settings,
+    list: 'captionFields' | 'tooltipFields',
+    heading: string,
+    choices: readonly ImageFieldId[],
+  ): m.Vnode {
+    const selected = draft.pictureInfo[list];
+    return m('.row', [
+      m('.col.s12', m('label', heading)),
+      ...choices.map((id) =>
+        m(InputCheckbox, {
+          inputId: `picture-${list}-${id}`,
+          className: 'col s6 m4',
+          label: t('imageMeta', id),
+          checked: selected.includes(id),
+          onchange: (checked: boolean) =>
+            update(current, {
+              pictureInfo: {
+                ...draft.pictureInfo,
+                [list]: checked
+                  ? choices.filter((choice) => choice === id || selected.includes(choice))
+                  : selected.filter((existing) => existing !== id),
+              },
+            }),
+        }),
+      ),
+    ]);
   }
 
   function update(current: SettingsEditorAttrs, patch: Partial<Settings>): void {
@@ -459,6 +502,53 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                           update(current, { rememberFolderViews: checked }),
                       }),
                     ]),
+
+                    m(
+                      '.row',
+                      m(
+                        'h4.fm-settings-section-heading.col.s12',
+                        t('settings', 'pictureInfoSection'),
+                      ),
+                    ),
+                    m('.row', [
+                      m(Switch, {
+                        className: 'col s12 m6',
+                        label: t('settings', 'pictureTooltip'),
+                        checked: activeDraft.pictureInfo.tooltipEnabled,
+                        left: t('settings', 'off'),
+                        right: t('settings', 'on'),
+                        onchange: (checked: boolean) =>
+                          update(current, {
+                            pictureInfo: { ...activeDraft.pictureInfo, tooltipEnabled: checked },
+                          }),
+                      }),
+                      m(NumberInput, {
+                        className: 'col s12 m6',
+                        label: t('settings', 'pictureTooltipDelay'),
+                        value: activeDraft.pictureInfo.tooltipDelayMs,
+                        min: 0,
+                        max: 5000,
+                        oninput: (value: number) =>
+                          update(current, {
+                            pictureInfo: { ...activeDraft.pictureInfo, tooltipDelayMs: value },
+                          }),
+                        ...errorAttrs('tooltipDelayMs'),
+                      }),
+                    ]),
+                    pictureFieldChoices(
+                      current,
+                      activeDraft,
+                      'captionFields',
+                      t('settings', 'pictureCaptionFields'),
+                      CAPTION_FIELD_CHOICES,
+                    ),
+                    pictureFieldChoices(
+                      current,
+                      activeDraft,
+                      'tooltipFields',
+                      t('settings', 'pictureTooltipFields'),
+                      TOOLTIP_FIELD_CHOICES,
+                    ),
 
                     m(
                       '.row',

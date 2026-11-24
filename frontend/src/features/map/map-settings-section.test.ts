@@ -1,6 +1,7 @@
 import m from 'mithril';
 import { describe, expect, it, vi } from 'vitest';
 import type { MapSettings } from '../../models';
+import { DEFAULT_PICTURE_INFO_SETTINGS } from '../../models/settings';
 import { validateSettingsDraft } from '../settings/settings-model';
 import { DEFAULT_MAP_SETTINGS } from './map-settings';
 import { MapSettingsSection, networkNotice } from './map-settings-section';
@@ -61,6 +62,7 @@ describe('settings validation', () => {
       rowHeight: 20,
       operationConcurrency: 2,
       defaultColumns: ['core.name'],
+      pictureInfo: DEFAULT_PICTURE_INFO_SETTINGS,
       map: { ...DEFAULT_MAP_SETTINGS, urlTemplate: 'ftp://x/{z}/{x}/{y}' },
     } as unknown as Parameters<typeof validateSettingsDraft>[0];
     expect(validateSettingsDraft(draft).map((error) => error.field)).toContain('map');

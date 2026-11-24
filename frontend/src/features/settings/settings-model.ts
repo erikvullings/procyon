@@ -99,6 +99,10 @@ export function validateSettingsDraft(draft: Settings): readonly SettingsValidat
   if (!Number.isFinite(draft.rowHeight) || draft.rowHeight < 16 || draft.rowHeight > 64) {
     errors.push({ field: 'rowHeight', message: t('settings', 'rowHeightRange') });
   }
+  const delay = draft.pictureInfo.tooltipDelayMs;
+  if (!Number.isInteger(delay) || delay < 0 || delay > 5_000) {
+    errors.push({ field: 'tooltipDelayMs', message: t('settings', 'tooltipDelayRange') });
+  }
   const mapProblem = validateMapSettings(draft.map);
   if (mapProblem !== undefined) {
     errors.push({ field: 'map', message: t('map', mapProblem) });

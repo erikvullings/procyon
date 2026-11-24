@@ -3615,6 +3615,19 @@ pub(crate) async fn read_image_gps(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Reads a short display summary of many images for grid captions and tooltips (task 0347).
+#[tauri::command]
+pub(crate) async fn read_image_summaries(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::ReadImageSummariesRequestDto,
+) -> Result<fm_transport_dto::ReadImageSummariesResponseDto, ApplicationErrorDto> {
+    state
+        .service
+        .read_image_summaries(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Reads a GeoJSON, GPX, KML or KMZ file into GeoJSON features (task 0277).
 #[tauri::command]
 pub(crate) async fn read_geo_file(

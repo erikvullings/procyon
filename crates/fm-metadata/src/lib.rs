@@ -7,6 +7,7 @@
 mod audio;
 mod cache;
 mod image_edit;
+mod image_summary;
 mod image_tags;
 mod pdf;
 mod photo;
@@ -22,6 +23,7 @@ pub use image_edit::{
     Change, EditableField, ImageEdit, ImageEditError, apply_image_edit, editable_fields,
     shift_capture_time,
 };
+pub use image_summary::{ImageSummary, read_image_summary};
 pub use image_tags::{
     GpsPosition, ImageTag, ImageTagGroup, ImageTags, detect_format, read_image_tags,
 };

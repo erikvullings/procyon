@@ -42,6 +42,7 @@ pub mod image_generation_transport;
 mod image_metadata;
 mod image_metadata_edit;
 mod image_prompts;
+mod image_summary;
 pub mod knowledge;
 mod knowledge_answer;
 pub mod knowledge_dsl;

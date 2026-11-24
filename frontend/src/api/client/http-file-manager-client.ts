@@ -100,6 +100,7 @@ import type {
   ImageGpsEntry,
   ImageMetadata,
   ImagePrompt,
+  ImageSummary,
   ImportSemanticLocalModelRequest,
   InspectAttributesResult,
   InspectSplitSetResult,
@@ -353,6 +354,7 @@ import {
   saveImagePrompt as requestImagePromptSave,
   listImagePrompts as requestImagePrompts,
   saveGeneratedImage as requestImageSave,
+  readImageSummaries as requestImageSummaries,
   inspectAttributes as requestInspectAttributes,
   inspectSplitSet as requestInspectSplitSet,
   discardInterruptedTransfer as requestInterruptedTransferDiscard,
@@ -1637,6 +1639,20 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200) {
       throw unexpectedResponseError('readImageGps', response.status);
+    }
+    return response.data.entries;
+  }
+
+  async readImageSummaries(
+    locations: readonly FileLocation[],
+    signal?: AbortSignal,
+  ): Promise<ImageSummary[]> {
+    const response = await requestImageSummaries(
+      { locations: [...locations] },
+      signal !== undefined ? { signal } : undefined,
+    );
+    if (response.status !== 200) {
+      throw unexpectedResponseError('readImageSummaries', response.status);
     }
     return response.data.entries;
   }

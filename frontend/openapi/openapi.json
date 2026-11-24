@@ -2630,6 +2630,54 @@
         }
       }
     },
+    "/api/v1/files/image-summaries": {
+      "post": {
+        "summary": "Reads a short display summary of many images for grid captions and tooltips (task 0347).",
+        "operationId": "readImageSummaries",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadImageSummariesRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Display summary per image",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadImageSummariesResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Too many images",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "An image is outside the accessible roots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/files/metadata-tokens": {
       "post": {
         "summary": "Resolves audio-tag and EXIF tokens for multi-rename patterns (task 0267).",
@@ -17130,6 +17178,128 @@
           }
         }
       },
+      "ImageSummaryEntryDto": {
+        "type": "object",
+        "description": "Display summary of one image. Values are typed, not formatted, so the UI can localize units.",
+        "required": [
+          "location"
+        ],
+        "properties": {
+          "aperture": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Aperture as an f-number, for example 2.8."
+          },
+          "bitDepth": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Bits per pixel (for example 24 for 8-bit RGB) when known.",
+            "minimum": 0
+          },
+          "camera": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Camera maker and model as one label."
+          },
+          "exposureBiasEv": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Exposure bias in EV steps."
+          },
+          "flashFired": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether the flash fired."
+          },
+          "focalLengthMm": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Focal length in millimetres."
+          },
+          "height": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Pixel height when it could be read from the header.",
+            "minimum": 0
+          },
+          "iso": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "ISO sensitivity.",
+            "minimum": 0
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "The image."
+          },
+          "rating": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "XMP rating 0-5.",
+            "minimum": 0
+          },
+          "shutterSeconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Exposure time in seconds, for example 0.004 for 1/250 s."
+          },
+          "takenAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Capture time as `YYYY-MM-DDTHH:MM:SS` (no time zone) when recorded."
+          },
+          "unreadable": {
+            "type": "boolean",
+            "description": "True when the file could not be read (missing, unreadable)."
+          },
+          "whiteBalanceAuto": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "True for automatic white balance, false for manual."
+          },
+          "width": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Pixel width when it could be read from the header.",
+            "minimum": 0
+          }
+        }
+      },
       "ImageTagDto": {
         "type": "object",
         "description": "One metadata tag.",
@@ -21865,6 +22035,42 @@
           }
         }
       },
+      "PictureInfoSettingsDto": {
+        "type": "object",
+        "description": "Which picture facts grid tiles and hover tooltips show (task 0347).",
+        "required": [
+          "captionFields",
+          "tooltipEnabled",
+          "tooltipDelayMs",
+          "tooltipFields"
+        ],
+        "properties": {
+          "captionFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Field ids shown under a grid tile's name; empty shows only the name. Ids the frontend does\nnot know are ignored."
+          },
+          "tooltipDelayMs": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Hover time before the tooltip appears, in milliseconds.",
+            "minimum": 0
+          },
+          "tooltipEnabled": {
+            "type": "boolean",
+            "description": "Whether hovering a grid tile shows the picture tooltip."
+          },
+          "tooltipFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Field ids listed in the tooltip's table."
+          }
+        }
+      },
       "PlanKnowledgeSearchRequestDto": {
         "type": "object",
         "description": "Requests a deterministic plan without executing retrieval.",
@@ -23466,6 +23672,38 @@
           "location": {
             "$ref": "#/components/schemas/LocationDto",
             "description": "The image file."
+          }
+        }
+      },
+      "ReadImageSummariesRequestDto": {
+        "type": "object",
+        "description": "Reads a short display summary of many images (`POST /api/v1/files/image-summaries`, task 0347).",
+        "required": [
+          "locations"
+        ],
+        "properties": {
+          "locations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocationDto"
+            },
+            "description": "Images to read, at most 64 per request."
+          }
+        }
+      },
+      "ReadImageSummariesResponseDto": {
+        "type": "object",
+        "description": "Summaries in request order.",
+        "required": [
+          "entries"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageSummaryEntryDto"
+            },
+            "description": "One entry per requested location."
           }
         }
       },
@@ -27904,6 +28142,10 @@
             "format": "int32",
             "description": "Maximum concurrent operations.",
             "minimum": 0
+          },
+          "pictureInfo": {
+            "$ref": "#/components/schemas/PictureInfoSettingsDto",
+            "description": "Picture captions under grid tiles and hover tooltips (task 0347)."
           },
           "pluginSettings": {
             "type": "object",

@@ -29,6 +29,7 @@ import {
 } from '../features/comparison/comparison-state';
 import { createDialogUIController } from '../features/dialogs/dialog-ui-controller';
 import type { FinderTagsLoader } from '../features/directory-table/finder-tags-loader';
+import type { ImageSummaryLoader } from '../features/directory-table/image-summary-loader';
 import type { NativeIconLoader } from '../features/directory-table/native-icon-loader';
 import type { ThumbnailLoader } from '../features/directory-table/thumbnail-loader';
 import type { TreeChildrenState } from '../features/directory-tree/directory-tree-state';
@@ -311,6 +312,7 @@ export function createShellState(client: FileManagerClient) {
     nativeIconLoader: undefined as unknown as NativeIconLoader | undefined,
     nativeIconLoaderSource: undefined as unknown as NativeIconLoader | undefined,
     thumbnailLoader: undefined as unknown as ThumbnailLoader | undefined,
+    imageSummaryLoader: undefined as unknown as ImageSummaryLoader | undefined,
     finderTagsLoader: undefined as unknown as FinderTagsLoader | undefined,
     /** Runtime capabilities discovered once at bootstrap (task 0145), used to capability-gate
      * affordances like the Properties dialog's Tags/Comment sections. */

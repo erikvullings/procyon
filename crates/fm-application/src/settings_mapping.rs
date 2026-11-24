@@ -7,17 +7,17 @@ use crate::sync_profile_mapping::{sync_profile_from_dto, sync_profile_to_dto};
 use fm_settings::{
     ConflictPolicy, DateFormat, DefaultPaneLayout, FilterCriteria, FilterKind, FilterPreset,
     FilterToggle, Language, MapBasemap, MapSettings, MultiRenameCaseTransform, MultiRenamePreset,
-    MultiRenameRules, MultiRenameSequence, QuickFilterMatchMode, Settings, SizeFormat,
-    TerminalShellIntegration, Theme,
+    MultiRenameRules, MultiRenameSequence, PictureInfoSettings, QuickFilterMatchMode, Settings,
+    SizeFormat, TerminalShellIntegration, Theme,
 };
 use fm_transport_dto::{
     ConceptHierarchyScopeDto, ConflictPolicyDto, DateFormatDto, DefaultPaneLayoutDto,
     FilterCriteriaDto, FilterKindDto, FilterPresetDto, FilterToggleDto, LanguageDto,
     MapBasemapKindDto, MapSettingsDto, MultiRenameCaseTransformDto, MultiRenamePresetDto,
-    MultiRenameRulesDto, MultiRenameSequenceDto, QuickFilterMatchModeDto, SavedSearchDto,
-    SearchConceptPredicateDto, SearchContentPredicateDto, SearchEntryKindDto, SearchGitStatusDto,
-    SearchModeDto, SearchNameModeDto, SearchNamePredicateDto, SearchQueryDto, SearchScopeDto,
-    SearchSemanticPredicateDto, SemanticSearchScopeDto, SettingsDto, SizeFormatDto,
+    MultiRenameRulesDto, MultiRenameSequenceDto, PictureInfoSettingsDto, QuickFilterMatchModeDto,
+    SavedSearchDto, SearchConceptPredicateDto, SearchContentPredicateDto, SearchEntryKindDto,
+    SearchGitStatusDto, SearchModeDto, SearchNameModeDto, SearchNamePredicateDto, SearchQueryDto,
+    SearchScopeDto, SearchSemanticPredicateDto, SemanticSearchScopeDto, SettingsDto, SizeFormatDto,
     TerminalShellIntegrationDto, ThemeDto,
 };
 
@@ -199,6 +199,12 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
         terminal_auto_run_read_only: settings.terminal_auto_run_read_only,
         terminal_allow_file_writes: settings.terminal_allow_file_writes,
         terminal_hide_function_keys: settings.terminal_hide_function_keys,
+        picture_info: PictureInfoSettingsDto {
+            caption_fields: settings.picture_info.caption_fields,
+            tooltip_enabled: settings.picture_info.tooltip_enabled,
+            tooltip_delay_ms: settings.picture_info.tooltip_delay_ms,
+            tooltip_fields: settings.picture_info.tooltip_fields,
+        },
     }
 }
 
@@ -383,6 +389,12 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
         terminal_auto_run_read_only: settings.terminal_auto_run_read_only,
         terminal_allow_file_writes: settings.terminal_allow_file_writes,
         terminal_hide_function_keys: settings.terminal_hide_function_keys,
+        picture_info: PictureInfoSettings {
+            caption_fields: settings.picture_info.caption_fields,
+            tooltip_enabled: settings.picture_info.tooltip_enabled,
+            tooltip_delay_ms: settings.picture_info.tooltip_delay_ms,
+            tooltip_fields: settings.picture_info.tooltip_fields,
+        },
     }
 }
 
@@ -742,5 +754,26 @@ mod filter_preset_tests {
         };
         let round_tripped = settings_from_dto(settings_to_dto(settings.clone()));
         assert_eq!(round_tripped.filter_presets, settings.filter_presets);
+    }
+
+    #[test]
+    fn picture_info_defaults_agree_between_settings_and_dto_and_round_trip() {
+        let defaults = Settings::default();
+        assert_eq!(
+            settings_to_dto(defaults.clone()).picture_info,
+            PictureInfoSettingsDto::default()
+        );
+
+        let settings = Settings {
+            picture_info: PictureInfoSettings {
+                caption_fields: vec!["camera".into()],
+                tooltip_enabled: false,
+                tooltip_delay_ms: 250,
+                tooltip_fields: vec!["iso".into(), "flash".into()],
+            },
+            ..Settings::default()
+        };
+        let round_tripped = settings_from_dto(settings_to_dto(settings.clone()));
+        assert_eq!(round_tripped.picture_info, settings.picture_info);
     }
 }

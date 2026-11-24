@@ -37,6 +37,7 @@ import type {
   HostKeyProbe,
   ImageGpsEntry,
   ImageMetadata,
+  ImageSummary,
   InspectAttributesResult,
   InspectSplitSetResult,
   ListDirectoryRequest,
@@ -360,6 +361,12 @@ export interface WorkspaceClient {
    * (task 0276); an unreadable image is flagged instead of failing the batch.
    */
   readImageGps(locations: readonly Location[], signal?: AbortSignal): Promise<ImageGpsEntry[]>;
+
+  /**
+   * Reads a display summary (size, depth, camera, exposure, rating) of up to 64 images from their
+   * leading bytes only (task 0347); an unreadable image is flagged instead of failing the batch.
+   */
+  readImageSummaries(locations: readonly Location[], signal?: AbortSignal): Promise<ImageSummary[]>;
 
   /**
    * Reads every EXIF, GPS, IPTC, XMP and ICC tag of an image from its leading bytes (task 0273).

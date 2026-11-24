@@ -9,6 +9,7 @@ import { decodeViewerRequest } from '../features/preview/viewer-window';
 import type { DirectorySnapshot, EntrySummary, Location, Operation } from '../models';
 import { encodeDiskUsageTree } from '../models';
 import type { EditableFile } from '../models/requests';
+import { DEFAULT_PICTURE_INFO_SETTINGS } from '../models/settings';
 import {
   AppShell,
   knowledgeEvidencePage,
@@ -6008,6 +6009,7 @@ describe('AppShell', () => {
     const client = new MockFileManagerClient();
     vi.spyOn(client, 'getSettings').mockResolvedValue({
       semanticMaxSourceMib: 64,
+      pictureInfo: DEFAULT_PICTURE_INFO_SETTINGS,
       semanticThemeRootIds: [],
       quickFilterMatchMode: 'fuzzy',
       terminalShellIntegration: 'unset',

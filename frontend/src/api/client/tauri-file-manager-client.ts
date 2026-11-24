@@ -110,6 +110,7 @@ import type {
   ImageGpsEntry,
   ImageMetadata,
   ImagePrompt,
+  ImageSummary,
   ImportSemanticLocalModelRequest,
   InspectAttributesResult,
   InspectSplitSetResult,
@@ -1147,6 +1148,16 @@ export class TauriFileManagerClient implements FileManagerClient {
     _signal?: AbortSignal,
   ): Promise<ImageGpsEntry[]> {
     const response = await invoke<{ entries: ImageGpsEntry[] }>('read_image_gps', {
+      request: { locations },
+    });
+    return response.entries;
+  }
+
+  async readImageSummaries(
+    locations: readonly Location[],
+    _signal?: AbortSignal,
+  ): Promise<ImageSummary[]> {
+    const response = await invoke<{ entries: ImageSummary[] }>('read_image_summaries', {
       request: { locations },
     });
     return response.entries;

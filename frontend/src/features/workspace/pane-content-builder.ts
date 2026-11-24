@@ -42,7 +42,9 @@ import { isCutLocation } from '../clipboard/clipboard';
 import { loadConnections } from '../connections/connections-model';
 import { SAMPLE_FILE_AGE_COLUMN } from '../directory-table/directory-table';
 import type { FinderTagsLoader } from '../directory-table/finder-tags-loader';
+import type { ImageSummaryLoader } from '../directory-table/image-summary-loader';
 import type { NativeIconLoader } from '../directory-table/native-icon-loader';
+import { gridPictureInfo } from '../directory-table/picture-info';
 import type { ThumbnailLoader } from '../directory-table/thumbnail-loader';
 import { DiskUsageView, type DiskUsageViewState } from '../disk-usage/disk-usage-view';
 import {
@@ -145,6 +147,7 @@ export interface PaneContentContext {
   getUnavailableLocations(): ReadonlySet<string>;
   getNativeIconLoader(): NativeIconLoader | undefined;
   getThumbnailLoader(): ThumbnailLoader | undefined;
+  getImageSummaryLoader(): ImageSummaryLoader | undefined;
   getFinderTagsLoader(): FinderTagsLoader | undefined;
   getPlugins(): readonly PluginDescriptor[];
   getPlatform(): SelectionPlatform;
@@ -546,6 +549,11 @@ export function createPaneContentBuilder(
     const volumesError = context.getVolumesError();
     const nativeIconLoader = context.getNativeIconLoader();
     const thumbnailLoader = context.getThumbnailLoader();
+    const imageSummaryLoader = context.getImageSummaryLoader();
+    const pictureInfo =
+      imageSummaryLoader === undefined || currentSettings === undefined
+        ? undefined
+        : gridPictureInfo(currentSettings.pictureInfo, imageSummaryLoader, entryFormatSettings);
     const finderTagsLoader = context.getFinderTagsLoader();
     const imageMapPane = context.getImageMapPane?.(paneId);
     const imageMapContent = imageMapPane?.tabId === tab?.id ? imageMapPane?.content : undefined;
@@ -723,6 +731,7 @@ export function createPaneContentBuilder(
       formatSettings: entryFormatSettings,
       ...(nativeIconLoader === undefined ? {} : { nativeIconLoader }),
       ...(thumbnailLoader === undefined ? {} : { thumbnailLoader }),
+      ...(pictureInfo === undefined ? {} : { pictureInfo }),
       ...(finderTagsLoader === undefined ? {} : { finderTagsLoader }),
       pluginColumns: [
         ...(context

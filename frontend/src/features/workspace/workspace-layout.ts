@@ -31,6 +31,7 @@ import type {
 } from '../directory-table/directory-table';
 import type { FinderTagsLoader } from '../directory-table/finder-tags-loader';
 import type { NativeIconLoader } from '../directory-table/native-icon-loader';
+import type { GridPictureInfo } from '../directory-table/picture-info';
 import type { ThumbnailLoader } from '../directory-table/thumbnail-loader';
 import type { DropEventState, DropModifiers } from '../drag-drop/drag-drop';
 import type { EntryFormatSettings } from '../entry-formatting/entry-formatting';
@@ -96,6 +97,7 @@ export interface WorkspacePaneContent {
   readonly breadcrumbLabel?: string;
   readonly nativeIconLoader?: NativeIconLoader;
   readonly thumbnailLoader?: ThumbnailLoader;
+  readonly pictureInfo?: GridPictureInfo;
   readonly finderTagsLoader?: FinderTagsLoader;
   readonly cursorIndex?: number;
   readonly contextTargetEntryId?: EntryId;
@@ -692,6 +694,7 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
             groupByParent: content.groupByParent,
             nativeIconLoader: content.nativeIconLoader,
             thumbnailLoader: content.thumbnailLoader,
+            pictureInfo: content.pictureInfo,
             finderTagsLoader: content.finderTagsLoader,
             viewMode: content.viewMode,
             iconSize: content.iconSize,

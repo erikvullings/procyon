@@ -191,6 +191,8 @@ import type {
   ReadImageGpsRequestDto,
   ReadImageGpsResponseDto,
   ReadImageMetadataRequestDto,
+  ReadImageSummariesRequestDto,
+  ReadImageSummariesResponseDto,
   ReadNoteRequestDto,
   ReadPptxPreviewPdfRequestDto,
   ReadStructuredJsonWindowRequestDto,
@@ -3078,6 +3080,54 @@ export const readImageMetadata = async (readImageMetadataRequestDto: ReadImageMe
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(readImageMetadataRequestDto)
+  }
+);}
+
+
+
+export type readImageSummariesResponse200 = {
+  data: ReadImageSummariesResponseDto
+  status: 200
+}
+
+export type readImageSummariesResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type readImageSummariesResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type readImageSummariesResponseSuccess = (readImageSummariesResponse200) & {
+  headers: Headers;
+};
+export type readImageSummariesResponseError = (readImageSummariesResponse400 | readImageSummariesResponse403) & {
+  headers: Headers;
+};
+
+export type readImageSummariesResponse = (readImageSummariesResponseSuccess | readImageSummariesResponseError)
+
+export const getReadImageSummariesUrl = () => {
+
+
+
+
+  return `/api/v1/files/image-summaries`
+}
+
+/**
+ * @summary Reads a short display summary of many images for grid captions and tooltips (task 0347).
+ */
+export const readImageSummaries = async (readImageSummariesRequestDto: ReadImageSummariesRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<readImageSummariesResponse> => {
+
+  return fetchMutator<readImageSummariesResponse>(getReadImageSummariesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(readImageSummariesRequestDto)
   }
 );}
 

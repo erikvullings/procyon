@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FileManagerClient } from '../../api/client/file-manager-client';
 import { MockFileManagerClient } from '../../api/client/mock-file-manager-client';
 import type { ActionDescriptor, PluginDescriptor, Settings } from '../../models';
+import { DEFAULT_PICTURE_INFO_SETTINGS } from '../../models/settings';
 import { DEFAULT_MAP_SETTINGS } from '../map/map-settings';
 import { SettingsEditor } from './settings-editor';
 
@@ -21,6 +22,7 @@ afterEach(() => {
 function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
   return {
     semanticMaxSourceMib: 64,
+    pictureInfo: DEFAULT_PICTURE_INFO_SETTINGS,
     semanticThemeRootIds: [],
     quickFilterMatchMode: 'fuzzy',
     terminalShellIntegration: 'unset',

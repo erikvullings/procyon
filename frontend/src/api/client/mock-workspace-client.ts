@@ -37,6 +37,7 @@ import type {
   HostKeyProbe,
   ImageGpsEntry,
   ImageMetadata,
+  ImageSummary,
   InspectAttributesResult,
   InspectSplitSetResult,
   ListDirectoryRequest,
@@ -691,6 +692,27 @@ export class MockWorkspaceClient implements WorkspaceClient {
           ? { location, gps: { latitude: 52.37 + index * 0.001, longitude: 4.89 + index * 0.001 } }
           : { location },
       ),
+    );
+  }
+
+  readImageSummaries(
+    locations: readonly Location[],
+    signal?: AbortSignal,
+  ): Promise<ImageSummary[]> {
+    // Deterministic fake: a 4000x3000 24-bit photo from a fictional camera.
+    return this.ctx.perform('readImageSummaries', signal, () =>
+      locations.map((location) => ({
+        location,
+        width: 4000,
+        height: 3000,
+        bitDepth: 24,
+        takenAt: '2024-03-05T14:07:09',
+        camera: 'ACME Cam 9000',
+        aperture: 2.8,
+        shutterSeconds: 0.004,
+        iso: 400,
+        focalLengthMm: 35,
+      })),
     );
   }
 

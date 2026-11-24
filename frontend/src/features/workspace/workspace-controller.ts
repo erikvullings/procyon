@@ -12,6 +12,7 @@ import type {
 } from '../../models';
 import { loadConnections } from '../connections/connections-model';
 import { FinderTagsLoader } from '../directory-table/finder-tags-loader';
+import { ImageSummaryLoader } from '../directory-table/image-summary-loader';
 import { NativeIconLoader } from '../directory-table/native-icon-loader';
 import { ThumbnailLoader } from '../directory-table/thumbnail-loader';
 import type { NavigationController } from '../navigation/navigation';
@@ -44,6 +45,7 @@ export interface WorkspaceControllerContext {
   setPlatformContextMenuSupported(v: boolean): void;
   setNativeIconLoader(loader?: NativeIconLoader): void;
   setThumbnailLoader(loader?: ThumbnailLoader): void;
+  setImageSummaryLoader(loader?: ImageSummaryLoader): void;
   setFinderTagsLoader(loader?: FinderTagsLoader): void;
   getRuntimeCapabilities(): RuntimeCapabilities | undefined;
   setRuntimeCapabilities(capabilities?: RuntimeCapabilities): void;
@@ -263,6 +265,7 @@ export function createWorkspaceController(
       // Unsupported formats/files simply fail per-request and fall back to
       // the themed icon, exactly like a `nativeFileIcons: false` host does.
       context.setThumbnailLoader(new ThumbnailLoader(client));
+      context.setImageSummaryLoader(new ImageSummaryLoader(client));
       context.setFinderTagsLoader(
         capabilities.finderTags ? new FinderTagsLoader(client) : undefined,
       );

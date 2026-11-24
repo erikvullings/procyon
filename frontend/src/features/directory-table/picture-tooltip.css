@@ -1,0 +1,61 @@
+.fm-picture-tooltip {
+  position: fixed;
+  z-index: 1000;
+  box-sizing: border-box;
+  width: 320px;
+  max-height: 420px;
+  overflow: hidden;
+  padding: 10px 12px;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.35);
+  color: var(--fm-text);
+  font-size: 0.85em;
+  /* Never in the way of the pointer: hovering the tooltip must not keep it open or block drops. */
+  pointer-events: none;
+}
+
+.fm-picture-tooltip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.fm-picture-tooltip-type {
+  color: var(--fm-text-muted);
+}
+
+.fm-picture-tooltip-preview {
+  display: block;
+  max-width: 100%;
+  max-height: 180px;
+  margin: 8px auto;
+  object-fit: contain;
+}
+
+.fm-picture-tooltip-table {
+  width: 100%;
+  margin-top: 6px;
+  border-collapse: collapse;
+}
+
+.fm-picture-tooltip-table th,
+.fm-picture-tooltip-table td {
+  padding: 1px 0;
+  text-align: left;
+  vertical-align: top;
+}
+
+.fm-picture-tooltip-table th {
+  padding-right: 12px;
+  color: var(--fm-text-muted);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.fm-picture-tooltip-empty {
+  margin-top: 6px;
+  color: var(--fm-text-muted);
+}

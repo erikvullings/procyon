@@ -89,6 +89,7 @@ import {
 } from '../directory-table/directory-table';
 import type { FinderTagsLoader } from '../directory-table/finder-tags-loader';
 import type { NativeIconLoader } from '../directory-table/native-icon-loader';
+import type { GridPictureInfo } from '../directory-table/picture-info';
 import type { ThumbnailLoader, ThumbnailViewport } from '../directory-table/thumbnail-loader';
 import type { DropEventState, DropModifiers } from '../drag-drop/drag-drop';
 import type { EntryFormatSettings } from '../entry-formatting/entry-formatting';
@@ -202,6 +203,7 @@ export interface TableConfigAttrs {
   readonly groupByParent?: boolean | undefined;
   readonly nativeIconLoader?: NativeIconLoader | undefined;
   readonly thumbnailLoader?: ThumbnailLoader | undefined;
+  readonly pictureInfo?: GridPictureInfo | undefined;
   readonly finderTagsLoader?: FinderTagsLoader | undefined;
   /** Table vs. thumbnail grid (task 0134). Defaults to `'table'`. */
   readonly viewMode?: 'table' | 'grid' | undefined;
@@ -2241,6 +2243,9 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
               ...(attrs.tableConfig.thumbnailLoader === undefined
                 ? {}
                 : { thumbnailLoader: attrs.tableConfig.thumbnailLoader }),
+              ...(attrs.tableConfig.pictureInfo === undefined
+                ? {}
+                : { pictureInfo: attrs.tableConfig.pictureInfo }),
               ...(attrs.searchPresentation?.semanticResults === undefined
                 ? {}
                 : {
