@@ -39,6 +39,11 @@ export interface TerminalClient {
   assistClose(sessionId: string): Promise<void>;
   /** Stops the request the tab's assistant is running (ESC while it works). */
   assistCancel?(sessionId: string): Promise<void>;
+  /**
+   * Gives the running request a message; the model reads it after its current tool calls
+   * (task 0355). `false` when it was not queued.
+   */
+  assistSteer?(sessionId: string, text: string): Promise<boolean>;
   /** The paths under a session's root, for `@` completion (task 0343). */
   assistFiles?(root: string): Promise<TerminalAssistFiles>;
   /** The skills `/` can invoke in a folder: folder skills and notes (task 0343). */
@@ -72,6 +77,7 @@ export const tauriTerminalClient: TerminalClient = {
   },
   assistClose: (sessionId) => invoke<void>('terminal_assist_close', { sessionId }),
   assistCancel: (sessionId) => invoke<void>('terminal_assist_cancel', { sessionId }),
+  assistSteer: (sessionId, text) => invoke<boolean>('terminal_assist_steer', { sessionId, text }),
   assistFiles: (root) => invoke<TerminalAssistFiles>('terminal_assist_files', { root }),
   assistSkills: (workingDirectory) =>
     invoke<TerminalAssistSkill[]>('terminal_assist_skills', { workingDirectory }),

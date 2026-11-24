@@ -29,6 +29,8 @@ pub(super) fn conversation_budget(window: Option<u32>) -> usize {
             .clamp(MAX_RENDERED_BYTES / 3, MAX_CONVERSATION_BYTES)
     })
 }
+/// Most messages queued for a running request.
+pub(crate) const MAX_STEERING: usize = 8;
 /// Most turns stored per session; older ones are dropped.
 const MAX_TURNS: usize = 40;
 /// Most command blocks remembered as already sent, per session.
@@ -83,6 +85,9 @@ struct Session {
     pending_edit: Option<PendingEdit>,
     /// Edits allowed without asking: `Some(true)` for the session, `Some(false)` for the question.
     edit_grant: Option<bool>,
+    /// Messages the person sent while a request was running, not yet given to the model
+    /// (task 0355).
+    steering: Vec<String>,
     /// The call that stopped the turn for the person; what they decide is its result.
     pending_call: Option<ToolCallRecord>,
     write_grant: Option<WriteGrant>,
@@ -202,6 +207,9 @@ impl Sessions {
     pub(super) fn push_person(&self, id: &str, question: &str, context: &str) {
         self.with(id, |session| {
             session.cancelled = false;
+            // Messages meant for the previous request are not carried into this one: the
+            // terminal asks what was not delivered as this question.
+            session.steering.clear();
             // A new question starts with fresh limits and only a session-wide grant survives.
             session.pending_write = None;
             session.pending_edit = None;
@@ -357,7 +365,42 @@ impl Sessions {
     /// Counts one tool step in the current turn and returns the new count.
     /// Stops the running request of a session: its tool loop ends before the next model call.
     pub(crate) fn cancel(&self, id: &str) {
-        self.with(id, |session| session.cancelled = true);
+        self.with(id, |session| {
+            session.cancelled = true;
+            session.steering.clear();
+        });
+    }
+
+    /// Queues a message for the running request (task 0355); `false` when the queue is full.
+    pub(crate) fn steer(&self, id: &str, text: &str) -> bool {
+        let mut queued = false;
+        self.with(id, |session| {
+            if session.steering.len() < MAX_STEERING {
+                session.steering.push(text.to_owned());
+                queued = true;
+            }
+        });
+        queued
+    }
+
+    /// The queued messages, now recorded in the conversation as the person's.
+    pub(super) fn take_steering(&self, id: &str) -> Vec<String> {
+        let mut taken = Vec::new();
+        self.with(id, |session| {
+            taken = std::mem::take(&mut session.steering);
+            for text in &taken {
+                session.turns.push(Turn::Person {
+                    question: text.clone(),
+                    context: String::new(),
+                });
+            }
+        });
+        taken
+    }
+
+    /// Drops what was queued but not delivered; the terminal asks it as the next question.
+    pub(super) fn drop_steering(&self, id: &str) {
+        self.with(id, |session| session.steering.clear());
     }
 
     /// Whether the person stopped the running request.

@@ -42,6 +42,13 @@ pub trait TurnHost: Send {
     fn push_note(&mut self, text: &str);
     /// Whether the person stopped the request.
     fn is_cancelled(&self) -> bool;
+    /// Messages the person sent while the turn was running (task 0355), oldest first. The host
+    /// records each in the conversation as a person message before returning it; the loop asks
+    /// after every round of tool calls and before it accepts a final answer, so a message never
+    /// interrupts a running tool. The default has none.
+    fn take_steering(&mut self) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 /// Progress the person sees while the turn runs.
@@ -54,6 +61,8 @@ pub enum TurnEvent {
     /// What a tool that is still running is doing (see [`ToolContext::report`]). Each report
     /// replaces the one before; the tool's [`Step`](Self::Step) replaces the last.
     Progress(String),
+    /// A message the person sent during the turn reached the model ([`TurnHost::take_steering`]).
+    Steered(String),
 }
 
 /// How a turn ended.
@@ -231,14 +240,32 @@ where
                 host.push_note(&nudge.message);
                 continue;
             }
+            // A message sent while the model wrote its answer is answered in the same turn.
+            if deliver_steering(host, on_event) {
+                continue;
+            }
             return Ok(TurnEnd::Answer(kept.to_owned()));
         }
         worked = true;
         if let Some(end) = run_calls(host, ctx, options, calls, records, on_event).await {
             return Ok(end);
         }
+        deliver_steering(host, on_event);
     }
     Ok(TurnEnd::StepLimit)
+}
+
+/// Gives the model what the person sent meanwhile; whether there was anything.
+fn deliver_steering<H: TurnHost>(
+    host: &mut H,
+    on_event: &mut (dyn FnMut(TurnEvent) + Send),
+) -> bool {
+    let steered = host.take_steering();
+    let any = !steered.is_empty();
+    for text in steered {
+        on_event(TurnEvent::Steered(text));
+    }
+    any
 }
 
 /// Runs the calls of one reply: consecutive read-only calls together (bounded), the others alone,

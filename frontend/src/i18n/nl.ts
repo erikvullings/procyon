@@ -2864,6 +2864,7 @@ export const nl = {
     composerLabel: 'Vraag voor de assistent',
     composerPlaceholder: 'Vraag de assistent… @ voegt een bestand toe, / een opdracht of skill',
     composerQueued: 'Wordt na dit antwoord verstuurd · Esc houdt de vraag hier',
+    composerSteering: 'Verstuurd · de assistent leest het na zijn huidige stap',
     composerSend: 'Versturen',
     consentTitle: 'Opdrachtblokken',
     consentText:

@@ -130,6 +130,8 @@ pub(crate) async fn run(
                 ChatReplyEventDto::Step { text }
             }
             TurnEvent::Progress(text) => ChatReplyEventDto::Progress { text },
+            // Chat sends no messages during a reply, so nothing is ever steered here.
+            TurnEvent::Steered(text) => ChatReplyEventDto::Step { text },
         });
     })
     .await?;

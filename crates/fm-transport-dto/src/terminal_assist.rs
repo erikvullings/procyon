@@ -215,6 +215,11 @@ pub enum TerminalAssistEventDto {
         /// The one-line description.
         text: String,
     },
+    /// A message the person sent while the assistant worked reached the model (task 0355).
+    Steered {
+        /// The message as sent.
+        text: String,
+    },
 }
 
 /// The files under a session's root, for `@` completion (task 0343).

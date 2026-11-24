@@ -335,6 +335,11 @@ type LiveTerminal = {
   /** A question sent while the assistant was answering; asked once the answer is done. */
   queued: string | undefined;
   /**
+   * Messages sent to the running request (task 0355), oldest first, until the model reads them.
+   * What it never read is asked as the next question.
+   */
+  steering: string[];
+  /**
    * Auto-approve mode (task 0356, `/auto`): commands run without asking unless they are very
    * dangerous, and files and edits are approved. Lasts while the tab lives; never saved.
    */
@@ -756,6 +761,13 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         m.redraw();
       }
       if (event.kind === 'progress') return;
+      if (event.kind === 'steered') {
+        const index = live.steering.indexOf(event.text);
+        if (index >= 0) live.steering.splice(index, 1);
+        live.terminal.write(questionAnsi(event.text, live.terminal.cols));
+        m.redraw();
+        return;
+      }
       streamed = true;
       live.terminal.write(
         event.kind === 'step' ? stepsAnsi([event.text]) : answer.line(event.text),
@@ -876,10 +888,16 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       live.restoreLine = undefined;
     }
     for (const data of live.held.splice(0)) onTypedData(live, data);
-    const queued = live.queued;
-    if (queued !== undefined && !isBusy(live)) {
+    // What the model never read is asked now, before a question that waited for the answer.
+    const waiting = [
+      ...live.steering.splice(0),
+      ...(live.queued === undefined ? [] : [live.queued]),
+    ];
+    if (waiting.length > 0 && !isBusy(live)) {
       live.queued = undefined;
-      submitQuestion(live, queued);
+      submitQuestion(live, waiting.join('\n'));
+    } else if (waiting.length > 0) {
+      live.queued = waiting.join('\n');
     }
     m.redraw();
   }
@@ -889,9 +907,13 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     live.requestId += 1;
     void currentAttrs?.client.assistCancel?.(live.assistSession).catch(() => undefined);
     panel = undefined;
-    // A question waiting for this answer goes back into the input instead of being asked.
-    if (live.queued !== undefined) {
-      live.composer = live.queued;
+    // Messages and a question waiting for this answer go back into the input instead.
+    const waiting = [
+      ...live.steering.splice(0),
+      ...(live.queued === undefined ? [] : [live.queued]),
+    ];
+    if (waiting.length > 0) {
+      live.composer = waiting.join('\n');
       live.queued = undefined;
     }
     live.terminal.write('\r\x1b[2K', () => releasePrompt(live));
@@ -1364,9 +1386,34 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     live.composer = '';
     live.recallIndex = undefined;
     rememberQuestion(live, question);
-    if (isBusy(live)) live.queued = question;
-    else submitQuestion(live, question);
+    if (!isBusy(live)) submitQuestion(live, question);
+    else if (!steer(live, question)) live.queued = question;
     m.redraw();
+  }
+
+  /**
+   * Sends a message to the running request (task 0355); `false` when it cannot be (a slash
+   * command, no host support, or a full queue), so it waits for the answer instead.
+   */
+  function steer(live: LiveTerminal, text: string): boolean {
+    const send = currentAttrs?.client.assistSteer;
+    if (send === undefined || parseSlash(text) !== undefined || live.steering.length >= 8) {
+      return false;
+    }
+    if (panel?.status !== 'busy' || panel.tabKey !== live.key) return false;
+    live.steering.push(text);
+    send(live.assistSession, text).then(
+      (queued) => {
+        if (queued) return;
+        // Not taken: it is asked once the answer is done.
+        const index = live.steering.indexOf(text);
+        if (index >= 0) live.steering.splice(index, 1);
+        live.queued = live.queued === undefined ? text : `${live.queued}\n${text}`;
+        m.redraw();
+      },
+      () => undefined,
+    );
+    return true;
   }
 
   /**
@@ -1832,6 +1879,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         composer: undefined,
         composerFocus: false,
         queued: undefined,
+        steering: [],
         autoApprove: false,
       };
       terminals.set(key, live);
@@ -2029,7 +2077,9 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         onkeydown: (event: KeyboardEvent) => composerKey(live, event),
       }),
       live.queued === undefined
-        ? undefined
+        ? live.steering.length === 0
+          ? undefined
+          : m('span.fm-terminal-composer-hint', t('terminal', 'composerSteering'))
         : m('span.fm-terminal-composer-hint', t('terminal', 'composerQueued')),
       m(
         'button.fm-terminal-composer-send',

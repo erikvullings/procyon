@@ -1,6 +1,7 @@
 import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LlmProfile } from '../../models';
+import type { TerminalAssistEvent } from './terminal-assist';
 import type { TerminalClient } from './terminal-client';
 import {
   handleTerminalKeyEvent,
@@ -1523,6 +1524,34 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     answer?.({ text: 'Done.' });
     await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
     expect(sentAt(1)?.request).toBe('next');
+  });
+
+  it('sends a message written while the assistant works to the running request', async () => {
+    let answer: ((reply: { text: string }) => void) | undefined;
+    let events: ((event: TerminalAssistEvent) => void) | undefined;
+    assist.mockImplementationOnce(
+      (_request, onEvent) =>
+        new Promise((resolve) => {
+          answer = resolve;
+          events = onEvent;
+        }),
+    );
+    const assistSteer = vi.fn(async () => true);
+    await mountWith({ assistSteer });
+    await markPrompt();
+    ask('# summarise the folder');
+    await vi.waitFor(() => expect(answer).toBeDefined());
+    ask('# skip the PDFs');
+    ask('# and the images');
+
+    expect(assistSteer).toHaveBeenCalledWith(expect.any(String), 'skip the PDFs');
+    expect(root.textContent).toContain('reads it after its current step');
+    events?.({ kind: 'steered', text: 'skip the PDFs' });
+
+    answer?.({ text: 'Done.' });
+    // The model never read the second one, so it is asked next.
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
+    expect(sentAt(1)?.request).toBe('and the images');
   });
 
   it('recalls earlier questions with Up and Down in the chat input', async () => {

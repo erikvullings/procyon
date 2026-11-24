@@ -2880,6 +2880,7 @@ export const pt = {
     composerLabel: 'Pergunta para o assistente',
     composerPlaceholder: 'Pergunte ao assistente… @ adiciona um ficheiro, / um comando ou skill',
     composerQueued: 'Enviada após esta resposta · Esc mantém-na aqui',
+    composerSteering: 'Enviado · o assistente lê depois do passo atual',
     composerSend: 'Enviar',
     consentTitle: 'Blocos de comandos',
     consentText:

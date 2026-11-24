@@ -179,6 +179,13 @@ pub(crate) async fn skills(
     commands::list_skills(terminal, working_directory).await
 }
 
+/// Queues a message for a session's running request (task 0355). `false` when the message is
+/// empty, too long, or the queue is full.
+pub(crate) fn steer(sessions: &Sessions, id: &str, text: &str) -> bool {
+    let text = text.trim();
+    !text.is_empty() && text.chars().count() <= MAX_REQUEST_CHARS && sessions.steer(id, text)
+}
+
 /// Replaces a session's conversation with a summary (`/compact`, task 0343).
 pub(crate) async fn compact(
     generator: &impl ChatGenerator,
@@ -255,9 +262,25 @@ async fn generate(
         .map_err(chat_failure)
 }
 
+/// A session question (see [`ask_turn`]). What the person sent during it but the model never saw
+/// is dropped when it ends: the terminal still holds it and asks it as the next question.
+async fn ask(
+    generator: &impl ChatGenerator,
+    terminal: &TerminalHost<'_>,
+    request: TerminalAssistRequestDto,
+    on_event: &mut (dyn FnMut(TerminalAssistEventDto) + Send),
+) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
+    let id = request.session_id.clone();
+    let reply = ask_turn(generator, terminal, request, on_event).await;
+    if let Some(id) = id {
+        terminal.sessions.drop_steering(&id);
+    }
+    reply
+}
+
 /// A session question: remembers the turn, lets the model use read-only tools, and stops at a
 /// command that needs the person's approval.
-async fn ask(
+async fn ask_turn(
     generator: &impl ChatGenerator,
     terminal: &TerminalHost<'_>,
     request: TerminalAssistRequestDto,
@@ -436,6 +459,7 @@ async fn ask(
                     TerminalAssistEventDto::Step { text }
                 }
                 TurnEvent::Progress(text) => TerminalAssistEventDto::Progress { text },
+                TurnEvent::Steered(text) => TerminalAssistEventDto::Steered { text },
             });
         })
         .await?;
@@ -573,6 +597,10 @@ impl<G: ChatGenerator> TurnHost for TerminalTurn<'_, G> {
 
     fn is_cancelled(&self) -> bool {
         self.sessions.is_cancelled(self.id)
+    }
+
+    fn take_steering(&mut self) -> Vec<String> {
+        self.sessions.take_steering(self.id)
     }
 }
 
@@ -1220,6 +1248,66 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_message_sent_while_the_assistant_works_is_answered_before_it_stops() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&[
+            r#"TOOL {"tool":"run_command","command":"cargo test"}"#,
+            "The tests pass.",
+            "The tests pass, and the build is clean too.",
+        ]);
+        let sessions = Sessions::default();
+        ask_in(
+            &fake,
+            &sessions,
+            ask_request("t1", "run the tests", dir.path()),
+        )
+        .await
+        .unwrap();
+        assert!(steer(&sessions, "t1", "  check the build too  "));
+        assert!(!steer(&sessions, "t1", "   "));
+
+        let mut follow = ask_request("t1", "", dir.path());
+        follow.request = None;
+        follow.tool_result = Some(TerminalToolResultDto {
+            command: "cargo test".into(),
+            declined: false,
+            exit_code: Some(0),
+            output: "ok".into(),
+        });
+        let mut events = Vec::new();
+        let done = reply_streaming_in(
+            &fake,
+            &ProviderRegistry::new(),
+            &sessions,
+            None,
+            follow,
+            &mut |event| events.push(event),
+        )
+        .await
+        .unwrap();
+        assert_eq!(done.text, "The tests pass, and the build is clean too.");
+        assert!(events.contains(&TerminalAssistEventDto::Steered {
+            text: "check the build too".into()
+        }));
+        assert!(
+            sessions
+                .render("t1")
+                .contains("Person: check the build too")
+        );
+    }
+
+    #[test]
+    fn the_steering_queue_is_bounded_and_cleared_by_a_stop() {
+        let sessions = Sessions::default();
+        for index in 0..session::MAX_STEERING {
+            assert!(steer(&sessions, "t", &format!("m{index}")));
+        }
+        assert!(!steer(&sessions, "t", "one too many"));
+        sessions.cancel("t");
+        assert!(steer(&sessions, "t", "after the stop"));
+    }
+
+    #[tokio::test]
     async fn declining_a_command_stops_without_asking_the_model_again() {
         let dir = tempfile::tempdir().unwrap();
         let fake = scripted(&[r#"TOOL {"tool":"run_command","command":"rm -rf build"}"#]);
@@ -1544,7 +1632,8 @@ mod tests {
             .map(|event| match event {
                 TerminalAssistEventDto::Line { text }
                 | TerminalAssistEventDto::Step { text }
-                | TerminalAssistEventDto::Progress { text } => text,
+                | TerminalAssistEventDto::Progress { text }
+                | TerminalAssistEventDto::Steered { text } => text,
             })
             .collect();
         assert_eq!(texts, ["Config:", "{\"name\": \"x\"}", "that is all"]);

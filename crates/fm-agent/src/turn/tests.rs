@@ -20,6 +20,9 @@ struct Scripted {
     /// The conversation as the loop recorded it.
     messages: Vec<Message>,
     cancelled: bool,
+    /// Messages the person sends, each once this many replies were generated.
+    steering: Vec<(usize, String)>,
+    generated: usize,
 }
 
 impl Scripted {
@@ -29,6 +32,8 @@ impl Scripted {
             log: Vec::new(),
             messages: Vec::new(),
             cancelled: false,
+            steering: Vec::new(),
+            generated: 0,
         }
     }
 
@@ -56,6 +61,7 @@ impl TurnHost for Scripted {
         on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
     ) -> Result<String, Failure> {
         let reply = self.replies.pop_front().ok_or(Failure)?;
+        self.generated += 1;
         for piece in reply.as_bytes().chunks(4) {
             on_delta(std::str::from_utf8(piece).unwrap_or(""));
         }
@@ -82,6 +88,21 @@ impl TurnHost for Scripted {
 
     fn is_cancelled(&self) -> bool {
         self.cancelled
+    }
+
+    fn take_steering(&mut self) -> Vec<String> {
+        let (ready, later) = std::mem::take(&mut self.steering)
+            .into_iter()
+            .partition::<Vec<_>, _>(|(after, _)| *after <= self.generated);
+        self.steering = later;
+        ready
+            .into_iter()
+            .map(|(_, text)| {
+                self.log.push(format!("person: {text}"));
+                self.messages.push(Message::User(text.clone()));
+                text
+            })
+            .collect()
     }
 }
 
@@ -186,7 +207,7 @@ async fn turn_with(host: &mut Scripted, harness: &Harness, options: &TurnOptions
         .iter()
         .filter_map(|event| match event {
             TurnEvent::Step(step) => Some(step.clone()),
-            TurnEvent::Line(_) | TurnEvent::Progress(_) => None,
+            TurnEvent::Line(_) | TurnEvent::Progress(_) | TurnEvent::Steered(_) => None,
         })
         .collect();
     Run { end, steps, events }
@@ -530,5 +551,39 @@ async fn what_a_running_tool_reports_is_shown_before_its_step() {
             &TurnEvent::Step("Shouted".into()),
             &TurnEvent::Step("Shouted".into()),
         ]
+    );
+}
+
+#[tokio::test]
+async fn a_message_sent_during_tool_calls_reaches_the_model_after_them() {
+    let mut host = Scripted::new(&[r#"TOOL {"tool":"shout","word":"a"}"#, "Done."]);
+    host.steering.push((1, "also do b".into()));
+    let run = turn(&mut host).await;
+
+    assert_eq!(run.end, Ok(TurnEnd::Answer("Done.".into())));
+    // The result of the running call comes first; the message never cuts into a round.
+    let order: Vec<&str> = host
+        .log
+        .iter()
+        .map(String::as_str)
+        .filter(|entry| entry.starts_with("tool:") || entry.starts_with("person:"))
+        .collect();
+    assert_eq!(order, ["tool: A", "person: also do b"]);
+    assert!(run.events.contains(&TurnEvent::Steered("also do b".into())));
+}
+
+#[tokio::test]
+async fn a_message_sent_while_the_answer_is_written_is_answered_in_the_same_turn() {
+    let mut host = Scripted::new(&["Done.", "Done, and b too."]);
+    host.steering.push((1, "and b?".into()));
+    let run = turn(&mut host).await;
+
+    assert_eq!(run.end, Ok(TurnEnd::Answer("Done, and b too.".into())));
+    assert_eq!(
+        run.events
+            .iter()
+            .filter(|event| matches!(event, TurnEvent::Steered(_)))
+            .count(),
+        1
     );
 }

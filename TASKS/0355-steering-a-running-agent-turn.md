@@ -1,6 +1,6 @@
 # 0355 Steering a running agent turn
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: backend, agent, frontend
 Depends on: none
@@ -33,3 +33,28 @@ current tool calls finish, a follow-up waits until the turn ends.
   `ModelSideCalls::stopped_when` and the turn's cancellation, so the steer path can follow it.
 
 ## Agent Notes
+- 2026-11-24 claude: backend done, frontend not started; nothing committed.
+  - Done: `TurnHost::take_steering` (default empty) and `TurnEvent::Steered` in fm-agent; the loop
+    delivers after each tool round and before accepting an answer (then continues). Terminal:
+    `Sessions::steer/take_steering/drop_steering` (max 8, cleared by a new question and by Stop),
+    `terminal_assist::steer`, `FileManagerService::terminal_assist_steer`, Tauri command
+    `terminal_assist_steer` (both handler lists), `TerminalAssistEventDto::Steered`. Undelivered
+    messages are dropped when a question ends; the terminal must ask them as the next question.
+  - Tests: fm-agent `turn::` 23 pass (2 new); terminal_assist 87 pass (2 new).
+  - Next: frontend. `terminal-assist.ts`: event `{ kind: 'steered', text }`; `terminal-client.ts`:
+    `assistSteer?(sessionId, text): Promise<boolean>` → `invoke('terminal_assist_steer', …)`.
+    `terminal-drawer.ts`: when busy, a submitted question goes to `live.steering` + `assistSteer`
+    (fall back to `live.queued` when it returns false); on a `steered` event remove it and write it
+    as a question line; when the reply ends, ask what is left as the next question; on cancel put
+    it back in the composer. Then i18n, a drawer test, lint, commit.
+  - Gap: removing a queued message before delivery is not offered (append-only queue).
+- 2026-11-24 claude: frontend done; task done.
+  - `terminal-client.ts` `assistSteer`; `terminal-assist.ts` event `steered`; `terminal-drawer.ts`
+    `LiveTerminal.steering`: while a request runs, a sent question goes to the request (not a
+    slash command; at most 8; falls back to "after this answer" when not taken). A delivered one
+    is written as a question line; what was never read is asked as the next question when the
+    answer ends; Stop puts it back in the input. Hint `composerSteering` in 8 locales.
+  - Chat: `TurnEvent::Steered` is mapped but chat sends nothing during a reply (no chat steer
+    endpoint yet); the terminal is where long tool loops run.
+  - Verified: drawer test "sends a message written while the assistant works to the running
+    request"; terminal + i18n frontend tests 463 pass; tsc clean.

@@ -2866,6 +2866,7 @@ export const pl = {
     composerLabel: 'Pytanie do asystenta',
     composerPlaceholder: 'Zapytaj asystenta… @ dodaje plik, / polecenie lub skill',
     composerQueued: 'Zostanie wysłane po tej odpowiedzi · Esc zatrzymuje je tutaj',
+    composerSteering: 'Wysłano · asystent przeczyta to po bieżącym kroku',
     composerSend: 'Wyślij',
     consentTitle: 'Bloki poleceń',
     consentText:

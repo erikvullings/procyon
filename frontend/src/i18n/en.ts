@@ -2811,6 +2811,7 @@ export const en = {
     composerLabel: 'Question for the assistant',
     composerPlaceholder: 'Ask the assistant… @ adds a file, / a command or skill',
     composerQueued: 'Sends after this answer · Esc keeps it here',
+    composerSteering: 'Sent · the assistant reads it after its current step',
     composerSend: 'Send',
     consentTitle: 'Command blocks',
     consentText:

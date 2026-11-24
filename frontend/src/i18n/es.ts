@@ -2874,6 +2874,7 @@ export const es = {
     composerLabel: 'Pregunta para el asistente',
     composerPlaceholder: 'Pregunta al asistente… @ añade un archivo, / un comando o skill',
     composerQueued: 'Se envía tras esta respuesta · Esc la conserva aquí',
+    composerSteering: 'Enviado · el asistente lo lee tras su paso actual',
     composerSend: 'Enviar',
     consentTitle: 'Bloques de comandos',
     consentText:

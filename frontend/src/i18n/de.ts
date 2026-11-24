@@ -2896,6 +2896,7 @@ export const de = {
     composerPlaceholder:
       'Den Assistenten fragen… @ fügt eine Datei hinzu, / einen Befehl oder Skill',
     composerQueued: 'Wird nach dieser Antwort gesendet · Esc behält sie hier',
+    composerSteering: 'Gesendet · der Assistent liest es nach seinem aktuellen Schritt',
     composerSend: 'Senden',
     consentTitle: 'Befehlsblöcke',
     consentText:

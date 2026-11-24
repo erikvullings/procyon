@@ -114,7 +114,9 @@ export interface TerminalAssistReply {
 export type TerminalAssistEvent =
   | { readonly kind: 'line'; readonly text: string }
   | { readonly kind: 'step'; readonly text: string }
-  | { readonly kind: 'progress'; readonly text: string };
+  | { readonly kind: 'progress'; readonly text: string }
+  /** A message sent while the assistant worked reached the model (task 0355). */
+  | { readonly kind: 'steered'; readonly text: string };
 
 /** A byte count for people: `812 B`, `1.2 KiB`. */
 export function byteSize(bytes: number): string {

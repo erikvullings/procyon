@@ -2867,6 +2867,7 @@ export const it = {
     composerLabel: 'Domanda per l’assistente',
     composerPlaceholder: 'Chiedi all’assistente… @ aggiunge un file, / un comando o una skill',
     composerQueued: 'Inviata dopo questa risposta · Esc la tiene qui',
+    composerSteering: "Inviato · l'assistente lo legge dopo il passo in corso",
     composerSend: 'Invia',
     consentTitle: 'Blocchi di comandi',
     consentText:

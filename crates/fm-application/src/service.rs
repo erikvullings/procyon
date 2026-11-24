@@ -3575,6 +3575,12 @@ impl FileManagerService {
         self.terminal_sessions.close(session_id);
     }
 
+    /// Gives a terminal tab's running request a message the person sent meanwhile; the model sees
+    /// it after the current tool calls (task 0355). `false` when it was not queued.
+    pub fn terminal_assist_steer(&self, session_id: &str, text: &str) -> bool {
+        crate::terminal_assist::steer(&self.terminal_sessions, session_id, text)
+    }
+
     /// Stops the request a terminal tab's assistant is running (its tool loop ends).
     pub fn terminal_assist_cancel(&self, session_id: &str) {
         self.terminal_sessions.cancel(session_id);
