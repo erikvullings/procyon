@@ -210,6 +210,9 @@ async fn files_inside_the_skill_are_read() {
 #[tokio::test]
 async fn reading_cannot_leave_the_skill_folder() {
     let (temp, skill) = skill_with_files().await;
+    // The folder must live to the end; only the Unix symlink checks below read it.
+    #[cfg(not(unix))]
+    let _ = &temp;
     for path in [
         "../outside.txt",
         "references/../../outside.txt",
