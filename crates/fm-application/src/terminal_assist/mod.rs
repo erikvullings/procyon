@@ -453,7 +453,7 @@ async fn ask(
                     sessions.push_tool(&id, "Error: creating files is turned off.");
                 } else if let Err(error) = write::check(&pending.name, &pending.content) {
                     sessions.push_tool(&id, &format!("Error: {error}"));
-                } else if sessions.writes_granted(&id, &folder_key) {
+                } else if request.auto_approve || sessions.writes_granted(&id, &folder_key) {
                     create_file(
                         writer.as_ref(),
                         sessions,
@@ -812,6 +812,7 @@ mod tests {
             tool_result: None,
             write_decision: None,
             allow_file_writes: false,
+            auto_approve: false,
             workspace_id: None,
         }
     }
@@ -830,6 +831,7 @@ mod tests {
             tool_result: None,
             write_decision: None,
             allow_file_writes: false,
+            auto_approve: false,
             workspace_id: None,
         }
     }
@@ -965,6 +967,7 @@ mod tests {
             tool_result: None,
             write_decision: None,
             allow_file_writes: false,
+            auto_approve: false,
             workspace_id: None,
         }
     }
@@ -1641,6 +1644,7 @@ mod tests {
     ) -> TerminalAssistRequestDto {
         TerminalAssistRequestDto {
             allow_file_writes: true,
+            auto_approve: false,
             ..ask_request(session, question, directory)
         }
     }
@@ -1774,6 +1778,21 @@ mod tests {
         assert_eq!(asked.folder, "./summaries/");
         assert_eq!(asked.name, "a.md");
         assert!(!dir.path().join("summaries").exists());
+    }
+
+    #[tokio::test]
+    async fn auto_approve_creates_files_without_asking() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&[WRITE_A, "Done."]);
+        let sessions = Sessions::default();
+        let request = TerminalAssistRequestDto {
+            auto_approve: true,
+            ..writing_request("t", "summarise", dir.path())
+        };
+        let reply = ask_local(&fake, &sessions, request).await;
+        assert!(reply.write_request.is_none());
+        assert_eq!(reply.text, "Done.");
+        assert!(dir.path().join("summaries/a.md").exists());
     }
 
     #[tokio::test]

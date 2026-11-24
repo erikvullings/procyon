@@ -2801,6 +2801,26 @@ export const pl = {
     slashHelpClear: 'zapomnij rozmowę, zachowaj folder',
     slashHelpCompact: 'zastąp rozmowę podsumowaniem',
     slashHelpModel: 'wyświetl modele czatu lub przełącz na jeden z nich',
+    slashHelpAuto:
+      'włącz lub wyłącz automatyczne zatwierdzanie: uruchamianie poleceń, tworzenie plików i wprowadzanie zmian bez pytania, z wyjątkiem bardzo niebezpiecznych poleceń',
+    slashAutoOn:
+      'Automatyczne zatwierdzanie jest włączone: polecenia, nowe pliki i zmiany są wykonywane bez pytania. Bardzo niebezpieczne polecenia nadal pytają.',
+    slashAutoOff:
+      'Automatyczne zatwierdzanie jest wyłączone: polecenia, które coś zmieniają, najpierw pytają.',
+    autoApprove: 'Auto',
+    autoApproveHelp:
+      'Automatyczne zatwierdzanie: uruchamianie poleceń, tworzenie plików i wprowadzanie zmian bez pytania. Bardzo niebezpieczne polecenia (usunięcie folderu domowego, folderu systemowego lub dysku) nadal pytają.',
+    autoApproveAsks: 'Pyta, ponieważ polecenie {reason}.',
+    dangerHome: 'dotyczy katalogu głównego, folderu domowego lub folderu nad nim',
+    dangerSystem: 'zmienia folder systemowy',
+    dangerWorkingFolder: 'usuwa sam folder roboczy',
+    dangerUnresolved: 'zmienia ścieżkę znaną dopiero podczas uruchomienia',
+    dangerDisk: 'zapisuje na dysk, formatuje go lub partycjonuje',
+    dangerPrivilege: 'działa jako inny użytkownik',
+    dangerPower: 'wyłącza lub uruchamia ponownie komputer',
+    dangerRemoteScript: 'uruchamia pobrany skrypt',
+    dangerForkBomb: 'uruchamiałoby procesy bez końca',
+    dangerUnparsed: 'nie dało się odczytać jako polecenia',
     slashHelpHelp: 'wyświetl te polecenia',
     drawer: 'Panel terminala',
     selectDirectory: 'Wybierz katalog, aby otworzyć terminal.',

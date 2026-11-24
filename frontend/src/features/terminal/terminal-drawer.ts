@@ -29,6 +29,7 @@ import {
   stepsAnsi,
 } from './answer-ansi';
 import { type BlockTracker, type CommandBlock, createBlockTracker } from './block-tracker';
+import { type CommandSite, type DangerKind, dangerOf } from './dangerous-command';
 import {
   caretOnFirstLine,
   caretOnLastLine,
@@ -112,6 +113,8 @@ export interface TerminalDrawerAttrs {
   readonly autoRunReadOnly?: boolean;
   /** Whether the assistant may offer to create files after approval (task 0338). */
   readonly allowFileWrites?: boolean;
+  /** The person's home folder (local), so auto-approve can tell when a command reaches it. */
+  readonly homeDirectory?: string | undefined;
   /** The terminal's shell on `host` (see `terminalHost`) moved to this absolute folder; the pane follows. */
   readonly onFollowFolder?: (host: string, path: string) => void;
   readonly listFolder?: (location: Location) => Promise<readonly string[]>;
@@ -173,8 +176,50 @@ function slashHelp(command: SlashCommandName): string {
       return t('terminal', 'slashHelpCompact');
     case 'model':
       return t('terminal', 'slashHelpModel');
+    case 'auto':
+      return t('terminal', 'slashHelpAuto');
     case 'help':
       return t('terminal', 'slashHelpHelp');
+  }
+}
+
+/** The native path of a `file://` or `sftp://` folder URI; `undefined` for anything else. */
+export function nativeFolder(uri: string): string | undefined {
+  const match = /^(?:file|sftp):\/\/[^/]*(\/[^?#]*)/.exec(uri);
+  if (match === null) return undefined;
+  let path: string;
+  try {
+    path = decodeURIComponent(match[1] ?? '/');
+  } catch {
+    return undefined;
+  }
+  // `file:///C:/Users` is the Windows path `C:/Users`.
+  return /^\/[A-Za-z]:/.test(path) ? path.slice(1) : path;
+}
+
+/** Why a command still asks in auto-approve mode, in words. */
+function dangerText(kind: DangerKind): string {
+  switch (kind) {
+    case 'home':
+      return t('terminal', 'dangerHome');
+    case 'system':
+      return t('terminal', 'dangerSystem');
+    case 'workingFolder':
+      return t('terminal', 'dangerWorkingFolder');
+    case 'unresolved':
+      return t('terminal', 'dangerUnresolved');
+    case 'disk':
+      return t('terminal', 'dangerDisk');
+    case 'privilege':
+      return t('terminal', 'dangerPrivilege');
+    case 'power':
+      return t('terminal', 'dangerPower');
+    case 'remoteScript':
+      return t('terminal', 'dangerRemoteScript');
+    case 'forkBomb':
+      return t('terminal', 'dangerForkBomb');
+    case 'unparsed':
+      return t('terminal', 'dangerUnparsed');
   }
 }
 
@@ -268,6 +313,11 @@ type LiveTerminal = {
   composerFocus: boolean;
   /** A question sent while the assistant was answering; asked once the answer is done. */
   queued: string | undefined;
+  /**
+   * Auto-approve mode (task 0356, `/auto`): commands run without asking unless they are very
+   * dangerous, and files and edits are approved. Lasts while the tab lives; never saved.
+   */
+  autoApprove: boolean;
 };
 
 export interface TerminalKeyHandlers {
@@ -476,7 +526,13 @@ type AssistPanel =
       readonly progress?: string | undefined;
     }
   | { readonly status: 'suggest'; readonly tabKey: string; readonly command: string }
-  | { readonly status: 'approve'; readonly tabKey: string; readonly command: string }
+  | {
+      readonly status: 'approve';
+      readonly tabKey: string;
+      readonly command: string;
+      /** Why the command asks although auto-approve is on. */
+      readonly danger?: DangerKind;
+    }
   | { readonly status: 'running'; readonly tabKey: string; readonly command: string }
   | {
       readonly status: 'write';
@@ -690,6 +746,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           ...(input.skill === undefined ? {} : { skill: input.skill }),
           ...(live.assistRoot === undefined ? {} : { root: live.assistRoot.uri }),
           allowFileWrites: attrs.allowFileWrites !== false,
+          ...(live.autoApprove ? { autoApprove: true } : {}),
         },
         onEvent,
       )
@@ -723,17 +780,20 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       next = { status: 'write', tabKey: live.key, ...reply.writeRequest };
     } else if (reply.runCommand !== undefined) {
       const command = cleanCommand(reply.runCommand);
-      // A read-only command runs at once, unless the person has started typing meanwhile.
-      if (
-        currentAttrs?.autoRunReadOnly !== false &&
-        isReadOnlyCommand(command) &&
-        live.markSeen &&
-        live.typed.known &&
-        live.typed.text === ''
-      ) {
+      // A read-only command runs at once, and in auto-approve mode any command that is not very
+      // dangerous, unless the person has started typing meanwhile.
+      const free = live.markSeen && live.typed.known && live.typed.text === '';
+      const danger = live.autoApprove ? dangerOf(command, commandSite(live)) : undefined;
+      const readOnly = currentAttrs?.autoRunReadOnly !== false && isReadOnlyCommand(command);
+      if (free && (readOnly || (live.autoApprove && danger === undefined))) {
         autoRun = command;
       } else {
-        next = { status: 'approve', tabKey: live.key, command };
+        next = {
+          status: 'approve',
+          tabKey: live.key,
+          command,
+          ...(danger === undefined ? {} : { danger }),
+        };
       }
     } else {
       if (!streamed) text += renderAnswerAnsi(reply.text, live.terminal.cols);
@@ -743,6 +803,17 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       }
     }
     present(live, token, text, next, autoRun);
+  }
+
+  /** The working and home folders of a tab's shell, as native paths when they are known. */
+  function commandSite(live: LiveTerminal): CommandSite {
+    const location = currentAttrs?.location;
+    const cwd = location === undefined ? undefined : nativeFolder(location.uri);
+    const home = live.host === 'local' ? currentAttrs?.homeDirectory : undefined;
+    return {
+      ...(cwd === undefined ? {} : { cwd }),
+      ...(home === undefined ? {} : { home }),
+    };
   }
 
   /** Shows `text` in the terminal, then brings the shell prompt back. Dropped if dismissed. */
@@ -1483,6 +1554,15 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       case 'model':
         runAsyncCommand(live, question, () => switchModel(live, attrs.models, argument));
         return;
+      case 'auto': {
+        const choice = argument.toLowerCase();
+        live.autoApprove = choice === 'on' ? true : choice === 'off' ? false : !live.autoApprove;
+        const text = live.autoApprove
+          ? t('terminal', 'slashAutoOn')
+          : t('terminal', 'slashAutoOff');
+        showCommandOutput(live, question, infoAnsi([text]));
+        return;
+      }
     }
   }
 
@@ -1690,6 +1770,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         composer: undefined,
         composerFocus: false,
         queued: undefined,
+        autoApprove: false,
       };
       terminals.set(key, live);
       const current = live;
@@ -2127,6 +2208,12 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           canRun
             ? undefined
             : m('span.fm-terminal-assist-status', t('terminal', 'assistNeedsBlocks')),
+          shown.danger === undefined
+            ? undefined
+            : m(
+                'span.fm-terminal-assist-status.fm-terminal-assist-danger',
+                t('terminal', 'autoApproveAsks', { reason: dangerText(shown.danger) }),
+              ),
           m('.fm-terminal-assist-buttons', [
             shortcutButton(
               canRun ? t('terminal', 'assistRun') : t('terminal', 'assistInsert'),
@@ -2198,13 +2285,16 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     shown: AssistPanel | undefined,
     chatting: boolean,
   ): m.Children {
+    const auto = autoApproveToggle(live);
     if (shown?.status === 'busy') {
       return [
         thinkingStatus(shown.progress),
         shortcutButton(t('terminal', 'assistDismiss'), 'Esc', () => cancelBusy(live)),
+        auto,
       ];
     }
     return [
+      auto,
       offerExplain(live) && (chatting || live.markSeen)
         ? shortcutButton(t('terminal', 'blockExplain'), chordLabel('E'), () => explain(live))
         : undefined,
@@ -2224,6 +2314,25 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           )
         : undefined,
     ];
+  }
+
+  /** Turns auto-approve on or off for the tab; shown once the assistant was used, or while on. */
+  function autoApproveToggle(live: LiveTerminal): m.Children {
+    if (!live.autoApprove && !live.assistActive) return undefined;
+    return m(
+      'button.fm-terminal-assist-action.fm-terminal-assist-toggle',
+      {
+        type: 'button',
+        'aria-pressed': live.autoApprove ? 'true' : 'false',
+        class: live.autoApprove ? 'is-on' : '',
+        ...tooltipEvents(() => t('terminal', 'autoApproveHelp'), 'above-left'),
+        onclick: () => {
+          live.autoApprove = !live.autoApprove;
+          m.redraw();
+        },
+      },
+      t('terminal', 'autoApprove'),
+    );
   }
 
   /** Ends the tab's shell so the next open starts it with the current integration setting. */

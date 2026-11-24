@@ -824,6 +824,17 @@ main.fm-workspace {
   cursor: default;
 }
 
+/* Auto-approve (task 0356): the toggle shows plainly when it is on, and a command that still asks
+   says why in the warning colour. */
+.fm-terminal-strip .fm-terminal-assist-action.fm-terminal-assist-toggle.is-on {
+  border-color: var(--fm-accent);
+  color: var(--fm-accent);
+}
+
+.fm-terminal-assist-danger {
+  color: var(--fm-warning);
+}
+
 /* Quiet actions in the strip: text with a faint key hint, no boxes. The first action of a
    status row (Run, Insert) is the one to take, so it is the only emphasised one. */
 .fm-terminal-strip .fm-terminal-assist-action {

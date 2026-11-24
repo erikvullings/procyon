@@ -2810,6 +2810,26 @@ export const es = {
     slashHelpClear: 'olvidar la conversación, conservar la carpeta',
     slashHelpCompact: 'sustituir la conversación por un resumen',
     slashHelpModel: 'listar los modelos de chat o cambiar a uno',
+    slashHelpAuto:
+      'activar o desactivar la aprobación automática: ejecutar comandos, crear archivos y aplicar cambios sin preguntar, salvo comandos muy peligrosos',
+    slashAutoOn:
+      'La aprobación automática está activada: comandos, archivos nuevos y cambios se aplican sin preguntar. Los comandos muy peligrosos siguen preguntando.',
+    slashAutoOff:
+      'La aprobación automática está desactivada: los comandos que cambian algo preguntan antes.',
+    autoApprove: 'Auto',
+    autoApproveHelp:
+      'Aprobación automática: ejecutar comandos, crear archivos y aplicar cambios sin preguntar. Los comandos muy peligrosos (borrar tu carpeta personal, una carpeta del sistema o un disco) siguen preguntando.',
+    autoApproveAsks: 'Pregunta porque {reason}.',
+    dangerHome: 'afecta a la raíz, a tu carpeta personal o a una carpeta superior',
+    dangerSystem: 'cambia una carpeta del sistema',
+    dangerWorkingFolder: 'elimina la propia carpeta de trabajo',
+    dangerUnresolved: 'cambia una ruta que solo se conoce al ejecutarse',
+    dangerDisk: 'escribe en un disco, lo formatea o lo particiona',
+    dangerPrivilege: 'se ejecuta como otro usuario',
+    dangerPower: 'apaga o reinicia el ordenador',
+    dangerRemoteScript: 'ejecuta un script descargado',
+    dangerForkBomb: 'iniciaría procesos sin fin',
+    dangerUnparsed: 'no se pudo leer como comando',
     slashHelpHelp: 'listar estos comandos',
     drawer: 'Panel de terminal',
     selectDirectory: 'Seleccione un directorio para abrir un terminal.',

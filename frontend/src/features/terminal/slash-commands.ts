@@ -2,7 +2,7 @@ import type { LlmProfile, LlmRoleAssignment } from '../../models';
 import type { MentionCompletion } from './terminal-assist';
 
 /** The session commands typed after `#` (task 0343). */
-export const SLASH_COMMANDS = ['new', 'clear', 'compact', 'model', 'help'] as const;
+export const SLASH_COMMANDS = ['new', 'clear', 'compact', 'model', 'auto', 'help'] as const;
 export type SlashCommandName = (typeof SLASH_COMMANDS)[number];
 
 /** What a `# /...` question asks for. */

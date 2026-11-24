@@ -226,6 +226,8 @@ export const ENGLISH_IDENTICAL_ALLOWLIST: Readonly<Record<string, Allowlisted>> 
   'settings.sizeFormatBytes': ['nl', 'de', 'es', 'pt'],
   'settings.sizeFormatDecimal': ['es', 'pt'],
   'settings.terminal': ['nl', 'de', 'fr', 'es', 'pt', 'pl'],
+  // "Auto" is the short label of the auto-approve toggle in every language.
+  'terminal.autoApprove': 'all',
   'settings.updateLater': ['nl'],
   'settings.updates': ['nl'],
   'shell.aboutVersion': ['de', 'fr'],

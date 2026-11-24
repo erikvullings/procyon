@@ -140,6 +140,10 @@ pub struct TerminalAssistRequestDto {
     /// Whether the assistant may offer to create files (the terminal setting, task 0338).
     #[serde(default)]
     pub allow_file_writes: bool,
+    /// The session's auto-approve mode is on (task 0356): files are created and edits applied
+    /// without asking. Commands are approved by the terminal, which still asks for dangerous ones.
+    #[serde(default)]
+    pub auto_approve: bool,
     /// The active workspace, whose semantic consent lets `search_notes` use the notes index
     /// (task 0337). Without it notes are searched by text.
     #[serde(default, skip_serializing_if = "Option::is_none")]

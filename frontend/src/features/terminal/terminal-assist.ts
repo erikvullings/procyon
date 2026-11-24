@@ -59,6 +59,8 @@ export interface TerminalAssistRequest {
   readonly writeDecision?: TerminalWriteDecision;
   /** Whether the assistant may offer to create files (the terminal setting). */
   readonly allowFileWrites?: boolean;
+  /** Auto-approve mode (task 0356): files are created and edits applied without asking. */
+  readonly autoApprove?: boolean;
   /** The active workspace, so `search_notes` may use the notes index (task 0337). */
   readonly workspaceId?: string;
   /** The session's trusted root: the folder it started in (task 0343). */

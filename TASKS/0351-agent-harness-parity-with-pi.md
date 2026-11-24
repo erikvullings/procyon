@@ -1,6 +1,6 @@
 # 0351 Agent harness: close the main gaps with Pi
 
-Status: open
+Status: in_progress
 Priority: medium
 Subsystem: backend, agent
 Depends on: none
@@ -27,7 +27,7 @@ UI, provider payload rewriting) is not copied; where a subtask needs an extensio
 narrow typed seam to `fm-agent`, not a general hook system.
 
 ## Acceptance Criteria
-- 0352, 0353, 0354 and 0355 are done.
+- 0352, 0353, 0354, 0355 and 0356 are done.
 - Each new capability lives in `fm-agent` (layer 0, no workspace dependencies) where it is
   host-neutral, with `fm-application` hosts (terminal assistant, chat) as thin adapters.
 - Browser and Tauri hosts behave the same (spec rule 9).

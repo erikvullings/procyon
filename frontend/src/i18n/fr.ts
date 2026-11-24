@@ -2826,6 +2826,26 @@ export const fr = {
     slashHelpClear: 'oublier la conversation, garder le dossier',
     slashHelpCompact: 'remplacer la conversation par un résumé',
     slashHelpModel: 'lister les modèles de chat ou en choisir un',
+    slashHelpAuto:
+      "activer ou désactiver l'approbation automatique : exécuter des commandes, créer des fichiers et appliquer des modifications sans demander, sauf pour les commandes très dangereuses",
+    slashAutoOn:
+      "L'approbation automatique est activée : commandes, nouveaux fichiers et modifications passent sans demander. Les commandes très dangereuses demandent toujours.",
+    slashAutoOff:
+      "L'approbation automatique est désactivée : les commandes qui modifient quelque chose demandent d'abord.",
+    autoApprove: 'Auto',
+    autoApproveHelp:
+      'Approbation automatique : exécuter des commandes, créer des fichiers et appliquer des modifications sans demander. Les commandes très dangereuses (supprimer votre dossier personnel, un dossier système ou un disque) demandent toujours.',
+    autoApproveAsks: 'Demande, car elle {reason}.',
+    dangerHome: 'touche la racine, votre dossier personnel ou un dossier au-dessus',
+    dangerSystem: 'modifie un dossier système',
+    dangerWorkingFolder: 'supprime le dossier de travail lui-même',
+    dangerUnresolved: "modifie un chemin connu seulement à l'exécution",
+    dangerDisk: 'écrit sur un disque, le formate ou le partitionne',
+    dangerPrivilege: "s'exécute sous un autre utilisateur",
+    dangerPower: "éteint ou redémarre l'ordinateur",
+    dangerRemoteScript: 'exécute un script téléchargé',
+    dangerForkBomb: 'lancerait des processus sans fin',
+    dangerUnparsed: "n'a pas pu être lue comme une commande",
     slashHelpHelp: 'lister ces commandes',
     drawer: 'Tiroir de terminal',
     selectDirectory: 'Sélectionnez un répertoire pour ouvrir un terminal.',

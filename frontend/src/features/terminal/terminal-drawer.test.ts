@@ -1247,6 +1247,36 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     expect(sentAt(1)?.toolResult).toMatchObject({ command: 'grep -n foo src | head -5' });
   });
 
+  it('in auto-approve mode runs a command at once, but still asks for a dangerous one', async () => {
+    assist
+      .mockResolvedValueOnce({ text: '', runCommand: 'rm -rf build' })
+      .mockResolvedValueOnce({ text: '', runCommand: 'rm -rf ~' });
+    await mount({ homeDirectory: '/home' });
+    await markPrompt();
+    ask('# /auto');
+    await vi.waitFor(() => expect(root.textContent).toContain('Auto-approve is on'));
+    await markPrompt();
+    ask('# clean');
+
+    await vi.waitFor(() =>
+      expect(write).toHaveBeenCalledWith(
+        'session-1',
+        new TextEncoder().encode('\x15 rm -rf build\r'),
+      ),
+    );
+    expect(sentAt(0)?.autoApprove).toBe(true);
+    echo?.({ type: 'output', data: bytes('\x1b]133;C\x07\r\n\x1b]133;D;0\x07') });
+
+    await vi.waitFor(() => expect(button('Run')).toBeDefined());
+    expect(root.querySelector('.fm-terminal-assist-danger')?.textContent).toContain(
+      'your home folder',
+    );
+    expect(write).not.toHaveBeenCalledWith(
+      'session-1',
+      new TextEncoder().encode('\x15 rm -rf ~\r'),
+    );
+  });
+
   it('still asks for a read-only command when the setting is off', async () => {
     autoRunReadOnly = false;
     assist.mockResolvedValueOnce({ text: '', runCommand: 'ls -la' });
