@@ -2843,7 +2843,7 @@ dependencies = [
 
 [[package]]
 name = "fm-agent"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "async-trait",
  "futures",
@@ -2857,7 +2857,7 @@ dependencies = [
 
 [[package]]
 name = "fm-application"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -2940,7 +2940,7 @@ dependencies = [
 
 [[package]]
 name = "fm-archive"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "async-trait",
  "bzip2",
@@ -2964,7 +2964,7 @@ dependencies = [
 
 [[package]]
 name = "fm-auth-oauth"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "base64 0.23.1",
  "rand 0.10.4",
@@ -2981,7 +2981,7 @@ dependencies = [
 
 [[package]]
 name = "fm-checksum"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "blake3",
  "crc32fast",
@@ -3003,7 +3003,7 @@ dependencies = [
 
 [[package]]
 name = "fm-cli"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "anyhow",
  "clap",
@@ -3014,7 +3014,7 @@ dependencies = [
 
 [[package]]
 name = "fm-comparison"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "chrono",
  "fm-checksum",
@@ -3032,7 +3032,7 @@ dependencies = [
 
 [[package]]
 name = "fm-connections"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3048,7 +3048,7 @@ dependencies = [
 
 [[package]]
 name = "fm-credentials"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "async-trait",
  "serde",
@@ -3061,7 +3061,7 @@ dependencies = [
 
 [[package]]
 name = "fm-credentials-macos"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "async-trait",
  "fm-credentials",
@@ -3072,7 +3072,7 @@ dependencies = [
 
 [[package]]
 name = "fm-credentials-windows"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "async-trait",
  "fm-credentials",
@@ -3083,7 +3083,7 @@ dependencies = [
 
 [[package]]
 name = "fm-desktop"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "chrono",
  "clipboard-rs",
@@ -3135,7 +3135,7 @@ dependencies = [
 
 [[package]]
 name = "fm-domain"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "chrono",
  "criterion",
@@ -3148,7 +3148,7 @@ dependencies = [
 
 [[package]]
 name = "fm-events"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "chrono",
  "fm-domain",
@@ -3160,7 +3160,7 @@ dependencies = [
 
 [[package]]
 name = "fm-geo"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "base64 0.23.1",
  "crs-definitions",
@@ -3174,7 +3174,7 @@ dependencies = [
 
 [[package]]
 name = "fm-metadata"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "flate2",
  "image",
@@ -3192,7 +3192,7 @@ dependencies = [
 
 [[package]]
 name = "fm-operations"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3212,7 +3212,7 @@ dependencies = [
 
 [[package]]
 name = "fm-platform"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "bitflags 2.13.2",
  "fm-domain",
@@ -3221,7 +3221,7 @@ dependencies = [
 
 [[package]]
 name = "fm-platform-macos"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "block2",
  "dirs",
@@ -3241,7 +3241,7 @@ dependencies = [
 
 [[package]]
 name = "fm-platform-windows"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "fm-domain",
  "fm-platform",
@@ -3255,7 +3255,7 @@ dependencies = [
 
 [[package]]
 name = "fm-plugin-api"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "fm-domain",
  "serde",
@@ -3266,7 +3266,7 @@ dependencies = [
 
 [[package]]
 name = "fm-plugin-runtime"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "fm-plugin-api",
  "mlua",
@@ -3280,7 +3280,7 @@ dependencies = [
 
 [[package]]
 name = "fm-pptx-renderer"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "ooxmlsdk-pdf",
  "thiserror 2.0.21",
@@ -3289,7 +3289,7 @@ dependencies = [
 
 [[package]]
 name = "fm-search"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3309,7 +3309,7 @@ dependencies = [
 
 [[package]]
 name = "fm-search-acceleration"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "thiserror 2.0.21",
  "tokio-util",
@@ -3317,7 +3317,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-components"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "ed25519-dalek",
  "fs2",
@@ -3335,7 +3335,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-conversion"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "blake3",
  "calamine",
@@ -3356,7 +3356,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-docling"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "docling-core",
  "docling-pdf",
@@ -3369,7 +3369,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-library"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "fm-domain",
  "fm-settings",
@@ -3384,7 +3384,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-protocol"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "prost",
  "prost-build",
@@ -3395,7 +3395,7 @@ dependencies = [
 
 [[package]]
 name = "fm-semantic-worker"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "blake3",
  "caseless",
@@ -3434,7 +3434,7 @@ dependencies = [
 
 [[package]]
 name = "fm-server"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "axum",
  "axum-server",
@@ -3481,7 +3481,7 @@ dependencies = [
 
 [[package]]
 name = "fm-settings"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "dirs",
  "fm-domain",
@@ -3495,7 +3495,7 @@ dependencies = [
 
 [[package]]
 name = "fm-ssh"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3515,7 +3515,7 @@ dependencies = [
 
 [[package]]
 name = "fm-test-support"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "serde",
  "serde_json",
@@ -3523,7 +3523,7 @@ dependencies = [
 
 [[package]]
 name = "fm-transport-dto"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "chrono",
  "fm-domain",
@@ -3536,7 +3536,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vcs-status"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "chrono",
  "dunce",
@@ -3550,7 +3550,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "async-trait",
  "bitflags 2.13.2",
@@ -3566,7 +3566,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-ftp"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "async-trait",
  "fm-domain",
@@ -3582,7 +3582,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-local"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3601,7 +3601,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-onedrive"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3621,7 +3621,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-s3"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3639,7 +3639,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-sftp"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3656,7 +3656,7 @@ dependencies = [
 
 [[package]]
 name = "fm-vfs-webdav"
-version = "0.7.0"
+version = "0.7.1-1"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
