@@ -64,7 +64,9 @@ pub enum LlmTlsPolicyDto {
 #[serde(rename_all = "camelCase")]
 pub struct LlmAdvancedSettingsDto {
     pub context_window: u32,
-    pub maximum_answer_tokens: u32,
+    /// A cap on each answer's tokens; `null` sends none, so answers are never cut off.
+    #[serde(default)]
+    pub maximum_answer_tokens: Option<u32>,
     pub temperature: f32,
     pub timeout_seconds: u64,
     pub tls_policy: LlmTlsPolicyDto,
@@ -314,7 +316,7 @@ mod tests {
             has_credential: true,
             advanced: LlmAdvancedSettingsDto {
                 context_window: 8_192,
-                maximum_answer_tokens: 1_024,
+                maximum_answer_tokens: None,
                 temperature: 0.2,
                 timeout_seconds: 30,
                 tls_policy: LlmTlsPolicyDto::RequireValidCertificate,
@@ -339,12 +341,12 @@ mod tests {
             context_window: None,
             maximum_answer_tokens: None,
             context_window_cap: 1_048_576,
-            maximum_answer_tokens_cap: 16_384,
+            maximum_answer_tokens_cap: 1_048_576,
         })
         .unwrap();
         assert_eq!(value["contextWindow"], serde_json::Value::Null);
         assert_eq!(value["maximumAnswerTokens"], serde_json::Value::Null);
         assert_eq!(value["contextWindowCap"], 1_048_576);
-        assert_eq!(value["maximumAnswerTokensCap"], 16_384);
+        assert_eq!(value["maximumAnswerTokensCap"], 1_048_576);
     }
 }

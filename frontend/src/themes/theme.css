@@ -272,29 +272,36 @@ body {
   user-select: none;
 }
 
-/* Keep native scrollbars visually aligned with the active theme in Tauri/WKWebView. */
+/* Native scrollbars look like the terminal's: no track (so no dark line along a pane's edge), a
+   thin rounded thumb that darkens on hover. Slightly wider than the terminal's (10px against 8px)
+   because the file lists are scrolled with the mouse far more often. `scrollbar-color` serves the
+   browsers that ignore the WebKit pseudo-elements; WKWebView (Tauri on macOS) uses those. */
 .fm-app-shell * {
-  scrollbar-color: var(--fm-border) var(--fm-surface);
+  scrollbar-color: var(--fm-border) transparent;
+  scrollbar-width: thin;
 }
 
 .fm-app-shell *::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
-  background: var(--fm-surface);
+  width: 10px;
+  height: 10px;
+  background: transparent;
 }
 
-.fm-app-shell *::-webkit-scrollbar-track {
-  background: var(--fm-surface);
+.fm-app-shell *::-webkit-scrollbar-track,
+.fm-app-shell *::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .fm-app-shell *::-webkit-scrollbar-thumb {
   background: var(--fm-border);
-  border: 2px solid var(--fm-surface);
+  background-clip: padding-box;
+  border: 2px solid transparent;
   border-radius: var(--fm-radius-pill);
 }
 
 .fm-app-shell *::-webkit-scrollbar-thumb:hover {
   background: var(--fm-text-muted);
+  background-clip: padding-box;
 }
 
 input,
@@ -903,16 +910,17 @@ main.fm-workspace {
   padding: 0 6px;
 }
 
-/* Close, at the drawer's top right in the gutter beside the output, so it covers no text. */
+/* Close, fixed at the drawer's top right over the top of the scrollbar. The terminal keeps its
+   text clear of the scrollbar's lane, so the button covers at most the end of the first line. */
 .fm-terminal-close {
   position: absolute;
   top: 4px;
-  right: 1px;
+  right: 0;
   z-index: 2;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
+  width: 16px;
   height: 20px;
   padding: 0;
   border: 0;
@@ -1214,31 +1222,33 @@ main.fm-workspace {
 .fm-terminal-host {
   flex: 1 1 auto;
   min-height: 0;
-  /* The right gutter holds the close button above the end of the scrollbar's track. */
-  padding: 4px 22px 4px 8px;
+  /* No right padding: the scrollbar sits against the drawer's edge. */
+  padding: 4px 0 4px 8px;
   font-size: 0.92em;
 }
 
 /* The terminal draws its own VS Code-style scrollbar (xterm's scrollable element), with inline
-   sizes, so these overrides are !important. It matches the file pane's look (surface track,
-   rounded thumb with a surface ring) but is thinner, and it sits flush with the pane's edge. */
+   sizes, so these overrides are !important. The same look as the native scrollbars (no track, a
+   rounded thumb inset by a transparent ring), a little thinner, flush with the drawer's edge. */
 .fm-terminal-drawer .xterm-scrollable-element > .scrollbar.vertical {
   width: 8px !important;
   right: 0 !important;
-  background: var(--fm-surface) !important;
+  background: transparent !important;
 }
 
 .fm-terminal-drawer .xterm-scrollable-element > .scrollbar.vertical > .slider {
   width: 8px !important;
   left: 0 !important;
   box-sizing: border-box;
-  border: 2px solid var(--fm-surface);
+  border: 2px solid transparent;
   border-radius: var(--fm-radius-pill);
   background: var(--fm-border) !important;
+  background-clip: padding-box;
 }
 
 .fm-terminal-drawer .xterm-scrollable-element > .scrollbar.vertical > .slider:hover {
   background: var(--fm-text-muted) !important;
+  background-clip: padding-box;
 }
 
 .fm-terminal-surface {

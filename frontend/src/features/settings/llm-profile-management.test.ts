@@ -204,7 +204,8 @@ describe('LlmProfileManagement', () => {
       ),
     ).toBe(false);
     await vi.waitFor(() => expect(fieldValue('Context window')).toBe('128k'));
-    expect(fieldValue('Maximum answer tokens')).toBe('8k');
+    // The model's own output limit is reported but not copied into the profile: no cap is sent.
+    expect(fieldValue('Maximum answer tokens')).toBe('No limit');
     expect(root.textContent).toContain('131,072 context tokens, 8,192 output tokens');
     fieldInput('Context window')?.click();
     m.redraw.sync();
@@ -215,7 +216,7 @@ describe('LlmProfileManagement', () => {
       [...root.querySelectorAll('li')].some((item) => item.textContent?.trim() === '256k'),
     ).toBe(false);
     expect(root.textContent).toContain('Maximum input and output combined');
-    expect(root.textContent).toContain('This also counts toward the context window');
+    expect(root.textContent).toContain('a capped answer is cut off');
     expect(root.textContent).not.toContain('Unlimited');
   });
 
@@ -235,7 +236,7 @@ describe('LlmProfileManagement', () => {
     m.redraw.sync();
 
     expect(fieldValue('Context window')).toBe('8k');
-    expect(fieldValue('Maximum answer tokens')).toBe('1k');
+    expect(fieldValue('Maximum answer tokens')).toBe('No limit');
     expect(root.textContent).toContain('Model limits could not be determined');
   });
 
@@ -260,7 +261,7 @@ describe('LlmProfileManagement', () => {
     expect(options).not.toContain('Unlimited');
   });
 
-  it('resets automatically suggested limits on model change without overriding edited caps', async () => {
+  it('resets the suggested context on model change, never an edited one or the answer limit', async () => {
     const client = new MockFileManagerClient();
     await mountLoaded(client);
     [...root.querySelectorAll<HTMLButtonElement>('button')]
@@ -274,7 +275,7 @@ describe('LlmProfileManagement', () => {
       .find((item) => item.textContent?.trim() === 'model-b')
       ?.click();
     await vi.waitFor(() => expect(fieldValue('Context window')).toBe('8k'));
-    expect(fieldValue('Maximum answer tokens')).toBe('1k');
+    expect(fieldValue('Maximum answer tokens')).toBe('No limit');
 
     fieldInput('Context window')?.click();
     m.redraw.sync();
@@ -285,8 +286,32 @@ describe('LlmProfileManagement', () => {
     [...root.querySelectorAll('li')]
       .find((item) => item.textContent?.trim() === 'model-a')
       ?.click();
-    await vi.waitFor(() => expect(fieldValue('Maximum answer tokens')).toBe('8k'));
+    await vi.waitFor(() => expect(root.textContent).toContain('8,192 output tokens'));
+    expect(fieldValue('Maximum answer tokens')).toBe('No limit');
     expect(fieldValue('Context window')).toBe('16k');
+  });
+
+  it('offers no limit first and saves it as a missing cap', async () => {
+    const client = new MockFileManagerClient();
+    await mountLoaded(client);
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Advanced settings')
+      ?.click();
+    m.redraw.sync();
+    fieldInput('Maximum answer tokens')?.click();
+    m.redraw.sync();
+    const options = [...root.querySelectorAll('li')].map((item) => item.textContent?.trim());
+    expect(options[options.indexOf('No limit') + 1]).toBe('1k');
+    [...root.querySelectorAll('li')].find((item) => item.textContent?.trim() === '2k')?.click();
+    m.redraw.sync();
+    expect(fieldValue('Maximum answer tokens')).toBe('2k');
+    fieldInput('Maximum answer tokens')?.click();
+    m.redraw.sync();
+    [...root.querySelectorAll('li')]
+      .find((item) => item.textContent?.trim() === 'No limit')
+      ?.click();
+    m.redraw.sync();
+    expect(fieldValue('Maximum answer tokens')).toBe('No limit');
   });
 
   it('keeps existing non-preset token limits selectable without modifying a saved profile', async () => {

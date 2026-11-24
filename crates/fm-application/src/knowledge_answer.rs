@@ -42,8 +42,6 @@ use crate::rag::{grounded_system_prompt, normalize_citation_references, parse_ge
 
 /// Answer contract identity retained in prompts for reproducibility.
 pub(crate) const KNOWLEDGE_ANSWER_PROMPT_VERSION: &str = "structured-knowledge-answer/2";
-/// Maximum generated answer tokens, further bounded by the saved profile.
-const MAX_ANSWER_TOKENS: u32 = 2_048;
 /// Sampling temperature used for evidence-grounded answers.
 const ANSWER_TEMPERATURE: f32 = 0.2;
 
@@ -316,7 +314,7 @@ impl KnowledgeAnswerCoordinator {
                     system_prompt,
                     user_prompt,
                     images: Vec::new(),
-                    maximum_tokens: MAX_ANSWER_TOKENS,
+                    maximum_tokens: None,
                     context_window: None,
                     temperature: Some(ANSWER_TEMPERATURE),
                     reply: ReplyFormat::Json,

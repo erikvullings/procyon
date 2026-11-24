@@ -35,25 +35,29 @@
    * `background` above, while later tracks repaint correctly - this nudges the engine to redo the
    * paint on its own layer instead of reusing that stale composite. */
   transform: translateZ(0);
-  scrollbar-color: var(--fm-border) var(--fm-surface);
+  /* The shared look (theme.css): no track, a thin rounded thumb, like the terminal's. */
+  scrollbar-color: var(--fm-border) transparent;
 }
 
 .fm-directory-viewport::-webkit-scrollbar {
-  width: 12px;
+  width: 10px;
+  background: transparent;
 }
 
 .fm-directory-viewport::-webkit-scrollbar-track {
-  background: var(--fm-surface);
+  background: transparent;
 }
 
 .fm-directory-viewport::-webkit-scrollbar-thumb {
   background: var(--fm-border);
-  border: 2px solid var(--fm-surface);
+  background-clip: padding-box;
+  border: 2px solid transparent;
   border-radius: var(--fm-radius-pill);
 }
 
 .fm-directory-viewport::-webkit-scrollbar-thumb:hover {
   background: var(--fm-text-muted);
+  background-clip: padding-box;
 }
 
 .fm-directory-header,

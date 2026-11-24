@@ -1176,7 +1176,7 @@ export class MockSemanticClient implements SemanticClient {
         model: '',
         advanced: {
           contextWindow: 8192,
-          maximumAnswerTokens: 1024,
+          maximumAnswerTokens: null,
           temperature: 0.2,
           timeoutSeconds: 30,
           tlsPolicy: 'requireValidCertificate' as const,
@@ -1819,7 +1819,7 @@ export class MockSemanticClient implements SemanticClient {
       contextWindow: request.model === 'model-a' ? 131_072 : null,
       maximumAnswerTokens: request.model === 'model-a' ? 8_192 : null,
       contextWindowCap: 1_048_576,
-      maximumAnswerTokensCap: 16_384,
+      maximumAnswerTokensCap: 1_048_576,
     }));
   }
 

@@ -32,12 +32,18 @@ use uuid::Uuid;
 
 use crate::image_generation_transport::{ImageApiStyle, ImageEndpointRequest};
 
-const PROFILE_SCHEMA_VERSION: u32 = 5;
+const PROFILE_SCHEMA_VERSION: u32 = 6;
+/// The answer cap every profile had by default before schema 6.
+const LEGACY_DEFAULT_ANSWER_TOKENS: u64 = 1_024;
 const TEST_PROMPT: &str = "Reply with OK.";
-const MAX_STREAM_BYTES: usize = 256 * 1024;
-/// Hard application bounds, independent of editable profile or provider metadata.
+/// Most bytes of one raw response body (server-sent events carry far more JSON than text). Only a
+/// runaway generation reaches it; it replaces an answer-token cap as the guard against one.
+const MAX_STREAM_BODY_BYTES: usize = 64 * 1024 * 1024;
+/// Most bytes of one reply's text, and of one native call's arguments (about 250k tokens).
+const MAX_REPLY_BYTES: usize = 1024 * 1024;
+/// Hard application bound on the context window, independent of editable profile or provider
+/// metadata. An answer limit, when the person sets one, is bounded by the context window only.
 pub const MAX_GENERATION_CONTEXT_WINDOW: u32 = 1_048_576;
-pub const MAX_GENERATION_ANSWER_TOKENS: u32 = 16_384;
 const ALLOWED_CUSTOM_HEADERS: &[&str] =
     &["openai-organization", "openai-project", "x-request-source"];
 
@@ -150,7 +156,10 @@ pub enum LlmTlsPolicy {
 #[serde(rename_all = "camelCase")]
 pub struct LlmAdvancedSettings {
     pub context_window: u32,
-    pub maximum_answer_tokens: u32,
+    /// A cap on each answer's tokens, only when the person sets one (for cost, say). `None`, the
+    /// default, sends no cap: a capped answer is cut off and fails, which costs more than it saves.
+    #[serde(default)]
+    pub maximum_answer_tokens: Option<u32>,
     pub temperature: f32,
     pub timeout_seconds: u64,
     pub tls_policy: LlmTlsPolicy,
@@ -161,7 +170,7 @@ impl Default for LlmAdvancedSettings {
     fn default() -> Self {
         Self {
             context_window: 8_192,
-            maximum_answer_tokens: 1_024,
+            maximum_answer_tokens: None,
             temperature: 0.2,
             timeout_seconds: 30,
             tls_policy: LlmTlsPolicy::RequireValidCertificate,
@@ -430,8 +439,10 @@ pub struct LlmChatGeneration {
     pub followups: Vec<Message>,
     /// Bounded image evidence. Only transports with verified vision support may accept it.
     pub images: Vec<LlmImageAttachment>,
-    /// Maximum generated tokens, further bounded by the saved profile.
-    pub maximum_tokens: u32,
+    /// A cap on generated tokens, sent only when there is one: `None` lets the model finish its
+    /// answer (a runaway generation is stopped by the response size bound instead). The
+    /// profile's own limit, when the person set one, still applies.
+    pub maximum_tokens: Option<u32>,
     /// Explicit runtime context request, used only after summary capacity is verified.
     pub context_window: Option<u32>,
     /// Sampling temperature, further bounded by the saved profile. `None` keeps the model's own
@@ -726,7 +737,7 @@ impl LlmProbeTransport for ReqwestLlmProbeTransport {
             .await?;
             let response = refused_generation(response).await?;
             let bytes = read_bounded_body(response, cancellation).await?;
-            return parse_ollama_chat(&bytes);
+            return finish_reply(parse_ollama_reply(&bytes)?, generation.reply);
         }
         match self
             .generate_chat_adaptive(request, generation, cancellation)
@@ -778,9 +789,10 @@ impl LlmProbeTransport for ReqwestLlmProbeTransport {
         }
         let response = refused_generation(response).await?;
         let bytes = read_streamed_body(response, cancellation, request.timeout, on_delta).await?;
-        let (text, reasoning_seen) = parse_streaming_chat_detailed(&bytes)?;
+        let reply = parse_streaming_chat_detailed(&bytes)?;
+        let reasoning_seen = reply.reasoning_seen;
         Ok(ChatOutcome::Generated {
-            text,
+            text: finish_reply(reply, generation.reply)?,
             reasoning_seen,
         })
     }
@@ -851,7 +863,7 @@ async fn read_streamed_body(
             return Ok(bytes);
         };
         let chunk = chunk.map_err(map_reqwest)?;
-        if bytes.len().saturating_add(chunk.len()) > MAX_STREAM_BYTES {
+        if bytes.len().saturating_add(chunk.len()) > MAX_STREAM_BODY_BYTES {
             return Err(LlmProfileError::MalformedResponse);
         }
         events.push(&chunk);
@@ -1034,7 +1046,7 @@ impl VersionedDocument for LlmProfilesDocument {
             2 => {
                 value["activeProfileId"] = Value::Null;
             }
-            3 | 4 => {}
+            3..=5 => {}
             PROFILE_SCHEMA_VERSION => return Ok(value),
             _ => return Err(LlmProfileError::InvalidConfiguration),
         }
@@ -1057,6 +1069,20 @@ impl VersionedDocument for LlmProfilesDocument {
         }
         if version <= 4 {
             value["roles"] = legacy_roles(&value);
+        }
+        if version <= 5 {
+            // 1024 was the default answer cap, not a choice: it becomes no cap. Any other value
+            // was set on purpose and stays.
+            if let Some(profiles) = value.get_mut("profiles").and_then(Value::as_array_mut) {
+                for profile in profiles {
+                    let advanced = &mut profile["advanced"];
+                    if advanced.get("maximumAnswerTokens").and_then(Value::as_u64)
+                        == Some(LEGACY_DEFAULT_ANSWER_TOKENS)
+                    {
+                        advanced["maximumAnswerTokens"] = Value::Null;
+                    }
+                }
+            }
         }
         Ok(value)
     }
@@ -1780,10 +1806,10 @@ impl LlmProfileService {
             } else {
                 Vec::new()
             },
-            maximum_tokens: generation
-                .maximum_tokens
-                .min(profile.advanced.maximum_answer_tokens)
-                .min(MAX_GENERATION_ANSWER_TOKENS),
+            maximum_tokens: tightest(
+                generation.maximum_tokens,
+                profile.advanced.maximum_answer_tokens,
+            ),
             temperature: generation
                 .temperature
                 .map(|value| value.clamp(0.0, profile.advanced.temperature)),
@@ -2021,7 +2047,9 @@ impl LlmProfileService {
                 .to_owned(),
             user_prompt: "Call the echo tool with the text ping.".to_owned(),
             images: Vec::new(),
-            maximum_tokens: 256,
+            // No cap: a model that reasons first must not be cut off before its call, which would
+            // record the endpoint as unable to call tools.
+            maximum_tokens: None,
             context_window: None,
             temperature: Some(0.0),
             reply: ReplyFormat::Text,
@@ -2101,10 +2129,6 @@ impl LlmProfileService {
             .advanced
             .context_window
             .min(MAX_GENERATION_CONTEXT_WINDOW);
-        profile.advanced.maximum_answer_tokens = profile
-            .advanced
-            .maximum_answer_tokens
-            .min(MAX_GENERATION_ANSWER_TOKENS);
         Ok(profile)
     }
 
@@ -2327,10 +2351,11 @@ fn validate_profile(profile: &LlmProfile) -> Result<(), LlmProfileError> {
     if profile.name.trim().is_empty()
         || profile.model.trim().is_empty()
         || profile.advanced.context_window == 0
-        || profile.advanced.maximum_answer_tokens == 0
-        || profile.advanced.maximum_answer_tokens > profile.advanced.context_window
+        || profile
+            .advanced
+            .maximum_answer_tokens
+            .is_some_and(|maximum| maximum == 0 || maximum > profile.advanced.context_window)
         || profile.advanced.context_window > MAX_GENERATION_CONTEXT_WINDOW
-        || profile.advanced.maximum_answer_tokens > MAX_GENERATION_ANSWER_TOKENS
         || !profile.advanced.temperature.is_finite()
         || !(0.0..=2.0).contains(&profile.advanced.temperature)
         || profile.advanced.timeout_seconds == 0
@@ -2546,8 +2571,10 @@ fn openai_generation_body(
         "model": request.model,
         "messages": messages,
         "stream": true,
-        "max_tokens": generation.maximum_tokens,
     });
+    if let Some(maximum) = generation.maximum_tokens {
+        body["max_tokens"] = json!(maximum);
+    }
     if let Some(temperature) = generation.temperature {
         body["temperature"] = json!(temperature);
     }
@@ -2669,7 +2696,10 @@ fn ollama_generation_body(request: &LlmProbeRequest, generation: &LlmChatGenerat
         .iter()
         .map(|image| base64::engine::general_purpose::STANDARD.encode(&image.data))
         .collect::<Vec<_>>();
-    let mut options = json!({"num_predict": generation.maximum_tokens});
+    let mut options = json!({});
+    if let Some(maximum) = generation.maximum_tokens {
+        options["num_predict"] = json!(maximum);
+    }
     if let Some(temperature) = generation.temperature {
         options["temperature"] = json!(temperature);
     }
@@ -2731,7 +2761,7 @@ fn cap_model_limits(limits: LlmModelLimits) -> LlmModelLimits {
             .map(|value| value.min(MAX_GENERATION_CONTEXT_WINDOW)),
         maximum_answer_tokens: limits
             .maximum_answer_tokens
-            .map(|value| value.min(MAX_GENERATION_ANSWER_TOKENS)),
+            .map(|value| value.min(MAX_GENERATION_CONTEXT_WINDOW)),
     }
 }
 
@@ -2789,13 +2819,48 @@ fn validate_streaming_chat(bytes: &[u8]) -> Result<(), LlmProfileError> {
     parse_streaming_chat(bytes).map(|_| ())
 }
 
+/// A complete reply's text; a reply cut off at a token limit is an error here.
 fn parse_streaming_chat(bytes: &[u8]) -> Result<String, LlmProfileError> {
-    parse_streaming_chat_detailed(bytes).map(|(text, _)| text)
+    let reply = parse_streaming_chat_detailed(bytes)?;
+    if reply.cut_off {
+        return Err(LlmProfileError::ReplyCutOff);
+    }
+    Ok(reply.text)
 }
 
-/// Parses a streamed completion into its content and whether the model also streamed reasoning
-/// (`reasoning_content`/`reasoning` deltas, or inline `<think>` tags).
-fn parse_streaming_chat_detailed(bytes: &[u8]) -> Result<(String, bool), LlmProfileError> {
+/// A parsed reply, before the caller decides what a cut-off one is worth.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedReply {
+    text: String,
+    /// The model also produced reasoning (`reasoning_content`/`reasoning`, or `<think>` tags).
+    reasoning_seen: bool,
+    /// The model stopped at a token limit; `text` is what it wrote until then, without any
+    /// native call (a call's arguments may be incomplete).
+    cut_off: bool,
+}
+
+/// Note added to a prose reply that a token limit cut off.
+const CUT_OFF_NOTE: &str = "\n\n[The answer was cut off at the model's token limit.]";
+
+/// The reply text for a caller: a cut-off prose reply is kept with a note, since most of an answer
+/// is worth more than asking again; a cut-off JSON reply is an error, since half a value is useless.
+fn finish_reply(reply: ParsedReply, format: ReplyFormat) -> Result<String, LlmProfileError> {
+    match (reply.cut_off, format) {
+        (false, _) => Ok(reply.text),
+        (true, ReplyFormat::Json) => Err(LlmProfileError::ReplyCutOff),
+        (true, ReplyFormat::Text) if reply.text.trim().is_empty() => {
+            Err(LlmProfileError::ReplyCutOff)
+        }
+        (true, ReplyFormat::Text) => {
+            tracing::warn!("a reply was cut off at the model's token limit; kept with a note");
+            Ok(format!("{}{CUT_OFF_NOTE}", reply.text.trim_end()))
+        }
+    }
+}
+
+/// Parses a streamed completion: its content, whether the model also streamed reasoning, and
+/// whether it stopped at a token limit.
+fn parse_streaming_chat_detailed(bytes: &[u8]) -> Result<ParsedReply, LlmProfileError> {
     let text = std::str::from_utf8(bytes).map_err(|_| LlmProfileError::MalformedResponse)?;
     let mut valid_event = false;
     let mut terminated = false;
@@ -2834,7 +2899,7 @@ fn parse_streaming_chat_detailed(bytes: &[u8]) -> Result<(String, bool), LlmProf
                 .and_then(Value::as_str)
             {
                 content.push_str(delta);
-                if content.len() > MAX_STREAM_BYTES {
+                if content.len() > MAX_REPLY_BYTES {
                     return Err(LlmProfileError::MalformedResponse);
                 }
             }
@@ -2871,7 +2936,7 @@ fn parse_streaming_chat_detailed(bytes: &[u8]) -> Result<(String, bool), LlmProf
                     .and_then(Value::as_str)
                 {
                     tool_calls[index].arguments.push_str(arguments);
-                    if tool_calls[index].arguments.len() > MAX_STREAM_BYTES {
+                    if tool_calls[index].arguments.len() > MAX_REPLY_BYTES {
                         return Err(LlmProfileError::MalformedResponse);
                     }
                 }
@@ -2887,10 +2952,12 @@ fn parse_streaming_chat_detailed(bytes: &[u8]) -> Result<(String, bool), LlmProf
             }
         }
     }
-    if valid_event && terminated && !truncated {
-        // Every named call becomes a `TOOL {json}` line; the agent loop runs them in order.
+    if valid_event && terminated {
+        // Every named call becomes a `TOOL {json}` line; the agent loop runs them in order. A
+        // cut-off reply runs none: its last call's arguments may be incomplete.
         let lines: Vec<String> = tool_calls
             .iter()
+            .filter(|_| !truncated)
             .filter_map(|call| tool_call_line(Some(&call.id), &call.name, &call.arguments))
             .collect();
         if !lines.is_empty() {
@@ -2901,7 +2968,11 @@ fn parse_streaming_chat_detailed(bytes: &[u8]) -> Result<(String, bool), LlmProf
             content.push_str(&line);
         }
         reasoning_seen |= content.contains("<think>") || content.contains("</think>");
-        Ok((content, reasoning_seen))
+        Ok(ParsedReply {
+            text: content,
+            reasoning_seen,
+            cut_off: truncated,
+        })
     } else {
         Err(LlmProfileError::MalformedResponse)
     }
@@ -2938,19 +3009,30 @@ fn tool_call_line(id: Option<&str>, name: &str, arguments: &str) -> Option<Strin
     Some(fm_agent::tool_call_line(id, name, &arguments))
 }
 
+/// A complete Ollama reply's text; one cut off at a token limit is an error here.
+#[cfg(test)]
 fn parse_ollama_chat(bytes: &[u8]) -> Result<String, LlmProfileError> {
+    let reply = parse_ollama_reply(bytes)?;
+    if reply.cut_off {
+        return Err(LlmProfileError::ReplyCutOff);
+    }
+    Ok(reply.text)
+}
+
+fn parse_ollama_reply(bytes: &[u8]) -> Result<ParsedReply, LlmProfileError> {
     let value: Value =
         serde_json::from_slice(bytes).map_err(|_| LlmProfileError::MalformedResponse)?;
-    if value.get("done").and_then(Value::as_bool) != Some(true)
-        || value.get("done_reason").and_then(Value::as_str) == Some("length")
-    {
+    if value.get("done").and_then(Value::as_bool) != Some(true) {
         return Err(LlmProfileError::MalformedResponse);
     }
+    let cut_off = value.get("done_reason").and_then(Value::as_str) == Some("length");
     let message = value.get("message");
     // Native tool calls come back as text-protocol lines, one per call (task 0339).
     let lines: Vec<String> = message
         .and_then(|message| message.get("tool_calls"))
         .and_then(Value::as_array)
+        // A cut-off reply runs no call: its arguments may be incomplete.
+        .filter(|_| !cut_off)
         .map(|calls| {
             calls
                 .iter()
@@ -2968,15 +3050,25 @@ fn parse_ollama_chat(bytes: &[u8]) -> Result<String, LlmProfileError> {
                 .collect()
         })
         .unwrap_or_default();
-    if !lines.is_empty() {
-        return Ok(lines.join("\n"));
-    }
-    message
-        .and_then(|message| message.get("content"))
-        .and_then(Value::as_str)
-        .filter(|content| !content.trim().is_empty())
-        .map(str::to_owned)
-        .ok_or(LlmProfileError::MalformedResponse)
+    let text = if lines.is_empty() {
+        message
+            .and_then(|message| message.get("content"))
+            .and_then(Value::as_str)
+            .filter(|content| !content.trim().is_empty())
+            .map(str::to_owned)
+            .ok_or(if cut_off {
+                LlmProfileError::ReplyCutOff
+            } else {
+                LlmProfileError::MalformedResponse
+            })?
+    } else {
+        lines.join("\n")
+    };
+    Ok(ParsedReply {
+        text,
+        reasoning_seen: false,
+        cut_off,
+    })
 }
 
 /// Most bytes of a refusal's body written to the log.
@@ -3060,6 +3152,14 @@ fn bounded_model_ids(models: Vec<String>) -> Vec<String> {
     models
 }
 
+/// The tighter of two optional token caps; `None` when neither is set.
+fn tightest(a: Option<u32>, b: Option<u32>) -> Option<u32> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    }
+}
+
 /// Typed generation-profile failure with no response or secret content.
 #[derive(Debug, Error, PartialEq)]
 pub enum LlmProfileError {
@@ -3091,6 +3191,10 @@ pub enum LlmProfileError {
     Tls,
     #[error("LLM streaming response was malformed")]
     MalformedResponse,
+    /// The model stopped at its token limit (`finish_reason: "length"`), so the reply is cut off.
+    /// A model that reasons first may spend the whole limit before it writes.
+    #[error("the model's reply was cut off at its token limit")]
+    ReplyCutOff,
     #[error("LLM request was cancelled")]
     Cancelled,
     #[error("LLM transport failed")]
@@ -3113,7 +3217,7 @@ impl LlmProfileError {
             Self::ModelUnavailable => LlmTestErrorCategory::ModelUnavailable,
             Self::Timeout => LlmTestErrorCategory::Timeout,
             Self::Tls => LlmTestErrorCategory::Tls,
-            Self::MalformedResponse => LlmTestErrorCategory::MalformedResponse,
+            Self::MalformedResponse | Self::ReplyCutOff => LlmTestErrorCategory::MalformedResponse,
             Self::Cancelled => LlmTestErrorCategory::Cancelled,
             Self::Transport => LlmTestErrorCategory::Transport,
         }
@@ -3168,7 +3272,7 @@ pub(crate) fn model_limits_to_dto(limits: LlmModelLimits) -> LlmModelLimitsDto {
         context_window: limits.context_window,
         maximum_answer_tokens: limits.maximum_answer_tokens,
         context_window_cap: MAX_GENERATION_CONTEXT_WINDOW,
-        maximum_answer_tokens_cap: MAX_GENERATION_ANSWER_TOKENS,
+        maximum_answer_tokens_cap: MAX_GENERATION_CONTEXT_WINDOW,
     }
 }
 
@@ -3407,7 +3511,7 @@ mod tests {
             system_prompt: "s".into(),
             user_prompt: "u".into(),
             images: Vec::new(),
-            maximum_tokens: 10,
+            maximum_tokens: Some(10),
             context_window: None,
             temperature: Some(0.0),
             reply: ReplyFormat::Text,
@@ -3768,7 +3872,7 @@ mod tests {
             cap_model_limits(parse_openai_model_limits(&value, "selected")),
             LlmModelLimits {
                 context_window: Some(MAX_GENERATION_CONTEXT_WINDOW),
-                maximum_answer_tokens: Some(MAX_GENERATION_ANSWER_TOKENS),
+                maximum_answer_tokens: Some(50_000),
             }
         );
         assert_eq!(
@@ -3803,16 +3907,23 @@ mod tests {
             draft(LlmPreset::Ollama, "http://127.0.0.1:11434"),
             None,
         );
+        // No answer limit is the default and valid; a set one is bounded by the context window.
+        assert!(validate_profile(&profile).is_ok());
         profile.advanced.context_window = MAX_GENERATION_CONTEXT_WINDOW;
-        profile.advanced.maximum_answer_tokens = MAX_GENERATION_ANSWER_TOKENS;
+        profile.advanced.maximum_answer_tokens = Some(MAX_GENERATION_CONTEXT_WINDOW);
         assert!(validate_profile(&profile).is_ok());
         profile.advanced.context_window += 1;
         assert!(matches!(
             validate_profile(&profile),
             Err(LlmProfileError::InvalidConfiguration)
         ));
-        profile.advanced.context_window = MAX_GENERATION_CONTEXT_WINDOW;
-        profile.advanced.maximum_answer_tokens += 1;
+        profile.advanced.context_window = 8_192;
+        profile.advanced.maximum_answer_tokens = Some(8_193);
+        assert!(matches!(
+            validate_profile(&profile),
+            Err(LlmProfileError::InvalidConfiguration)
+        ));
+        profile.advanced.maximum_answer_tokens = Some(0);
         assert!(matches!(
             validate_profile(&profile),
             Err(LlmProfileError::InvalidConfiguration)
@@ -3830,10 +3941,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(limits.context_window, Some(128_000));
-        assert_eq!(
-            limits.maximum_answer_tokens,
-            Some(MAX_GENERATION_ANSWER_TOKENS)
-        );
+        assert_eq!(limits.maximum_answer_tokens, Some(32_000));
         let captured = transport.captured.lock().unwrap();
         assert_eq!(captured[0].model, "selected");
         assert_eq!(
@@ -4057,7 +4165,7 @@ mod tests {
                     media_type: "image/png".into(),
                     data: vec![1, 2, 3],
                 }],
-                maximum_tokens: 512,
+                maximum_tokens: Some(512),
                 context_window: Some(8_192),
                 temperature: Some(0.1),
                 reply: ReplyFormat::Json,
@@ -4087,7 +4195,7 @@ mod tests {
             system_prompt: "s".into(),
             user_prompt: "u".into(),
             images: Vec::new(),
-            maximum_tokens: 8,
+            maximum_tokens: Some(8),
             context_window: None,
             temperature,
             reply: ReplyFormat::Text,
@@ -4106,7 +4214,7 @@ mod tests {
             system_prompt: "s".into(),
             user_prompt: "Describe".into(),
             images: Vec::new(),
-            maximum_tokens: 8,
+            maximum_tokens: Some(8),
             context_window: None,
             temperature: Some(0.0),
             reply: ReplyFormat::Text,
@@ -4122,7 +4230,7 @@ mod tests {
                 media_type: "image/png".into(),
                 data: vec![1, 2, 3],
             }],
-            maximum_tokens: 8,
+            maximum_tokens: Some(8),
             context_window: None,
             temperature: Some(0.0),
             reply: ReplyFormat::Text,
@@ -4161,6 +4269,107 @@ mod tests {
         };
         assert_eq!(document.roles.chat, Some(expected.clone()));
         assert_eq!(document.roles.embeddings, Some(expected));
+    }
+
+    #[test]
+    fn version_five_turns_only_the_old_default_answer_cap_into_no_cap() {
+        let mut default_capped = profile_from_draft(
+            Uuid::new_v4(),
+            draft(LlmPreset::Ollama, "http://localhost:11434"),
+            None,
+        );
+        default_capped.advanced.maximum_answer_tokens = Some(1_024);
+        let mut chosen = default_capped.clone();
+        chosen.id = Uuid::new_v4();
+        chosen.advanced.maximum_answer_tokens = Some(4_000);
+        let value = serde_json::to_value(LlmProfilesDocument {
+            schema_version: 5,
+            active_profile_id: None,
+            profiles: vec![default_capped, chosen],
+            roles: LlmRoles::default(),
+        })
+        .unwrap();
+
+        let migrated = LlmProfilesDocument::migrate(value, 5).unwrap();
+        let document: LlmProfilesDocument = serde_json::from_value(migrated).unwrap();
+
+        document.validate().unwrap();
+        let caps: Vec<Option<u32>> = document
+            .profiles
+            .iter()
+            .map(|profile| profile.advanced.maximum_answer_tokens)
+            .collect();
+        assert_eq!(caps, [None, Some(4_000)]);
+    }
+
+    #[test]
+    fn no_cap_is_sent_unless_one_is_set() {
+        let request = probe_request_for_tests();
+        let uncapped = LlmChatGeneration {
+            maximum_tokens: None,
+            ..tiny_generation()
+        };
+        let openai = openai_generation_body(&request, &uncapped, ReasoningSwitch::Plain);
+        assert!(openai.get("max_tokens").is_none(), "{openai}");
+        let ollama = ollama_generation_body(&request, &uncapped);
+        assert!(ollama["options"].get("num_predict").is_none(), "{ollama}");
+
+        let capped = openai_generation_body(&request, &tiny_generation(), ReasoningSwitch::Plain);
+        assert_eq!(capped["max_tokens"], 16);
+        assert_eq!(tightest(None, Some(5)), Some(5));
+        assert_eq!(tightest(Some(9), Some(5)), Some(5));
+        assert_eq!(tightest(None, None), None);
+    }
+
+    #[test]
+    fn a_cut_off_prose_reply_is_kept_with_a_note_and_without_its_calls() {
+        let stream = b"data: {\"choices\":[{\"delta\":{\"content\":\"Most of the answer\",\"tool_calls\":[{\"index\":0,\"id\":\"c1\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"pa\"}}]},\"finish_reason\":\"length\"}]}\n\n";
+        let reply = parse_streaming_chat_detailed(stream).unwrap();
+        assert!(reply.cut_off);
+        assert_eq!(reply.text, "Most of the answer", "no half call is run");
+
+        let kept = finish_reply(reply.clone(), ReplyFormat::Text).unwrap();
+        assert!(kept.starts_with("Most of the answer"));
+        assert!(kept.ends_with("[The answer was cut off at the model's token limit.]"));
+        assert_eq!(
+            finish_reply(reply, ReplyFormat::Json),
+            Err(LlmProfileError::ReplyCutOff),
+            "half a JSON value is useless"
+        );
+        let empty = ParsedReply {
+            text: String::new(),
+            reasoning_seen: true,
+            cut_off: true,
+        };
+        assert_eq!(
+            finish_reply(empty, ReplyFormat::Text),
+            Err(LlmProfileError::ReplyCutOff)
+        );
+
+        let ollama = parse_ollama_reply(
+            br#"{"message":{"role":"assistant","content":"Partial"},"done":true,"done_reason":"length"}"#,
+        )
+        .unwrap();
+        assert!(ollama.cut_off);
+        assert_eq!(ollama.text, "Partial");
+    }
+
+    #[test]
+    fn a_long_streamed_reply_is_not_mistaken_for_a_runaway_one() {
+        // Thousands of small events: far more raw bytes than text, as real streams send.
+        let mut stream = String::new();
+        for index in 0..5_000 {
+            stream.push_str(&format!(
+                "data: {{\"id\":\"chatcmpl-{index}\",\"object\":\"chat.completion.chunk\",\"choices\":[{{\"index\":0,\"delta\":{{\"content\":\"word \"}}}}]}}\n\n"
+            ));
+        }
+        stream.push_str(
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n",
+        );
+        assert!(stream.len() > 256 * 1024);
+        assert!(stream.len() < MAX_STREAM_BODY_BYTES);
+        let text = parse_streaming_chat(stream.as_bytes()).unwrap();
+        assert_eq!(text.len(), 5_000 * 5);
     }
 
     #[test]
@@ -4999,7 +5208,7 @@ mod tests {
             parse_streaming_chat(
                 b"data: {\"choices\":[{\"delta\":{\"content\":\"An incomplete answer\"},\"finish_reason\":\"length\"}]}\n\n"
             ),
-            Err(LlmProfileError::MalformedResponse)
+            Err(LlmProfileError::ReplyCutOff)
         ));
         assert_eq!(
             parse_ollama_chat(
@@ -5012,7 +5221,7 @@ mod tests {
             parse_ollama_chat(
                 br#"{"message":{"role":"assistant","content":"An incomplete answer"},"done":true,"done_reason":"length"}"#
             ),
-            Err(LlmProfileError::MalformedResponse)
+            Err(LlmProfileError::ReplyCutOff)
         ));
         let request = LlmProbeRequest {
             url: "http://localhost:11434/v1/chat/completions".into(),
@@ -5032,7 +5241,7 @@ mod tests {
                 system_prompt: "Answer from evidence.".into(),
                 user_prompt: "Question".into(),
                 images: Vec::new(),
-                maximum_tokens: 1_024,
+                maximum_tokens: Some(1_024),
                 context_window: None,
                 temperature: Some(0.2),
                 reply: ReplyFormat::Json,
@@ -5133,7 +5342,7 @@ mod tests {
             system_prompt: "Summarize grounded evidence.".into(),
             user_prompt: "Evidence".into(),
             images: Vec::new(),
-            maximum_tokens: 512,
+            maximum_tokens: Some(512),
             context_window: None,
             temperature: Some(0.1),
             reply: ReplyFormat::Text,
@@ -5234,7 +5443,7 @@ mod tests {
             system_prompt: "Answer.".into(),
             user_prompt: "Question".into(),
             images: Vec::new(),
-            maximum_tokens: 16,
+            maximum_tokens: Some(16),
             context_window: None,
             temperature: Some(0.0),
             reply: ReplyFormat::Text,

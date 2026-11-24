@@ -132,7 +132,9 @@ const TOKEN_PRESETS = [
   [1_048_576, '1M'],
 ] as const;
 const FALLBACK_CONTEXT_CAP = 1_048_576;
-const FALLBACK_OUTPUT_CAP = 16_384;
+const FALLBACK_OUTPUT_CAP = 1_048_576;
+/** The answer-limit choice that sends no cap (the default): answers are never cut off. */
+const NO_ANSWER_LIMIT = 'none';
 
 function tokenCount(value: number): string {
   return new Intl.NumberFormat(getLocale()).format(value);
@@ -186,7 +188,6 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
   let customOutput = false;
   let modelLimits: LlmModelLimits | undefined;
   let contextEdited = false;
-  let outputEdited = false;
   /** The provider choice the roles section asked for, and whether it has been applied yet. */
   let pendingPreset: LlmProfileManagementAttrs['openPreset'];
   let openedPresetRevision: number | undefined;
@@ -253,7 +254,6 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     customContext = false;
     customOutput = false;
     contextEdited = false;
-    outputEdited = false;
     clearAvailableModels();
     consent = false;
     message = undefined;
@@ -345,23 +345,14 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
             defaults?.contextWindow ??
             editor.request.advanced.contextWindow)
           : editor.request.advanced.contextWindow;
-        const maximumAnswerTokens = !outputEdited
-          ? Math.min(
-              limits.maximumAnswerTokens ??
-                defaults?.maximumAnswerTokens ??
-                editor.request.advanced.maximumAnswerTokens,
-              Math.max(1, Math.floor(contextWindow / 2)),
-            )
-          : editor.request.advanced.maximumAnswerTokens;
-        if (
-          contextWindow !== editor.request.advanced.contextWindow ||
-          maximumAnswerTokens !== editor.request.advanced.maximumAnswerTokens
-        ) {
+        // The answer limit is never filled in from the model: no limit is the default, so an
+        // answer is never cut off unless the person chooses a cap.
+        if (contextWindow !== editor.request.advanced.contextWindow) {
           editor = {
             ...editor,
             request: {
               ...editor.request,
-              advanced: { ...editor.request.advanced, contextWindow, maximumAnswerTokens },
+              advanced: { ...editor.request.advanced, contextWindow },
             },
           };
           dirty = true;
@@ -381,7 +372,6 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     customContext = false;
     customOutput = false;
     contextEdited = false;
-    outputEdited = false;
     clearAvailableModels();
     consent = false;
     message = undefined;
@@ -701,15 +691,22 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                 m(Select<string>, {
                   className: 'fm-llm-field',
                   label: t('llmProfiles', 'maximumAnswerTokens'),
-                  options: tokenOptions(request.advanced.maximumAnswerTokens, 1_024, outputCap),
-                  checkedId: customOutput ? 'custom' : String(request.advanced.maximumAnswerTokens),
+                  options: [
+                    { id: NO_ANSWER_LIMIT, label: t('llmProfiles', 'noAnswerLimit') },
+                    ...tokenOptions(request.advanced.maximumAnswerTokens ?? 0, 1_024, outputCap),
+                  ],
+                  checkedId: customOutput
+                    ? 'custom'
+                    : String(request.advanced.maximumAnswerTokens ?? NO_ANSWER_LIMIT),
                   onchange: ([value]) => {
                     if (value === undefined) return;
                     customOutput = value === 'custom';
                     if (!customOutput) {
-                      outputEdited = true;
                       updateRequest({
-                        advanced: { ...request.advanced, maximumAnswerTokens: Number(value) },
+                        advanced: {
+                          ...request.advanced,
+                          maximumAnswerTokens: value === NO_ANSWER_LIMIT ? null : Number(value),
+                        },
                       });
                     }
                   },
@@ -757,9 +754,8 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
                           label: t('llmProfiles', 'customAnswerTokens'),
                           min: 1,
                           max: outputCap,
-                          value: request.advanced.maximumAnswerTokens,
+                          value: request.advanced.maximumAnswerTokens ?? outputCap,
                           oninput: (value: number) => {
-                            outputEdited = true;
                             updateRequest({
                               advanced: { ...request.advanced, maximumAnswerTokens: value },
                             });
@@ -790,12 +786,12 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
               (modelLimits?.contextWindow != null &&
                 request.advanced.contextWindow > modelLimits.contextWindow) ||
               (modelLimits?.maximumAnswerTokens != null &&
-                request.advanced.maximumAnswerTokens > modelLimits.maximumAnswerTokens)
+                (request.advanced.maximumAnswerTokens ?? 0) > modelLimits.maximumAnswerTokens)
                 ? m('p', t('llmProfiles', 'savedLimitAboveModel'))
                 : undefined,
               request.advanced.contextWindow >
                 (modelLimits?.contextWindowCap ?? FALLBACK_CONTEXT_CAP) ||
-              request.advanced.maximumAnswerTokens >
+              (request.advanced.maximumAnswerTokens ?? 0) >
                 (modelLimits?.maximumAnswerTokensCap ?? FALLBACK_OUTPUT_CAP)
                 ? m('p', t('llmProfiles', 'savedLimitAboveBackend'))
                 : undefined,

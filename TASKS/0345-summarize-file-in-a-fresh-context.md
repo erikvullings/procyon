@@ -77,3 +77,9 @@ local models, which then see one document at a time.
   ReplyFormat` now says which callers want JSON (document_summary, rag, knowledge_answer). Parts
   and calls are still summarised one at a time (`ToolEffect::Exclusive`); parallel parts are a
   possible follow-up for remote endpoints.
+- 2026-11-24 claude: live runs failed every side call with "LLM streaming response was
+  malformed" (desktop log): the stream ended with `finish_reason: "length"` because side calls
+  allowed 1024 tokens and a reasoning model spent them before writing. `SIDE_REPLY_TOKENS` is now
+  8192 (still bounded by the profile; the input budget subtracts it), and a cut-off reply is its
+  own `LlmProfileError::ReplyCutOff` (OpenAI stream and Ollama `done_reason`), so logs say what
+  happened. A failed summary's step line now reads `Could not summarise X`, not `Summarised X`.

@@ -30,9 +30,6 @@ const MAX_EXCHANGE_BYTES: usize = 192 * 1024;
 const MAX_TOOL_BYTES: usize = 16 * 1024;
 /// Longest step line kept with a reply, in bytes.
 const MAX_STEP_BYTES: usize = 200;
-/// No limit of its own on generated tokens: the profile's answer limit (set from the model's
-/// own limits) is the only bound, so a long answer or a file's content is not cut short.
-const MAX_REPLY_TOKENS: u32 = u32::MAX;
 
 const TOOLS_INTRO: &str = "\nYou can look things up in the folder the person chose, in their \
      notes and in the skills listed below. Paths are relative to that folder and cannot leave it. \
@@ -194,7 +191,7 @@ impl<G: ChatGenerator> TurnHost for ChatTurn<'_, G> {
                     user_prompt,
                     // Images belong to the person's message, so they are sent once.
                     images: std::mem::take(&mut self.images),
-                    maximum_tokens: MAX_REPLY_TOKENS,
+                    maximum_tokens: None,
                     context_window: None,
                     temperature: None,
                     reply: ReplyFormat::Text,

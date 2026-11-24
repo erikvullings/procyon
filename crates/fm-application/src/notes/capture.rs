@@ -19,8 +19,6 @@ const MAX_CONVERSATION_BYTES: usize = MAX_PROMPT_BYTES / 2;
 /// Most bytes of one command's output: its start and, mostly, its end.
 const MAX_OUTPUT_HEAD_BYTES: usize = 1024;
 const MAX_OUTPUT_TAIL_BYTES: usize = 2048;
-/// Upper bound on generated tokens for one note.
-const MAX_NOTE_TOKENS: u32 = 2048;
 /// Most tags kept.
 const MAX_TAGS: usize = 8;
 /// The title when nothing better is known.
@@ -77,7 +75,7 @@ pub(crate) async fn draft_note(
                 system_prompt: CAPTURE_PROMPT.to_owned(),
                 user_prompt: capture_prompt(&input),
                 images: Vec::new(),
-                maximum_tokens: MAX_NOTE_TOKENS,
+                maximum_tokens: None,
                 context_window: None,
                 temperature: None,
                 reply: ReplyFormat::Text,

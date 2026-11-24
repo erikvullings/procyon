@@ -38,6 +38,8 @@ export interface DocumentSummaryDialogAttrs {
 const REPRESENTATIVE_TOKEN_BUDGET = 4_096;
 const MAX_SUMMARY_INPUT_TOKENS = 131_072;
 const PROMPT_TOKEN_RESERVE = 1_024;
+/** Room left for the answer when the profile sets no answer limit (as the backend sizes it). */
+const ANSWER_ROOM_TOKENS = 8_192;
 
 /** Plain text of a generated summary, for the clipboard. */
 export function summaryAsText(
@@ -58,7 +60,12 @@ function inputTokenBudget(profile: LlmProfile | undefined): number {
     MAX_SUMMARY_INPUT_TOKENS,
     Math.max(
       1,
-      profile.advanced.contextWindow - profile.advanced.maximumAnswerTokens - PROMPT_TOKEN_RESERVE,
+      profile.advanced.contextWindow -
+        Math.min(
+          profile.advanced.maximumAnswerTokens ?? ANSWER_ROOM_TOKENS,
+          Math.floor(profile.advanced.contextWindow / 2),
+        ) -
+        PROMPT_TOKEN_RESERVE,
     ),
   );
 }

@@ -26,8 +26,6 @@ const MAX_MESSAGE_CHARS: usize = 16 * 1024;
 const MAX_CONVERSATION_CHARS: usize = 64 * 1024;
 /// Longest reply returned, in bytes; the template body limit, so a draft fits a new file.
 const MAX_REPLY_BYTES: usize = 64 * 1024;
-/// Upper bound on generated tokens for one reply.
-const MAX_REPLY_TOKENS: u32 = 4096;
 /// Low randomness: the reply is file contents, not prose.
 const REPLY_TEMPERATURE: f32 = 0.2;
 
@@ -142,7 +140,7 @@ impl FileAssistantService {
                     system_prompt: prompts.system,
                     user_prompt: prompts.user,
                     images: Vec::new(),
-                    maximum_tokens: MAX_REPLY_TOKENS,
+                    maximum_tokens: None,
                     context_window: None,
                     temperature: Some(REPLY_TEMPERATURE),
                     reply: ReplyFormat::Text,

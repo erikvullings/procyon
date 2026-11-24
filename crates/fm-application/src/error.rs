@@ -350,7 +350,7 @@ impl From<LlmProfileError> for ApplicationError {
             LlmProfileError::Tls => {
                 Rejection::new(reason::LLM_TLS, error.to_string()).into_platform()
             }
-            LlmProfileError::MalformedResponse => {
+            LlmProfileError::MalformedResponse | LlmProfileError::ReplyCutOff => {
                 Rejection::new(reason::LLM_MALFORMED_RESPONSE, error.to_string()).into_platform()
             }
             LlmProfileError::Transport => {

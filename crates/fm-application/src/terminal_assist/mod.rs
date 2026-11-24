@@ -52,9 +52,6 @@ const MAX_REPLY_BYTES: usize = 8 * 1024;
 const MAX_REQUEST_CHARS: usize = 2 * 1024;
 /// Most transcript bytes sent; the newest output is kept.
 const MAX_TRANSCRIPT_BYTES: usize = 16 * 1024;
-/// No limit of its own on generated tokens: the profile's answer limit (set from the model's
-/// own limits) is the only bound, so a long answer or a file's content is not cut short.
-const MAX_REPLY_TOKENS: u32 = u32::MAX;
 /// Most files attached with `@path` to one question.
 const MAX_ATTACHED_FILES: usize = 5;
 /// Longest session id, in characters.
@@ -243,7 +240,7 @@ async fn generate(
                 system_prompt,
                 user_prompt,
                 images: Vec::new(),
-                maximum_tokens: MAX_REPLY_TOKENS,
+                maximum_tokens: None,
                 context_window: None,
                 temperature: None,
                 reply: ReplyFormat::Text,

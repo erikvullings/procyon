@@ -43,7 +43,9 @@ const MAX_SUMMARY_REDUCTION_ROUNDS: usize = 16;
 const SUMMARY_PROMPT_RESERVE: u32 = 1024;
 const MAX_SUMMARY_TEXT_PREVIEW_CHARS: usize = 24_000;
 const ATTRIBUTION_SOURCE_TOKENS: u32 = 500;
-const ATTRIBUTION_MAX_OUTPUT_TOKENS: u32 = 1024;
+/// Tokens of the window left free for each reply when the input is sized and the profile sets no
+/// answer limit; no cap is sent.
+const SUMMARY_ANSWER_ROOM: u32 = 8192;
 const SOURCE_SUMMARY_TASK: &str =
     "Summarize every supplied source passage. Keep claims grounded in the evidence.";
 const REDUCTION_SUMMARY_TASK: &str =
@@ -342,7 +344,8 @@ pub struct DocumentSummaryCoordinator {
 struct SummaryGenerationBudget {
     context_window: u32,
     input_tokens: u32,
-    maximum_output_tokens: u32,
+    /// The profile's answer limit, when the person set one; otherwise no cap is sent.
+    maximum_output_tokens: Option<u32>,
     provider_limit_verified: bool,
 }
 
@@ -539,7 +542,14 @@ impl DocumentSummaryCoordinator {
                 }
             })?;
         let input_tokens = window
-            .checked_sub(profile.advanced.maximum_answer_tokens + SUMMARY_PROMPT_RESERVE)
+            .checked_sub(
+                profile
+                    .advanced
+                    .maximum_answer_tokens
+                    .unwrap_or(SUMMARY_ANSWER_ROOM)
+                    .min(window / 2)
+                    + SUMMARY_PROMPT_RESERVE,
+            )
             .filter(|value| *value > 0)
             .ok_or(DocumentSummaryError::InvalidRequest)?
             .min(131_072);
@@ -785,9 +795,7 @@ async fn extract_attribution(
                     .into(),
                 user_prompt: prompt,
                 images: Vec::new(),
-                maximum_tokens: budget
-                    .maximum_output_tokens
-                    .min(ATTRIBUTION_MAX_OUTPUT_TOKENS),
+                maximum_tokens: budget.maximum_output_tokens,
                 context_window: ollama.then_some(budget.context_window),
                 temperature: Some(0.0),
                 reply: ReplyFormat::Json,
@@ -1484,7 +1492,7 @@ mod tests {
                 api_key: None,
                 advanced: LlmAdvancedSettings {
                     context_window: 8_192,
-                    maximum_answer_tokens: 512,
+                    maximum_answer_tokens: Some(512),
                     ..LlmAdvancedSettings::default()
                 },
                 capabilities: [LlmApiCapability::ChatCompletions].into(),
@@ -1715,7 +1723,7 @@ mod tests {
                 api_key: None,
                 advanced: LlmAdvancedSettings {
                     context_window: 8_192,
-                    maximum_answer_tokens: 512,
+                    maximum_answer_tokens: Some(512),
                     ..LlmAdvancedSettings::default()
                 },
                 capabilities: [LlmApiCapability::ChatCompletions].into(),

@@ -127,8 +127,9 @@ impl FileTools for FolderTools {
     }
 }
 
-/// Most tokens of one summary written outside the conversation.
-const SIDE_REPLY_TOKENS: u32 = 1024;
+/// Tokens of the window left free for the reply when the input of a call outside the conversation
+/// is sized. No cap is sent: the room covers a short summary and a model that reasons first.
+const SIDE_REPLY_ROOM_TOKENS: u32 = 8192;
 /// Text one side call takes when the model's window is not known.
 const DEFAULT_SIDE_INPUT_BYTES: usize = 24 * 1024;
 /// Most text one side call takes, however large the window.
@@ -168,7 +169,7 @@ impl<'a, G: ChatGenerator> ModelSideCalls<'a, G> {
 fn side_input_bytes(tokens: Option<u32>) -> usize {
     tokens.map_or(DEFAULT_SIDE_INPUT_BYTES, |tokens| {
         (tokens as usize)
-            .saturating_sub(SIDE_REPLY_TOKENS as usize + 1024)
+            .saturating_sub(SIDE_REPLY_ROOM_TOKENS as usize + 1024)
             .saturating_mul(2)
             .clamp(8 * 1024, MAX_SIDE_INPUT_BYTES)
     })
@@ -196,7 +197,7 @@ impl<G: ChatGenerator> SideModel for ModelSideCalls<'_, G> {
                     system_prompt: system.to_owned(),
                     user_prompt: prompt.to_owned(),
                     images: Vec::new(),
-                    maximum_tokens: SIDE_REPLY_TOKENS,
+                    maximum_tokens: None,
                     context_window: None,
                     temperature: None,
                     reply: ReplyFormat::Text,
@@ -489,7 +490,10 @@ mod tests {
     fn a_side_call_takes_about_two_bytes_a_token_within_bounds() {
         assert_eq!(side_input_bytes(None), DEFAULT_SIDE_INPUT_BYTES);
         assert_eq!(side_input_bytes(Some(2048)), 8 * 1024);
-        assert_eq!(side_input_bytes(Some(32 * 1024)), (32 * 1024 - 2048) * 2);
+        assert_eq!(
+            side_input_bytes(Some(32 * 1024)),
+            (32 * 1024 - 8192 - 1024) * 2
+        );
         assert_eq!(side_input_bytes(Some(1_000_000)), MAX_SIDE_INPUT_BYTES);
     }
 }

@@ -12,8 +12,12 @@ export interface LlmAdvancedSettingsDto {
   /** @minimum 0 */
   contextWindow: number;
   customHeaders: LlmAdvancedSettingsDtoCustomHeaders;
-  /** @minimum 0 */
-  maximumAnswerTokens: number;
+  /**
+     * A cap on each answer's tokens; `null` sends none, so answers are never cut off.
+     * @minimum 0
+     * @nullable
+     */
+  maximumAnswerTokens?: number | null;
   temperature: number;
   /** @minimum 0 */
   timeoutSeconds: number;

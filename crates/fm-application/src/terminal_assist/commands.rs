@@ -10,7 +10,7 @@ use fm_transport_dto::{ChatFailureDto, TerminalAssistFilesDto, TerminalAssistSki
 use fm_vfs::{ListOptions, ProviderRegistry};
 use tokio_util::sync::CancellationToken;
 
-use super::{MAX_REPLY_TOKENS, Sessions, TerminalHost};
+use super::{Sessions, TerminalHost};
 use crate::agent_host::{SkillScope, chat_failure, project_context};
 use crate::chat::ChatGenerator;
 use crate::file_assistant::truncate_to_bytes;
@@ -194,7 +194,7 @@ pub(crate) async fn compact(
                 system_prompt: COMPACT_PROMPT.to_owned(),
                 user_prompt: conversation,
                 images: Vec::new(),
-                maximum_tokens: MAX_REPLY_TOKENS,
+                maximum_tokens: None,
                 context_window: None,
                 temperature: None,
                 reply: ReplyFormat::Text,

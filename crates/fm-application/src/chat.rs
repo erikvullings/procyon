@@ -40,9 +40,6 @@ const MAX_IMAGES: usize = 4;
 const MAX_IMAGE_EDGE: u32 = 1024;
 /// Most decoded image bytes sent with one message.
 const MAX_IMAGE_BYTES: usize = 4 * 1024 * 1024;
-/// No limit of its own on generated tokens: the profile's answer limit (set from the model's
-/// own limits) is the only bound, so a long answer or a file's content is not cut short.
-const MAX_REPLY_TOKENS: u32 = u32::MAX;
 
 const SYSTEM_PROMPT: &str = "You are the chat assistant inside Procyon, a file manager. Answer the \
      person's questions helpfully and concisely. Some messages include context the person attached \
@@ -303,7 +300,7 @@ impl ChatService {
                             system_prompt: SYSTEM_PROMPT.to_owned(),
                             user_prompt: prompts,
                             images,
-                            maximum_tokens: MAX_REPLY_TOKENS,
+                            maximum_tokens: None,
                             context_window: None,
                             temperature: None,
                             reply: ReplyFormat::Text,

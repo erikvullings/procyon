@@ -46,8 +46,6 @@ const PROMPT_VERSION: &str = "grounded-rag/2";
 const MAX_QUESTION_BYTES: usize = 8 * 1024;
 const MAX_HISTORY_TURNS: usize = 6;
 const MAX_HISTORY_BYTES: usize = 16 * 1024;
-const MAX_ANSWER_TOKENS: u32 = 2_048;
-const MAX_PLANNER_TOKENS: u32 = 256;
 
 /// Worker-side operation needed by host-owned Ask orchestration.
 #[async_trait]
@@ -1001,7 +999,7 @@ impl RagCoordinator {
                     system_prompt,
                     user_prompt,
                     images: Vec::new(),
-                    maximum_tokens: MAX_PLANNER_TOKENS,
+                    maximum_tokens: None,
                     context_window: None,
                     temperature: Some(0.0),
                     reply: ReplyFormat::Json,
@@ -1084,7 +1082,7 @@ impl RagCoordinator {
                     system_prompt,
                     user_prompt,
                     images: Vec::new(),
-                    maximum_tokens: MAX_ANSWER_TOKENS,
+                    maximum_tokens: None,
                     context_window: None,
                     temperature: Some(0.2),
                     reply: ReplyFormat::Json,
