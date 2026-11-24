@@ -4,7 +4,9 @@ use std::sync::Arc;
 use fm_vfs::ProviderRegistry;
 use fm_vfs_local::LocalFileSystemProvider;
 
-use super::{Documents, is_document, window};
+use fm_semantic_conversion::{BudgetKind, ConversionOutcome};
+
+use super::{Documents, converted_text, is_document, window};
 use crate::agent_host::sandbox::FileCall;
 use crate::agent_host::sandbox::{MAX_READ_BYTES, ToolHost};
 
@@ -221,4 +223,28 @@ async fn a_document_inside_a_skill_folder_is_read_as_text() {
             .await
             .is_none()
     );
+}
+
+#[test]
+fn a_conversion_over_a_budget_names_the_budget() {
+    let reason = |budget, limit| {
+        converted_text(ConversionOutcome::OverBudget { budget, limit }, "book.pdf")
+            .expect_err("over budget")
+            .to_string()
+    };
+    let slow = reason(BudgetKind::Time, 95_000);
+    assert!(
+        slow.contains("book.pdf: converting it took longer than 95 s"),
+        "{slow}"
+    );
+    assert!(!slow.contains("too large"), "{slow}");
+    let big = reason(BudgetKind::SourceBytes, 64 * 1024 * 1024);
+    assert!(
+        big.contains("larger than the 64 MB the converter reads"),
+        "{big}"
+    );
+    let pages = reason(BudgetKind::Items, 4096);
+    assert!(pages.contains("more than the 4096 pages"), "{pages}");
+    let deep = reason(BudgetKind::NestingDepth, 128);
+    assert!(deep.contains("nesting depth limit (128)"), "{deep}");
 }

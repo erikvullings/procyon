@@ -588,3 +588,9 @@ subtask block (0299–0303) and the earlier corpus-themes follow-ups.
 - [ ] 0347 Picture metadata under thumbnails and in hover tooltips *(backend, frontend, settings, medium — configurable caption lines in the grid, EXIF tooltip with larger preview; shares caption fields with 0346; needs 0134, 0273)*
 - [x] 0348 No default answer-token caps *(backend, frontend, settings, high — no `max_tokens` unless the profile sets one, old 1024 default migrated away, cut-off prose kept, raw-stream bound no longer mistaken for a reply limit; needs 0345)*
 - [ ] 0349 html5ever readable HTML conversion and worker dependency refresh *(backend, semantic, high — html5ever + dom_smoothie main-content extraction, baseline/11; semver-compatible closure updates and rusqlite 0.43 in the same Gemma re-qualification; docling upgrade split out)*
+- [x] 0350 Summaries of long documents *(backend, high — budget named in conversion errors, size-scaled deadline for agent reads, summaries combined in rounds instead of a 12-part cap; needs 0345)*
+- [ ] 0351 Agent harness: close the main gaps with Pi *(backend, agent — parent of 0352–0355; sub-agents, plan mode and a general hook system out of scope)*
+- [ ] 0352 Agent edit_file tool with approval *(backend, agent, frontend — exact-string replace, diff approved by the person, fingerprint check; part of 0351)*
+- [ ] 0353 Agent conversation compaction by summary *(backend, agent — older exchanges summarised incrementally instead of dropped; part of 0351)*
+- [ ] 0354 Saved, resumable and forkable agent sessions *(backend, agent, frontend — terminal sessions persisted, chat keeps tool history, fork from here; needs 0353; part of 0351)*
+- [ ] 0355 Steering a running agent turn *(backend, agent, frontend — messages typed during a turn delivered between tool rounds; part of 0351)*

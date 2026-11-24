@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use fm_semantic_conversion::{Completeness, ConversionOutcome};
+use fm_semantic_conversion::{BudgetKind, Completeness, ConversionOutcome};
 use fm_vfs::ProviderRegistry;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
@@ -47,7 +47,7 @@ pub(crate) struct Documents {
 impl Documents {
     pub(crate) fn new(providers: &ProviderRegistry) -> Self {
         Self {
-            service: DocumentConversionService::new(providers.clone()),
+            service: DocumentConversionService::for_reading(providers.clone()),
             providers: providers.clone(),
             cache: Mutex::new(Vec::new()),
             #[cfg(test)]
@@ -197,10 +197,35 @@ fn converted_text(outcome: ConversionOutcome, name: &str) -> Result<String, Tool
         ConversionOutcome::NoTextLayer { .. } => {
             Err(fail("no text layer (a scan); it would need OCR"))
         }
-        ConversionOutcome::OverBudget { .. } => Err(fail("too large to read")),
+        ConversionOutcome::OverBudget { budget, limit } => Err(fail(&over_budget(budget, limit))),
         ConversionOutcome::Skipped { .. } => Err(fail("no text found")),
         ConversionOutcome::Malformed { .. } => Err(fail("damaged or not a valid document")),
         _ => Err(fail("this kind of file cannot be read")),
+    }
+}
+
+/// Which limit a conversion went over, in words: the reason a document cannot be read, so the
+/// model is not told "too large" for a conversion that only took too long.
+fn over_budget(budget: BudgetKind, limit: u64) -> String {
+    match budget {
+        BudgetKind::Time => format!(
+            "converting it took longer than {} s; try again, or read a smaller document",
+            limit.div_ceil(1000)
+        ),
+        BudgetKind::SourceBytes => {
+            format!(
+                "larger than the {} MB the converter reads",
+                limit / (1024 * 1024)
+            )
+        }
+        BudgetKind::ExpandedBytes => format!(
+            "its unpacked contents are larger than the {} MB the converter reads",
+            limit / (1024 * 1024)
+        ),
+        BudgetKind::Items => {
+            format!("more than the {limit} pages, slides or sheets the converter reads")
+        }
+        other => format!("over the converter's {other} limit ({limit})"),
     }
 }
 

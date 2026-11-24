@@ -44,6 +44,8 @@ struct Recorder {
     input_bytes: usize,
     prompts: Mutex<Vec<String>>,
     fail: bool,
+    /// Bytes of filler each answer carries, for summaries that do not all fit one call.
+    padding: usize,
 }
 
 impl Recorder {
@@ -52,6 +54,7 @@ impl Recorder {
             input_bytes,
             prompts: Mutex::new(Vec::new()),
             fail: false,
+            padding: 0,
         }
     }
 
@@ -73,7 +76,11 @@ impl SideModel for Recorder {
         }
         let mut prompts = self.prompts.lock().unwrap();
         prompts.push(prompt.to_owned());
-        Ok(format!("summary {}", prompts.len()))
+        Ok(format!(
+            "summary {}{}",
+            prompts.len(),
+            " y".repeat(self.padding / 2)
+        ))
     }
 }
 
@@ -152,6 +159,74 @@ async fn a_long_document_is_summarised_in_parts_then_combined() {
     expected.extend((1..=parts).map(|part| format!("Summarising long.md: part {part} of {parts}")));
     expected.push(format!("Summarising long.md: combining {parts} parts"));
     assert_eq!(reports, expected);
+}
+
+#[tokio::test]
+async fn summaries_too_long_for_one_call_are_combined_in_rounds() {
+    let paragraph = "word ".repeat(800);
+    let files = OneFile {
+        name: "book.pdf",
+        text: [paragraph.as_str(); 8].join("\n\n"),
+    };
+    let mut model = Recorder::new(MIN_PART_BYTES);
+    // Three summaries never fit one call, two do: rounds of 8, then 4, then 2.
+    model.padding = 1500;
+    let (output, reports) = run_reporting(&files, &model, json!({ "path": "book.pdf" })).await;
+
+    let prompts = model.prompts();
+    assert_eq!(prompts.len(), 8 + 4 + 2 + 1, "{reports:#?}");
+    // No call is given more than one part's worth of summaries.
+    for prompt in &prompts[8..] {
+        assert!(
+            prompt.len() < MIN_PART_BYTES + 256,
+            "{} bytes",
+            prompt.len()
+        );
+    }
+    assert!(prompts[8].starts_with("Document: book.pdf, parts 1-2 of 8\n"));
+    assert!(prompts[8].contains("Part 1:\nsummary 1"));
+    assert!(prompts[8].contains("Part 2:\nsummary 2"));
+    // The second round combines what the first made, labelled by the parts it covers.
+    assert!(prompts[12].starts_with("Document: book.pdf, parts 1-4 of 8\n"));
+    assert!(prompts[12].contains("Parts 1-2:\nsummary 9"));
+    assert!(prompts[12].contains("Parts 3-4:\nsummary 10"));
+    let last = prompts.last().unwrap();
+    assert!(last.contains("These are summaries of its 8 parts"));
+    assert!(last.contains("Parts 1-4:\nsummary 13"));
+    assert!(last.contains("Parts 5-8:\nsummary 14"));
+    assert_eq!(output.step, "Summarised book.pdf (8 parts)");
+    assert!(output.text.contains("summary 15"));
+
+    let mut expected = vec!["Reading book.pdf".to_owned()];
+    expected.extend((1..=8).map(|part| format!("Summarising book.pdf: part {part} of 8")));
+    for (first, last) in [(1, 2), (3, 4), (5, 6), (7, 8), (1, 4), (5, 8)] {
+        expected.push(format!(
+            "Summarising book.pdf: combining parts {first}-{last} of 8"
+        ));
+    }
+    expected.push("Summarising book.pdf: combining 8 parts".to_owned());
+    assert_eq!(reports, expected);
+}
+
+#[test]
+fn a_summary_left_alone_in_a_round_is_carried_to_the_next() {
+    let covered = |part: usize, bytes: usize| Covered {
+        first: part,
+        last: part,
+        summary: "z".repeat(bytes),
+    };
+    let groups = group_summaries(
+        vec![covered(1, 1000), covered(2, 1000), covered(3, 1000)],
+        2500,
+    );
+    let parts: Vec<Vec<usize>> = groups
+        .iter()
+        .map(|group| group.iter().map(|covered| covered.first).collect())
+        .collect();
+    assert_eq!(parts, vec![vec![1, 2], vec![3]]);
+    // Even summaries larger than a call are paired, so every round shrinks.
+    let oversized = group_summaries(vec![covered(1, 9000), covered(2, 9000)], 2500);
+    assert_eq!(oversized.len(), 1);
 }
 
 #[tokio::test]

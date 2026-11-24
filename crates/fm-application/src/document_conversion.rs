@@ -12,6 +12,7 @@
 
 use crate::rejection::{Rejection, reason};
 use std::sync::Arc;
+use std::time::Duration;
 
 use fm_domain::{EntryId, EntryKind, Location};
 use fm_semantic_conversion::{
@@ -41,6 +42,28 @@ pub(crate) struct DocumentConversionService {
     providers: ProviderRegistry,
     converter: Arc<dyn DocumentConverter>,
     budgets: ConversionBudgets,
+    deadline: Deadline,
+}
+
+/// How long one conversion may take.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Deadline {
+    /// The budgets' own timeout, for background work such as indexing.
+    Budget,
+    /// Grows with the file ([`deadline_for_size`]): a person waits on a document they asked for.
+    BySize,
+}
+
+/// Deadline for a document someone asked to read: 30 s, plus 1 s per 100 KB of file.
+const READ_DEADLINE_BASE: Duration = Duration::from_secs(30);
+const READ_DEADLINE_BYTES_PER_SECOND: u64 = 100 * 1024;
+const READ_DEADLINE_MAX: Duration = Duration::from_secs(300);
+
+/// The deadline for converting a file of `bytes` that a person waits on.
+fn deadline_for_size(bytes: u64) -> Duration {
+    READ_DEADLINE_BASE
+        .saturating_add(Duration::from_secs(bytes / READ_DEADLINE_BYTES_PER_SECOND))
+        .min(READ_DEADLINE_MAX)
 }
 
 impl DocumentConversionService {
@@ -51,6 +74,27 @@ impl DocumentConversionService {
             providers,
             converter: Arc::new(converter_with_baseline_fallback()),
             budgets: ConversionBudgets::default(),
+            deadline: Deadline::Budget,
+        }
+    }
+
+    /// The same service for documents a person asked to read: the deadline grows with the
+    /// file's size ([`deadline_for_size`]) instead of the indexing default.
+    pub(crate) fn for_reading(providers: ProviderRegistry) -> Self {
+        Self {
+            deadline: Deadline::BySize,
+            ..Self::new(providers)
+        }
+    }
+
+    /// The budgets for converting a file of `bytes`.
+    fn budgets_for(&self, bytes: u64) -> ConversionBudgets {
+        match self.deadline {
+            Deadline::Budget => self.budgets.clone(),
+            Deadline::BySize => ConversionBudgets {
+                timeout: deadline_for_size(bytes).max(self.budgets.timeout),
+                ..self.budgets.clone()
+            },
         }
     }
 
@@ -144,7 +188,7 @@ impl DocumentConversionService {
 
         let metadata = trusted_metadata(&summary, bytes.len() as u64);
         let context = ConversionContext::new()
-            .with_budgets(self.budgets.clone())
+            .with_budgets(self.budgets_for(bytes.len() as u64))
             .with_visual_evidence(visual_evidence)
             .with_cancellation(Cancellation::new(Arc::new(TokenSignal(
                 cancellation.clone(),
@@ -176,7 +220,7 @@ impl DocumentConversionService {
             .map_err(ApplicationError::from)?;
         let mut bridge = tokio_util::io::SyncIoBridge::new(reader);
         let context = ConversionContext::new()
-            .with_budgets(self.budgets.clone())
+            .with_budgets(self.budgets_for(metadata.byte_length().unwrap_or(0)))
             .with_cancellation(Cancellation::new(Arc::new(TokenSignal(
                 cancellation.clone(),
             ))));
@@ -587,6 +631,29 @@ mod tests {
             error,
             ApplicationError::InvalidRequest(_) | ApplicationError::Rejected(_)
         ));
+    }
+
+    #[test]
+    fn a_document_someone_reads_gets_a_deadline_that_grows_with_its_size() {
+        assert_eq!(deadline_for_size(0), Duration::from_secs(30));
+        // The 6.7 MB, 422-page PDF that took 32 s in a debug build.
+        assert_eq!(deadline_for_size(6_725_655), Duration::from_secs(30 + 65));
+        assert_eq!(deadline_for_size(u64::MAX), Duration::from_secs(300));
+
+        let indexing = DocumentConversionService::new(ProviderRegistry::new());
+        let reading = DocumentConversionService::for_reading(ProviderRegistry::new());
+        let size = 10 * 1024 * 1024;
+        assert_eq!(indexing.budgets_for(size), ConversionBudgets::default());
+        let budgets = reading.budgets_for(size);
+        assert_eq!(budgets.timeout, Duration::from_secs(30 + 102));
+        // Only the deadline changes.
+        assert_eq!(
+            ConversionBudgets {
+                timeout: ConversionBudgets::default().timeout,
+                ..budgets
+            },
+            ConversionBudgets::default()
+        );
     }
 
     #[tokio::test]

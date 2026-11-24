@@ -2,7 +2,7 @@
 //! whole text ([`FileTools::read_whole`]) and a fresh model call ([`SideModel`]), with no history
 //! and no tools, writes the summary. Only the summary comes back, so summarising many documents
 //! keeps the conversation small. A text too long for one call is summarised in parts, and the
-//! part summaries are then combined.
+//! part summaries are then combined in rounds that each fit one call (task 0350).
 //!
 //! [`FileTools::read_whole`]: crate::FileTools::read_whole
 
@@ -38,7 +38,10 @@ pub struct WholeText {
 }
 
 /// Most parts one document is summarised in; a longer text is only summarised from its start.
-pub const MAX_SUMMARY_PARTS: usize = 12;
+/// At the smallest part this is 192 KB, at the default 24 KB part about 1.1 MB (a 400-page book),
+/// at the largest 4.5 MB. The part summaries are combined in rounds, so this bounds the calls and
+/// the time, not what one call is given.
+pub const MAX_SUMMARY_PARTS: usize = 48;
 /// Smallest part, whatever the host says, so a tiny window still makes progress.
 const MIN_PART_BYTES: usize = 4 * 1024;
 
@@ -129,6 +132,10 @@ impl<I: Send + 'static> TypedTool<I> for SummarizeFile {
 
 /// The summary of `text` and the number of parts it was summarised in.
 /// Reports each call through `ctx`, so the person sees how far a long document is.
+///
+/// A text longer than one call is summarised part by part. The part summaries are then combined
+/// in rounds: consecutive summaries in groups that fit one call, until one summary is left, so
+/// no single call is given more than `part_bytes` whatever the document's length.
 async fn summarize(
     ctx: &ToolContext<'_>,
     model: &dyn SideModel,
@@ -156,20 +163,100 @@ async fn summarize(
             "Document: {name}, part {} of {count}\n{focus_line}Summarise this part.\n\n{part}",
             index + 1
         );
-        summaries.push(model.complete(SUMMARY_SYSTEM, &prompt).await?);
+        let summary = model.complete(SUMMARY_SYSTEM, &prompt).await?;
+        summaries.push(Covered {
+            first: index + 1,
+            last: index + 1,
+            summary: summary.trim().to_owned(),
+        });
     }
-    let joined = summaries
-        .iter()
-        .enumerate()
-        .map(|(index, summary)| format!("Part {}:\n{}", index + 1, summary.trim()))
-        .collect::<Vec<_>>()
-        .join("\n\n");
-    ctx.report(format!("Summarising {name}: combining {count} parts"));
-    let prompt = format!(
-        "Document: {name}\n{focus_line}These are summaries of its {count} parts, in order. Write \
-         one summary of the whole document.\n\n{joined}"
-    );
-    Ok((model.complete(SUMMARY_SYSTEM, &prompt).await?, count))
+    while summaries.len() > 1 {
+        let groups = group_summaries(summaries, part_bytes);
+        let last_round = groups.len() == 1;
+        let mut combined = Vec::with_capacity(groups.len());
+        for group in groups {
+            let (first, last) = (group[0].first, group[group.len() - 1].last);
+            if group.len() == 1 {
+                // Alone in its group: carried to the next round as it is.
+                combined.extend(group);
+                continue;
+            }
+            let joined = group
+                .iter()
+                .map(Covered::labelled)
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            let prompt = if last_round {
+                ctx.report(format!("Summarising {name}: combining {count} parts"));
+                format!(
+                    "Document: {name}\n{focus_line}These are summaries of its {count} parts, in \
+                     order. Write one summary of the whole document.\n\n{joined}"
+                )
+            } else {
+                ctx.report(format!(
+                    "Summarising {name}: combining parts {first}-{last} of {count}"
+                ));
+                format!(
+                    "Document: {name}, parts {first}-{last} of {count}\n{focus_line}These are \
+                     summaries of these parts, in order. Write one summary of parts \
+                     {first}-{last}.\n\n{joined}"
+                )
+            };
+            let summary = model.complete(SUMMARY_SYSTEM, &prompt).await?;
+            combined.push(Covered {
+                first,
+                last,
+                summary: summary.trim().to_owned(),
+            });
+        }
+        summaries = combined;
+    }
+    let whole = summaries
+        .pop()
+        .map(|covered| covered.summary)
+        .unwrap_or_default();
+    Ok((whole, count))
+}
+
+/// A summary of parts `first` to `last` of a document.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Covered {
+    first: usize,
+    last: usize,
+    summary: String,
+}
+
+impl Covered {
+    /// The summary under a line naming the parts it covers.
+    fn labelled(&self) -> String {
+        if self.first == self.last {
+            format!("Part {}:\n{}", self.first, self.summary)
+        } else {
+            format!("Parts {}-{}:\n{}", self.first, self.last, self.summary)
+        }
+    }
+}
+
+/// `summaries` in consecutive groups whose labelled text fits `size` bytes. A group holds at
+/// least two summaries while two are left, so every round makes fewer summaries than the last,
+/// even when summaries are longer than they should be.
+fn group_summaries(summaries: Vec<Covered>, size: usize) -> Vec<Vec<Covered>> {
+    let mut groups: Vec<Vec<Covered>> = Vec::new();
+    let mut current: Vec<Covered> = Vec::new();
+    let mut current_bytes = 0;
+    for covered in summaries {
+        let bytes = covered.labelled().len() + 2;
+        if current.len() >= 2 && current_bytes + bytes > size {
+            groups.push(std::mem::take(&mut current));
+            current_bytes = 0;
+        }
+        current_bytes += bytes;
+        current.push(covered);
+    }
+    if !current.is_empty() {
+        groups.push(current);
+    }
+    groups
 }
 
 /// `text` in parts of at most `size` bytes, cut at a paragraph break, else a line break, else a
