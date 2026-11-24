@@ -262,9 +262,11 @@ SHA-256 prefix; development IDs and the public developer key are never accepted 
 The production identity contract pins `intfloat/multilingual-e5-small` at revision
 `614241f622f53c4eeff9890bdc4f31cfecc418b3`, tokenizer
 `xlm-roberta-sentencepiece.614241f6`, converter
-`docling-pdf/2052009+baseline/14`, chunker `structural/3`, worker protocol 1, and index schema 2.
-This converter revision repairs a narrowly identified PDF text-layout gap inside Elsevier DOI
-links; it invalidates derived PDF vectors and requires a new signed, measured qualification.
+`docling-pdf/2086014+baseline/16`, chunker `structural/3`, worker protocol 1, and index schema 2.
+This converter revision (task 0349) moves Docling to 2.86.14 and HTML conversion to html5ever with
+Readability-style main-content extraction; it invalidates derived PDF and HTML vectors. By the
+maintainer's decision the Docling update is re-signed through the automatic qualification without a
+new measured evaluation, as earlier Docling updates did not change retrieval quality measurably.
 The previously recorded `docling-pdf/1036000+baseline/2` evaluation remains historical evidence,
 not approval for this revision.
 Manual dispatches of `.github/workflows/release-semantic-components.yml` qualify components against

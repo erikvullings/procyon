@@ -42,7 +42,7 @@ const OCR_REQUIRED_GUIDANCE: &str = "This PDF has no searchable text layer and w
 
 /// Version of the Docling extraction and Procyon structural mapping behavior.
 pub const DOCLING_PDF_CONVERTER_VERSION: ComponentVersion =
-    ComponentVersion::new("docling-pdf", 2_082_001);
+    ComponentVersion::new("docling-pdf", 2_086_014);
 /// Stable identity of the production conversion pipeline.
 ///
 /// This changes whenever the preferred converter or fallback behaviour can
@@ -50,7 +50,7 @@ pub const DOCLING_PDF_CONVERTER_VERSION: ComponentVersion =
 /// included: enabling it retries only previously textless PDFs, while
 /// disabling it makes reconciliation remove their OCR-derived occurrences.
 /// OCR-derived documents carry [`OCRMYPDF_CONVERTER_VERSION`] themselves.
-pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/2082001+baseline/15";
+pub const DEFAULT_CONVERTER_PIPELINE_VERSION: &str = "docling-pdf/2086014+baseline/16";
 /// Version of the optional OCRmyPDF plus deterministic Docling composition.
 pub const OCRMYPDF_CONVERTER_VERSION: ComponentVersion =
     ComponentVersion::new("ocrmypdf-docling", 2);
@@ -1556,7 +1556,9 @@ impl<'a> Mapper<'a> {
                 self.current_page = u32::try_from(page_no).unwrap_or(u32::MAX).max(1);
                 self.block_index = 0;
             }
-            Node::PageBreak => {}
+            // A continuation marks where a paragraph joined across a page break resumes; it
+            // carries a box, not text, and every docling serializer but its JSON export skips it.
+            Node::PageBreak | Node::ProvContinuation { .. } => {}
             Node::Heading { level, text } => self.heading(level, text),
             Node::Paragraph { text } | Node::TextDump(text) => {
                 if !self.is_page_number(&text) {

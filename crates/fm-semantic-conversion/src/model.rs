@@ -534,6 +534,9 @@ pub enum ConversionWarning {
         /// Normalized excerpt of the matched text.
         excerpt: String,
     },
+    /// A web page's main content could not be told apart from its menus and other site chrome, so
+    /// the whole page was read (without its navigation, header, footer and asides).
+    MainContentNotFound,
     /// A feature of the source that the baseline converter does not read.
     UnsupportedFeature {
         /// What was not read.

@@ -9,6 +9,8 @@ license.workspace = true
 [dependencies]
 blake3.workspace = true
 calamine.workspace = true
+dom_query.workspace = true
+dom_smoothie.workspace = true
 encoding_rs.workspace = true
 image.workspace = true
 lopdf.workspace = true
