@@ -1736,6 +1736,8 @@ export const nl = {
     forkQuestion: 'Splitsen: nieuwe chat van vóór deze vraag',
     forkReply: 'Splitsen: nieuwe chat tot en met dit antwoord',
     forkFailed: 'Het gesprek kon niet worden gesplitst.',
+    thinkingEffort: 'Denkniveau voor deze chat',
+    thinkingDefault: 'Denken: standaard',
     noFolder: 'Open een map in het andere paneel om die toe te voegen.',
     noSelection: 'Selecteer items in de map om ze toe te voegen.',
     consentRequired:
@@ -2488,6 +2490,14 @@ export const nl = {
       'Dit eindpunt heeft toestemming nodig in Instellingen: open het hierboven en sla op met toestemming.',
     image: 'Afbeelding genereren',
     allowCloudImage: 'Cloudgebruik voor afbeeldingen toestaan',
+    thinking: 'Denkniveau',
+    thinkingHint:
+      'De standaard voor chats en de terminalassistent; elk gesprek kan een eigen niveau kiezen. Niet elk model kan nadenken of de mate ervan variëren.',
+    thinkingAuto: 'Automatisch (uit voor lokale modellen, standaard van de aanbieder in de cloud)',
+    thinkingOff: 'Uit',
+    thinkingLow: 'Laag',
+    thinkingMedium: 'Gemiddeld',
+    thinkingHigh: 'Hoog',
     cloudHintImage:
       'De woorden die je typt gaan naar dit cloud-eindpunt en de afbeeldingen komen ervan terug. Zet dit alleen aan als je dat accepteert.',
     imageModelHint:
@@ -2831,6 +2841,11 @@ export const nl = {
       'Nieuwe sessie van vóór vraag {number}. De vraag staat in de invoer om opnieuw te stellen of aan te passen.',
     forkGone: 'Er is geen vraag {number}.',
     resumeDeleted: '“{title}” verwijderd.',
+    slashHelpEffort:
+      'toon of stel het denkniveau van deze sessie in (/effort off, low, medium, high of default)',
+    effortShown: 'Denkniveau voor deze sessie: {effort}.',
+    effortDefault: 'de standaard van het chatmodel',
+    effortUnknown: 'Gebruik /effort off, low, medium, high of default.',
     slashHelpAuto:
       'automatisch goedkeuren aan- of uitzetten: opdrachten uitvoeren, bestanden maken en wijzigingen toepassen zonder te vragen, behalve zeer gevaarlijke opdrachten',
     slashAutoOn:

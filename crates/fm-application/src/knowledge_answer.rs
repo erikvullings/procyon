@@ -318,6 +318,7 @@ impl KnowledgeAnswerCoordinator {
                     context_window: None,
                     temperature: Some(ANSWER_TEMPERATURE),
                     reply: ReplyFormat::Json,
+                    thinking: crate::llm_profiles::ThinkingRequest::Background,
                 },
                 &cancellation,
             )

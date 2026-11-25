@@ -41,7 +41,7 @@ use crate::agent_host::{
     tool_calling,
 };
 use crate::chat::ChatGenerator;
-use crate::llm_profiles::{LlmChatGeneration, LlmRole, ReplyFormat};
+use crate::llm_profiles::{LlmChatGeneration, LlmRole, ReplyFormat, ThinkingRequest};
 
 use self::agent_tools::TerminalInterrupt;
 use self::context::{AttachedFile, render_activity, render_context, state_sections};
@@ -225,6 +225,7 @@ pub(crate) async fn reply_streaming(
         system_prompt,
         (user_prompt, Vec::new()),
         Vec::new(),
+        conversation_thinking(&request),
         &mut |_: &str| {},
     )
     .await?;
@@ -246,11 +247,17 @@ pub(crate) async fn reply_streaming(
     })
 }
 
+/// The thinking effort the session chose (`/effort`), or the chat role's default.
+fn conversation_thinking(request: &TerminalAssistRequestDto) -> ThinkingRequest {
+    ThinkingRequest::Conversation(request.thinking.map(crate::llm_profiles::thinking_from_dto))
+}
+
 async fn generate(
     generator: &impl ChatGenerator,
     system_prompt: String,
     (user_prompt, followups): (String, Vec<Message>),
     tools: Vec<ToolSpec>,
+    thinking: ThinkingRequest,
     on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
 ) -> Result<String, ChatFailureDto> {
     let cancellation = CancellationToken::new();
@@ -267,6 +274,7 @@ async fn generate(
                 context_window: None,
                 temperature: None,
                 reply: ReplyFormat::Text,
+                thinking,
             },
             &cancellation,
             on_delta,
@@ -452,6 +460,7 @@ async fn ask_turn(
         budget: session::conversation_budget(generator.context_window(LlmRole::Chat).await),
         calling,
         tools: prompt_registry.specs_for(calling),
+        thinking: conversation_thinking(&request),
     };
     let skill_documents = SkillFolderDocuments::new(providers);
     let side_calls = ModelSideCalls::new(generator, CancellationToken::new())
@@ -586,6 +595,7 @@ struct TerminalTurn<'a, G> {
     tools: Vec<ToolSpec>,
     /// How many bytes of conversation the model's window allows.
     budget: usize,
+    thinking: ThinkingRequest,
 }
 
 #[async_trait]
@@ -602,6 +612,7 @@ impl<G: ChatGenerator> TurnHost for TerminalTurn<'_, G> {
             self.system_prompt.clone(),
             generation_parts(messages, self.calling),
             self.tools.clone(),
+            self.thinking,
             on_delta,
         )
         .await
@@ -969,6 +980,7 @@ mod tests {
             allow_file_writes: false,
             auto_approve: false,
             workspace_id: None,
+            thinking: None,
         }
     }
 
@@ -989,6 +1001,7 @@ mod tests {
             allow_file_writes: false,
             auto_approve: false,
             workspace_id: None,
+            thinking: None,
         }
     }
 
@@ -1126,6 +1139,7 @@ mod tests {
             allow_file_writes: false,
             auto_approve: false,
             workspace_id: None,
+            thinking: None,
         }
     }
 

@@ -2722,6 +2722,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       rename: (key, id, title) => chatWiring.rename(shellState.client, key, id, title),
       remove: (key, id) => chatWiring.remove(shellState.client, key, id),
       fork: (key, keep) => chatWiring.fork(shellState.client, key, keep),
+      setThinking: (key, effort) => chatWiring.setThinking(key, effort),
       send: (key, draft) => chatWiring.send(shellState.client, key, draft),
       retry: (key) => chatWiring.retry(shellState.client, key),
       stop: (key) => chatWiring.stop(shellState.client, key),

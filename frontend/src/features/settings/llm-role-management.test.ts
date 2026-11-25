@@ -136,7 +136,8 @@ describe('LlmRoleManagement', () => {
         ).length,
       };
     };
-    expect(drawn('[aria-label="Chat and summaries"]')).toEqual({ dropdowns: 1, typed: 1 });
+    // Chat also picks its default thinking effort (task 0361).
+    expect(drawn('[aria-label="Chat and summaries"]')).toEqual({ dropdowns: 2, typed: 1 });
     // The picture row adds its own provider choice, then names an endpoint and types a model.
     expect(drawn('[aria-label="Image generation"]')).toEqual({ dropdowns: 1, typed: 1 });
   });

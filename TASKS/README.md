@@ -599,3 +599,4 @@ subtask block (0299–0303) and the earlier corpus-themes follow-ups.
 - [ ] 0358 Assistant session memory through the semantic index *(backend, agent, semantic — session summaries as Markdown records in the notes folder, indexed under its consent, found with `search_notes`; needs 0353, 0354)*
 - [x] 0359 Chat conversations: tool history, compaction and forks *(backend, agent, frontend — schema 2 with agent messages, chat compaction, fork from here, delete saved terminal sessions; split from 0353/0354)*
 - [ ] 0360 Agent harness robustness across models *(backend, agent — argument aliases, JSON repair for native calls, tiered edit matching, guiding errors, loop control, measured model profiles, eval suite)*
+- [x] 0361 Thinking effort: role default, per-conversation choice *(backend, frontend, llm — `auto`/off/low/medium/high mapped per endpoint with fallback; Settings default, chat header picker, terminal `/effort`)*

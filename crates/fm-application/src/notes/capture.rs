@@ -79,6 +79,7 @@ pub(crate) async fn draft_note(
                 context_window: None,
                 temperature: None,
                 reply: ReplyFormat::Text,
+                thinking: crate::llm_profiles::ThinkingRequest::Background,
             },
             &CancellationToken::new(),
             &mut |_: &str| {},

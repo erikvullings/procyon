@@ -1741,6 +1741,8 @@ export class MockSemanticClient implements SemanticClient {
           profileId: request.profileId,
           model: request.model,
           allowCloud: request.allowCloud,
+          // Absent keeps the role's current default effort (task 0361).
+          thinking: request.thinking ?? this.ctx.llmRoles[role]?.thinking ?? 'auto',
         },
       };
       return structuredClone(this.ctx.llmRoles);

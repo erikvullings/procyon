@@ -166,6 +166,9 @@ pub struct TerminalAssistRequestDto {
     /// (task 0337). Without it notes are searched by text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace_id: Option<Uuid>,
+    /// The session's thinking effort (`/effort`, task 0361); absent uses the chat role's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<crate::ThinkingEffortDto>,
 }
 
 /// The assistant's answer as plain text. For `command`, the text is exactly one command line.

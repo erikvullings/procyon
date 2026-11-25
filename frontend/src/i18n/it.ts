@@ -1323,6 +1323,8 @@ export const it = {
     forkQuestion: 'Dirama: nuova chat da prima di questa domanda',
     forkReply: 'Dirama: nuova chat fino a questa risposta',
     forkFailed: 'Impossibile diramare la conversazione.',
+    thinkingEffort: 'Livello di ragionamento per questa chat',
+    thinkingDefault: 'Ragionamento: predefinito',
     noFolder: 'Apri una cartella nell’altro riquadro per allegarla.',
     noSelection: 'Seleziona elementi nella cartella per allegarli.',
     consentRequired:
@@ -2080,6 +2082,14 @@ export const it = {
       'Questo endpoint richiede il consenso nelle Impostazioni: aprilo sopra e salva con consenso.',
     image: 'Generazione di immagini',
     allowCloudImage: 'Consenti l’uso del cloud per la generazione di immagini',
+    thinking: 'Livello di ragionamento',
+    thinkingHint:
+      'Il valore predefinito per le chat e l’assistente del terminale; ogni conversazione può sceglierne uno proprio. Non tutti i modelli sanno ragionare o variarne la quantità.',
+    thinkingAuto: 'Automatico (spento per i modelli locali, predefinito del fornitore nel cloud)',
+    thinkingOff: 'Spento',
+    thinkingLow: 'Basso',
+    thinkingMedium: 'Medio',
+    thinkingHigh: 'Alto',
     cloudHintImage:
       'Le parole che digiti vengono inviate a questo endpoint cloud e le immagini tornano da esso. Attiva solo se accetti.',
     imageModelHint:
@@ -2833,6 +2843,11 @@ export const it = {
       'Nuova sessione da prima della domanda {number}. La domanda è nell’input per riproporla o modificarla.',
     forkGone: 'Non c’è una domanda {number}.',
     resumeDeleted: '“{title}” eliminata.',
+    slashHelpEffort:
+      'mostra o imposta il livello di ragionamento di questa sessione (/effort off, low, medium, high o default)',
+    effortShown: 'Livello di ragionamento per questa sessione: {effort}.',
+    effortDefault: 'il predefinito del modello di chat',
+    effortUnknown: 'Usa /effort off, low, medium, high o default.',
     slashHelpAuto:
       "attiva o disattiva l'approvazione automatica: esegui comandi, crea file e applica modifiche senza chiedere, tranne i comandi molto pericolosi",
     slashAutoOn:

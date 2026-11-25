@@ -3,6 +3,7 @@
  * Run `pnpm api:generate` (or `pnpm api:check`) to regenerate.
  */
 import type { ChatImageDto } from './chatImageDto.ts';
+import type { ThinkingEffortDto } from './thinkingEffortDto.ts';
 
 /**
  * Asks for the next reply in a saved conversation. The person's message is saved first; the
@@ -30,6 +31,7 @@ export interface ChatReplyRequestDto {
      * The message is not saved a second time, and `content` and `context` are not used.
      */
   retry?: boolean;
+  thinking?: ThinkingEffortDto | null;
   /**
      * A folder (a location URL) the model may look into with read-only tools, together with the
      * person's notes and skills (task 0339). It cannot leave the folder or change anything.

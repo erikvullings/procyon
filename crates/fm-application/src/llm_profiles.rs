@@ -21,6 +21,7 @@ use fm_transport_dto::{
     LlmPresetDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto,
     LlmRoleAssignmentDto, LlmRoleDto, LlmRolesDto, LlmTestErrorCategoryDto, LlmTlsPolicyDto,
     OrphanLlmCredentialDispositionDto, SaveLlmProfileRequestDto, SaveLlmRoleRequestDto,
+    ThinkingEffortDto,
 };
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -103,6 +104,167 @@ impl ReasoningSwitch {
             Self::TemplateKwargs => Self::EffortNone,
             Self::Both | Self::EffortNone | Self::Plain => Self::Plain,
         }
+    }
+}
+
+/// How much a model should think before it answers (task 0361). The chat role stores a default;
+/// a conversation may choose its own.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ThinkingEffort {
+    /// As before there was a choice: thinking off on local servers, the provider's own default in
+    /// the cloud.
+    #[default]
+    Auto,
+    Off,
+    Low,
+    Medium,
+    High,
+}
+
+impl ThinkingEffort {
+    /// The `reasoning_effort` / Ollama `think` level of a thinking effort.
+    const fn level(self) -> Option<&'static str> {
+        match self {
+            Self::Low => Some("low"),
+            Self::Medium => Some("medium"),
+            Self::High => Some("high"),
+            Self::Auto | Self::Off => None,
+        }
+    }
+}
+
+/// Which thinking effort a generation asks for.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ThinkingRequest {
+    /// A background call (a summary, a name, a JSON task): [`ThinkingEffort::Auto`], so it stays
+    /// fast.
+    #[default]
+    Background,
+    /// A reply to the person: the conversation's choice, or the role's default without one.
+    Conversation(Option<ThinkingEffort>),
+}
+
+impl ThinkingRequest {
+    /// The effort to use when the role's default is `default`.
+    pub fn effort(self, default: ThinkingEffort) -> ThinkingEffort {
+        match self {
+            Self::Background => ThinkingEffort::Auto,
+            Self::Conversation(choice) => choice.unwrap_or(default),
+        }
+    }
+}
+
+/// What Ollama's `think` field carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OllamaThink {
+    Off,
+    On,
+    Level(&'static str),
+}
+
+impl OllamaThink {
+    fn value(self) -> Value {
+        match self {
+            Self::Off => Value::Bool(false),
+            Self::On => Value::Bool(true),
+            Self::Level(level) => Value::from(level),
+        }
+    }
+}
+
+/// One way of asking an endpoint for a thinking effort; [`thinking_attempts`] lists them in the
+/// order they are tried until the endpoint accepts one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ThinkingAttempt {
+    pub switch: ReasoningSwitch,
+    /// `reasoning_effort` for an OpenAI-compatible endpoint.
+    pub effort: Option<&'static str>,
+    /// `think` for Ollama.
+    pub ollama_think: OllamaThink,
+}
+
+impl ThinkingAttempt {
+    const PLAIN: Self = Self {
+        switch: ReasoningSwitch::Plain,
+        effort: None,
+        ollama_think: OllamaThink::Off,
+    };
+
+    const fn switch(switch: ReasoningSwitch) -> Self {
+        Self {
+            switch,
+            ..Self::PLAIN
+        }
+    }
+
+    const fn effort(effort: &'static str) -> Self {
+        Self {
+            effort: Some(effort),
+            ..Self::PLAIN
+        }
+    }
+
+    const fn ollama(think: OllamaThink) -> Self {
+        Self {
+            ollama_think: think,
+            ..Self::PLAIN
+        }
+    }
+
+    /// Whether the request carries a thinking parameter an endpoint might reject.
+    fn asks_anything(self) -> bool {
+        self != Self::PLAIN
+    }
+}
+
+/// The ways to ask `profile`'s endpoint for `effort`, in the order they are tried; the last one
+/// asks for nothing the endpoint could reject. Which values a model takes is not disclosed by
+/// OpenAI-compatible servers, so the list goes from the closest match to none at all.
+pub fn thinking_attempts(profile: &LlmProfile, effort: ThinkingEffort) -> Vec<ThinkingAttempt> {
+    if profile.preset == LlmPreset::Ollama {
+        // Ollama: a boolean, or a level for gpt-oss (which ignores booleans). A model without the
+        // thinking capability refuses `think: true`.
+        return match effort.level() {
+            None => vec![ThinkingAttempt::ollama(OllamaThink::Off)],
+            Some(level) if profile.model.to_ascii_lowercase().contains("gpt-oss") => vec![
+                ThinkingAttempt::ollama(OllamaThink::Level(level)),
+                ThinkingAttempt::ollama(OllamaThink::Off),
+            ],
+            Some(_) => vec![
+                ThinkingAttempt::ollama(OllamaThink::On),
+                ThinkingAttempt::ollama(OllamaThink::Off),
+            ],
+        };
+    }
+    if let Some(level) = effort.level() {
+        return vec![ThinkingAttempt::effort(level), ThinkingAttempt::PLAIN];
+    }
+    if supports_reasoning_switch(profile.preset) {
+        // Off and Auto alike: the thinking-off switch this server took last time goes first.
+        let mut attempts: Vec<ThinkingAttempt> = profile
+            .reasoning_switch
+            .into_iter()
+            .map(ThinkingAttempt::switch)
+            .collect();
+        attempts.extend(
+            ReasoningSwitch::LADDER
+                .into_iter()
+                .filter(|switch| Some(*switch) != profile.reasoning_switch)
+                .map(ThinkingAttempt::switch),
+        );
+        return attempts;
+    }
+    match effort {
+        // Newer OpenAI models take `none`, the first GPT-5 models `minimal`, o-series `low` at
+        // the least; a model that does not reason refuses the parameter altogether.
+        ThinkingEffort::Off => vec![
+            ThinkingAttempt::effort("none"),
+            ThinkingAttempt::effort("minimal"),
+            ThinkingAttempt::effort("low"),
+            ThinkingAttempt::PLAIN,
+        ],
+        _ => vec![ThinkingAttempt::PLAIN],
     }
 }
 
@@ -370,6 +532,29 @@ pub struct LlmProbeRequest {
     /// How to ask the server not to emit reasoning tokens; `Plain` for everything but the local
     /// OpenAI-compatible presets (strict cloud APIs reject unknown parameters).
     pub reasoning_switch: ReasoningSwitch,
+    /// `reasoning_effort` to send to an OpenAI-compatible endpoint (task 0361).
+    pub reasoning_effort: Option<&'static str>,
+    /// Ollama's `think`.
+    pub ollama_think: OllamaThink,
+}
+
+impl LlmProbeRequest {
+    /// This request asking for one thinking attempt.
+    fn with_thinking(&self, attempt: ThinkingAttempt) -> Self {
+        Self {
+            reasoning_switch: attempt.switch,
+            reasoning_effort: attempt.effort,
+            ollama_think: attempt.ollama_think,
+            ..self.clone()
+        }
+    }
+
+    /// Whether the request carries a thinking parameter an endpoint might reject.
+    fn asks_thinking(&self) -> bool {
+        self.reasoning_switch != ReasoningSwitch::Plain
+            || self.reasoning_effort.is_some()
+            || self.ollama_think != OllamaThink::Off
+    }
 }
 
 impl std::fmt::Debug for LlmProbeRequest {
@@ -383,6 +568,9 @@ impl std::fmt::Debug for LlmProbeRequest {
             .field("api_key_header", &self.api_key_header)
             .field("headers", &self.headers.keys().collect::<Vec<_>>())
             .field("timeout", &self.timeout)
+            .field("reasoning_switch", &self.reasoning_switch)
+            .field("reasoning_effort", &self.reasoning_effort)
+            .field("ollama_think", &self.ollama_think)
             .finish()
     }
 }
@@ -450,6 +638,8 @@ pub struct LlmChatGeneration {
     pub temperature: Option<f32>,
     /// What the reply must be. A JSON reply is enforced where the endpoint can (Ollama).
     pub reply: ReplyFormat,
+    /// How much the model should think (task 0361).
+    pub thinking: ThinkingRequest,
 }
 
 /// Result of one generation attempt that may carry a thinking-off switch.
@@ -559,6 +749,34 @@ impl ReqwestLlmProbeTransport {
         url: &str,
     ) -> reqwest::RequestBuilder {
         self.request_with_timeout(method, request, url, request.timeout)
+    }
+
+    /// One Ollama generation. A request asking to think that Ollama refuses (a model without the
+    /// thinking capability) is [`ChatOutcome::Rejected`], so the caller can ask without.
+    async fn generate_ollama(
+        &self,
+        request: &LlmProbeRequest,
+        url: &str,
+        generation: &LlmChatGeneration,
+        cancellation: &CancellationToken,
+    ) -> Result<ChatOutcome, LlmProfileError> {
+        let body = ollama_generation_body(request, generation);
+        let response = send_generation(
+            self.generation_request(reqwest::Method::POST, request, url)
+                .json(&body),
+            request,
+            cancellation,
+        )
+        .await?;
+        if request.asks_thinking() && matches!(response.status().as_u16(), 400 | 422) {
+            return Ok(ChatOutcome::Rejected);
+        }
+        let response = refused_generation(response).await?;
+        let bytes = read_bounded_body(response, cancellation).await?;
+        Ok(ChatOutcome::Generated {
+            text: finish_reply(parse_ollama_reply(&bytes)?, generation.reply)?,
+            reasoning_seen: false,
+        })
     }
 
     /// A generation request: its total wait is capped far above the idle timeout, because a local
@@ -727,17 +945,13 @@ impl LlmProbeTransport for ReqwestLlmProbeTransport {
         cancellation: &CancellationToken,
     ) -> Result<String, LlmProfileError> {
         if let Some(url) = &request.ollama_generation_url {
-            let body = ollama_generation_body(request, generation);
-            let response = send_generation(
-                self.generation_request(reqwest::Method::POST, request, url)
-                    .json(&body),
-                request,
-                cancellation,
-            )
-            .await?;
-            let response = refused_generation(response).await?;
-            let bytes = read_bounded_body(response, cancellation).await?;
-            return finish_reply(parse_ollama_reply(&bytes)?, generation.reply);
+            return match self
+                .generate_ollama(request, url, generation, cancellation)
+                .await?
+            {
+                ChatOutcome::Generated { text, .. } => Ok(text),
+                ChatOutcome::Rejected => Err(LlmProfileError::Transport),
+            };
         }
         match self
             .generate_chat_adaptive(request, generation, cancellation)
@@ -765,15 +979,14 @@ impl LlmProbeTransport for ReqwestLlmProbeTransport {
         cancellation: &CancellationToken,
         on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
     ) -> Result<ChatOutcome, LlmProfileError> {
-        if request.ollama_generation_url.is_some() {
-            let text = self
-                .generate_chat(request, generation, cancellation)
+        if let Some(url) = &request.ollama_generation_url {
+            let outcome = self
+                .generate_ollama(request, url, generation, cancellation)
                 .await?;
-            on_delta(&text);
-            return Ok(ChatOutcome::Generated {
-                text,
-                reasoning_seen: false,
-            });
+            if let ChatOutcome::Generated { text, .. } = &outcome {
+                on_delta(text);
+            }
+            return Ok(outcome);
         }
         let body = openai_generation_body(request, generation, request.reasoning_switch);
         let response = send_generation(
@@ -784,7 +997,7 @@ impl LlmProbeTransport for ReqwestLlmProbeTransport {
         )
         .await?;
         let status = response.status().as_u16();
-        if request.reasoning_switch != ReasoningSwitch::Plain && matches!(status, 400 | 422) {
+        if request.asks_thinking() && matches!(status, 400 | 422) {
             return Ok(ChatOutcome::Rejected);
         }
         let response = refused_generation(response).await?;
@@ -929,6 +1142,10 @@ pub struct RoleAssignment {
     pub model: String,
     #[serde(default)]
     pub allow_cloud: bool,
+    /// The thinking effort of a reply when the conversation chose none (task 0361); used by the
+    /// chat role.
+    #[serde(default)]
+    pub thinking: ThinkingEffort,
 }
 
 /// The role bindings that are configured globally.
@@ -950,6 +1167,8 @@ pub struct RoleAssignmentInput {
     pub profile_id: Uuid,
     pub model: String,
     pub allow_cloud: bool,
+    /// The default thinking effort; `None` keeps the role's current one.
+    pub thinking: Option<ThinkingEffort>,
 }
 
 /// A role binding that passed endpoint, consent and cloud-permission checks.
@@ -957,6 +1176,8 @@ pub struct RoleAssignmentInput {
 pub struct LlmResolvedRole {
     pub profile: LlmProfile,
     pub model: String,
+    /// The role's default thinking effort.
+    pub thinking: ThinkingEffort,
 }
 
 /// Durable profile collection.
@@ -1118,12 +1339,17 @@ impl VersionedDocument for LlmProfilesDocument {
 }
 
 /// Thread-safe profile lifecycle and test capability.
+/// A profile, the model it serves and a thinking effort.
+type ThinkingKey = (Uuid, String, ThinkingEffort);
+
 #[derive(Clone)]
 pub struct LlmProfileService {
     settings: SettingsStore,
     profiles: Arc<Mutex<LlmProfilesDocument>>,
     /// Tool-calling probes in flight or recently unanswered, with the time the next may start.
     probing: Arc<Mutex<std::collections::HashMap<(Uuid, String), Instant>>>,
+    /// The thinking attempt each profile, model and effort accepted in this session (task 0361).
+    accepted_thinking: Arc<Mutex<std::collections::HashMap<ThinkingKey, ThinkingAttempt>>>,
     credentials: Arc<dyn CredentialStore>,
     transport: Arc<dyn LlmProbeTransport>,
     host_policy: LlmHostPolicy,
@@ -1146,6 +1372,7 @@ impl LlmProfileService {
             settings,
             profiles: Arc::new(Mutex::new(profiles)),
             probing: Arc::default(),
+            accepted_thinking: Arc::default(),
             credentials,
             transport,
             host_policy,
@@ -1166,6 +1393,7 @@ impl LlmProfileService {
             settings,
             profiles: Arc::new(Mutex::new(LlmProfilesDocument::default())),
             probing: Arc::default(),
+            accepted_thinking: Arc::default(),
             credentials,
             transport,
             host_policy,
@@ -1500,10 +1728,19 @@ impl LlmProfileService {
                     // provider, so it is refused where the person can still act on it.
                     return Err(LlmProfileError::InvalidConfiguration);
                 }
+                let current = match role {
+                    LlmRole::Chat => document.roles.chat.as_ref(),
+                    LlmRole::Embeddings => document.roles.embeddings.as_ref(),
+                    LlmRole::Image => document.roles.image.as_ref(),
+                };
                 Some(RoleAssignment {
                     profile_id: input.profile_id,
                     model: input.model,
                     allow_cloud: input.allow_cloud,
+                    thinking: input
+                        .thinking
+                        .or_else(|| current.map(|current| current.thinking))
+                        .unwrap_or_default(),
                 })
             }
         };
@@ -1557,6 +1794,7 @@ impl LlmProfileService {
         Ok(LlmResolvedRole {
             profile: profile.clone(),
             model: assignment.model.clone(),
+            thinking: assignment.thinking,
         })
     }
 
@@ -1733,7 +1971,8 @@ impl LlmProfileService {
         on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
     ) -> Result<String, LlmProfileError> {
         let profile = self.profile(id)?;
-        self.generate_profile_streamed(profile, generation, cancellation, on_delta)
+        let effort = generation.thinking.effort(ThinkingEffort::Auto);
+        self.generate_profile_streamed(profile, generation, effort, cancellation, on_delta)
             .await
     }
 
@@ -1752,7 +1991,8 @@ impl LlmProfileService {
             model: resolved.model,
             ..resolved.profile
         };
-        self.generate_profile_streamed(profile, generation, cancellation, on_delta)
+        let effort = generation.thinking.effort(resolved.thinking);
+        self.generate_profile_streamed(profile, generation, effort, cancellation, on_delta)
             .await
     }
 
@@ -1760,6 +2000,7 @@ impl LlmProfileService {
         &self,
         profile: LlmProfile,
         generation: LlmChatGeneration,
+        effort: ThinkingEffort,
         cancellation: &CancellationToken,
         on_delta: &mut (dyn for<'a> FnMut(&'a str) + Send),
     ) -> Result<String, LlmProfileError> {
@@ -1815,30 +2056,32 @@ impl LlmProfileService {
                 .map(|value| value.clamp(0.0, profile.advanced.temperature)),
             ..generation
         };
-        let capable = supports_reasoning_switch(profile.preset);
-        let mut candidates = Vec::new();
-        if capable {
-            // The variant that worked last time goes first; the rest only matter if the server
-            // changed its mind.
-            candidates.extend(profile.reasoning_switch);
-            candidates.extend(
-                ReasoningSwitch::LADDER
-                    .into_iter()
-                    .filter(|switch| Some(*switch) != profile.reasoning_switch),
-            );
-        } else {
-            candidates.push(ReasoningSwitch::Plain);
+        let learns_switch = supports_reasoning_switch(profile.preset) && effort.level().is_none();
+        let key = (id, profile.model.clone(), effort);
+        let mut candidates = thinking_attempts(&profile, effort);
+        // The variant that worked for this model and effort before goes first (this session).
+        if let Some(accepted) = self.accepted_thinking(&key)
+            && let Some(position) = candidates.iter().position(|attempt| *attempt == accepted)
+        {
+            let accepted = candidates.remove(position);
+            candidates.insert(0, accepted);
         }
+        let request = if effort.level().is_some() {
+            // A thinking model may stay silent for long between chunks.
+            LlmProbeRequest {
+                timeout: request.timeout.max(FIRST_REPLY_MIN_WAIT),
+                ..request
+            }
+        } else {
+            request
+        };
         let emitted = AtomicBool::new(false);
         let mut report = |fragment: &str| {
             emitted.store(true, Ordering::Relaxed);
             on_delta(fragment);
         };
-        for switch in candidates {
-            let attempt = LlmProbeRequest {
-                reasoning_switch: switch,
-                ..request.clone()
-            };
+        for candidate in candidates {
+            let attempt = request.with_thinking(candidate);
             let outcome = match self
                 .transport
                 .generate_chat_streamed(&attempt, &bounded, cancellation, &mut report)
@@ -1863,13 +2106,15 @@ impl LlmProfileService {
             else {
                 continue;
             };
-            if capable {
+            if learns_switch {
                 let learned = if reasoning_seen {
-                    switch.after_ineffective()
+                    candidate.switch.after_ineffective()
                 } else {
-                    switch
+                    candidate.switch
                 };
                 self.remember_reasoning_switch(id, learned);
+            } else if candidate.asks_anything() || effort != ThinkingEffort::Auto {
+                self.remember_thinking(key.clone(), candidate);
             }
             let answer = strip_reasoning(&text);
             return if answer.is_empty() {
@@ -1879,6 +2124,20 @@ impl LlmProfileService {
             };
         }
         Err(LlmProfileError::Transport)
+    }
+
+    /// The thinking attempt an endpoint accepted for a model and effort in this session.
+    fn accepted_thinking(&self, key: &ThinkingKey) -> Option<ThinkingAttempt> {
+        self.accepted_thinking
+            .lock()
+            .ok()
+            .and_then(|accepted| accepted.get(key).copied())
+    }
+
+    fn remember_thinking(&self, key: ThinkingKey, attempt: ThinkingAttempt) {
+        if let Ok(mut accepted) = self.accepted_thinking.lock() {
+            accepted.insert(key, attempt);
+        }
     }
 
     /// Stores the thinking-off variant a server accepted so the next generation starts with it.
@@ -2053,6 +2312,7 @@ impl LlmProfileService {
             context_window: None,
             temperature: Some(0.0),
             reply: ReplyFormat::Text,
+            thinking: crate::llm_profiles::ThinkingRequest::Background,
         };
         let cancellation = CancellationToken::new();
         let outcome = self
@@ -2198,6 +2458,8 @@ impl LlmProfileService {
             headers: profile.advanced.custom_headers.clone(),
             timeout: Duration::from_secs(profile.advanced.timeout_seconds),
             reasoning_switch: ReasoningSwitch::Plain,
+            reasoning_effort: None,
+            ollama_think: OllamaThink::Off,
         })
     }
 
@@ -2590,6 +2852,9 @@ fn openai_generation_body(
     if matches!(switch, ReasoningSwitch::Both | ReasoningSwitch::EffortNone) {
         body["reasoning_effort"] = json!("none");
     }
+    if let Some(effort) = request.reasoning_effort {
+        body["reasoning_effort"] = json!(effort);
+    }
     body
 }
 
@@ -2715,7 +2980,7 @@ fn ollama_generation_body(request: &LlmProbeRequest, generation: &LlmChatGenerat
         "model": request.model,
         "messages": messages,
         "stream": false,
-        "think": false,
+        "think": request.ollama_think.value(),
         "options": options
     });
     if !generation.tools.is_empty() {
@@ -3231,6 +3496,27 @@ fn assignment_to_dto(assignment: RoleAssignment) -> LlmRoleAssignmentDto {
         profile_id: assignment.profile_id,
         model: assignment.model,
         allow_cloud: assignment.allow_cloud,
+        thinking: thinking_to_dto(assignment.thinking),
+    }
+}
+
+pub(crate) fn thinking_to_dto(effort: ThinkingEffort) -> ThinkingEffortDto {
+    match effort {
+        ThinkingEffort::Auto => ThinkingEffortDto::Auto,
+        ThinkingEffort::Off => ThinkingEffortDto::Off,
+        ThinkingEffort::Low => ThinkingEffortDto::Low,
+        ThinkingEffort::Medium => ThinkingEffortDto::Medium,
+        ThinkingEffort::High => ThinkingEffortDto::High,
+    }
+}
+
+pub(crate) fn thinking_from_dto(effort: ThinkingEffortDto) -> ThinkingEffort {
+    match effort {
+        ThinkingEffortDto::Auto => ThinkingEffort::Auto,
+        ThinkingEffortDto::Off => ThinkingEffort::Off,
+        ThinkingEffortDto::Low => ThinkingEffort::Low,
+        ThinkingEffortDto::Medium => ThinkingEffort::Medium,
+        ThinkingEffortDto::High => ThinkingEffort::High,
     }
 }
 
@@ -3264,6 +3550,7 @@ pub(crate) fn role_input_from_dto(request: SaveLlmRoleRequestDto) -> RoleAssignm
         profile_id: request.profile_id,
         model: request.model,
         allow_cloud: request.allow_cloud,
+        thinking: request.thinking.map(thinking_from_dto),
     }
 }
 
@@ -3504,6 +3791,8 @@ mod tests {
             headers: BTreeMap::new(),
             timeout: Duration::from_secs(30),
             reasoning_switch: ReasoningSwitch::Both,
+            reasoning_effort: None,
+            ollama_think: OllamaThink::Off,
         };
         let generation = LlmChatGeneration {
             followups: Vec::new(),
@@ -3515,6 +3804,7 @@ mod tests {
             context_window: None,
             temperature: Some(0.0),
             reply: ReplyFormat::Text,
+            thinking: crate::llm_profiles::ThinkingRequest::Background,
         };
         let off = openai_generation_body(&request, &generation, ReasoningSwitch::Both);
         assert_eq!(off["chat_template_kwargs"]["enable_thinking"], false);
@@ -3588,6 +3878,8 @@ mod tests {
             headers: BTreeMap::new(),
             timeout: Duration::from_secs(30),
             reasoning_switch: ReasoningSwitch::Plain,
+            reasoning_effort: None,
+            ollama_think: OllamaThink::Off,
         }
     }
 
@@ -4153,6 +4445,8 @@ mod tests {
             headers: BTreeMap::new(),
             timeout: Duration::from_secs(30),
             reasoning_switch: ReasoningSwitch::Plain,
+            reasoning_effort: None,
+            ollama_think: OllamaThink::Off,
         };
         let body = ollama_generation_body(
             &request,
@@ -4169,6 +4463,7 @@ mod tests {
                 context_window: Some(8_192),
                 temperature: Some(0.1),
                 reply: ReplyFormat::Json,
+                thinking: crate::llm_profiles::ThinkingRequest::Background,
             },
         );
 
@@ -4188,6 +4483,8 @@ mod tests {
             headers: BTreeMap::new(),
             timeout: Duration::from_secs(30),
             reasoning_switch: ReasoningSwitch::Plain,
+            reasoning_effort: None,
+            ollama_think: OllamaThink::Off,
         };
         let generation = |temperature| LlmChatGeneration {
             followups: Vec::new(),
@@ -4199,6 +4496,7 @@ mod tests {
             context_window: None,
             temperature,
             reply: ReplyFormat::Text,
+            thinking: crate::llm_profiles::ThinkingRequest::Background,
         };
         let unset = openai_generation_body(&request, &generation(None), ReasoningSwitch::Plain);
         assert!(unset.get("temperature").is_none());
@@ -4218,6 +4516,7 @@ mod tests {
             context_window: None,
             temperature: Some(0.0),
             reply: ReplyFormat::Text,
+            thinking: crate::llm_profiles::ThinkingRequest::Background,
         });
         assert_eq!(text_only, json!("Describe"));
 
@@ -4234,6 +4533,7 @@ mod tests {
             context_window: None,
             temperature: Some(0.0),
             reply: ReplyFormat::Text,
+            thinking: crate::llm_profiles::ThinkingRequest::Background,
         });
         assert_eq!(with_image[0], json!({"type": "text", "text": "Describe"}));
         assert_eq!(
@@ -4266,6 +4566,7 @@ mod tests {
             profile_id: profile.id,
             model: profile.model.clone(),
             allow_cloud: false,
+            thinking: ThinkingEffort::Auto,
         };
         assert_eq!(document.roles.chat, Some(expected.clone()));
         assert_eq!(document.roles.embeddings, Some(expected));
@@ -4414,6 +4715,7 @@ mod tests {
                 profile_id: profile.id,
                 model: "embed-model".to_owned(),
                 allow_cloud: false,
+                thinking: None,
             }),
         );
         assert_eq!(blocked, Err(LlmProfileError::CloudEmbeddingNotAllowed));
@@ -4425,6 +4727,7 @@ mod tests {
                     profile_id: profile.id,
                     model: "embed-model".to_owned(),
                     allow_cloud: true,
+                    thinking: None,
                 }),
             )
             .unwrap();
@@ -4455,6 +4758,7 @@ mod tests {
                     profile_id: local.id,
                     model: "flux".to_owned(),
                     allow_cloud: false,
+                    thinking: None,
                 }),
             )
             .unwrap();
@@ -4481,6 +4785,7 @@ mod tests {
                     profile_id: studio.id,
                     model: "qwen-image".to_owned(),
                     allow_cloud: true,
+                    thinking: None,
                 }),
             )
             .unwrap();
@@ -4524,6 +4829,7 @@ mod tests {
                     profile_id: studio.id,
                     model: "qwen-plus".to_owned(),
                     allow_cloud: true,
+                    thinking: None,
                 }),
             ),
             Err(LlmProfileError::InvalidConfiguration)
@@ -4535,6 +4841,7 @@ mod tests {
                     profile_id: studio.id,
                     model: "qwen-image".to_owned(),
                     allow_cloud: true,
+                    thinking: None,
                 }),
             )
             .unwrap();
@@ -4569,6 +4876,7 @@ mod tests {
                     profile_id: profile.id,
                     model: "wan2.5-t2i-preview".to_owned(),
                     allow_cloud: true,
+                    thinking: None,
                 }),
             )
             .unwrap();
@@ -4598,6 +4906,7 @@ mod tests {
                     profile_id: chat.id,
                     model: "chat-model".to_owned(),
                     allow_cloud: false,
+                    thinking: None,
                 }),
             )
             .unwrap();
@@ -4608,6 +4917,7 @@ mod tests {
                     profile_id: image.id,
                     model: "image-model".to_owned(),
                     allow_cloud: false,
+                    thinking: None,
                 }),
             )
             .unwrap();
@@ -4660,6 +4970,7 @@ mod tests {
             profile_id: profile.id,
             model: "image-model".to_owned(),
             allow_cloud,
+            thinking: None,
         };
         assert_eq!(
             service.set_role(LlmRole::Image, Some(input(false))),
@@ -4699,6 +5010,7 @@ mod tests {
                     profile_id: profile.id,
                     model: "image-model".to_owned(),
                     allow_cloud: false,
+                    thinking: None,
                 }),
             )
             .unwrap();
@@ -4734,6 +5046,7 @@ mod tests {
                     profile_id: profile.id,
                     model: "flux".to_owned(),
                     allow_cloud: true,
+                    thinking: None,
                 }),
             )
             .unwrap();
@@ -4764,6 +5077,7 @@ mod tests {
                     profile_id: profile.id,
                     model: profile.model.clone(),
                     allow_cloud: false,
+                    thinking: None,
                 }),
             )
             .unwrap();
@@ -4799,6 +5113,7 @@ mod tests {
                     profile_id: profile.id,
                     model: profile.model.clone(),
                     allow_cloud: false,
+                    thinking: None,
                 }),
             )
             .unwrap();
@@ -4806,6 +5121,277 @@ mod tests {
             service.resolve_role(LlmRole::Chat).unwrap().profile.id,
             profile.id
         );
+    }
+
+    #[tokio::test]
+    async fn the_chat_roles_default_thinking_effort_is_kept_when_a_save_names_none() {
+        let (service, _, _) = service(LlmHostPolicy::desktop());
+        let profile = service
+            .create(draft(LlmPreset::Ollama, "http://localhost:11434"))
+            .await
+            .unwrap();
+        let input = |thinking| RoleAssignmentInput {
+            profile_id: profile.id,
+            model: profile.model.clone(),
+            allow_cloud: false,
+            thinking,
+        };
+        service
+            .set_role(LlmRole::Chat, Some(input(Some(ThinkingEffort::High))))
+            .unwrap();
+        // `/model` switches the model without naming an effort.
+        service.set_role(LlmRole::Chat, Some(input(None))).unwrap();
+        assert_eq!(
+            service.resolve_role(LlmRole::Chat).unwrap().thinking,
+            ThinkingEffort::High
+        );
+        service
+            .set_role(LlmRole::Chat, Some(input(Some(ThinkingEffort::Off))))
+            .unwrap();
+        assert_eq!(
+            service.resolve_role(LlmRole::Chat).unwrap().thinking,
+            ThinkingEffort::Off
+        );
+    }
+
+    #[test]
+    fn a_conversation_choice_wins_and_background_calls_stay_auto() {
+        let high = ThinkingEffort::High;
+        assert_eq!(
+            ThinkingRequest::Background.effort(high),
+            ThinkingEffort::Auto
+        );
+        assert_eq!(ThinkingRequest::Conversation(None).effort(high), high);
+        assert_eq!(
+            ThinkingRequest::Conversation(Some(ThinkingEffort::Low)).effort(high),
+            ThinkingEffort::Low
+        );
+    }
+
+    #[test]
+    fn thinking_attempts_match_each_kind_of_endpoint() {
+        let profile = |preset: LlmPreset, model: &str| {
+            let mut profile =
+                profile_from_draft(Uuid::new_v4(), draft(preset, "http://127.0.0.1:8000"), None);
+            profile.model = model.to_owned();
+            profile
+        };
+        let effort = ThinkingAttempt::effort;
+        let ollama = ThinkingAttempt::ollama;
+        // Ollama: a level for gpt-oss, a boolean for the rest, and off as the way back.
+        assert_eq!(
+            thinking_attempts(
+                &profile(LlmPreset::Ollama, "gpt-oss:20b"),
+                ThinkingEffort::High
+            ),
+            [ollama(OllamaThink::Level("high")), ollama(OllamaThink::Off)]
+        );
+        assert_eq!(
+            thinking_attempts(&profile(LlmPreset::Ollama, "qwen3:8b"), ThinkingEffort::Low),
+            [ollama(OllamaThink::On), ollama(OllamaThink::Off)]
+        );
+        assert_eq!(
+            thinking_attempts(
+                &profile(LlmPreset::Ollama, "qwen3:8b"),
+                ThinkingEffort::Auto
+            ),
+            [ollama(OllamaThink::Off)]
+        );
+        // Local OpenAI-compatible servers: a level, else nothing; off is the learned switch.
+        assert_eq!(
+            thinking_attempts(&profile(LlmPreset::LmStudio, "m"), ThinkingEffort::Medium),
+            [effort("medium"), ThinkingAttempt::PLAIN]
+        );
+        assert_eq!(
+            thinking_attempts(&profile(LlmPreset::Vllm, "m"), ThinkingEffort::Off)[0],
+            ThinkingAttempt::switch(ReasoningSwitch::Both)
+        );
+        // Cloud and generic endpoints: nothing for auto; off goes from `none` down to nothing.
+        assert_eq!(
+            thinking_attempts(
+                &profile(LlmPreset::OpenAiCompatible, "m"),
+                ThinkingEffort::Auto
+            ),
+            [ThinkingAttempt::PLAIN]
+        );
+        assert_eq!(
+            thinking_attempts(&profile(LlmPreset::AzureOpenAi, "m"), ThinkingEffort::Off),
+            [
+                effort("none"),
+                effort("minimal"),
+                effort("low"),
+                ThinkingAttempt::PLAIN
+            ]
+        );
+        assert_eq!(
+            thinking_attempts(
+                &profile(LlmPreset::OpenAiCompatible, "m"),
+                ThinkingEffort::High
+            ),
+            [effort("high"), ThinkingAttempt::PLAIN]
+        );
+    }
+
+    #[test]
+    fn the_request_bodies_carry_the_thinking_attempt() {
+        let mut request = LlmProbeRequest {
+            url: "http://localhost:8000/v1/chat/completions".into(),
+            ollama_generation_url: None,
+            model: "m".into(),
+            api_key: None,
+            api_key_header: "authorization",
+            headers: BTreeMap::new(),
+            timeout: Duration::from_secs(5),
+            reasoning_switch: ReasoningSwitch::Plain,
+            reasoning_effort: None,
+            ollama_think: OllamaThink::Off,
+        };
+        let plain = openai_generation_body(&request, &tiny_generation(), ReasoningSwitch::Plain);
+        assert!(plain.get("reasoning_effort").is_none());
+        request = request.with_thinking(ThinkingAttempt::effort("high"));
+        let high = openai_generation_body(&request, &tiny_generation(), request.reasoning_switch);
+        assert_eq!(high["reasoning_effort"], "high");
+        assert!(high.get("chat_template_kwargs").is_none());
+        request = request.with_thinking(ThinkingAttempt::ollama(OllamaThink::Level("low")));
+        assert_eq!(
+            ollama_generation_body(&request, &tiny_generation())["think"],
+            "low"
+        );
+        request = request.with_thinking(ThinkingAttempt::ollama(OllamaThink::On));
+        assert_eq!(
+            ollama_generation_body(&request, &tiny_generation())["think"],
+            true
+        );
+        request = request.with_thinking(ThinkingAttempt::PLAIN);
+        assert_eq!(
+            ollama_generation_body(&request, &tiny_generation())["think"],
+            false
+        );
+    }
+
+    /// Accepts only the listed `reasoning_effort` values (and none at all), like a strict server.
+    struct EffortTransport {
+        accepted: Vec<Option<&'static str>>,
+        attempts: Mutex<Vec<(Option<&'static str>, Duration)>>,
+    }
+
+    #[async_trait]
+    impl LlmProbeTransport for EffortTransport {
+        async fn discover_models(
+            &self,
+            _request: &LlmProbeRequest,
+            _cancellation: &CancellationToken,
+        ) -> Result<Option<Vec<String>>, LlmProfileError> {
+            Ok(None)
+        }
+
+        async fn stream_chat(
+            &self,
+            _request: &LlmProbeRequest,
+            _cancellation: &CancellationToken,
+        ) -> Result<LlmProbeResponse, LlmProfileError> {
+            Err(LlmProfileError::Transport)
+        }
+
+        async fn generate_chat(
+            &self,
+            _request: &LlmProbeRequest,
+            _generation: &LlmChatGeneration,
+            _cancellation: &CancellationToken,
+        ) -> Result<String, LlmProfileError> {
+            Err(LlmProfileError::Transport)
+        }
+
+        async fn generate_chat_adaptive(
+            &self,
+            request: &LlmProbeRequest,
+            _generation: &LlmChatGeneration,
+            _cancellation: &CancellationToken,
+        ) -> Result<ChatOutcome, LlmProfileError> {
+            self.attempts
+                .lock()
+                .unwrap()
+                .push((request.reasoning_effort, request.timeout));
+            if self.accepted.contains(&request.reasoning_effort) {
+                Ok(ChatOutcome::Generated {
+                    text: "fine".into(),
+                    reasoning_seen: false,
+                })
+            } else {
+                Ok(ChatOutcome::Rejected)
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn an_effort_the_endpoint_refuses_falls_back_and_the_accepted_one_goes_first() {
+        let transport = Arc::new(EffortTransport {
+            accepted: vec![Some("minimal"), None],
+            attempts: Mutex::new(Vec::new()),
+        });
+        let service = LlmProfileService::new(
+            SettingsStore::new(tempdir().unwrap().keep()),
+            Arc::new(InMemoryCredentialStore::new()),
+            transport.clone(),
+            LlmHostPolicy::desktop(),
+        )
+        .unwrap();
+        let profile = service
+            .create(draft(LlmPreset::OpenAiCompatible, "http://127.0.0.1:8000"))
+            .await
+            .unwrap();
+        let off = LlmChatGeneration {
+            thinking: ThinkingRequest::Conversation(Some(ThinkingEffort::Off)),
+            ..tiny_generation()
+        };
+        let cancel = CancellationToken::new();
+        service
+            .generate(profile.id, off.clone(), &cancel)
+            .await
+            .unwrap();
+        let tried = |transport: &EffortTransport| -> Vec<Option<&'static str>> {
+            transport
+                .attempts
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|(effort, _)| *effort)
+                .collect()
+        };
+        assert_eq!(tried(&transport), [Some("none"), Some("minimal")]);
+        transport.attempts.lock().unwrap().clear();
+        service.generate(profile.id, off, &cancel).await.unwrap();
+        assert_eq!(tried(&transport), [Some("minimal")]);
+
+        // A level the model does not take ends with a request that asks nothing, and waits as long
+        // between chunks as for the first one.
+        transport.attempts.lock().unwrap().clear();
+        let high = LlmChatGeneration {
+            thinking: ThinkingRequest::Conversation(Some(ThinkingEffort::High)),
+            ..tiny_generation()
+        };
+        service.generate(profile.id, high, &cancel).await.unwrap();
+        let attempts = transport.attempts.lock().unwrap().clone();
+        assert_eq!(
+            attempts
+                .iter()
+                .map(|(effort, _)| *effort)
+                .collect::<Vec<_>>(),
+            [Some("high"), None]
+        );
+        assert!(
+            attempts
+                .iter()
+                .all(|(_, timeout)| *timeout >= FIRST_REPLY_MIN_WAIT)
+        );
+
+        // A background call asks nothing.
+        transport.attempts.lock().unwrap().clear();
+        service
+            .generate(profile.id, tiny_generation(), &cancel)
+            .await
+            .unwrap();
+        assert_eq!(tried(&transport), [None]);
     }
 
     #[test]
@@ -4887,6 +5473,7 @@ mod tests {
                     profile_id: Uuid::new_v4(),
                     model: "gone".to_owned(),
                     allow_cloud: false,
+                    thinking: ThinkingEffort::Auto,
                 }),
                 embeddings: None,
             },
@@ -4917,6 +5504,7 @@ mod tests {
                     profile_id: profile.id,
                     model: profile.model.clone(),
                     allow_cloud: false,
+                    thinking: None,
                 }),
             )
             .unwrap();
@@ -5232,6 +5820,8 @@ mod tests {
             headers: BTreeMap::new(),
             timeout: Duration::from_secs(30),
             reasoning_switch: ReasoningSwitch::Plain,
+            reasoning_effort: None,
+            ollama_think: OllamaThink::Off,
         };
         let body = ollama_generation_body(
             &request,
@@ -5245,6 +5835,7 @@ mod tests {
                 context_window: None,
                 temperature: Some(0.2),
                 reply: ReplyFormat::Json,
+                thinking: crate::llm_profiles::ThinkingRequest::Background,
             },
         );
         assert_eq!(body["think"], false);
@@ -5346,6 +5937,7 @@ mod tests {
             context_window: None,
             temperature: Some(0.1),
             reply: ReplyFormat::Text,
+            thinking: crate::llm_profiles::ThinkingRequest::Background,
         };
         assert!(matches!(
             service
@@ -5447,6 +6039,7 @@ mod tests {
             context_window: None,
             temperature: Some(0.0),
             reply: ReplyFormat::Text,
+            thinking: crate::llm_profiles::ThinkingRequest::Background,
         }
     }
 
@@ -5810,6 +6403,8 @@ mod tests {
             headers: BTreeMap::new(),
             timeout: Duration::from_secs(30),
             reasoning_switch: ReasoningSwitch::Plain,
+            reasoning_effort: None,
+            ollama_think: OllamaThink::Off,
         };
         let tool = ToolSpec {
             name: "read_file",

@@ -204,7 +204,7 @@ pub use llm_profile::{
     LlmModelLimitsDto, LlmPresetDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto,
     LlmProfileTestResultDto, LlmRoleAssignmentDto, LlmRoleDto, LlmRolesDto,
     LlmTestErrorCategoryDto, LlmTlsPolicyDto, OrphanLlmCredentialDispositionDto,
-    SaveLlmProfileRequestDto, SaveLlmRoleRequestDto, ToolCallingProbeDto,
+    SaveLlmProfileRequestDto, SaveLlmRoleRequestDto, ThinkingEffortDto, ToolCallingProbeDto,
 };
 pub use location::LocationDto;
 pub use metadata_tokens::{

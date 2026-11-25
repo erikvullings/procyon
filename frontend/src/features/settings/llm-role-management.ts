@@ -9,7 +9,9 @@ import type {
   LlmRole,
   LlmRoleAssignment,
   LlmRoles,
+  ThinkingEffort,
 } from '../../models';
+import { THINKING_EFFORTS } from '../../models/llm-profile';
 import { canAssignRole, LLM_ROLES, type RoleStatus, roleStatus } from '../../models/llm-roles';
 import { connectionLabel, errorMessage } from './llm-profile-management';
 
@@ -31,6 +33,24 @@ interface RoleDraft {
   profileId: string;
   model: string;
   allowCloud: boolean;
+  /** The default thinking effort (chat role, task 0361). */
+  thinking: ThinkingEffort;
+}
+
+/** The label of a thinking effort. */
+export function thinkingLabel(effort: ThinkingEffort): string {
+  switch (effort) {
+    case 'auto':
+      return t('llmRoles', 'thinkingAuto');
+    case 'off':
+      return t('llmRoles', 'thinkingOff');
+    case 'low':
+      return t('llmRoles', 'thinkingLow');
+    case 'medium':
+      return t('llmRoles', 'thinkingMedium');
+    case 'high':
+      return t('llmRoles', 'thinkingHigh');
+  }
 }
 
 /** Only states the person must act on get a line; "ready" and "unassigned" are shown by the field. */
@@ -58,17 +78,19 @@ function isDirty(draft: RoleDraft, saved: LlmRoleAssignment | null | undefined):
   return (
     draft.profileId !== base.profileId ||
     draft.model.trim() !== base.model ||
-    draft.allowCloud !== base.allowCloud
+    draft.allowCloud !== base.allowCloud ||
+    draft.thinking !== base.thinking
   );
 }
 
 function draftFrom(assignment: LlmRoleAssignment | null | undefined): RoleDraft {
   return assignment == null
-    ? { profileId: '', model: '', allowCloud: false }
+    ? { profileId: '', model: '', allowCloud: false, thinking: 'auto' }
     : {
         profileId: assignment.profileId,
         model: assignment.model,
         allowCloud: assignment.allowCloud,
+        thinking: assignment.thinking ?? 'auto',
       };
 }
 
@@ -268,6 +290,24 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
       role === 'image' && draft.profileId !== ''
         ? m('p.fm-llm-role-notice', t('llmRoles', 'imageModelHint'))
         : undefined,
+      // The chat role's default thinking effort; a chat or terminal session may choose its own.
+      role === 'chat'
+        ? m(Select<ThinkingEffort>, {
+            className: 'fm-llm-field',
+            label: t('llmRoles', 'thinking'),
+            helperText: t('llmRoles', 'thinkingHint'),
+            disabled: draft.profileId === '',
+            options: THINKING_EFFORTS.map((effort) => ({
+              id: effort,
+              label: thinkingLabel(effort),
+            })),
+            checkedId: draft.thinking,
+            onchange: ([value]) => {
+              if (value === undefined) return;
+              drafts = { ...drafts, [role]: { ...draft, thinking: value } };
+            },
+          })
+        : undefined,
       // Only chat may reach the cloud without the flag; embeddings and images need it turned on.
       role !== 'chat'
         ? m(Switch, {
@@ -323,6 +363,7 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
                   profileId: draft.profileId,
                   model,
                   allowCloud: draft.allowCloud,
+                  ...(role === 'chat' ? { thinking: draft.thinking } : {}),
                 });
                 drafts = { ...drafts, [role]: draftFrom(roles[role]) };
               }),

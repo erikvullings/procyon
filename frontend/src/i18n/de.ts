@@ -1343,6 +1343,8 @@ export const de = {
     forkQuestion: 'Abzweigen: neuer Chat ab vor dieser Frage',
     forkReply: 'Abzweigen: neuer Chat bis zu dieser Antwort',
     forkFailed: 'Die Unterhaltung konnte nicht abgezweigt werden.',
+    thinkingEffort: 'Denkaufwand für diesen Chat',
+    thinkingDefault: 'Denken: Vorgabe',
     noFolder: 'Öffne im anderen Bereich einen Ordner, um ihn anzuhängen.',
     noSelection: 'Wähle Einträge im Ordner aus, um sie anzuhängen.',
     consentRequired:
@@ -2104,6 +2106,14 @@ export const de = {
       'Dieser Endpunkt benötigt eine Zustimmung in den Einstellungen: öffne ihn oben und speichere mit Zustimmung.',
     image: 'Bilder erstellen',
     allowCloudImage: 'Cloud-Nutzung für Bilderstellung erlauben',
+    thinking: 'Denkaufwand',
+    thinkingHint:
+      'Die Vorgabe für Chats und den Terminal-Assistenten; jede Unterhaltung kann einen eigenen wählen. Nicht jedes Modell kann denken oder den Aufwand variieren.',
+    thinkingAuto: 'Automatisch (aus bei lokalen Modellen, Anbietervorgabe in der Cloud)',
+    thinkingOff: 'Aus',
+    thinkingLow: 'Niedrig',
+    thinkingMedium: 'Mittel',
+    thinkingHigh: 'Hoch',
     cloudHintImage:
       'Die von Ihnen eingegebenen Wörter werden an diesen Cloud-Endpunkt gesendet; die Bilder kommen von ihm zurück. Aktivieren Sie dies nur, wenn Sie damit einverstanden sind.',
     imageModelHint:
@@ -2861,6 +2871,11 @@ export const de = {
       'Neue Sitzung ab vor Frage {number}. Die Frage steht in der Eingabe, um sie erneut zu stellen oder zu ändern.',
     forkGone: 'Es gibt keine Frage {number}.',
     resumeDeleted: '„{title}“ gelöscht.',
+    slashHelpEffort:
+      'Denkaufwand dieser Sitzung anzeigen oder festlegen (/effort off, low, medium, high oder default)',
+    effortShown: 'Denkaufwand für diese Sitzung: {effort}.',
+    effortDefault: 'die Vorgabe des Chatmodells',
+    effortUnknown: 'Verwende /effort off, low, medium, high oder default.',
     slashHelpAuto:
       'automatische Freigabe ein- oder ausschalten: Befehle ausführen, Dateien anlegen und Änderungen übernehmen, ohne zu fragen, außer bei sehr gefährlichen Befehlen',
     slashAutoOn:

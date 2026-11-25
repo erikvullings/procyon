@@ -114,6 +114,9 @@ pub struct ChatReplyRequestDto {
     /// Without it the model only answers from the conversation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools_folder: Option<String>,
+    /// The conversation's thinking effort (task 0361); absent uses the chat role's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<crate::ThinkingEffortDto>,
 }
 
 /// One image sent with a chat message. The format is detected from the bytes (PNG, JPEG or WebP).

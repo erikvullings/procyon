@@ -52,6 +52,7 @@ describe('ChatTab header', () => {
         onStop: noop,
         onRetry: noop,
         onToggleTools: noop,
+        onThinking: noop,
         onAttachFolder: () => undefined,
         onAttachSelection: () => undefined,
         onAttachFileContents: noop,
@@ -129,6 +130,7 @@ describe('ChatTab fork from here', () => {
         onStop: noop,
         onRetry: noop,
         onToggleTools: noop,
+        onThinking: noop,
         onAttachFolder: () => undefined,
         onAttachSelection: () => undefined,
         onAttachFileContents: noop,
@@ -139,6 +141,51 @@ describe('ChatTab fork from here', () => {
       }),
     );
   }
+
+  it('chooses a thinking effort for the chat, or goes back to the default', () => {
+    const onThinking = vi.fn();
+    m.render(
+      root,
+      m(ChatTab, {
+        entry: entry(),
+        folderAvailable: false,
+        folderSelection: { selected: 0, selectedFiles: 0, fileTooLarge: false },
+        onNew: noop,
+        onSelect: noop,
+        onRename: noop,
+        onDelete: noop,
+        onFork: noop,
+        onSend: noop,
+        onStop: noop,
+        onRetry: noop,
+        onToggleTools: noop,
+        onThinking,
+        onAttachFolder: () => undefined,
+        onAttachSelection: () => undefined,
+        onAttachFileContents: noop,
+        onDetach: noop,
+        images: [],
+        onPasteImages: noop,
+        onRemoveImage: noop,
+      }),
+    );
+    const select = root.querySelector(
+      'select[aria-label="Thinking effort for this chat"]',
+    ) as HTMLSelectElement;
+    expect([...select.options].map((option) => option.value)).toEqual([
+      '',
+      'off',
+      'low',
+      'medium',
+      'high',
+    ]);
+    select.value = 'high';
+    select.dispatchEvent(new Event('change'));
+    expect(onThinking).toHaveBeenLastCalledWith('high');
+    select.value = '';
+    select.dispatchEvent(new Event('change'));
+    expect(onThinking).toHaveBeenLastCalledWith(undefined);
+  });
 
   it('forks before a question and puts it in the draft, or up to and with a reply', () => {
     const onFork = vi.fn();

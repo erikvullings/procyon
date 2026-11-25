@@ -414,3 +414,21 @@
   gap: var(--fm-space-1);
   flex: 0 0 auto;
 }
+
+/* The thinking effort of the chat (task 0361): a compact native select beside the chrome buttons. */
+.fm-chat select.browser-default.fm-chat-thinking {
+  flex: 0 0 auto;
+  width: auto;
+  height: var(--fm-row-height);
+  margin: 0;
+  padding: 0 var(--fm-space-1);
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius-control);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.fm-chat select.browser-default.fm-chat-thinking:disabled {
+  color: var(--fm-text-muted);
+}

@@ -185,6 +185,24 @@ pub enum LlmRoleDto {
     Image,
 }
 
+/// How much a model should think before answering (task 0361). `auto` keeps thinking off on
+/// local servers and leaves cloud models at their provider's default.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ThinkingEffortDto {
+    /// Off on local servers, the provider's default in the cloud.
+    #[default]
+    Auto,
+    /// No thinking, where the model allows it.
+    Off,
+    /// A little thinking.
+    Low,
+    /// Moderate thinking.
+    Medium,
+    /// Thorough thinking.
+    High,
+}
+
 /// One role's endpoint, model and cloud permission.
 #[allow(missing_docs)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -193,6 +211,9 @@ pub struct LlmRoleAssignmentDto {
     pub profile_id: Uuid,
     pub model: String,
     pub allow_cloud: bool,
+    /// The default thinking effort of the role's replies (chat role).
+    #[serde(default)]
+    pub thinking: ThinkingEffortDto,
 }
 
 /// The configured role bindings. An absent role is not assigned.
@@ -213,6 +234,9 @@ pub struct SaveLlmRoleRequestDto {
     pub profile_id: Uuid,
     pub model: String,
     pub allow_cloud: bool,
+    /// The default thinking effort; absent keeps the current one.
+    #[serde(default)]
+    pub thinking: Option<ThinkingEffortDto>,
 }
 
 /// Request to classify an endpoint URL as local or cloud before it is saved.

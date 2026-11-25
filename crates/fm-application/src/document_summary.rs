@@ -687,6 +687,7 @@ impl DocumentSummaryCoordinator {
                                 .then_some(budget.context_window),
                             temperature: Some(profile.advanced.temperature),
                             reply: ReplyFormat::Json,
+                            thinking: crate::llm_profiles::ThinkingRequest::Background,
                         },
                         cancellation,
                     )
@@ -799,6 +800,7 @@ async fn extract_attribution(
                 context_window: ollama.then_some(budget.context_window),
                 temperature: Some(0.0),
                 reply: ReplyFormat::Json,
+                thinking: crate::llm_profiles::ThinkingRequest::Background,
             },
             cancellation,
         )

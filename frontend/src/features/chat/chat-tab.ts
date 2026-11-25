@@ -18,8 +18,10 @@ import {
 } from '../../components/tabler-icons';
 import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
-import type { ChatConversationSummary } from '../../models';
+import type { ChatConversationSummary, ThinkingEffort } from '../../models';
+import { isThinkingEffort, THINKING_EFFORTS } from '../../models/llm-profile';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
+import { thinkingLabel } from '../settings/llm-role-management';
 import type { PastedImage } from './chat-image';
 import {
   type ChatAttachment,
@@ -59,6 +61,8 @@ export interface ChatTabAttrs {
   readonly onRetry: () => void;
   /** Lets the model look into the folder pane's folder, notes and skills, or stops it. */
   readonly onToggleTools: () => void;
+  /** Chooses this chat's thinking effort; `undefined` goes back to the chat role's default. */
+  readonly onThinking: (effort: ThinkingEffort | undefined) => void;
   /** Returns the listing as text for the draft; the chat inserts it at the caret. */
   readonly onAttachFolder: () => ChatAttachment | undefined;
   /** Returns the selection as text for the draft; the chat inserts it at the caret. */
@@ -214,6 +218,30 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
     );
   };
 
+  /** How long the model may think; unset follows the chat role's default (task 0361). */
+  const thinkingPicker = (attrs: ChatTabAttrs, pending: boolean) =>
+    tooltip(
+      t('chat', 'thinkingEffort'),
+      m(
+        'select.browser-default.fm-chat-thinking',
+        {
+          'aria-label': t('chat', 'thinkingEffort'),
+          disabled: pending,
+          value: attrs.entry.thinking ?? '',
+          onchange: (event: Event) => {
+            const value = (event.target as HTMLSelectElement).value;
+            attrs.onThinking(isThinkingEffort(value) ? value : undefined);
+          },
+        },
+        [
+          m('option', { value: '' }, t('chat', 'thinkingDefault')),
+          ...THINKING_EFFORTS.filter((effort) => effort !== 'auto').map((effort) =>
+            m('option', { value: effort }, thinkingLabel(effort)),
+          ),
+        ],
+      ),
+    );
+
   const currentTitle = (entry: ChatTabEntry): string | undefined => {
     const summary = entry.conversations.find((item) => item.id === entry.conversationId);
     if (summary === undefined) return undefined;
@@ -287,6 +315,7 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
           !listOpen && current !== undefined
             ? m('span.fm-chat-current', { title: current }, current)
             : undefined,
+          thinkingPicker(attrs, pending),
           // The pane's trailing actions, in the same order as the image pane's: a new chat, the AI
           // settings, a new tab. The favourites menu the file panes carry means nothing here.
           iconButton(

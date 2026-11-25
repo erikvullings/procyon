@@ -4,6 +4,7 @@ import type {
   ChatMessage,
   PaneId,
   TabId,
+  ThinkingEffort,
 } from '../../models';
 import type { PastedImage } from './chat-image';
 
@@ -35,6 +36,8 @@ export interface ChatTabEntry {
    * endpoint.
    */
   useTools?: boolean | undefined;
+  /** The thinking effort chosen for this chat (task 0361); unset uses the chat role's default. */
+  thinking?: ThinkingEffort | undefined;
   /** What the tools looked up for the reply in progress, or the last reply; shown as pills. */
   steps?: string[] | undefined;
   /** What a long tool call of the reply in progress is doing now, such as a summary's part. */

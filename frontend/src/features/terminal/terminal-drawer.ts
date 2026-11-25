@@ -18,8 +18,11 @@ import type {
   LlmRoleAssignment,
   Location,
   NoteProposal,
+  ThinkingEffort,
 } from '../../models';
+import { isThinkingEffort } from '../../models/llm-profile';
 import type { TerminalShellIntegration } from '../../models/settings';
+import { thinkingLabel } from '../settings/llm-role-management';
 import {
   createAnswerStream,
   infoAnsi,
@@ -183,6 +186,8 @@ function slashHelp(command: SlashCommandName): string {
       return t('terminal', 'slashHelpResume');
     case 'fork':
       return t('terminal', 'slashHelpFork');
+    case 'effort':
+      return t('terminal', 'slashHelpEffort');
     case 'help':
       return t('terminal', 'slashHelpHelp');
   }
@@ -354,6 +359,8 @@ type LiveTerminal = {
    * dangerous, and files and edits are approved. Lasts while the tab lives; never saved.
    */
   autoApprove: boolean;
+  /** The session's thinking effort (`/effort`, task 0361); unset uses the chat role's default. */
+  thinking: ThinkingEffort | undefined;
 };
 
 export interface TerminalKeyHandlers {
@@ -800,6 +807,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           ...(live.assistRoot === undefined ? {} : { root: live.assistRoot.uri }),
           allowFileWrites: attrs.allowFileWrites !== false,
           ...(live.autoApprove ? { autoApprove: true } : {}),
+          ...(live.thinking === undefined ? {} : { thinking: live.thinking }),
         },
         onEvent,
       )
@@ -1680,6 +1688,23 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       case 'fork':
         runAsyncCommand(live, question, () => forkSession(live, argument));
         return;
+      case 'effort': {
+        // `/effort` shows the effort, `/effort <level>` sets it, `/effort default` clears it.
+        const choice = argument.trim().toLowerCase();
+        if (choice === 'default') live.thinking = undefined;
+        else if (choice !== '' && isThinkingEffort(choice) && choice !== 'auto')
+          live.thinking = choice;
+        else if (choice !== '') {
+          showCommandOutput(live, question, noticeAnsi(t('terminal', 'effortUnknown')));
+          return;
+        }
+        const effort =
+          live.thinking === undefined
+            ? t('terminal', 'effortDefault')
+            : thinkingLabel(live.thinking);
+        showCommandOutput(live, question, infoAnsi([t('terminal', 'effortShown', { effort })]));
+        return;
+      }
       case 'auto': {
         const choice = argument.toLowerCase();
         live.autoApprove = choice === 'on' ? true : choice === 'off' ? false : !live.autoApprove;
@@ -1981,6 +2006,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         queued: undefined,
         steering: [],
         autoApprove: false,
+        thinking: undefined,
       };
       terminals.set(key, live);
       const current = live;

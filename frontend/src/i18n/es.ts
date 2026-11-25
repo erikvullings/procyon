@@ -1327,6 +1327,8 @@ export const es = {
     forkQuestion: 'Bifurcar: nuevo chat desde antes de esta pregunta',
     forkReply: 'Bifurcar: nuevo chat hasta esta respuesta',
     forkFailed: 'No se pudo bifurcar la conversación.',
+    thinkingEffort: 'Esfuerzo de razonamiento para este chat',
+    thinkingDefault: 'Razonamiento: predeterminado',
     noFolder: 'Abre una carpeta en el otro panel para adjuntarla.',
     noSelection: 'Selecciona elementos de la carpeta para adjuntarlos.',
     consentRequired:
@@ -2083,6 +2085,14 @@ export const es = {
       'Este endpoint necesita consentimiento en Ajustes: ábrelo arriba y guarda con consentimiento.',
     image: 'Generación de imágenes',
     allowCloudImage: 'Permitir el uso en la nube para generar imágenes',
+    thinking: 'Esfuerzo de razonamiento',
+    thinkingHint:
+      'El valor predeterminado para los chats y el asistente del terminal; cada conversación puede elegir el suyo. No todos los modelos pueden razonar ni variar cuánto.',
+    thinkingAuto: 'Automático (desactivado en modelos locales, el del proveedor en la nube)',
+    thinkingOff: 'Desactivado',
+    thinkingLow: 'Bajo',
+    thinkingMedium: 'Medio',
+    thinkingHigh: 'Alto',
     cloudHintImage:
       'Las palabras que escribes se envían a este endpoint en la nube y las imágenes vuelven de él. Actívalo solo si te parece bien.',
     imageModelHint:
@@ -2840,6 +2850,11 @@ export const es = {
       'Nueva sesión desde antes de la pregunta {number}. La pregunta está en la entrada para volver a hacerla o cambiarla.',
     forkGone: 'No hay pregunta {number}.',
     resumeDeleted: '“{title}” eliminada.',
+    slashHelpEffort:
+      'muestra o define el esfuerzo de razonamiento de esta sesión (/effort off, low, medium, high o default)',
+    effortShown: 'Esfuerzo de razonamiento para esta sesión: {effort}.',
+    effortDefault: 'el predeterminado del modelo de chat',
+    effortUnknown: 'Usa /effort off, low, medium, high o default.',
     slashHelpAuto:
       'activar o desactivar la aprobación automática: ejecutar comandos, crear archivos y aplicar cambios sin preguntar, salvo comandos muy peligrosos',
     slashAutoOn:

@@ -1003,6 +1003,7 @@ impl RagCoordinator {
                     context_window: None,
                     temperature: Some(0.0),
                     reply: ReplyFormat::Json,
+                    thinking: crate::llm_profiles::ThinkingRequest::Background,
                 },
                 cancellation,
             )
@@ -1086,6 +1087,7 @@ impl RagCoordinator {
                     context_window: None,
                     temperature: Some(0.2),
                     reply: ReplyFormat::Json,
+                    thinking: crate::llm_profiles::ThinkingRequest::Background,
                 },
                 cancellation,
             )

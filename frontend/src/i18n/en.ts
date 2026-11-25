@@ -1706,6 +1706,8 @@ export const en = {
     forkQuestion: 'Fork: new chat from before this question',
     forkReply: 'Fork: new chat up to this reply',
     forkFailed: 'The conversation could not be forked.',
+    thinkingEffort: 'Thinking effort for this chat',
+    thinkingDefault: 'Thinking: default',
     noFolder: 'Open a folder in the other pane to attach it.',
     noSelection: 'Select entries in the folder to attach them.',
     consentRequired: 'This endpoint needs consent in Settings before the chat can use it.',
@@ -2444,6 +2446,14 @@ export const en = {
       'This endpoint needs consent in Settings: open it above, and save with consent.',
     image: 'Image generation',
     allowCloudImage: 'Allow cloud use for image generation',
+    thinking: 'Thinking effort',
+    thinkingHint:
+      'The default for chats and the terminal assistant; each conversation can choose its own. Not every model can think, or vary how much.',
+    thinkingAuto: 'Automatic (off for local models, provider default in the cloud)',
+    thinkingOff: 'Off',
+    thinkingLow: 'Low',
+    thinkingMedium: 'Medium',
+    thinkingHigh: 'High',
     cloudHintImage:
       'The words you type are sent to this cloud endpoint, and the pictures come back from it. Turn this on only if you accept that.',
     imageModelHint:
@@ -2778,6 +2788,11 @@ export const en = {
       'New session from before question {number}. The question is in the input to ask again or change.',
     forkGone: 'There is no question {number}.',
     resumeDeleted: 'Deleted “{title}”.',
+    slashHelpEffort:
+      "show or set this session's thinking effort (/effort off, low, medium, high or default)",
+    effortShown: 'Thinking effort for this session: {effort}.',
+    effortDefault: "the chat model's default",
+    effortUnknown: 'Use /effort off, low, medium, high or default.',
     slashHelpAuto:
       'turn auto-approve on or off: run commands, create files and apply edits without asking, except very dangerous commands',
     slashAutoOn:

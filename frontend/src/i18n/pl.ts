@@ -1323,6 +1323,8 @@ export const pl = {
     forkQuestion: 'Rozgałęź: nowy czat sprzed tego pytania',
     forkReply: 'Rozgałęź: nowy czat do tej odpowiedzi',
     forkFailed: 'Nie udało się rozgałęzić rozmowy.',
+    thinkingEffort: 'Poziom rozumowania dla tego czatu',
+    thinkingDefault: 'Rozumowanie: domyślne',
     noFolder: 'Otwórz folder w drugim panelu, aby go dołączyć.',
     noSelection: 'Zaznacz elementy w folderze, aby je dołączyć.',
     consentRequired:
@@ -2075,6 +2077,14 @@ export const pl = {
       'Ten punkt końcowy wymaga zgody w Ustawieniach: otwórz go powyżej i zapisz ze zgodą.',
     image: 'Generowanie obrazów',
     allowCloudImage: 'Zezwól na użycie chmury do generowania obrazów',
+    thinking: 'Poziom rozumowania',
+    thinkingHint:
+      'Domyślny dla czatów i asystenta terminala; każda rozmowa może wybrać własny. Nie każdy model potrafi rozumować lub zmieniać jego zakres.',
+    thinkingAuto: 'Automatyczny (wyłączony dla modeli lokalnych, domyślny dostawcy w chmurze)',
+    thinkingOff: 'Wyłączony',
+    thinkingLow: 'Niski',
+    thinkingMedium: 'Średni',
+    thinkingHigh: 'Wysoki',
     cloudHintImage:
       'Wpisane słowa trafiają do tego punktu końcowego w chmurze, a obrazy z niego wracają. Włącz tylko, jeśli to akceptujesz.',
     imageModelHint:
@@ -2831,6 +2841,11 @@ export const pl = {
       'Nowa sesja sprzed pytania {number}. Pytanie jest w polu wprowadzania, aby zadać je ponownie lub zmienić.',
     forkGone: 'Nie ma pytania {number}.',
     resumeDeleted: 'Usunięto „{title}”.',
+    slashHelpEffort:
+      'pokaż lub ustaw poziom rozumowania tej sesji (/effort off, low, medium, high lub default)',
+    effortShown: 'Poziom rozumowania dla tej sesji: {effort}.',
+    effortDefault: 'domyślny modelu czatu',
+    effortUnknown: 'Użyj /effort off, low, medium, high lub default.',
     slashHelpAuto:
       'włącz lub wyłącz automatyczne zatwierdzanie: uruchamianie poleceń, tworzenie plików i wprowadzanie zmian bez pytania, z wyjątkiem bardzo niebezpiecznych poleceń',
     slashAutoOn:

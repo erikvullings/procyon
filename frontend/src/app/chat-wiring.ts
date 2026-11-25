@@ -24,7 +24,7 @@ import {
 } from '../features/chat/chat-tab-state';
 import { dispatchWorkspaceCommand } from '../features/workspace/dispatch-workspace-command';
 import { t } from '../i18n';
-import type { ChatFailure, PaneId, WorkspaceProjection } from '../models';
+import type { ChatFailure, PaneId, ThinkingEffort, WorkspaceProjection } from '../models';
 import { activeEditorOf, tabKey } from './shell-helpers';
 import type { ShellState } from './shell-state';
 
@@ -297,6 +297,7 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
           context: request.context ?? null,
           retry: request.retry,
           ...(toolsFolder === undefined ? {} : { toolsFolder }),
+          ...(entry.thinking === undefined ? {} : { thinking: entry.thinking }),
           ...(images.length > 0 ? { images: images.map(({ data }) => ({ data })) } : {}),
         },
         (event) => {
@@ -360,6 +361,14 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
   }
 
   /** Turns the read-only tools on or off for this chat tab. */
+  /** Chooses a chat's thinking effort; `undefined` uses the chat role's default (task 0361). */
+  function setThinking(key: string, effort: ThinkingEffort | undefined): void {
+    const entry = entryOf(key);
+    if (entry === undefined) return;
+    entry.thinking = effort;
+    m.redraw();
+  }
+
   function toggleTools(key: string): void {
     const entry = entryOf(key);
     if (entry === undefined) return;
@@ -566,6 +575,7 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
     stop,
     attachFolder,
     toggleTools,
+    setThinking,
     attachSelection,
     attachFileContents: (client: FileManagerClient, key: string) =>
       void attachFileContents(client, key),

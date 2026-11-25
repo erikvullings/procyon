@@ -21,7 +21,9 @@ use crate::agent_host::{
     chat_failure, generation_parts, note_proposal_dto, project_context, tool_calling,
 };
 use crate::chat::ChatGenerator;
-use crate::llm_profiles::{LlmChatGeneration, LlmImageAttachment, LlmRole, ReplyFormat};
+use crate::llm_profiles::{
+    LlmChatGeneration, LlmImageAttachment, LlmRole, ReplyFormat, ThinkingRequest,
+};
 
 /// Most bytes of tool exchanges kept while tools run; the oldest exchanges drop out first. The
 /// conversation itself (with the person's question) is bounded by the chat and always kept.
@@ -75,6 +77,8 @@ pub(crate) struct AgentRun<'a> {
     pub(crate) question: &'a str,
     pub(crate) transcript: String,
     pub(crate) images: Vec<LlmImageAttachment>,
+    /// The conversation's thinking effort (task 0361).
+    pub(crate) thinking: ThinkingRequest,
     pub(crate) cancellation: &'a CancellationToken,
 }
 
@@ -112,6 +116,7 @@ pub(crate) async fn run(
         calling,
         tools: registry.specs_for(calling),
         images: input.images,
+        thinking: input.thinking,
         cancellation: input.cancellation,
     };
     let skill_documents = SkillFolderDocuments::new(tooling.providers);
@@ -189,6 +194,7 @@ struct ChatTurn<'a, G> {
     calling: ToolCalling,
     tools: Vec<ToolSpec>,
     images: Vec<LlmImageAttachment>,
+    thinking: ThinkingRequest,
     cancellation: &'a CancellationToken,
 }
 
@@ -226,6 +232,7 @@ impl<G: ChatGenerator> TurnHost for ChatTurn<'_, G> {
                     context_window: None,
                     temperature: None,
                     reply: ReplyFormat::Text,
+                    thinking: self.thinking,
                 },
                 self.cancellation,
                 on_delta,
@@ -274,6 +281,7 @@ mod tests {
             calling: ToolCalling::Text,
             tools: Vec::new(),
             images: Vec::new(),
+            thinking: ThinkingRequest::Background,
             cancellation: CANCEL.get_or_init(CancellationToken::new),
         }
     }

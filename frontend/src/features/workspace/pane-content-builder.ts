@@ -24,6 +24,7 @@ import type {
   TabId,
   TabProjection,
   ThemePassage,
+  ThinkingEffort,
   Volume,
   WorkspaceProjection,
 } from '../../models';
@@ -231,6 +232,7 @@ export interface PaneContentContext {
     rename(key: string, conversationId: string, title: string): void;
     remove(key: string, conversationId: string): void;
     fork(key: string, keep: number): void;
+    setThinking(key: string, effort: ThinkingEffort | undefined): void;
     send(key: string, draft: string): void;
     stop(key: string): void;
     retry(key: string): void;
@@ -1294,6 +1296,8 @@ export function createPaneContentBuilder(
                 onStop: () => context.chatActions?.stop(chat.key),
                 onRetry: () => context.chatActions?.retry(chat.key),
                 onToggleTools: () => context.chatActions?.toggleTools(chat.key),
+                onThinking: (effort: ThinkingEffort | undefined) =>
+                  context.chatActions?.setThinking(chat.key, effort),
                 onAttachFolder: () => context.chatActions?.attachFolder(chat.key),
                 onAttachSelection: () => context.chatActions?.attachSelection(chat.key),
                 onAttachFileContents: () => context.chatActions?.attachFileContents(chat.key),

@@ -201,6 +201,7 @@ impl<G: ChatGenerator> SideModel for ModelSideCalls<'_, G> {
                     context_window: None,
                     temperature: None,
                     reply: ReplyFormat::Text,
+                    thinking: crate::llm_profiles::ThinkingRequest::Background,
                 },
                 &self.cancellation,
                 &mut |_| {},

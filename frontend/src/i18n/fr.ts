@@ -1331,6 +1331,8 @@ export const fr = {
     forkQuestion: 'Bifurquer : nouvelle discussion avant cette question',
     forkReply: 'Bifurquer : nouvelle discussion jusqu’à cette réponse',
     forkFailed: 'Impossible de bifurquer la conversation.',
+    thinkingEffort: 'Effort de réflexion pour cette discussion',
+    thinkingDefault: 'Réflexion : par défaut',
     noFolder: 'Ouvrez un dossier dans l’autre volet pour le joindre.',
     noSelection: 'Sélectionnez des éléments du dossier pour les joindre.',
     consentRequired:
@@ -2092,6 +2094,15 @@ export const fr = {
       'Ce point de terminaison nécessite un consentement dans les paramètres : ouvrez-le ci-dessus et enregistrez avec consentement.',
     image: 'Génération d’image',
     allowCloudImage: 'Autoriser l’usage cloud pour la génération d’images',
+    thinking: 'Effort de réflexion',
+    thinkingHint:
+      'La valeur par défaut des discussions et de l’assistant du terminal ; chaque conversation peut choisir la sienne. Tous les modèles ne savent pas réfléchir ni doser leur réflexion.',
+    thinkingAuto:
+      'Automatique (désactivé pour les modèles locaux, valeur du fournisseur dans le cloud)',
+    thinkingOff: 'Désactivé',
+    thinkingLow: 'Faible',
+    thinkingMedium: 'Moyen',
+    thinkingHigh: 'Élevé',
     cloudHintImage:
       'Les mots que vous saisissez sont envoyés à ce point de terminaison cloud, et les images en reviennent. Ne activez cette option que si vous l’acceptez.',
     imageModelHint:
@@ -2857,6 +2868,11 @@ export const fr = {
       'Nouvelle session à partir d’avant la question {number}. La question est dans la saisie pour la reposer ou la modifier.',
     forkGone: 'Il n’y a pas de question {number}.',
     resumeDeleted: '« {title} » supprimée.',
+    slashHelpEffort:
+      'afficher ou régler l’effort de réflexion de cette session (/effort off, low, medium, high ou default)',
+    effortShown: 'Effort de réflexion pour cette session : {effort}.',
+    effortDefault: 'la valeur par défaut du modèle de discussion',
+    effortUnknown: 'Utilisez /effort off, low, medium, high ou default.',
     slashHelpAuto:
       "activer ou désactiver l'approbation automatique : exécuter des commandes, créer des fichiers et appliquer des modifications sans demander, sauf pour les commandes très dangereuses",
     slashAutoOn:

@@ -11641,6 +11641,17 @@
             "type": "boolean",
             "description": "Asks again for the reply to the conversation's last message, which must be the person's.\nThe message is not saved a second time, and `content` and `context` are not used."
           },
+          "thinking": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ThinkingEffortDto",
+                "description": "The conversation's thinking effort (task 0361); absent uses the chat role's default."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "toolsFolder": {
             "type": [
               "string",
@@ -20176,6 +20187,10 @@
           "profileId": {
             "type": "string",
             "format": "uuid"
+          },
+          "thinking": {
+            "$ref": "#/components/schemas/ThinkingEffortDto",
+            "description": "The default thinking effort of the role's replies (chat role)."
           }
         }
       },
@@ -24813,6 +24828,17 @@
           "profileId": {
             "type": "string",
             "format": "uuid"
+          },
+          "thinking": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ThinkingEffortDto",
+                "description": "The default thinking effort; absent keeps the current one."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -30807,6 +30833,17 @@
             "minimum": 0
           }
         }
+      },
+      "ThinkingEffortDto": {
+        "type": "string",
+        "description": "How much a model should think before answering (task 0361). `auto` keeps thinking off on\nlocal servers and leaves cloud models at their provider's default.",
+        "enum": [
+          "auto",
+          "off",
+          "low",
+          "medium",
+          "high"
+        ]
       },
       "ToolCallingProbeDto": {
         "type": "object",

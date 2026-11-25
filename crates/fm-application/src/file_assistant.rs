@@ -144,6 +144,7 @@ impl FileAssistantService {
                     context_window: None,
                     temperature: Some(REPLY_TEMPERATURE),
                     reply: ReplyFormat::Text,
+                    thinking: crate::llm_profiles::ThinkingRequest::Background,
                 },
                 &cancellation,
                 &mut |fragment: &str| visible.push(fragment),

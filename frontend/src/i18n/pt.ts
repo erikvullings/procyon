@@ -1328,6 +1328,8 @@ export const pt = {
     forkQuestion: 'Ramificar: novo chat a partir de antes desta pergunta',
     forkReply: 'Ramificar: novo chat até esta resposta',
     forkFailed: 'Não foi possível ramificar a conversa.',
+    thinkingEffort: 'Esforço de raciocínio para este chat',
+    thinkingDefault: 'Raciocínio: predefinido',
     noFolder: 'Abra uma pasta no outro painel para a anexar.',
     noSelection: 'Selecione itens da pasta para os anexar.',
     consentRequired:
@@ -2084,6 +2086,14 @@ export const pt = {
       'Este endpoint precisa de consentimento nas Definições: abra-o acima e guarde com consentimento.',
     image: 'Geração de imagens',
     allowCloudImage: 'Permitir o uso na nuvem para gerar imagens',
+    thinking: 'Esforço de raciocínio',
+    thinkingHint:
+      'A predefinição para os chats e o assistente do terminal; cada conversa pode escolher o seu. Nem todos os modelos conseguem raciocinar ou variar quanto.',
+    thinkingAuto: 'Automático (desligado em modelos locais, predefinição do fornecedor na nuvem)',
+    thinkingOff: 'Desligado',
+    thinkingLow: 'Baixo',
+    thinkingMedium: 'Médio',
+    thinkingHigh: 'Alto',
     cloudHintImage:
       'As palavras que escreve são enviadas para este endpoint na nuvem e as imagens vêm dele. Ative apenas se aceitar isso.',
     imageModelHint:
@@ -2846,6 +2856,11 @@ export const pt = {
       'Nova sessão a partir de antes da pergunta {number}. A pergunta está na entrada para a repetir ou alterar.',
     forkGone: 'Não existe a pergunta {number}.',
     resumeDeleted: '“{title}” eliminada.',
+    slashHelpEffort:
+      'mostra ou define o esforço de raciocínio desta sessão (/effort off, low, medium, high ou default)',
+    effortShown: 'Esforço de raciocínio para esta sessão: {effort}.',
+    effortDefault: 'a predefinição do modelo de chat',
+    effortUnknown: 'Use /effort off, low, medium, high ou default.',
     slashHelpAuto:
       'ativar ou desativar a aprovação automática: executar comandos, criar arquivos e aplicar alterações sem perguntar, exceto comandos muito perigosos',
     slashAutoOn:

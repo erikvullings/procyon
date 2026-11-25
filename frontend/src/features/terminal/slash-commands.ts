@@ -9,6 +9,7 @@ export const SLASH_COMMANDS = [
   'resume',
   'fork',
   'model',
+  'effort',
   'auto',
   'help',
 ] as const;

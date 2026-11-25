@@ -26,7 +26,8 @@ use crate::chat_conversations::{
 };
 use crate::file_assistant::{VisibleText, truncate_to_bytes};
 use crate::llm_profiles::{
-    LlmChatGeneration, LlmImageAttachment, LlmProfileError, LlmProfileService, LlmRole, ReplyFormat,
+    LlmChatGeneration, LlmImageAttachment, LlmProfileError, LlmProfileService, LlmRole,
+    ReplyFormat, ThinkingRequest,
 };
 
 /// Longest message the person sends, in characters.
@@ -268,6 +269,9 @@ impl ChatService {
         )
         .await;
         let prompts = build_prompts(&saved);
+        let thinking = ThinkingRequest::Conversation(
+            request.thinking.map(crate::llm_profiles::thinking_from_dto),
+        );
         let mut steps = Vec::new();
         let mut exchanges = Vec::new();
         let outcome = match (tooling, request.tools_folder.as_deref()) {
@@ -283,6 +287,7 @@ impl ChatService {
                     question,
                     transcript: prompts,
                     images,
+                    thinking,
                     cancellation: &cancellation,
                 };
                 match crate::chat_agent::run(generator, tooling, run, on_event).await {
@@ -325,6 +330,7 @@ impl ChatService {
                             context_window: None,
                             temperature: None,
                             reply: ReplyFormat::Text,
+                            thinking,
                         },
                         &cancellation,
                         &mut |fragment: &str| visible.push(fragment),
@@ -717,6 +723,7 @@ mod tests {
             images: Vec::new(),
             retry: false,
             tools_folder: None,
+            thinking: None,
         }
     }
 
@@ -772,6 +779,32 @@ mod tests {
             ]
         );
         assert_eq!(generator.seen.lock().unwrap()[0].0, LlmRole::Chat);
+    }
+
+    #[tokio::test]
+    async fn the_conversations_thinking_effort_goes_with_the_reply_request() {
+        let (_directory, conversations) = store();
+        let workspace = Uuid::new_v4();
+        let id = conversations.create(workspace).unwrap().id;
+        let generator = fake(Outcome::Text("Done.".into()));
+        let mut ask = request(workspace, id, "Think hard", None);
+        ask.thinking = Some(fm_transport_dto::ThinkingEffortDto::High);
+        run(&ChatService::default(), &generator, &conversations, ask).await;
+        let unchosen = request(workspace, id, "And now?", None);
+        run(
+            &ChatService::default(),
+            &generator,
+            &conversations,
+            unchosen,
+        )
+        .await;
+        let seen = generator.seen.lock().unwrap();
+        assert_eq!(
+            seen[0].1.thinking,
+            ThinkingRequest::Conversation(Some(crate::llm_profiles::ThinkingEffort::High))
+        );
+        // Without a choice the chat role's default applies.
+        assert_eq!(seen[1].1.thinking, ThinkingRequest::Conversation(None));
     }
 
     #[tokio::test]

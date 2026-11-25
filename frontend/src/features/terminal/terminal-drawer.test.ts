@@ -1511,6 +1511,24 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     expect(assist).not.toHaveBeenCalled();
   });
 
+  it('sets the session thinking effort with /effort and sends it with each question', async () => {
+    await mountWith({});
+    ask('# /effort high');
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain('Thinking effort for this session: High.'),
+    );
+    await markPrompt();
+    ask('# /effort sometimes');
+    await vi.waitFor(() => expect(root.textContent).toContain('Use /effort off, low'));
+    await markPrompt();
+    ask('# what is here?');
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledOnce());
+    expect(sentAt(0)).toMatchObject({ thinking: 'high' });
+    await markPrompt();
+    ask('# /effort default');
+    await vi.waitFor(() => expect(root.textContent).toContain("the chat model's default"));
+  });
+
   it('lists the chat models with /model and switches with /model <number>', async () => {
     const select = vi.fn<TerminalModels['select']>(async () => undefined);
     const models: TerminalModels = {
