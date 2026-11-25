@@ -601,3 +601,5 @@ subtask block (0299–0303) and the earlier corpus-themes follow-ups.
 - [ ] 0360 Agent harness robustness across models *(backend, agent — argument aliases, JSON repair for native calls, tiered edit matching, guiding errors, loop control, measured model profiles, eval suite)*
 - [x] 0361 Thinking effort: role default, per-conversation choice *(backend, frontend, llm — `auto`/off/low/medium/high mapped per endpoint with fallback; Settings default, chat header picker, terminal `/effort`)*
 - [x] 0362 Learn a model's thinking controls from its served chat template *(backend, llm, frontend — minijinja analysis of oMLX templates, learned list per endpoint and model, origin in Settings; needs 0361)*
+- [ ] 0363 Read-only web_fetch tool for the assistants *(backend, agent — no prompt per fetch: step lines, one setting, no private addresses, exfiltration guard; browsing stays with skills)*
+- [ ] 0364 Command approvals that explain what the command does *(frontend, backend, agent — model's explanation plus Procyon's own effects summary of shell lines and scripts; read-only scripts run without asking)*
