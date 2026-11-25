@@ -1102,6 +1102,53 @@ describe('createBackendEventHandler', () => {
       expect(ctx.removeOperationSourcesFromSearchResults).not.toHaveBeenCalled();
     });
 
+    it('notifies when a delete finishes with an entry error', () => {
+      const operation: Operation = {
+        id: 'op-locked' as never,
+        kind: 'delete',
+        state: 'completedWithWarnings',
+        sources: [
+          {
+            id: 'entry-1' as never,
+            location: { providerId: 'local', uri: 'file:///tmp/setup.exe' },
+          },
+        ],
+        progress: { completedItems: 0, completedBytes: 0 },
+        conflictPolicy: 'ask',
+        createdAt: '2026-01-01T00:00:00Z',
+        errors: [
+          {
+            entry: {
+              id: 'entry-1' as never,
+              location: { providerId: 'local', uri: 'file:///tmp/setup.exe' },
+            },
+            message: 'The file is in use',
+          },
+        ],
+      };
+      const pending: BackendEvent[] = [];
+      const notifyOperationProblem = vi.fn();
+      const ctx = makeContext({
+        pushPendingOperationEvent: vi.fn((event: BackendEvent) => pending.push(event)),
+        clearPendingOperationEvents: vi.fn(() => pending.splice(0)),
+        notifyOperationProblem,
+      });
+      const raf = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
+        callback(0);
+        return 1;
+      });
+      try {
+        createBackendEventHandler(ctx)(
+          makeEvent({ type: 'operation.completed', operation }, WS_ID),
+        );
+      } finally {
+        raf.mockRestore();
+      }
+      expect(notifyOperationProblem).toHaveBeenCalledExactlyOnceWith(
+        'setup.exe: The file is in use',
+      );
+    });
+
     it('does not auto-dismiss a completed operation while undo remains available', () => {
       const runningOperation: Operation = {
         id: 'undoable-trash' as never,

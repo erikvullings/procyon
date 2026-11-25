@@ -1,4 +1,4 @@
-import { apiErrorMessage, t } from '../../i18n';
+import { apiErrorMessage, operationEntryErrorText, operationFailureText, t } from '../../i18n';
 import type {
   BackendEvent,
   Connection,
@@ -7,6 +7,7 @@ import type {
   DirectoryDelta,
   Operation,
   OperationConflict,
+  OperationFailure,
   OperationId,
   PaneId,
   PluginDescriptor,
@@ -38,6 +39,24 @@ const AUTO_DISMISS_DELAY_MS = 5_000;
 /** The backend pushes a directory delta for affected panes right after an operation; a fallback
  * reload only runs when none arrived within this window. */
 const OPERATION_REFRESH_SETTLE_MS = 400;
+
+/** Toast text for an operation that failed or finished with entry-level errors, else undefined. */
+function operationProblemMessage(
+  operation: Operation,
+  failure: OperationFailure | undefined,
+): string | undefined {
+  if (operation.state === 'failed') {
+    return failure === undefined ? undefined : operationFailureText(failure);
+  }
+  if (operation.state !== 'completedWithWarnings') return undefined;
+  const [first, ...rest] = operation.errors ?? [];
+  if (first === undefined) return undefined;
+  const name = decodeURIComponent(
+    first.entry.location.uri.replace(/\/+$/, '').split('/').pop() ?? '',
+  );
+  const text = `${name}: ${operationEntryErrorText(first)}`;
+  return rest.length === 0 ? text : `${text} (+${rest.length})`;
+}
 
 function shouldRefreshOnTerminalOperation(operation: Operation): boolean {
   if (operation.kind === 'search' || operation.kind === 'compare') return false;
@@ -88,6 +107,8 @@ export interface BackendEventContext {
   clearOperationSourceSelections(operation: Operation): void;
   removeOperationSourcesFromSearchResults(operation: Operation): void;
   removeOperationSourcesFromDiskUsage(operation: Operation): void;
+  /** Shows a transient message (toast) when an operation fails or finishes with warnings. */
+  notifyOperationProblem?(message: string): void;
 
   // Directory
   /** Returns the current revision for the active tab in `paneId`, or `undefined` if unknown. */
@@ -264,6 +285,8 @@ export function createBackendEventHandler(ctx: BackendEventContext): (event: Bac
               const previousState = previous.byId[id]?.state;
               if (previousState === current.state) continue;
               ctx.clearDismissedOperation(id);
+              const problem = operationProblemMessage(current, next.failuresById[id]);
+              if (problem !== undefined) ctx.notifyOperationProblem?.(problem);
               perfMark('op-state', { kind: current.kind, state: current.state });
               if (current.kind === 'copy') {
                 ctx.clearOperationSourceSelections(current);

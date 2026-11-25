@@ -1657,6 +1657,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     clearOperationSourceSelections: opsWiring.clearOperationSourceSelections,
     removeOperationSourcesFromSearchResults: opsWiring.removeOperationSourcesFromSearchResults,
     removeOperationSourcesFromDiskUsage: opsWiring.removeOperationSourcesFromDiskUsage,
+    notifyOperationProblem: (message) => {
+      const text = document.createElement('span');
+      text.textContent = message;
+      toast({ html: text.outerHTML });
+    },
     getActiveDirectoryRevision: (paneId) =>
       shellState.directories.get(activeTabKey(paneId))?.revision,
     applyDelta,
