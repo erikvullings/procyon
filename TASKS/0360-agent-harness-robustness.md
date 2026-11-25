@@ -85,8 +85,8 @@ guidance in errors, loop detection and a way to measure any of it.
   including a capped read and an edit with an approval result. Each model ran each task once.
 
   | Model | Read | Capped read | Edit | Success | Rounds | Failed calls by cause |
-  | --- | --- | --- | --- | --- | ---: | ---: | --- |
-  | `llama3.2:3b` | No (2 rounds) | No (2 rounds) | Yes (2 rounds) | 1/3 | 6 | None |
+  | --- | --- | --- | --- | --- | ---: | --- |
+  | `llama3.2:3b` | No (2 rounds) | No (2 rounds) | Yes (2 rounds) | 1/3 | 6 | None (wrong final answer, no tool failure) |
   | `granite4.2:latest` | Yes (2 rounds) | Yes (2 rounds) | Yes (3 rounds) | 3/3 | 7 | None |
 
   Llama missed the expected final answers after successful reads. The sample does not establish
