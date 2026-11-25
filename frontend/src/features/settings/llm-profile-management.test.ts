@@ -93,7 +93,7 @@ describe('LlmProfileManagement', () => {
     const client = new MockFileManagerClient();
     const preset = (await client.listLlmProfilePresets())[0];
     if (preset === undefined) throw new Error('Missing preset');
-    const request = { ...preset, name: 'mlx-serve local', credential: null };
+    const request = { ...preset, name: 'mlx-serve local', model: 'model-a', credential: null };
     const first = await client.createLlmProfile(request);
     const second = await client.createLlmProfile(request);
     const remove = vi.spyOn(client, 'deleteLlmProfile');
@@ -125,6 +125,24 @@ describe('LlmProfileManagement', () => {
     await vi.waitFor(() => expect(create).toHaveBeenCalledOnce());
     await vi.waitFor(() => expect(root.textContent).toContain('Generation profile saved.'));
     expect(root.querySelector('[aria-label="Connections"]')).not.toBeNull();
+  });
+
+  it('says a model is missing instead of a vague error, and saves nothing', async () => {
+    const client = new MockFileManagerClient();
+    // Nothing answers at the address, so no models are offered.
+    vi.spyOn(client, 'discoverLlmProfileDraftModels').mockRejectedValue(new Error('unreachable'));
+    const create = vi.spyOn(client, 'createLlmProfile');
+    await mountLoaded(client);
+    const model = fieldInput('Model');
+    expect(model).toBeInstanceOf(HTMLInputElement);
+    (model as HTMLInputElement).value = '';
+    model?.dispatchEvent(new Event('input'));
+    m.redraw.sync();
+    [...root.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.trim() === 'Save connection')
+      ?.click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Choose or type a model.'));
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('asks which images contract the endpoint answers, in the advanced settings', async () => {
@@ -626,6 +644,8 @@ describe('LlmProfileManagement', () => {
       .find((button) => button.textContent?.trim() === 'New profile')
       ?.click();
     m.redraw.sync();
+    // A connection needs a model: the draft's discovery fills it in first.
+    await vi.waitFor(() => expect(fieldValue('Model')).toBe('model-a'));
     if (save === undefined) throw new Error('Save handler was not registered');
     await save();
 

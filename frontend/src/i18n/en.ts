@@ -2463,6 +2463,8 @@ export const en = {
     supportLevelsTried: 'Levels are tried and dropped if the model refuses them.',
     supportSource: 'From the model card of {source}.',
     supportFamily: 'Guessed from its model family ({source}).',
+    supportTemplate: "Read from the model's chat template on this server ({date}).",
+    copyListEntry: 'Copy as list entry',
     cloudHintImage:
       'The words you type are sent to this cloud endpoint, and the pictures come back from it. Turn this on only if you accept that.',
     imageModelHint:
@@ -2477,6 +2479,8 @@ export const en = {
     saveConnection: 'Save connection',
     connectionsTitle: 'Connections',
     consentRequired: 'Allow cloud use: confirm consent before saving a cloud endpoint.',
+    modelRequired:
+      'Choose or type a model. When the list stays empty, check the address: nothing answered there.',
     title: 'AI summaries and answers',
     description: 'Configure providers once, then choose a connection and model for each task.',
     loading: 'Loading generation profiles…',

@@ -82,7 +82,7 @@ use crate::llm_profiles::{
 use crate::llm_profiles::{
     disposition_from_dto, draft_from_dto, locality_to_dto, model_limits_to_dto,
     preset_to_profile_dto, profile_to_dto, profile_to_export_dto, role_from_dto,
-    role_input_from_dto, roles_to_dto, test_result_to_dto,
+    role_input_from_dto, test_result_to_dto,
 };
 use crate::operation_history::{ApplicationOperationObserver, OperationHistory};
 use crate::operation_planner::OperationPlanner;
@@ -5366,7 +5366,7 @@ impl FileManagerService {
 
     /// Lists the role bindings (chat, embeddings).
     pub fn list_llm_roles(&self) -> Result<LlmRolesDto, ApplicationError> {
-        Ok(roles_to_dto(self.llm_profiles.roles()?))
+        Ok(self.llm_profiles.roles_dto()?)
     }
 
     /// Binds a role to an endpoint and model.

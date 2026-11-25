@@ -2102,6 +2102,8 @@ export const es = {
     supportLevelsTried: 'Los niveles se prueban y se omiten si el modelo los rechaza.',
     supportSource: 'Según la ficha del modelo {source}.',
     supportFamily: 'Deducido de su familia de modelos ({source}).',
+    supportTemplate: 'Leído de la plantilla de chat del modelo en este servidor ({date}).',
+    copyListEntry: 'Copiar como entrada de lista',
     cloudHintImage:
       'Las palabras que escribes se envían a este endpoint en la nube y las imágenes vuelven de él. Actívalo solo si te parece bien.',
     imageModelHint:
@@ -2117,6 +2119,8 @@ export const es = {
     connectionsTitle: 'Conexiones',
     consentRequired:
       'Permitir uso en la nube: confirma el consentimiento antes de guardar un endpoint en la nube.',
+    modelRequired:
+      'Elige o escribe un modelo. Si la lista sigue vacía, revisa la dirección: allí no respondió nada.',
     title: 'Resúmenes y respuestas con IA',
     description:
       'Configura los proveedores una vez y elige una conexión y un modelo para cada tarea.',

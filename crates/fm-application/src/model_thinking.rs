@@ -6,10 +6,31 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+
+pub mod learned;
+pub mod template;
+
+/// The chat-template switches a request may set. A learned or listed entry can name no other, so
+/// a request never carries an arbitrary parameter.
+pub const SWITCH_NAMES: &[&str] = &["enable_thinking", "thinking"];
+/// The `reasoning_effort` values a request may send.
+pub const EFFORT_VALUES: &[&str] = &[
+    "none", "minimal", "low", "medium", "high", "xhigh", "max", "lean",
+];
+
+/// `name` as one of [`SWITCH_NAMES`].
+pub fn known_switch(name: &str) -> Option<&'static str> {
+    SWITCH_NAMES.iter().copied().find(|known| *known == name)
+}
+
+/// `value` as one of [`EFFORT_VALUES`].
+pub fn known_effort(value: &str) -> Option<&'static str> {
+    EFFORT_VALUES.iter().copied().find(|known| *known == value)
+}
 
 /// Whether and how a model thinks.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ThinkingKind {
     /// The model never thinks.
@@ -21,7 +42,7 @@ pub enum ThinkingKind {
 }
 
 /// An effort a model may map to a `reasoning_effort` value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum LevelName {
     /// Thinking off, or as little as the model allows.
@@ -35,7 +56,7 @@ pub enum LevelName {
 }
 
 /// One model family's thinking controls.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ModelThinking {
     /// Texts of which one occurs in the model id (case-insensitive).
@@ -113,6 +134,22 @@ mod tests {
                 entry.switch.is_some(),
                 entry.thinking == ThinkingKind::Toggle,
                 "a toggle names its switch, and only a toggle: {}",
+                entry.source
+            );
+            assert!(
+                entry
+                    .switch
+                    .as_deref()
+                    .is_none_or(|name| known_switch(name).is_some()),
+                "the switch is one a request may set: {}",
+                entry.source
+            );
+            assert!(
+                entry
+                    .levels
+                    .values()
+                    .all(|value| known_effort(value).is_some()),
+                "every level is a value a request may send: {}",
                 entry.source
             );
             assert!(

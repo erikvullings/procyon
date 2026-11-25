@@ -2507,6 +2507,8 @@ export const nl = {
     supportLevelsTried: 'Niveaus worden geprobeerd en weggelaten als het model ze weigert.',
     supportSource: 'Uit de modelkaart van {source}.',
     supportFamily: 'Afgeleid van de modelfamilie ({source}).',
+    supportTemplate: 'Gelezen uit het chatsjabloon van het model op deze server ({date}).',
+    copyListEntry: 'Kopiëren als lijstitem',
     cloudHintImage:
       'De woorden die je typt gaan naar dit cloud-eindpunt en de afbeeldingen komen ervan terug. Zet dit alleen aan als je dat accepteert.',
     imageModelHint:
@@ -2522,6 +2524,8 @@ export const nl = {
     connectionsTitle: 'Verbindingen',
     consentRequired:
       'Cloudgebruik toestaan: bevestig toestemming voordat je een cloud-eindpunt opslaat.',
+    modelRequired:
+      'Kies of typ een model. Blijft de lijst leeg, controleer dan het adres: daar antwoordde niets.',
     title: 'AI-samenvattingen en antwoorden',
     description: 'Stel aanbieders één keer in en kies per taak een verbinding en model.',
     loading: 'Generatieprofielen laden…',

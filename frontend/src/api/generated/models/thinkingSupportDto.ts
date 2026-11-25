@@ -3,6 +3,7 @@
  * Run `pnpm api:generate` (or `pnpm api:check`) to regenerate.
  */
 import type { ThinkingEffortDto } from './thinkingEffortDto.ts';
+import type { ThinkingOriginDto } from './thinkingOriginDto.ts';
 
 /**
  * What a model supports for thinking, from its chat template and model card (task 0361).
@@ -12,13 +13,25 @@ export interface ThinkingSupportDto {
   canTurnOff: boolean;
   /** Whether it thinks when nothing is asked. */
   defaultOn: boolean;
+  /**
+     * When it was read from the template, RFC 3339 (`template` origin only).
+     * @nullable
+     */
+  learnedAt?: string | null;
   /** The efforts that change how much it thinks; empty when it only switches on and off. */
   levels: ThinkingEffortDto[];
+  /**
+     * The entry as it would go into the curated list, JSON (`template` origin only).
+     * @nullable
+     */
+  listEntry?: string | null;
   /**
      * What else the card says about thinking.
      * @nullable
      */
   note?: string | null;
+  /** Where this comes from. */
+  origin: ThinkingOriginDto;
   /** The Hugging Face repository the entry was read from. */
   source: string;
   /** Whether the model thinks at all. */

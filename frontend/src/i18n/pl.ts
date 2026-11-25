@@ -2094,6 +2094,8 @@ export const pl = {
     supportLevelsTried: 'Poziomy są próbowane i pomijane, gdy model je odrzuci.',
     supportSource: 'Według karty modelu {source}.',
     supportFamily: 'Wywnioskowano z rodziny modelu ({source}).',
+    supportTemplate: 'Odczytano z szablonu czatu modelu na tym serwerze ({date}).',
+    copyListEntry: 'Kopiuj jako wpis listy',
     cloudHintImage:
       'Wpisane słowa trafiają do tego punktu końcowego w chmurze, a obrazy z niego wracają. Włącz tylko, jeśli to akceptujesz.',
     imageModelHint:
@@ -2109,6 +2111,8 @@ export const pl = {
     connectionsTitle: 'Połączenia',
     consentRequired:
       'Zezwól na użycie w chmurze: potwierdź zgodę przed zapisaniem punktu końcowego w chmurze.',
+    modelRequired:
+      'Wybierz lub wpisz model. Jeśli lista pozostaje pusta, sprawdź adres: nic tam nie odpowiedziało.',
     title: 'Podsumowania i odpowiedzi AI',
     description:
       'Skonfiguruj dostawców raz, a następnie wybierz połączenie i model dla każdego zadania.',

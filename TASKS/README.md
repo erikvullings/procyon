@@ -600,3 +600,4 @@ subtask block (0299–0303) and the earlier corpus-themes follow-ups.
 - [x] 0359 Chat conversations: tool history, compaction and forks *(backend, agent, frontend — schema 2 with agent messages, chat compaction, fork from here, delete saved terminal sessions; split from 0353/0354)*
 - [ ] 0360 Agent harness robustness across models *(backend, agent — argument aliases, JSON repair for native calls, tiered edit matching, guiding errors, loop control, measured model profiles, eval suite)*
 - [x] 0361 Thinking effort: role default, per-conversation choice *(backend, frontend, llm — `auto`/off/low/medium/high mapped per endpoint with fallback; Settings default, chat header picker, terminal `/effort`)*
+- [x] 0362 Learn a model's thinking controls from its served chat template *(backend, llm, frontend — minijinja analysis of oMLX templates, learned list per endpoint and model, origin in Settings; needs 0361)*

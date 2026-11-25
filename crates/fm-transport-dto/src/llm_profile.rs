@@ -203,6 +203,18 @@ pub enum ThinkingEffortDto {
     High,
 }
 
+/// Where what is known about a model's thinking comes from (task 0362).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ThinkingOriginDto {
+    /// Read from the chat template the server uses for this model.
+    Template,
+    /// The curated list, read from the model's card and template on Hugging Face.
+    Card,
+    /// A guess from the model's family.
+    Family,
+}
+
 /// What a model supports for thinking, from its chat template and model card (task 0361).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -223,6 +235,14 @@ pub struct ThinkingSupportDto {
     /// What else the card says about thinking.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// Where this comes from.
+    pub origin: ThinkingOriginDto,
+    /// When it was read from the template, RFC 3339 (`template` origin only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub learned_at: Option<String>,
+    /// The entry as it would go into the curated list, JSON (`template` origin only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub list_entry: Option<String>,
 }
 
 /// One role's endpoint, model and cloud permission.

@@ -670,6 +670,7 @@ export * from './themeMapPointDto.ts';
 export * from './themePassageDto.ts';
 export * from './themeShareDto.ts';
 export * from './thinkingEffortDto.ts';
+export * from './thinkingOriginDto.ts';
 export * from './thinkingSupportDto.ts';
 export * from './toolCallingProbeDto.ts';
 export * from './transferConflictsDto.ts';

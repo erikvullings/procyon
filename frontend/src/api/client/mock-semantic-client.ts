@@ -1621,6 +1621,7 @@ export class MockSemanticClient implements SemanticClient {
 
   createLlmProfile(request: SaveLlmProfileRequest, signal?: AbortSignal): Promise<LlmProfile> {
     return this.ctx.perform('createLlmProfile', signal, () => {
+      requireProfileModel(request);
       this.ctx.llmProfileSequence += 1;
       const host = new URL(request.baseUrl).hostname.toLowerCase();
       const profile: LlmProfile = {
@@ -1643,6 +1644,7 @@ export class MockSemanticClient implements SemanticClient {
     signal?: AbortSignal,
   ): Promise<LlmProfile> {
     return this.ctx.perform('updateLlmProfile', signal, () => {
+      requireProfileModel(request);
       const current = this.ctx.requireLlmProfile(profileId);
       const host = new URL(request.baseUrl).hostname.toLowerCase();
       const endpoint = new URL(request.baseUrl).href.replace(/\/$/u, '');
@@ -2410,6 +2412,15 @@ function summaryOf(conversation: ChatConversation): ChatConversationSummary {
     updatedAt: conversation.updatedAt,
     messageCount: conversation.messages.length,
   };
+}
+
+/** As the backend: a profile without a model is not valid. */
+function requireProfileModel(request: SaveLlmProfileRequest): void {
+  if (request.model.trim() === '') {
+    throw new MockClientError('invalidRequest', 'A model is required', {
+      reason: 'llmProfileInvalid',
+    });
+  }
 }
 
 function chatRecord(

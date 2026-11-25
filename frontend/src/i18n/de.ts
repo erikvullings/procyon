@@ -2123,6 +2123,8 @@ export const de = {
     supportLevelsTried: 'Stufen werden versucht und weggelassen, wenn das Modell sie ablehnt.',
     supportSource: 'Aus der Modellkarte von {source}.',
     supportFamily: 'Aus der Modellfamilie abgeleitet ({source}).',
+    supportTemplate: 'Aus der Chat-Vorlage des Modells auf diesem Server gelesen ({date}).',
+    copyListEntry: 'Als Listeneintrag kopieren',
     cloudHintImage:
       'Die von Ihnen eingegebenen Wörter werden an diesen Cloud-Endpunkt gesendet; die Bilder kommen von ihm zurück. Aktivieren Sie dies nur, wenn Sie damit einverstanden sind.',
     imageModelHint:
@@ -2138,6 +2140,8 @@ export const de = {
     connectionsTitle: 'Verbindungen',
     consentRequired:
       'Cloud-Nutzung erlauben: Zustimmung bestätigen, bevor ein Cloud-Endpunkt gespeichert wird.',
+    modelRequired:
+      'Wähle oder tippe ein Modell. Bleibt die Liste leer, prüfe die Adresse: Dort hat nichts geantwortet.',
     title: 'KI-Zusammenfassungen und -Antworten',
     description: 'Anbieter einmal einrichten, dann je Aufgabe Verbindung und Modell wählen.',
     loading: 'Generierungsprofile werden geladen…',

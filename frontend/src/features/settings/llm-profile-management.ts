@@ -440,10 +440,18 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     selectProfile(saved);
   }
 
-  async function save(attrs: LlmProfileManagementAttrs): Promise<boolean> {
+  /**
+   * Saves the open connection. `explicit` is the connection's own Save button; the Settings
+   * dialog's Save passes false and skips a new connection without a model, which is a draft the
+   * person has not finished (or not started), rather than failing the whole dialog.
+   */
+  async function save(attrs: LlmProfileManagementAttrs, explicit = false): Promise<boolean> {
     const client = attrs.client;
     const current = editor;
     if (current === undefined) return true;
+    if (!explicit && current.profileId === undefined && current.request.model.trim() === '') {
+      return true;
+    }
     const stored = profiles.find((profile) => profile.id === current.profileId);
     const locality = await classifyNow(client, current.request.baseUrl);
     // Consent is given in this editor when a cloud host is saved, and again when it changes (0322).
@@ -456,6 +464,11 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     if (!dirty && !consentPending) return true;
     if (needsConsent && !consent) {
       error = t('llmProfiles', 'consentRequired');
+      return false;
+    }
+    // A connection needs a model; without one the backend only says the settings are not valid.
+    if (current.request.model.trim() === '') {
+      error = t('llmProfiles', 'modelRequired');
       return false;
     }
     busy = true;
@@ -1007,7 +1020,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
               disabled: busy,
               onclick: () => {
                 if (editor?.profileId === undefined) dirty = true;
-                void save(attrs);
+                void save(attrs, true);
               },
             },
             t('llmProfiles', 'saveConnection'),

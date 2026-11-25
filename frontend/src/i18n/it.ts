@@ -2099,6 +2099,8 @@ export const it = {
     supportLevelsTried: 'I livelli vengono provati e tralasciati se il modello li rifiuta.',
     supportSource: 'Dalla scheda del modello {source}.',
     supportFamily: 'Dedotto dalla famiglia del modello ({source}).',
+    supportTemplate: 'Letto dal template di chat del modello su questo server ({date}).',
+    copyListEntry: 'Copia come voce di elenco',
     cloudHintImage:
       'Le parole che digiti vengono inviate a questo endpoint cloud e le immagini tornano da esso. Attiva solo se accetti.',
     imageModelHint:
@@ -2114,6 +2116,8 @@ export const it = {
     connectionsTitle: 'Connessioni',
     consentRequired:
       "Consenti l'uso nel cloud: conferma il consenso prima di salvare un endpoint cloud.",
+    modelRequired:
+      'Scegli o digita un modello. Se l’elenco resta vuoto, controlla l’indirizzo: lì non ha risposto nulla.',
     title: 'Riepiloghi e risposte con IA',
     description:
       'Configura i fornitori una volta, poi scegli una connessione e un modello per ogni attività.',

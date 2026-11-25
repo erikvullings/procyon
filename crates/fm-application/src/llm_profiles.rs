@@ -228,7 +228,20 @@ impl ThinkingAttempt {
 /// by trial, from the closest match down to nothing at all, since OpenAI-compatible servers do not
 /// disclose which values a model takes.
 pub fn thinking_attempts(profile: &LlmProfile, effort: ThinkingEffort) -> Vec<ThinkingAttempt> {
-    let known = crate::model_thinking::lookup(&profile.model);
+    thinking_attempts_with(
+        profile,
+        crate::model_thinking::lookup(&profile.model),
+        effort,
+    )
+}
+
+/// Like [`thinking_attempts`], with what is known about the model given: learned from its
+/// template (task 0362), listed, or nothing.
+pub fn thinking_attempts_with(
+    profile: &LlmProfile,
+    known: Option<&crate::model_thinking::ModelThinking>,
+    effort: ThinkingEffort,
+) -> Vec<ThinkingAttempt> {
     if profile.preset == LlmPreset::Ollama {
         return ollama_attempts(profile, known, effort);
     }
@@ -288,7 +301,7 @@ pub fn thinking_attempts(profile: &LlmProfile, effort: ThinkingEffort) -> Vec<Th
 /// capability refuses `think: true`, so a listed model that never thinks is not asked to.
 fn ollama_attempts(
     profile: &LlmProfile,
-    known: Option<&'static crate::model_thinking::ModelThinking>,
+    known: Option<&crate::model_thinking::ModelThinking>,
     effort: ThinkingEffort,
 ) -> Vec<ThinkingAttempt> {
     use crate::model_thinking::ThinkingKind;
@@ -308,7 +321,7 @@ fn ollama_attempts(
 /// The request a listed model's chat template expects for `effort`. `local` endpoints keep
 /// thinking off for [`ThinkingEffort::Auto`], as they always did; elsewhere Auto asks nothing.
 fn known_attempt(
-    entry: &'static crate::model_thinking::ModelThinking,
+    entry: &crate::model_thinking::ModelThinking,
     effort: ThinkingEffort,
     local: bool,
 ) -> ThinkingAttempt {
@@ -321,7 +334,10 @@ fn known_attempt(
         ThinkingEffort::Medium => LevelName::Medium,
         ThinkingEffort::High => LevelName::High,
     };
-    let effort = entry.level(level);
+    // Only switches and values a request may carry (checked when the list is loaded, too).
+    let effort = entry
+        .level(level)
+        .and_then(crate::model_thinking::known_effort);
     match entry.thinking {
         ThinkingKind::None => ThinkingAttempt::PLAIN,
         ThinkingKind::Always => ThinkingAttempt {
@@ -333,6 +349,7 @@ fn known_attempt(
             template: entry
                 .switch
                 .as_deref()
+                .and_then(crate::model_thinking::known_switch)
                 .map(|name| (name, level != LevelName::Off)),
             ..ThinkingAttempt::PLAIN
         },
@@ -732,6 +749,17 @@ pub enum ChatOutcome {
 
 #[async_trait]
 pub trait LlmProbeTransport: Send + Sync {
+    /// The chat template an oMLX server on this machine uses for `request.model` (task 0362):
+    /// read from the model's folder, which `/v1/models/status` names. `None` for other servers
+    /// or when the template cannot be found.
+    async fn chat_template(
+        &self,
+        _request: &LlmProbeRequest,
+        _cancellation: &CancellationToken,
+    ) -> Result<Option<String>, LlmProfileError> {
+        Ok(None)
+    }
+
     async fn discover_model_limits(
         &self,
         _request: &LlmProbeRequest,
@@ -954,6 +982,30 @@ impl LlmProbeTransport for ReqwestLlmProbeTransport {
         classify_http_status(response.status().as_u16())?;
         let body = read_bounded_body(response, cancellation).await?;
         parse_ollama_model_capabilities(&body)
+    }
+
+    async fn chat_template(
+        &self,
+        request: &LlmProbeRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<Option<String>, LlmProfileError> {
+        let Some(url) = models_url(&request.url).map(|models| format!("{models}/status")) else {
+            return Ok(None);
+        };
+        let response = tokio::select! {
+            () = cancellation.cancelled() => return Err(LlmProfileError::Cancelled),
+            response = self.request(reqwest::Method::GET, request, &url).send() => {
+                response.map_err(map_reqwest)?
+            }
+        };
+        if !response.status().is_success() {
+            return Ok(None);
+        }
+        let body = read_bounded_body(response, cancellation).await?;
+        let Some(folder) = model_folder(&body, &request.model) else {
+            return Ok(None);
+        };
+        Ok(read_chat_template(&folder).await)
     }
 
     async fn discover_models(
@@ -1426,6 +1478,10 @@ pub struct LlmProfileService {
     probing: Arc<Mutex<std::collections::HashMap<(Uuid, String), Instant>>>,
     /// The thinking attempt each profile, model and effort accepted in this session (task 0361).
     accepted_thinking: Arc<Mutex<std::collections::HashMap<ThinkingKey, ThinkingAttempt>>>,
+    /// Thinking controls learned from the templates of servers on this machine (task 0362).
+    learned_thinking: Arc<crate::model_thinking::learned::LearnedThinking>,
+    /// Endpoints and models whose template was looked at in this session.
+    templates_checked: Arc<Mutex<std::collections::HashSet<(String, String)>>>,
     credentials: Arc<dyn CredentialStore>,
     transport: Arc<dyn LlmProbeTransport>,
     host_policy: LlmHostPolicy,
@@ -1444,11 +1500,16 @@ impl LlmProfileService {
             .map_err(|_| LlmProfileError::Persistence)?
             .unwrap_or_default();
         profiles.prune_dangling_roles();
+        let learned_thinking = Arc::new(crate::model_thinking::learned::LearnedThinking::new(
+            SettingsStore::new(settings.directory()),
+        ));
         Ok(Self {
             settings,
             profiles: Arc::new(Mutex::new(profiles)),
             probing: Arc::default(),
             accepted_thinking: Arc::default(),
+            learned_thinking,
+            templates_checked: Arc::default(),
             credentials,
             transport,
             host_policy,
@@ -1465,11 +1526,16 @@ impl LlmProfileService {
         transport: Arc<dyn LlmProbeTransport>,
         host_policy: LlmHostPolicy,
     ) -> Self {
+        let learned_thinking = Arc::new(crate::model_thinking::learned::LearnedThinking::new(
+            SettingsStore::new(settings.directory()),
+        ));
         Self {
             settings,
             profiles: Arc::new(Mutex::new(LlmProfilesDocument::default())),
             probing: Arc::default(),
             accepted_thinking: Arc::default(),
+            learned_thinking,
+            templates_checked: Arc::default(),
             credentials,
             transport,
             host_policy,
@@ -1532,6 +1598,40 @@ impl LlmProfileService {
     /// The configured role bindings, unchanged by reads.
     pub fn roles(&self) -> Result<LlmRoles, LlmProfileError> {
         Ok(self.lock()?.roles.clone())
+    }
+
+    /// The role bindings for the API, the chat role with what its model supports for thinking:
+    /// learned from its template on this machine when it was read (task 0362), else listed.
+    pub(crate) fn roles_dto(&self) -> Result<LlmRolesDto, LlmProfileError> {
+        let (roles, base_urls) = {
+            let document = self.lock()?;
+            let base_urls: std::collections::HashMap<Uuid, String> = document
+                .profiles
+                .iter()
+                .filter_map(|profile| {
+                    normalize_endpoint(&profile.base_url)
+                        .ok()
+                        .map(|endpoint| (profile.id, endpoint.base_url))
+                })
+                .collect();
+            (document.roles.clone(), base_urls)
+        };
+        let dto = |assignment: RoleAssignment| {
+            let learned = base_urls
+                .get(&assignment.profile_id)
+                .and_then(|base| self.learned_thinking.get(base, &assignment.model));
+            let support = match &learned {
+                Some(learned) => Some(thinking_support_dto(&learned.thinking, Some(learned))),
+                None => crate::model_thinking::lookup(&assignment.model)
+                    .map(|entry| thinking_support_dto(entry, None)),
+            };
+            assignment_to_dto(assignment, support)
+        };
+        Ok(LlmRolesDto {
+            chat: roles.chat.map(dto),
+            embeddings: roles.embeddings.map(dto),
+            image: roles.image.map(dto),
+        })
     }
 
     pub fn list(&self) -> Result<Vec<LlmProfile>, LlmProfileError> {
@@ -2132,12 +2232,15 @@ impl LlmProfileService {
                 .map(|value| value.clamp(0.0, profile.advanced.temperature)),
             ..generation
         };
-        // A listed model is asked as its template expects; only an unlisted one learns the switch.
+        let known = self
+            .model_thinking(&profile, &endpoint, &request, cancellation)
+            .await;
+        // A known model is asked as its template expects; only an unknown one learns the switch.
         let learns_switch = supports_reasoning_switch(profile.preset)
             && effort.level().is_none()
-            && crate::model_thinking::lookup(&profile.model).is_none();
+            && known.is_none();
         let key = (id, profile.model.clone(), effort);
-        let mut candidates = thinking_attempts(&profile, effort);
+        let mut candidates = thinking_attempts_with(&profile, known.as_ref(), effort);
         // The variant that worked for this model and effort before goes first (this session).
         if let Some(accepted) = self.accepted_thinking(&key)
             && let Some(position) = candidates.iter().position(|attempt| *attempt == accepted)
@@ -2203,6 +2306,52 @@ impl LlmProfileService {
             };
         }
         Err(LlmProfileError::Transport)
+    }
+
+    /// What is known about how `profile`'s model thinks (task 0362): learned from the template an
+    /// oMLX server on this machine uses, else the curated list, else its family. The template is
+    /// looked at once per session; an unchanged one reuses what was learned before.
+    async fn model_thinking(
+        &self,
+        profile: &LlmProfile,
+        endpoint: &NormalizedEndpoint,
+        request: &LlmProbeRequest,
+        cancellation: &CancellationToken,
+    ) -> Option<crate::model_thinking::ModelThinking> {
+        if profile.preset == LlmPreset::Omlx && endpoint.loopback {
+            let key = (endpoint.base_url.clone(), profile.model.clone());
+            let first_look = self
+                .templates_checked
+                .lock()
+                .map(|mut checked| checked.insert(key.clone()))
+                .unwrap_or(false);
+            if first_look
+                && let Ok(Some(template)) =
+                    self.transport.chat_template(request, cancellation).await
+            {
+                self.learn_template(&key.0, &key.1, &template);
+            }
+            if let Some(entry) = self.learned_thinking.get(&key.0, &key.1) {
+                return Some(entry.thinking);
+            }
+        }
+        crate::model_thinking::lookup(&profile.model).cloned()
+    }
+
+    /// Analyses `template` unless it is the one already learned for `model` on `endpoint`.
+    fn learn_template(&self, endpoint: &str, model: &str, template: &str) {
+        let hash = crate::model_thinking::learned::template_hash(template);
+        if self
+            .learned_thinking
+            .get(endpoint, model)
+            .is_some_and(|entry| entry.template_sha256 == hash)
+        {
+            return;
+        }
+        if let Some(thinking) = crate::model_thinking::template::analyse(template) {
+            self.learned_thinking
+                .put(endpoint, model, template, thinking);
+        }
     }
 
     /// The thinking attempt an endpoint accepted for a model and effort in this session.
@@ -2823,6 +2972,53 @@ fn models_url(chat_url: &str) -> Option<String> {
     chat_url
         .strip_suffix("/chat/completions")
         .map(|base| format!("{base}/models"))
+}
+
+/// The folder oMLX's `/v1/models/status` names for `model`.
+fn model_folder(status: &[u8], model: &str) -> Option<std::path::PathBuf> {
+    let value: Value = serde_json::from_slice(status).ok()?;
+    value
+        .get("models")?
+        .as_array()?
+        .iter()
+        .find(|entry| entry.get("id").and_then(Value::as_str) == Some(model))?
+        .get("model_path")?
+        .as_str()
+        .map(std::path::PathBuf::from)
+}
+
+/// Longest `tokenizer_config.json` read for its template (it may list many added tokens).
+const MAX_TOKENIZER_CONFIG_BYTES: u64 = 8 * 1024 * 1024;
+
+/// The chat template in a model folder: `chat_template.jinja`, else the one in
+/// `tokenizer_config.json`. Bounded in size; anything unreadable is `None`.
+async fn read_chat_template(folder: &std::path::Path) -> Option<String> {
+    let jinja = folder.join("chat_template.jinja");
+    if let Ok(metadata) = tokio::fs::metadata(&jinja).await
+        && metadata.is_file()
+        && metadata.len() <= crate::model_thinking::template::MAX_TEMPLATE_BYTES as u64
+    {
+        return tokio::fs::read_to_string(&jinja).await.ok();
+    }
+    let config = folder.join("tokenizer_config.json");
+    let metadata = tokio::fs::metadata(&config).await.ok()?;
+    if !metadata.is_file() || metadata.len() > MAX_TOKENIZER_CONFIG_BYTES {
+        return None;
+    }
+    template_from_tokenizer_config(&tokio::fs::read(&config).await.ok()?)
+}
+
+/// The `chat_template` of a `tokenizer_config.json`: a string, or the `default` of a named list.
+pub(crate) fn template_from_tokenizer_config(bytes: &[u8]) -> Option<String> {
+    let value: Value = serde_json::from_slice(bytes).ok()?;
+    match value.get("chat_template")? {
+        Value::String(template) => Some(template.clone()),
+        Value::Array(named) => named
+            .iter()
+            .find(|entry| entry.get("name").and_then(Value::as_str) == Some("default"))
+            .and_then(|entry| entry.get("template")?.as_str().map(str::to_owned)),
+        _ => None,
+    }
 }
 
 /// The header a profile's key travels in.
@@ -3574,9 +3770,12 @@ impl LlmProfileError {
 
 // --- Conversions (folded from `llm_profile_mapping`) ---
 
-fn assignment_to_dto(assignment: RoleAssignment) -> LlmRoleAssignmentDto {
+fn assignment_to_dto(
+    assignment: RoleAssignment,
+    thinking_support: Option<fm_transport_dto::ThinkingSupportDto>,
+) -> LlmRoleAssignmentDto {
     LlmRoleAssignmentDto {
-        thinking_support: thinking_support(&assignment.model),
+        thinking_support,
         profile_id: assignment.profile_id,
         model: assignment.model,
         allow_cloud: assignment.allow_cloud,
@@ -3584,10 +3783,14 @@ fn assignment_to_dto(assignment: RoleAssignment) -> LlmRoleAssignmentDto {
     }
 }
 
-/// What `model` supports for thinking, when its family is listed.
-pub(crate) fn thinking_support(model: &str) -> Option<fm_transport_dto::ThinkingSupportDto> {
+/// What a model supports for thinking, for Settings: `learned` when its template was read on this
+/// machine, else the curated list or its family.
+fn thinking_support_dto(
+    entry: &crate::model_thinking::ModelThinking,
+    learned: Option<&crate::model_thinking::learned::LearnedEntry>,
+) -> fm_transport_dto::ThinkingSupportDto {
     use crate::model_thinking::{LevelName, ThinkingKind};
-    let entry = crate::model_thinking::lookup(model)?;
+    use fm_transport_dto::ThinkingOriginDto;
     let levels = [
         (LevelName::Low, ThinkingEffortDto::Low),
         (LevelName::Medium, ThinkingEffortDto::Medium),
@@ -3597,7 +3800,12 @@ pub(crate) fn thinking_support(model: &str) -> Option<fm_transport_dto::Thinking
     .filter(|(level, _)| entry.level(*level).is_some())
     .map(|(_, dto)| dto)
     .collect();
-    Some(fm_transport_dto::ThinkingSupportDto {
+    let origin = match (learned, entry.family) {
+        (Some(_), _) => ThinkingOriginDto::Template,
+        (None, true) => ThinkingOriginDto::Family,
+        (None, false) => ThinkingOriginDto::Card,
+    };
+    fm_transport_dto::ThinkingSupportDto {
         thinks: entry.thinking != ThinkingKind::None,
         can_turn_off: entry.thinking == ThinkingKind::Toggle,
         default_on: entry.default_on,
@@ -3605,7 +3813,23 @@ pub(crate) fn thinking_support(model: &str) -> Option<fm_transport_dto::Thinking
         verified: !entry.family,
         source: entry.source.clone(),
         note: entry.note.clone(),
-    })
+        origin,
+        learned_at: learned.map(|learned| learned.learned_at.clone()),
+        list_entry: learned.and_then(list_entry),
+    }
+}
+
+/// A learned entry as it would go into `model_thinking.json`.
+fn list_entry(learned: &crate::model_thinking::learned::LearnedEntry) -> Option<String> {
+    let mut entry = learned.thinking.clone();
+    entry.matches = vec![learned.model.to_ascii_lowercase()];
+    entry.source = learned.model.clone();
+    entry.tested = vec![format!(
+        "Read from the chat template {} serves ({}).",
+        learned.endpoint,
+        learned.learned_at.get(..10).unwrap_or(&learned.learned_at)
+    )];
+    serde_json::to_string_pretty(&entry).ok()
 }
 
 pub(crate) fn thinking_to_dto(effort: ThinkingEffort) -> ThinkingEffortDto {
@@ -3625,14 +3849,6 @@ pub(crate) fn thinking_from_dto(effort: ThinkingEffortDto) -> ThinkingEffort {
         ThinkingEffortDto::Low => ThinkingEffort::Low,
         ThinkingEffortDto::Medium => ThinkingEffort::Medium,
         ThinkingEffortDto::High => ThinkingEffort::High,
-    }
-}
-
-pub(crate) fn roles_to_dto(roles: LlmRoles) -> LlmRolesDto {
-    LlmRolesDto {
-        chat: roles.chat.map(assignment_to_dto),
-        embeddings: roles.embeddings.map(assignment_to_dto),
-        image: roles.image.map(assignment_to_dto),
     }
 }
 
@@ -5476,6 +5692,266 @@ mod tests {
         assert_eq!(
             ollama_generation_body(&request, &tiny_generation())["think"],
             false
+        );
+    }
+
+    #[tokio::test]
+    async fn the_template_is_found_in_the_folder_omlx_names_for_the_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("org/model-a");
+        std::fs::create_dir_all(&folder).unwrap();
+        let status = serde_json::json!({"models": [
+            {"id": "other", "model_path": "/nowhere"},
+            {"id": "model-a", "model_path": folder.to_str().unwrap()}
+        ]})
+        .to_string();
+        assert_eq!(
+            model_folder(status.as_bytes(), "model-a"),
+            Some(folder.clone())
+        );
+        assert_eq!(model_folder(status.as_bytes(), "missing"), None);
+
+        // Without chat_template.jinja the tokenizer config's template is used: a string, or the
+        // `default` of a named list.
+        std::fs::write(
+            folder.join("tokenizer_config.json"),
+            r#"{"chat_template": [{"name": "tool_use", "template": "t"}, {"name": "default", "template": "d"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(read_chat_template(&folder).await.as_deref(), Some("d"));
+        std::fs::write(folder.join("chat_template.jinja"), "j").unwrap();
+        assert_eq!(read_chat_template(&folder).await.as_deref(), Some("j"));
+        assert_eq!(
+            template_from_tokenizer_config(br#"{"chat_template": "s"}"#).as_deref(),
+            Some("s")
+        );
+        assert_eq!(read_chat_template(&dir.path().join("none")).await, None);
+    }
+
+    /// Reads a live oMLX server's templates and prints the analysis:
+    /// `PROCYON_OMLX_URL=http://127.0.0.1:8000 cargo test -p fm-application live_omlx -- --ignored --nocapture`
+    #[tokio::test]
+    #[ignore = "needs a running oMLX server in PROCYON_OMLX_URL"]
+    async fn live_omlx_templates() {
+        let Ok(base) = std::env::var("PROCYON_OMLX_URL") else {
+            return;
+        };
+        let transport = ReqwestLlmProbeTransport::new();
+        let request = |model: &str| LlmProbeRequest {
+            url: format!("{base}/v1/chat/completions"),
+            ollama_generation_url: None,
+            model: model.to_owned(),
+            api_key: None,
+            api_key_header: "authorization",
+            headers: BTreeMap::new(),
+            timeout: Duration::from_secs(10),
+            reasoning_switch: ReasoningSwitch::Plain,
+            reasoning_effort: None,
+            ollama_think: OllamaThink::Off,
+            template_switch: None,
+        };
+        let cancel = CancellationToken::new();
+        let models = transport
+            .discover_models(&request("x"), &cancel)
+            .await
+            .unwrap()
+            .unwrap_or_default();
+        for model in models {
+            let template = transport
+                .chat_template(&request(&model), &cancel)
+                .await
+                .unwrap();
+            let analysed = template
+                .as_deref()
+                .and_then(crate::model_thinking::template::analyse);
+            println!(
+                "{model}: template={} -> {:?}",
+                template.is_some(),
+                analysed.map(|entry| (
+                    entry.thinking,
+                    entry.switch,
+                    entry.default_on,
+                    entry.levels
+                ))
+            );
+        }
+    }
+
+    /// How one generation asked to think: its effort and its template switch.
+    type AskedThinking = (Option<&'static str>, Option<(&'static str, bool)>);
+
+    /// Serves a chat template for every model and records how each generation asked to think.
+    struct TemplateTransport {
+        template: Mutex<String>,
+        template_reads: std::sync::atomic::AtomicUsize,
+        attempts: Mutex<Vec<AskedThinking>>,
+    }
+
+    #[async_trait]
+    impl LlmProbeTransport for TemplateTransport {
+        async fn chat_template(
+            &self,
+            _request: &LlmProbeRequest,
+            _cancellation: &CancellationToken,
+        ) -> Result<Option<String>, LlmProfileError> {
+            self.template_reads
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(Some(self.template.lock().unwrap().clone()))
+        }
+
+        async fn discover_models(
+            &self,
+            _request: &LlmProbeRequest,
+            _cancellation: &CancellationToken,
+        ) -> Result<Option<Vec<String>>, LlmProfileError> {
+            Ok(None)
+        }
+
+        async fn stream_chat(
+            &self,
+            _request: &LlmProbeRequest,
+            _cancellation: &CancellationToken,
+        ) -> Result<LlmProbeResponse, LlmProfileError> {
+            Err(LlmProfileError::Transport)
+        }
+
+        async fn generate_chat(
+            &self,
+            _request: &LlmProbeRequest,
+            _generation: &LlmChatGeneration,
+            _cancellation: &CancellationToken,
+        ) -> Result<String, LlmProfileError> {
+            Err(LlmProfileError::Transport)
+        }
+
+        async fn generate_chat_adaptive(
+            &self,
+            request: &LlmProbeRequest,
+            _generation: &LlmChatGeneration,
+            _cancellation: &CancellationToken,
+        ) -> Result<ChatOutcome, LlmProfileError> {
+            self.attempts
+                .lock()
+                .unwrap()
+                .push((request.reasoning_effort, request.template_switch));
+            Ok(ChatOutcome::Generated {
+                text: "fine".into(),
+                reasoning_seen: false,
+            })
+        }
+    }
+
+    /// A Dirk-like template: a switch, and efforts none/low/high only (medium raises).
+    const DIRK_LIKE: &str = "{%- set e = reasoning_effort|default('high') %}{%- if e not in ('none', 'low', 'high') %}{{- raise_exception('no ' ~ e) }}{%- endif %}{%- if enable_thinking is undefined or enable_thinking is true %}[{{ e }}]<think>{%- else %}<think></think>{%- endif %}";
+
+    #[tokio::test]
+    async fn an_omlx_models_template_is_read_once_learned_and_kept_until_it_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let transport = Arc::new(TemplateTransport {
+            template: Mutex::new(DIRK_LIKE.to_owned()),
+            template_reads: std::sync::atomic::AtomicUsize::new(0),
+            attempts: Mutex::new(Vec::new()),
+        });
+        let open = |transport: Arc<TemplateTransport>| {
+            LlmProfileService::new(
+                SettingsStore::new(dir.path()),
+                Arc::new(InMemoryCredentialStore::new()),
+                transport,
+                LlmHostPolicy::desktop(),
+            )
+            .unwrap()
+        };
+        let service = open(transport.clone());
+        let mut omlx = draft(LlmPreset::Omlx, "http://127.0.0.1:8000");
+        // A Qwen3.8 model: the list would send `medium`, which this template refuses.
+        omlx.model = "Dirk-Qwen3.8-27B".into();
+        let profile = service.create(omlx).await.unwrap();
+        let cancel = CancellationToken::new();
+        let ask = |effort| LlmChatGeneration {
+            thinking: ThinkingRequest::Conversation(Some(effort)),
+            ..tiny_generation()
+        };
+        service
+            .generate(profile.id, ask(ThinkingEffort::High), &cancel)
+            .await
+            .unwrap();
+        service
+            .generate(profile.id, ask(ThinkingEffort::Medium), &cancel)
+            .await
+            .unwrap();
+        let reads = |transport: &TemplateTransport| {
+            transport
+                .template_reads
+                .load(std::sync::atomic::Ordering::SeqCst)
+        };
+        assert_eq!(reads(&transport), 1, "once per session");
+        assert_eq!(
+            *transport.attempts.lock().unwrap(),
+            [
+                (Some("high"), Some(("enable_thinking", true))),
+                // No medium in this template: the switch alone, never a refused value.
+                (None, Some(("enable_thinking", true))),
+            ]
+        );
+
+        // Settings shows it came from the template, with an entry for the curated list.
+        service
+            .set_role(
+                LlmRole::Chat,
+                Some(RoleAssignmentInput {
+                    profile_id: profile.id,
+                    model: "Dirk-Qwen3.8-27B".into(),
+                    allow_cloud: false,
+                    thinking: None,
+                }),
+            )
+            .unwrap();
+        let support = service
+            .roles_dto()
+            .unwrap()
+            .chat
+            .unwrap()
+            .thinking_support
+            .unwrap();
+        assert_eq!(
+            support.origin,
+            fm_transport_dto::ThinkingOriginDto::Template
+        );
+        let learned_at = support.learned_at.clone().unwrap();
+        let entry: serde_json::Value = serde_json::from_str(&support.list_entry.unwrap()).unwrap();
+        assert_eq!(entry["match"][0], "dirk-qwen3.8-27b");
+        assert_eq!(entry["levels"]["high"], "high");
+
+        // A new session reads the template again; unchanged, it keeps what was learned.
+        let later = open(transport.clone());
+        later
+            .generate(profile.id, ask(ThinkingEffort::Low), &cancel)
+            .await
+            .unwrap();
+        assert_eq!(reads(&transport), 2);
+        let same = later
+            .roles_dto()
+            .unwrap()
+            .chat
+            .unwrap()
+            .thinking_support
+            .unwrap();
+        assert_eq!(same.learned_at.as_deref(), Some(learned_at.as_str()));
+
+        // A changed template is learned anew.
+        *transport.template.lock().unwrap() = DIRK_LIKE.replace("'high')", "'low')");
+        let after = open(transport.clone());
+        after
+            .generate(profile.id, ask(ThinkingEffort::Low), &cancel)
+            .await
+            .unwrap();
+        let learned = after
+            .learned_thinking
+            .get("http://127.0.0.1:8000", "Dirk-Qwen3.8-27B")
+            .unwrap();
+        assert_eq!(
+            learned.template_sha256,
+            crate::model_thinking::learned::template_hash(&transport.template.lock().unwrap())
         );
     }
 

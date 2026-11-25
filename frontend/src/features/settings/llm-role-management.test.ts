@@ -322,6 +322,7 @@ describe('thinking support line', () => {
         levels: ['low', 'medium', 'high'],
         verified: true,
         source: 'Qwen/Qwen3.8-27B',
+        origin: 'card',
       }),
     ).toBe(
       'Thinking can be turned off; it is on by default. Levels it distinguishes: Low, Medium, High. From the model card of Qwen/Qwen3.8-27B.',
@@ -334,6 +335,7 @@ describe('thinking support line', () => {
         levels: [],
         verified: false,
         source: 'Qwen (family)',
+        origin: 'family',
       }),
     ).toContain(
       'Levels are tried and dropped if the model refuses them. Guessed from its model family',
@@ -346,7 +348,20 @@ describe('thinking support line', () => {
         levels: [],
         verified: true,
         source: 'meta-llama/Llama-3.2-3B-Instruct',
+        origin: 'card',
       }),
     ).toBe('This model does not think. From the model card of meta-llama/Llama-3.2-3B-Instruct.');
+    expect(
+      thinkingSupportText({
+        thinks: true,
+        canTurnOff: true,
+        defaultOn: true,
+        levels: ['low', 'high'],
+        verified: true,
+        source: 'the chat template served with the model',
+        origin: 'template',
+        learnedAt: '2026-11-25T17:00:00Z',
+      }),
+    ).toContain("Read from the model's chat template on this server (2026-11-25).");
   });
 });

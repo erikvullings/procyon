@@ -2112,6 +2112,8 @@ export const fr = {
     supportLevelsTried: 'Les niveaux sont essayés et abandonnés si le modèle les refuse.',
     supportSource: 'D’après la fiche du modèle {source}.',
     supportFamily: 'Déduit de sa famille de modèles ({source}).',
+    supportTemplate: 'Lu dans le modèle de discussion du modèle sur ce serveur ({date}).',
+    copyListEntry: 'Copier comme entrée de liste',
     cloudHintImage:
       'Les mots que vous saisissez sont envoyés à ce point de terminaison cloud, et les images en reviennent. Ne activez cette option que si vous l’acceptez.',
     imageModelHint:
@@ -2127,6 +2129,8 @@ export const fr = {
     connectionsTitle: 'Connexions',
     consentRequired:
       "Autoriser l'usage cloud : confirmez le consentement avant d'enregistrer un point de terminaison cloud.",
+    modelRequired:
+      'Choisissez ou saisissez un modèle. Si la liste reste vide, vérifiez l’adresse : rien n’y a répondu.',
     title: 'Résumés et réponses par IA',
     description:
       "Connectez un modèle pour rédiger des résumés de documents et répondre à des questions à partir de vos fichiers. Enregistrez les connexions sous forme de profils et choisissez-en un par défaut. Un modèle local s'exécute sur votre appareil ; un service cloud reçoit les questions et des extraits. La recherche sémantique fonctionne sans profil.",

@@ -14,6 +14,7 @@ import type {
 } from '../../models';
 import { THINKING_EFFORTS } from '../../models/llm-profile';
 import { canAssignRole, LLM_ROLES, type RoleStatus, roleStatus } from '../../models/llm-roles';
+import { copyText } from '../preview/clipboard';
 import { connectionLabel, errorMessage } from './llm-profile-management';
 
 export interface LlmRoleManagementAttrs {
@@ -53,11 +54,19 @@ export function thinkingSupportText(support: ThinkingSupport): string {
         : t('llmRoles', support.verified ? 'supportNoLevels' : 'supportLevelsTried'),
     );
   }
-  parts.push(
-    t('llmRoles', support.verified ? 'supportSource' : 'supportFamily', {
-      source: support.source,
-    }),
-  );
+  switch (support.origin) {
+    case 'template':
+      parts.push(
+        t('llmRoles', 'supportTemplate', { date: (support.learnedAt ?? '').slice(0, 10) }),
+      );
+      break;
+    case 'card':
+      parts.push(t('llmRoles', 'supportSource', { source: support.source }));
+      break;
+    case 'family':
+      parts.push(t('llmRoles', 'supportFamily', { source: support.source }));
+      break;
+  }
   return parts.join(' ');
 }
 
@@ -334,6 +343,17 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
         : undefined,
       role === 'chat' && savedRole?.thinkingSupport != null
         ? m('p.fm-llm-role-notice', thinkingSupportText(savedRole.thinkingSupport))
+        : undefined,
+      // Read from this server's template: offered as an entry for the curated list (task 0362).
+      role === 'chat' && savedRole?.thinkingSupport?.listEntry != null
+        ? m(
+            'button.btn-flat',
+            {
+              type: 'button',
+              onclick: () => void copyText(savedRole.thinkingSupport?.listEntry ?? ''),
+            },
+            t('llmRoles', 'copyListEntry'),
+          )
         : undefined,
       // Only chat may reach the cloud without the flag; embeddings and images need it turned on.
       role !== 'chat'

@@ -30867,6 +30867,15 @@
           "high"
         ]
       },
+      "ThinkingOriginDto": {
+        "type": "string",
+        "description": "Where what is known about a model's thinking comes from (task 0362).",
+        "enum": [
+          "template",
+          "card",
+          "family"
+        ]
+      },
       "ThinkingSupportDto": {
         "type": "object",
         "description": "What a model supports for thinking, from its chat template and model card (task 0361).",
@@ -30876,7 +30885,8 @@
           "defaultOn",
           "levels",
           "verified",
-          "source"
+          "source",
+          "origin"
         ],
         "properties": {
           "canTurnOff": {
@@ -30887,6 +30897,13 @@
             "type": "boolean",
             "description": "Whether it thinks when nothing is asked."
           },
+          "learnedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When it was read from the template, RFC 3339 (`template` origin only)."
+          },
           "levels": {
             "type": "array",
             "items": {
@@ -30894,12 +30911,23 @@
             },
             "description": "The efforts that change how much it thinks; empty when it only switches on and off."
           },
+          "listEntry": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The entry as it would go into the curated list, JSON (`template` origin only)."
+          },
           "note": {
             "type": [
               "string",
               "null"
             ],
             "description": "What else the card says about thinking."
+          },
+          "origin": {
+            "$ref": "#/components/schemas/ThinkingOriginDto",
+            "description": "Where this comes from."
           },
           "source": {
             "type": "string",

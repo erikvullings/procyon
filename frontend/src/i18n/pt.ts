@@ -2103,6 +2103,8 @@ export const pt = {
     supportLevelsTried: 'Os níveis são tentados e omitidos se o modelo os recusar.',
     supportSource: 'Segundo o cartão do modelo {source}.',
     supportFamily: 'Deduzido da família do modelo ({source}).',
+    supportTemplate: 'Lido do modelo de chat do modelo neste servidor ({date}).',
+    copyListEntry: 'Copiar como entrada de lista',
     cloudHintImage:
       'As palavras que escreve são enviadas para este endpoint na nuvem e as imagens vêm dele. Ative apenas se aceitar isso.',
     imageModelHint:
@@ -2118,6 +2120,8 @@ export const pt = {
     connectionsTitle: 'Ligações',
     consentRequired:
       'Permitir uso na nuvem: confirme o consentimento antes de guardar um endpoint na nuvem.',
+    modelRequired:
+      'Escolha ou escreva um modelo. Se a lista continuar vazia, verifique o endereço: nada respondeu aí.',
     title: 'Resumos e respostas de IA',
     description:
       'Configure os fornecedores uma vez e escolha uma ligação e um modelo para cada tarefa.',
