@@ -196,6 +196,34 @@ pub struct TerminalAssistReplyDto {
     /// with an `editDecision`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub edit_request: Option<TerminalEditRequestDto>,
+    /// What `run_command` does, for the approval (task 0364).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_details: Option<TerminalCommandDetailsDto>,
+}
+
+/// What a command the assistant asks to run does (task 0364): the model's explanation and the
+/// scripts it runs from the working folder, so the terminal can check them itself. A description
+/// independent of the conversation is asked for separately.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalCommandDetailsDto {
+    /// One or two sentences from the model: what the command does and why.
+    pub explanation: String,
+    /// Script files the command runs, read from the working folder.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scripts: Vec<TerminalScriptDto>,
+}
+
+/// A script file a command runs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalScriptDto {
+    /// The path as the command names it.
+    pub path: String,
+    /// Its text, as far as it was read.
+    pub text: String,
+    /// Whether the file goes on past `text`.
+    pub truncated: bool,
 }
 
 /// Something shown while an `ask` is answered, so the terminal can write it as it happens.

@@ -1,6 +1,6 @@
 # 0364 Command approvals that explain what the command does
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: frontend, backend, agent
 Depends on: none
@@ -50,3 +50,34 @@ approval panel shows only the command line, and `run_command` takes only `comman
 
 ## Agent Notes
 - 2026-11-25 claude: planned.
+- 2026-11-25 claude: done.
+  - `run_command` requires `explanation` (fm-agent `CommandRequest.explanation`, at most 600
+    characters; a missing or blank one gets a guiding error). Shown as "The assistant's reason".
+  - Maintainer (mid-task): what the command does must come from a fresh call that is not
+    influenced by the conversation. So the description is a separate model call
+    (`terminal_assist::describe_command`, Tauri `terminal_assist_describe_command`) that sees only
+    the command and the scripts it runs, never the conversation or the assistant's explanation;
+    the terminal asks for it only when it shows an approval, so commands that run at once cost no
+    call. It replaces the planned "long scripts only" description.
+  - Backend `terminal_assist/command_details.rs`: finds the script files a line runs (after an
+    interpreter, or run directly as `./x.sh`; not `-c`/`-m` code) and reads them from the working
+    folder through the folder tools (sandboxed, at most 3, 32 KiB each, truncation flagged);
+    `TerminalAssistReplyDto.run_details { explanation, scripts }`.
+  - Frontend `command-effects.ts` (shares the tokenizer exported from `dangerous-command.ts`):
+    `effectsOf` (programs, writes, deletes, network, privilege, scripts) and `scanScript` for
+    Python and Node (writes, deletes, network, subprocesses, dynamic code, paths outside the folder
+    or the environment, modules outside a read-only list). `isReadOnlyScriptCommand`: one
+    `python`/`node` command, no pipe or redirect, plain arguments inside the folder, inline code or
+    a fully read script that only reads → runs without asking under the existing read-only
+    setting. Anything it cannot read in full asks.
+  - Approval panel: the assistant's reason, Procyon's effect lines, the separate description
+    (with a "asking…" line until it arrives), and a long command or one that runs scripts folded
+    under "Show command". i18n in 8 locales; `terminal.scriptEffects` allowlisted (placeholders
+    only).
+  - Not done: scripts run through other programs (`make`, `npm run`) are not read; shell scripts
+    run as files are listed but not scanned (they ask). Not tried in the desktop app: the terminal
+    exists only there, so the browser preview cannot show it.
+  - Verified: fm-agent 111, terminal_assist 94 (new: details with script, description call sees
+    only the command), command-effects 8 and drawer 2 new; all Rust (1975) and frontend (4228)
+    tests pass; `pnpm lint` clean.
+

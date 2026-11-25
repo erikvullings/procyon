@@ -4,6 +4,7 @@
 //! proposed, and runs after the person approves it. Nothing is saved to disk.
 
 mod agent_tools;
+mod command_details;
 mod commands;
 mod context;
 mod edit;
@@ -237,14 +238,19 @@ pub(crate) async fn reply_streaming(
         }
     }
     .ok_or(ChatFailureDto::Empty)?;
-    Ok(TerminalAssistReplyDto {
-        text,
-        steps: Vec::new(),
-        run_command: None,
-        note_proposal: None,
-        write_request: None,
-        edit_request: None,
-    })
+    Ok(stopped(text, Vec::new()))
+}
+
+/// What `command` does, described by a model call that sees only the command and the scripts it
+/// runs from `working_directory`, never a conversation (task 0364). `None` when it fails.
+pub(crate) async fn describe_command(
+    generator: &impl ChatGenerator,
+    providers: &ProviderRegistry,
+    command: &str,
+    working_directory: &str,
+) -> Option<String> {
+    let side_calls = ModelSideCalls::new(generator, CancellationToken::new()).await;
+    command_details::describe_command(command, providers, working_directory, &side_calls).await
 }
 
 /// The thinking effort the session chose (`/effort`), or the chat role's default.
@@ -523,8 +529,12 @@ async fn ask_turn(
                 });
             }
             TerminalInterrupt::Command(command) => {
+                // What the command does, for the approval (task 0364).
+                let details =
+                    command_details::details(&command, providers, &request.working_directory).await;
                 return Ok(TerminalAssistReplyDto {
                     run_command: Some(command.command),
+                    run_details: Some(details),
                     ..stopped(String::new(), steps)
                 });
             }
@@ -734,6 +744,7 @@ fn stopped(text: String, steps: Vec<String>) -> TerminalAssistReplyDto {
         note_proposal: None,
         write_request: None,
         edit_request: None,
+        run_details: None,
     }
 }
 
@@ -1286,7 +1297,7 @@ mod tests {
     async fn a_command_waits_for_approval_and_its_result_continues_the_turn() {
         let dir = tempfile::tempdir().unwrap();
         let fake = scripted(&[
-            r#"TOOL {"tool":"run_command","command":"cargo test"}"#,
+            r#"TOOL {"tool":"run_command","command":"cargo test","explanation":"Runs the tests."}"#,
             "The tests pass.",
         ]);
         let sessions = Sessions::default();
@@ -1318,10 +1329,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_command_comes_with_its_explanation_and_the_script_it_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        let script = "print(1)\n";
+        std::fs::write(dir.path().join("count.py"), script).unwrap();
+        let fake = scripted(&[
+            r#"TOOL {"tool":"run_command","command":"python3 count.py","explanation":"Prints one."}"#,
+            // The separate description call.
+            "It prints the number 1 and touches no files.",
+        ]);
+        let sessions = Sessions::default();
+        let request = ask_request("t1", "count the secret things", dir.path());
+        let working_directory = request.working_directory.clone();
+        let reply = ask_in(&fake, &sessions, request).await.unwrap();
+        let details = reply.run_details.unwrap();
+        assert_eq!(details.explanation, "Prints one.");
+        assert_eq!(details.scripts.len(), 1);
+        assert_eq!(details.scripts[0].path, "count.py");
+        assert_eq!(details.scripts[0].text, script);
+        assert!(!details.scripts[0].truncated);
+
+        // What the command does comes from a call that sees only the command and its script:
+        // not the question, the conversation or the assistant's own explanation.
+        let description = describe_command(
+            &fake,
+            &ProviderRegistry::new(),
+            "python3 count.py",
+            &working_directory,
+        )
+        .await;
+        assert_eq!(
+            description.as_deref(),
+            Some("It prints the number 1 and touches no files.")
+        );
+        let seen = fake.seen.lock().unwrap();
+        let call = &seen.last().unwrap().1;
+        let sent = format!("{}{}", call.system_prompt, call.user_prompt);
+        assert!(
+            sent.contains("python3 count.py") && sent.contains("print(1)"),
+            "{sent}"
+        );
+        assert!(!sent.contains("secret things"), "{sent}");
+        assert!(!sent.contains("Prints one."), "{sent}");
+        assert!(call.followups.is_empty());
+    }
+
+    #[tokio::test]
     async fn a_message_sent_while_the_assistant_works_is_answered_before_it_stops() {
         let dir = tempfile::tempdir().unwrap();
         let fake = scripted(&[
-            r#"TOOL {"tool":"run_command","command":"cargo test"}"#,
+            r#"TOOL {"tool":"run_command","command":"cargo test","explanation":"Runs the tests."}"#,
             "The tests pass.",
             "The tests pass, and the build is clean too.",
         ]);
@@ -1424,7 +1481,9 @@ mod tests {
     #[tokio::test]
     async fn declining_a_command_stops_without_asking_the_model_again() {
         let dir = tempfile::tempdir().unwrap();
-        let fake = scripted(&[r#"TOOL {"tool":"run_command","command":"rm -rf build"}"#]);
+        let fake = scripted(&[
+            r#"TOOL {"tool":"run_command","command":"rm -rf build","explanation":"Deletes the build folder."}"#,
+        ]);
         let sessions = Sessions::default();
         ask_in(&fake, &sessions, ask_request("t1", "clean", dir.path()))
             .await

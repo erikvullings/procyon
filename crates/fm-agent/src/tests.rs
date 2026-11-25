@@ -204,12 +204,20 @@ async fn the_built_in_tools_check_their_arguments_before_any_access() {
             "pattern must not be empty",
         ),
         (
-            r#"TOOL {"tool":"run_command","command":"  "}"#,
+            r#"TOOL {"tool":"run_command","command":"  ","explanation":"x"}"#,
             "one non-empty line",
         ),
         (
-            r#"TOOL {"tool":"run_command","command":"ls\nrm -rf x"}"#,
+            r#"TOOL {"tool":"run_command","command":"ls\nrm -rf x","explanation":"x"}"#,
             "one non-empty line",
+        ),
+        (
+            r#"TOOL {"tool":"run_command","command":"ls","explanation":" "}"#,
+            "give `explanation`",
+        ),
+        (
+            r#"TOOL {"tool":"run_command","command":"ls"}"#,
+            "invalid arguments for run_command",
         ),
         (
             r#"TOOL {"tool":"read_file"}"#,
@@ -236,9 +244,13 @@ async fn valid_calls_without_access_are_explained_not_dropped() {
 #[tokio::test]
 async fn run_command_interrupts_with_the_trimmed_line() {
     assert_eq!(
-        core(r#"TOOL {"tool":"run_command","command":" cargo test "}"#).await,
+        core(
+            r#"TOOL {"tool":"run_command","command":" cargo test ","explanation":" Runs the tests. "}"#
+        )
+        .await,
         ToolOutcome::Interrupt(Interrupt::Command(CommandRequest {
-            command: "cargo test".into()
+            command: "cargo test".into(),
+            explanation: "Runs the tests.".into(),
         }))
     );
 }

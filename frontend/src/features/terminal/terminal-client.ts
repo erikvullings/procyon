@@ -49,6 +49,11 @@ export interface TerminalClient {
   assistSaved?(): Promise<readonly TerminalSavedSession[]>;
   /** Continues a saved session in this tab's session; `null` when it is gone. */
   assistResume?(savedId: string, sessionId: string): Promise<TerminalSavedSession | null>;
+  /**
+   * What `command` does, from a model call that sees only the command and the scripts it runs in
+   * `workingDirectory`, never the conversation (task 0364); `null` when it failed.
+   */
+  assistDescribe?(command: string, workingDirectory: string): Promise<string | null>;
   /** Deletes a saved session (`/resume delete`, task 0359); `false` when it was not saved. */
   assistDeleteSaved?(savedId: string): Promise<boolean>;
   /** The person's questions in a session, oldest first (`/fork`, task 0359). */
@@ -96,6 +101,8 @@ export const tauriTerminalClient: TerminalClient = {
   assistResume: (savedId, sessionId) =>
     invoke<TerminalSavedSession | null>('terminal_assist_resume', { savedId, sessionId }),
   assistDeleteSaved: (savedId) => invoke<boolean>('terminal_assist_delete_saved', { savedId }),
+  assistDescribe: (command, workingDirectory) =>
+    invoke<string | null>('terminal_assist_describe_command', { command, workingDirectory }),
   assistQuestions: (sessionId) => invoke<string[]>('terminal_assist_questions', { sessionId }),
   assistFork: (sessionId, question, into) =>
     invoke<string | null>('terminal_assist_fork', { sessionId, question, into }),

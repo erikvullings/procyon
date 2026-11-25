@@ -3637,6 +3637,22 @@ impl FileManagerService {
         self.terminal_sessions.fork(session_id, question, into)
     }
 
+    /// What a command the assistant asks to run does, described by a model call that sees only
+    /// the command and the scripts it runs, not the conversation (task 0364).
+    pub async fn terminal_assist_describe_command(
+        &self,
+        command: &str,
+        working_directory: &str,
+    ) -> Option<String> {
+        crate::terminal_assist::describe_command(
+            &self.llm_profiles,
+            &self.providers,
+            command,
+            working_directory,
+        )
+        .await
+    }
+
     /// Gives a terminal tab's running request a message the person sent meanwhile; the model sees
     /// it after the current tool calls (task 0355). `false` when it was not queued.
     pub fn terminal_assist_steer(&self, session_id: &str, text: &str) -> bool {

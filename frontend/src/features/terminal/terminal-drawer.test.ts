@@ -1248,6 +1248,78 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     expect(sentAt(1)?.toolResult).toMatchObject({ command: 'grep -n foo src | head -5' });
   });
 
+  it('runs a python script that only reads at once, as it does ls', async () => {
+    assist.mockResolvedValueOnce({
+      text: '',
+      runCommand: 'python3 count.py',
+      runDetails: {
+        explanation: 'Counts the JSON files.',
+        scripts: [
+          {
+            path: 'count.py',
+            text: 'from pathlib import Path\nprint(len(list(Path(".").glob("*.json"))))',
+            truncated: false,
+          },
+        ],
+      },
+    });
+    await mount();
+    await markPrompt();
+    ask('# how many json files?');
+    await vi.waitFor(() =>
+      expect(write).toHaveBeenCalledWith(
+        'session-1',
+        new TextEncoder().encode('\x15 python3 count.py\r'),
+      ),
+    );
+    expect(button('Run')).toBeUndefined();
+  });
+
+  it('asks for a script that deletes, saying why and what Procyon found', async () => {
+    assist.mockResolvedValueOnce({
+      text: '',
+      runCommand: 'python3 clean.py',
+      runDetails: {
+        explanation: 'Removes the cache folders.',
+        scripts: [
+          { path: 'clean.py', text: "import shutil\nshutil.rmtree('cache')", truncated: false },
+        ],
+      },
+    });
+    let answer: (text: string) => void = () => undefined;
+    const assistDescribe = vi.fn(
+      (_command: string, _folder: string) =>
+        new Promise<string | null>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    await mountWith({ assistDescribe });
+    await markPrompt();
+    ask('# clean the caches');
+    await vi.waitFor(() => expect(button('Run')).toBeDefined());
+    let text = root.textContent ?? '';
+    expect(text).toContain("The assistant's reason: Removes the cache folders.");
+    expect(text).toContain('clean.py: deletes files');
+    // The description comes from a call that is given only the command and its folder.
+    expect(assistDescribe).toHaveBeenCalledWith('python3 clean.py', 'file:///home/repo');
+    expect(text).toContain('Asking a separate model call what the command does');
+    answer('It deletes the cache folder.');
+    await vi.waitFor(() => {
+      text = root.textContent ?? '';
+      expect(text).toContain(
+        'What it does, read by a separate model call that saw only the command: It deletes the cache folder.',
+      );
+    });
+    // The command itself is folded below what it does.
+    expect(root.querySelector('details.fm-terminal-assist-folded summary')?.textContent).toBe(
+      'Show command',
+    );
+    expect(write).not.toHaveBeenCalledWith(
+      'session-1',
+      new TextEncoder().encode('\x15 python3 clean.py\r'),
+    );
+  });
+
   it('in auto-approve mode runs a command at once, but still asks for a dangerous one', async () => {
     assist
       .mockResolvedValueOnce({ text: '', runCommand: 'rm -rf build' })

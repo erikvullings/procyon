@@ -1,4 +1,5 @@
 import type { NoteProposal, ThinkingEffort } from '../../models';
+import type { ScriptText } from './command-effects';
 
 /**
  * Pure helpers for terminal assistance (task 0333, phase 1). The drawer gathers the transcript
@@ -107,6 +108,16 @@ export interface TerminalAssistReply {
   readonly writeRequest?: TerminalWriteRequest;
   /** A change to a file; nothing is written until the person answers (task 0352). */
   readonly editRequest?: TerminalEditRequest;
+  /** What `runCommand` does, for the approval (task 0364). */
+  readonly runDetails?: TerminalCommandDetails;
+}
+
+/** What a command the assistant asks to run does (task 0364). */
+export interface TerminalCommandDetails {
+  /** The model's explanation: what the command does and why. */
+  readonly explanation: string;
+  /** Script files the command runs, read from the working folder. */
+  readonly scripts?: readonly ScriptText[];
 }
 
 /**

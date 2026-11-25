@@ -83,7 +83,7 @@ const MOUNT_PARENTS = ['/Volumes', '/mnt', '/media', '/Users', '/home'];
 const WINDOWS_SYSTEM = ['windows', 'program files', 'program files (x86)', 'programdata'];
 
 /** Programs whose every operand is a path they delete or move. */
-const REMOVERS = new Set([
+export const REMOVERS = new Set([
   'rm',
   'rmdir',
   'unlink',
@@ -129,7 +129,7 @@ const POWER = new Set([
   'stop-computer',
   'restart-computer',
 ]);
-const PRIVILEGE = new Set(['sudo', 'doas', 'su', 'pkexec', 'runas']);
+export const PRIVILEGE = new Set(['sudo', 'doas', 'su', 'pkexec', 'runas']);
 /** Programs that run another program given as their arguments. */
 const WRAPPERS = new Set([
   'command',
@@ -142,7 +142,7 @@ const WRAPPERS = new Set([
   'timeout',
   'caffeinate',
 ]);
-const DOWNLOADERS = new Set([
+export const DOWNLOADERS = new Set([
   'curl',
   'wget',
   'fetch',
@@ -168,9 +168,9 @@ const INTERPRETERS = new Set([
   'iex',
   'invoke-expression',
 ]);
-const SHELLS_WITH_C = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish']);
+export const SHELLS_WITH_C = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish']);
 /** Redirection targets that write nowhere. */
-const HARMLESS_DEVICES = new Set([
+export const HARMLESS_DEVICES = new Set([
   '/dev/null',
   '/dev/stdout',
   '/dev/stderr',
@@ -179,7 +179,7 @@ const HARMLESS_DEVICES = new Set([
 ]);
 
 /** One shell word: its text, and whether it held something only the shell can resolve. */
-interface Word {
+export interface Word {
   readonly text: string;
   /** A variable other than `$HOME`, a command substitution, or a backtick. */
   readonly dynamic: boolean;
@@ -188,7 +188,7 @@ interface Word {
 }
 
 /** A simple command, with the redirections written in it. */
-interface Simple {
+export interface Simple {
   readonly words: Word[];
   readonly redirects: Word[];
   /** Whether its output is piped into the next command. */
@@ -201,7 +201,7 @@ const FORK_BOMB = /(\w+|:)\s*\(\s*\)\s*\{[^}]*\1\s*\|\s*\1\s*&[^}]*\}\s*;?\s*\1/
  * Splits `line` into simple commands, or `undefined` when a quote is left open. `$HOME`,
  * `${HOME}` and a leading `~` become `home` when it is known.
  */
-function parse(line: string, home: string | undefined): Simple[] | undefined {
+export function parse(line: string, home: string | undefined): Simple[] | undefined {
   const commands: Simple[] = [];
   let words: Word[] = [];
   let redirects: Word[] = [];
@@ -308,7 +308,7 @@ function parse(line: string, home: string | undefined): Simple[] | undefined {
 }
 
 /** `path` with `.` and `..` resolved, no trailing `/`, `\` read as `/` on a Windows drive. */
-function normalize(path: string): string {
+export function normalize(path: string): string {
   const windows = /^[A-Za-z]:[\\/]?/.exec(path);
   const unified = windows === null ? path : path.replace(/\\/g, '/');
   const drive = windows === null ? '' : unified.slice(0, 2);
@@ -409,13 +409,13 @@ function targetDanger(
 }
 
 const lower = (word: Word | undefined): string => (word?.text ?? '').toLowerCase();
-const programName = (word: Word | undefined): string => {
+export const programName = (word: Word | undefined): string => {
   const name = lower(word);
   return name.slice(name.lastIndexOf('/') + 1).replace(/\.exe$/, '');
 };
 
 /** The words after a wrapper such as `nice -n 5` or `env FOO=1`, starting at the real program. */
-function unwrap(words: Word[]): Word[] {
+export function unwrap(words: Word[]): Word[] {
   let index = 0;
   while (index < words.length) {
     const word = words[index];
@@ -436,7 +436,7 @@ function unwrap(words: Word[]): Word[] {
 }
 
 /** Splits arguments into options and operands; everything after `--` is an operand. */
-function operandsOf(args: Word[]): { options: string[]; operands: Word[] } {
+export function operandsOf(args: Word[]): { options: string[]; operands: Word[] } {
   const options: string[] = [];
   const operands: Word[] = [];
   let ended = false;

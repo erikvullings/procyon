@@ -2995,6 +2995,19 @@ pub(crate) fn terminal_assist_close(state: State<'_, AppState>, session_id: Stri
     state.service.terminal_assist_close(&session_id);
 }
 
+/// What a command the assistant asks to run does, described without the conversation (0364).
+#[tauri::command]
+pub(crate) async fn terminal_assist_describe_command(
+    state: State<'_, AppState>,
+    command: String,
+    working_directory: String,
+) -> Result<Option<String>, ()> {
+    Ok(state
+        .service
+        .terminal_assist_describe_command(&command, &working_directory)
+        .await)
+}
+
 /// Deletes a saved terminal assistant session (task 0359).
 #[tauri::command]
 pub(crate) fn terminal_assist_delete_saved(state: State<'_, AppState>, saved_id: String) -> bool {

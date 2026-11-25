@@ -138,12 +138,20 @@ impl<I: Send + 'static> TypedTool<I> for Grep {
 pub struct CommandRequest {
     /// The one line to run, trimmed.
     pub command: String,
+    /// What the command does and why, in the person's terms (task 0364).
+    pub explanation: String,
 }
+
+/// Longest explanation kept, in characters.
+const MAX_EXPLANATION_CHARS: usize = 600;
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub(crate) struct RunCommandArgs {
     /// One shell command line.
     command: String,
+    /// One or two sentences for the person: what the command does and why, naming what it
+    /// reads, changes, deletes or downloads.
+    explanation: String,
 }
 
 /// Asks the person to run one command; the host does the asking.
@@ -161,7 +169,9 @@ impl<I: From<CommandRequest> + Send + 'static> TypedTool<I> for RunCommand {
         "Asks the person to run a command in their terminal. They may decline, and the result \
          returns with its exit status and output. Use it only for what your other tools cannot \
          do: never to list, find, read, convert, summarise or create files, and never write a \
-         script (python, node, shell) for such work; compare file names yourself."
+         script (python, node, shell) for such work; compare file names yourself. Always give \
+         `explanation`: one or two plain sentences on what the command does and why, naming \
+         what it reads, changes, deletes or downloads."
     }
 
     async fn run_typed(&self, _ctx: &ToolContext<'_>, args: RunCommandArgs) -> ToolOutcome<I> {
@@ -172,8 +182,18 @@ impl<I: From<CommandRequest> + Send + 'static> TypedTool<I> for RunCommand {
                 "the command must be one non-empty line without control characters.",
             );
         }
+        let explanation = args.explanation.trim();
+        if explanation.is_empty() {
+            return ToolOutcome::error(
+                "Run command",
+                "give `explanation`: one or two sentences on what the command does and why, \
+                 naming what it reads, changes, deletes or downloads. The person sees it before \
+                 deciding.",
+            );
+        }
         ToolOutcome::Interrupt(I::from(CommandRequest {
             command: args.command.trim().to_owned(),
+            explanation: explanation.chars().take(MAX_EXPLANATION_CHARS).collect(),
         }))
     }
 }

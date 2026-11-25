@@ -32,6 +32,12 @@ import {
   stepsAnsi,
 } from './answer-ansi';
 import { type BlockTracker, type CommandBlock, createBlockTracker } from './block-tracker';
+import {
+  type CommandEffects,
+  effectsOf,
+  isReadOnlyScriptCommand,
+  scriptReadsOnly,
+} from './command-effects';
 import { type CommandSite, type DangerKind, dangerOf } from './dangerous-command';
 import {
   caretOnFirstLine,
@@ -74,6 +80,7 @@ import {
   type TerminalAssistEvent,
   type TerminalAssistReply,
   type TerminalAssistSource,
+  type TerminalCommandDetails,
   type TerminalSavedSession,
   type TerminalToolResult,
   type TerminalWriteDecision,
@@ -226,6 +233,60 @@ function diffView(diff: string): m.Children {
       return m(`span${kind}`, `${line}\n`);
     }),
   );
+}
+
+/** A command longer than this is folded below its explanation. */
+const LONG_COMMAND_CHARS = 120;
+
+/** What Procyon found a command does, one line per kind of effect (task 0364). */
+export function effectLines(effects: CommandEffects): string[] {
+  if (!effects.readable) return [t('terminal', 'effectsUnreadable')];
+  const lines: string[] = [];
+  if (effects.programs.length > 0) {
+    lines.push(t('terminal', 'effectsRuns', { programs: effects.programs.join(', ') }));
+  }
+  if (effects.privilege) lines.push(t('terminal', 'effectsPrivilege'));
+  if (effects.deletes.length > 0) {
+    lines.push(t('terminal', 'effectsDeletes', { paths: effects.deletes.join(', ') }));
+  }
+  if (effects.writes.length > 0) {
+    lines.push(t('terminal', 'effectsWrites', { paths: effects.writes.join(', ') }));
+  }
+  if (effects.network) lines.push(t('terminal', 'effectsNetwork'));
+  for (const script of effects.scripts) {
+    const name =
+      script.path === undefined
+        ? t('terminal', 'scriptInline', {
+            language: script.language === 'python' ? 'Python' : 'Node',
+          })
+        : script.path;
+    if (scriptReadsOnly(script)) {
+      lines.push(t('terminal', 'scriptReadOnly', { name }));
+      continue;
+    }
+    const parts: string[] = [];
+    if (!script.known) parts.push(t('terminal', 'scriptUnknown'));
+    if (script.dynamicCode) parts.push(t('terminal', 'scriptDynamic'));
+    if (script.deletes) parts.push(t('terminal', 'scriptDeletes'));
+    if (script.writes) parts.push(t('terminal', 'scriptWrites'));
+    if (script.network) parts.push(t('terminal', 'scriptNetwork'));
+    if (script.subprocess) parts.push(t('terminal', 'scriptSubprocess'));
+    if (script.outsideFolder) parts.push(t('terminal', 'scriptOutside'));
+    if (script.modules.length > 0) {
+      parts.push(t('terminal', 'scriptModules', { modules: script.modules.join(', ') }));
+    }
+    lines.push(t('terminal', 'scriptEffects', { name, effects: parts.join('; ') }));
+  }
+  if (
+    effects.deletes.length === 0 &&
+    effects.writes.length === 0 &&
+    !effects.network &&
+    !effects.privilege &&
+    effects.scripts.length === 0
+  ) {
+    lines.push(t('terminal', 'effectsNone'));
+  }
+  return lines;
 }
 
 /** Why a command still asks in auto-approve mode, in words. */
@@ -575,6 +636,14 @@ type AssistPanel =
       readonly command: string;
       /** Why the command asks although auto-approve is on. */
       readonly danger?: DangerKind;
+      /** The model's explanation and the scripts it runs (task 0364). */
+      readonly details?: TerminalCommandDetails;
+      /** What Procyon found the command does. */
+      readonly effects?: CommandEffects;
+      /** What it does, from a model call that saw only the command; absent until it answers. */
+      readonly description?: string;
+      /** Whether that call is still running. */
+      readonly describing?: boolean;
     }
   | { readonly status: 'running'; readonly tabKey: string; readonly command: string }
   | {
@@ -846,8 +915,13 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       // A read-only command runs at once, and in auto-approve mode any command that is not very
       // dangerous, unless the person has started typing meanwhile.
       const free = live.markSeen && live.typed.known && live.typed.text === '';
-      const danger = live.autoApprove ? dangerOf(command, commandSite(live)) : undefined;
-      const readOnly = currentAttrs?.autoRunReadOnly !== false && isReadOnlyCommand(command);
+      const site = commandSite(live);
+      const danger = live.autoApprove ? dangerOf(command, site) : undefined;
+      const scripts = reply.runDetails?.scripts ?? [];
+      // A python or node command whose code only reads is as harmless as `ls` (task 0364).
+      const readOnly =
+        currentAttrs?.autoRunReadOnly !== false &&
+        (isReadOnlyCommand(command) || isReadOnlyScriptCommand(command, site, scripts));
       if (free && (readOnly || (live.autoApprove && danger === undefined))) {
         autoRun = command;
       } else {
@@ -856,7 +930,11 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           tabKey: live.key,
           command,
           ...(danger === undefined ? {} : { danger }),
+          ...(reply.runDetails === undefined ? {} : { details: reply.runDetails }),
+          effects: effectsOf(command, site, scripts),
+          ...(currentAttrs?.client.assistDescribe === undefined ? {} : { describing: true }),
         };
+        describeCommand(live, command);
       }
     } else {
       if (!streamed) text += renderAnswerAnsi(reply.text, live.terminal.cols);
@@ -936,6 +1014,26 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     }
     live.terminal.write('\r\x1b[2K', () => releasePrompt(live));
     m.redraw();
+  }
+
+  /**
+   * Asks a separate model call, which sees only the command and its scripts, what the command
+   * waiting for approval does, and shows the answer when it comes (task 0364).
+   */
+  function describeCommand(live: LiveTerminal, command: string): void {
+    const describe = currentAttrs?.client.assistDescribe;
+    const folder = currentAttrs?.location?.uri;
+    if (describe === undefined || folder === undefined) return;
+    const update = (description: string | null) => {
+      const shown = panel;
+      if (shown?.status !== 'approve' || shown.tabKey !== live.key || shown.command !== command) {
+        return;
+      }
+      const { describing: _done, ...rest } = shown;
+      panel = description === null ? rest : { ...rest, description };
+      m.redraw();
+    };
+    describe(command, folder).then(update, () => update(null));
   }
 
   /** Runs the approved command in the terminal; its block goes back to the assistant. */
@@ -2440,30 +2538,65 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         ]);
       case 'approve': {
         const canRun = live.markSeen;
-        return m('.fm-terminal-assist-row', [
-          command(shown.command),
-          // The command and its Run / Decline say what is asked; only the exception needs words.
-          canRun
+        // A long command, or one that runs scripts, is folded below what it does.
+        const folded =
+          shown.details !== undefined &&
+          (shown.command.length > LONG_COMMAND_CHARS || (shown.effects?.scripts.length ?? 0) > 0);
+        return m('.fm-terminal-assist-approval', [
+          shown.details === undefined
             ? undefined
-            : m('span.fm-terminal-assist-status', t('terminal', 'assistNeedsBlocks')),
-          shown.danger === undefined
-            ? undefined
-            : m(
-                'span.fm-terminal-assist-status.fm-terminal-assist-danger',
-                t('terminal', 'autoApproveAsks', { reason: dangerText(shown.danger) }),
+            : m('.fm-terminal-assist-explanation', [
+                m(
+                  'p.fm-terminal-assist-why',
+                  t('terminal', 'commandReason', { text: shown.details.explanation }),
+                ),
+                shown.effects === undefined
+                  ? undefined
+                  : m(
+                      'ul.fm-terminal-assist-effects',
+                      { 'aria-label': t('terminal', 'effectsTitle') },
+                      effectLines(shown.effects).map((line) => m('li', line)),
+                    ),
+                shown.description === undefined
+                  ? shown.describing === true
+                    ? m('p.fm-terminal-assist-description', t('terminal', 'commandDescribing'))
+                    : undefined
+                  : m(
+                      'p.fm-terminal-assist-description',
+                      t('terminal', 'commandDescribed', { text: shown.description }),
+                    ),
+              ]),
+          folded
+            ? m('details.fm-terminal-assist-folded', [
+                m('summary', t('terminal', 'commandShow')),
+                command(shown.command),
+              ])
+            : undefined,
+          m('.fm-terminal-assist-row', [
+            folded ? undefined : command(shown.command),
+            // The command and its Run / Decline say what is asked; only the exception needs words.
+            canRun
+              ? undefined
+              : m('span.fm-terminal-assist-status', t('terminal', 'assistNeedsBlocks')),
+            shown.danger === undefined
+              ? undefined
+              : m(
+                  'span.fm-terminal-assist-status.fm-terminal-assist-danger',
+                  t('terminal', 'autoApproveAsks', { reason: dangerText(shown.danger) }),
+                ),
+            m('.fm-terminal-assist-buttons', [
+              shortcutButton(
+                canRun ? t('terminal', 'assistRun') : t('terminal', 'assistInsert'),
+                'Enter',
+                () => {
+                  if (canRun) runApproved(live, shown.command);
+                  else insertCommand(live, shown.command);
+                },
               ),
-          m('.fm-terminal-assist-buttons', [
-            shortcutButton(
-              canRun ? t('terminal', 'assistRun') : t('terminal', 'assistInsert'),
-              'Enter',
-              () => {
-                if (canRun) runApproved(live, shown.command);
-                else insertCommand(live, shown.command);
-              },
-            ),
-            shortcutButton(t('terminal', 'assistDecline'), 'Ctrl+C', () =>
-              declineApproved(live, shown.command),
-            ),
+              shortcutButton(t('terminal', 'assistDecline'), 'Ctrl+C', () =>
+                declineApproved(live, shown.command),
+              ),
+            ]),
           ]),
         ]);
       }

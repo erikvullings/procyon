@@ -229,6 +229,8 @@ export const ENGLISH_IDENTICAL_ALLOWLIST: Readonly<Record<string, Allowlisted>> 
   'settings.terminal': ['nl', 'de', 'fr', 'es', 'pt', 'pl'],
   // "Auto" is the short label of the auto-approve toggle in every language.
   'terminal.autoApprove': 'all',
+  // Only placeholders and punctuation: the same in every language.
+  'terminal.scriptEffects': ['nl', 'de', 'es', 'it', 'pt', 'pl'],
   'settings.updateLater': ['nl'],
   'settings.updates': ['nl'],
   'shell.aboutVersion': ['de', 'fr'],
