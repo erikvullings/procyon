@@ -910,7 +910,7 @@ mod tests {
     struct FakeGenerator {
         outcome: Outcome,
         /// Answers handed out first, one per call, before `outcome` applies.
-        script: StdMutex<VecDeque<&'static str>>,
+        script: StdMutex<VecDeque<String>>,
         seen: StdMutex<Vec<(LlmRole, LlmChatGeneration)>>,
         /// Whether the endpoint takes tools natively.
         native: bool,
@@ -936,7 +936,7 @@ mod tests {
             self.seen.lock().unwrap().push((role, generation));
             if let Some(text) = self.script.lock().unwrap().pop_front() {
                 // Hand the text over in small pieces, as a streaming endpoint does.
-                let mut rest = text;
+                let mut rest = text.as_str();
                 while !rest.is_empty() {
                     let mut end = rest.len().min(5);
                     while !rest.is_char_boundary(end) {
@@ -945,7 +945,7 @@ mod tests {
                     on_delta(&rest[..end]);
                     rest = &rest[end..];
                 }
-                return Ok(text.to_owned());
+                return Ok(text);
             }
             match self.outcome {
                 Outcome::Text(text) => Ok(text.to_owned()),
@@ -966,9 +966,12 @@ mod tests {
         }
     }
 
-    fn scripted(answers: &[&'static str]) -> FakeGenerator {
+    fn scripted(answers: &[&str]) -> FakeGenerator {
         let fake = generator(Outcome::Text("unscripted"));
-        fake.script.lock().unwrap().extend(answers.iter().copied());
+        fake.script
+            .lock()
+            .unwrap()
+            .extend(answers.iter().map(|answer| (*answer).to_owned()));
         fake
     }
 
@@ -1517,19 +1520,50 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_long_tool_loop_runs_until_the_person_stops_it() {
+    async fn a_long_turn_with_distinct_calls_can_finish() {
         let dir = tempfile::tempdir().unwrap();
-        let looping = r#"TOOL {"tool":"list_dir","path":"."}"#;
-        let mut script = vec![looping; 20];
-        script.push("done");
+        let calls: Vec<_> = (0..20)
+            .map(|index| {
+                let path = format!("part-{index}");
+                std::fs::create_dir(dir.path().join(&path)).unwrap();
+                fm_agent::tool_call_line(None, "list_dir", &serde_json::json!({ "path": path }))
+            })
+            .collect();
+        let script: Vec<_> = calls.iter().map(String::as_str).chain(["done"]).collect();
         let fake = scripted(&script);
         let sessions = Sessions::default();
 
-        let reply = ask_in(&fake, &sessions, ask_request("t1", "loop", dir.path()))
-            .await
-            .unwrap();
+        let reply = ask_in(
+            &fake,
+            &sessions,
+            ask_request("t1", "list folders", dir.path()),
+        )
+        .await
+        .unwrap();
         assert_eq!(reply.text, "done");
         assert_eq!(reply.steps.len(), 20);
+    }
+
+    #[tokio::test]
+    async fn a_repeated_tool_call_stops_and_explains_why() {
+        let dir = tempfile::tempdir().unwrap();
+        let repeated = r#"TOOL {"tool":"list_dir","path":"."}"#;
+        let fake = scripted(&[repeated; 4]);
+        let sessions = Sessions::default();
+
+        let reply = ask_in(
+            &fake,
+            &sessions,
+            ask_request("t1", "list folders", dir.path()),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            reply.text,
+            "Stopped after repeated calls to list_dir returned the same result."
+        );
+        assert_eq!(reply.steps.len(), 4);
+        assert_eq!(fake.seen.lock().unwrap().len(), 4);
     }
 
     #[tokio::test]
