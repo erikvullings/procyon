@@ -4174,6 +4174,12 @@ mod tests {
             tool_call_line(None, "list_dir", "not json").as_deref(),
             Some("TOOL {\"name\":\"list_dir\",\"arguments\":\"not json\"}")
         );
+        assert_eq!(
+            tool_call_line(Some("c2"), "read_file", "{filePath:'a.txt',}").as_deref(),
+            Some(
+                "TOOL {\"id\":\"c2\",\"name\":\"read_file\",\"arguments\":{\"filePath\":\"a.txt\"}}"
+            )
+        );
         assert_eq!(tool_call_line(None, "", "{}"), None);
     }
 

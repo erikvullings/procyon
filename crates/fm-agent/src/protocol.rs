@@ -308,19 +308,15 @@ fn repair_json_syntax(input: &str) -> String {
 
 /// `TOOL {"id":"<id>","name":"<name>","arguments":{..}}`: a call in the protocol's line form (the
 /// id only when given). Hosts write native tool calls back like this, keeping the endpoint's call
-/// id, so an argument may be called `tool` or `name` without clashing.
+/// id, so an argument may be called `tool` or `name` without clashing. Invalid arguments
+/// remain in their original shape for the tool's validator.
 pub fn tool_call_line(id: Option<&str>, name: &str, arguments: &Value) -> String {
-    let arguments = if arguments.is_object() {
-        arguments.clone()
-    } else {
-        Value::Object(Map::new())
-    };
     let mut object = Map::new();
     if let Some(id) = id.filter(|id| !id.is_empty()) {
         object.insert("id".to_owned(), Value::String(id.to_owned()));
     }
     object.insert("name".to_owned(), Value::String(name.to_owned()));
-    object.insert("arguments".to_owned(), arguments);
+    object.insert("arguments".to_owned(), arguments.clone());
     format!("TOOL {}", Value::Object(object))
 }
 
