@@ -44,6 +44,7 @@
 //! must act (approve a command, review a draft). Interrupts are the registry's type parameter `I`;
 //! the built-in tools that interrupt need `I: From<CommandRequest>` or `I: From<NoteProposal>`.
 
+mod compact;
 mod edit;
 mod frontmatter;
 mod instructions;
@@ -63,6 +64,10 @@ mod tool;
 mod tools;
 mod turn;
 
+pub use self::compact::{
+    COMPACT_AT_PERCENT, COMPACTED_INTRO, Compaction, KEEP_AFTER_COMPACTING_PERCENT, compact,
+    compaction_cut, needs_compaction,
+};
 pub use self::edit::{
     EditError, EditFile, EditRequest, MAX_EDIT_TEXT_BYTES, MAX_EDITED_FILE_BYTES, apply_edit,
 };

@@ -451,6 +451,32 @@ impl Sessions {
         fit_messages(&messages, limit)
     }
 
+    /// Every message of the conversation, oldest first, one per stored turn.
+    pub(super) fn messages(&self, id: &str) -> Vec<Message> {
+        let state = self.lock();
+        state
+            .sessions
+            .get(id)
+            .map(|session| session.turns.iter().map(Turn::message).collect())
+            .unwrap_or_default()
+    }
+
+    /// Replaces the first `covered` turns with `summary` (automatic compaction, task 0353).
+    /// Nothing happens when the conversation changed meanwhile so the turns no longer line up.
+    pub(super) fn replace_prefix(
+        &self,
+        id: &str,
+        covered: usize,
+        expected_len: usize,
+        summary: Message,
+    ) {
+        self.with(id, |session| {
+            if session.turns.len() == expected_len && covered <= session.turns.len() {
+                session.turns.splice(..covered, [Turn::Agent(summary)]);
+            }
+        });
+    }
+
     /// Replaces the conversation with `summary` (`/compact`); what waited for the person is
     /// dropped with it.
     pub(super) fn replace_with_summary(&self, id: &str, summary: &str) {

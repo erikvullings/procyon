@@ -449,6 +449,15 @@ async fn ask_turn(
         side_model: Some(&side_calls),
         ..ToolContext::new(&project.skills)
     };
+    compact_if_needed(
+        sessions,
+        &id,
+        turn.budget,
+        &side_calls,
+        on_event,
+        &mut steps,
+    )
+    .await;
     let options = turn_options();
     loop {
         let end = run_turn(&mut turn, &registry, &ctx, &options, &mut |event| {
@@ -636,6 +645,38 @@ async fn create_file(
     on_event(TerminalAssistEventDto::Step { text: step.clone() });
     steps.push(step);
     sessions.push_tool(id, &text);
+}
+
+/// Summarises the oldest exchanges once the conversation passes most of its budget (task 0353),
+/// before the model is asked, so it never works at the crowded end of its window. When the
+/// summary fails, the oldest exchanges are left out of the prompt as before.
+async fn compact_if_needed(
+    sessions: &Sessions,
+    id: &str,
+    budget: usize,
+    model: &dyn fm_agent::SideModel,
+    on_event: &mut (dyn FnMut(TerminalAssistEventDto) + Send),
+    steps: &mut Vec<String>,
+) {
+    let messages = sessions.messages(id);
+    if !fm_agent::needs_compaction(&messages, budget) {
+        return;
+    }
+    on_event(TerminalAssistEventDto::Progress {
+        text: "Summarising the earlier conversation".to_owned(),
+    });
+    let step = match fm_agent::compact(&messages, budget, model, &|_| {}).await {
+        Ok(Some(compaction)) => {
+            sessions.replace_prefix(id, compaction.covered, messages.len(), compaction.message());
+            format!("Summarised {} earlier messages", compaction.covered)
+        }
+        Ok(None) => return,
+        Err(_) => {
+            "Could not summarise the earlier conversation; its oldest part is left out".to_owned()
+        }
+    };
+    on_event(TerminalAssistEventDto::Step { text: step.clone() });
+    steps.push(step);
 }
 
 /// Writes an approved edit; its outcome becomes the call's result.
@@ -1294,6 +1335,50 @@ mod tests {
                 .render("t1")
                 .contains("Person: check the build too")
         );
+    }
+
+    #[tokio::test]
+    async fn a_long_session_is_summarised_before_the_model_is_asked() {
+        let dir = tempfile::tempdir().unwrap();
+        let sessions = Sessions::default();
+        for index in 0..20 {
+            sessions.push_person("t", &format!("question {index} {}", "q".repeat(600)), "");
+            sessions.push_assistant("t", &format!("answer {index} {}", "a".repeat(600)), &[]);
+        }
+        let before = sessions.messages("t").len();
+        let fake = scripted(&["The person asked twenty questions.", "Here you go."]);
+        let mut events = Vec::new();
+        let reply = reply_streaming_in(
+            &fake,
+            &ProviderRegistry::new(),
+            &sessions,
+            None,
+            ask_request("t", "and now?", dir.path()),
+            &mut |event| events.push(event),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(reply.text, "Here you go.");
+        let step = reply
+            .steps
+            .iter()
+            .find(|step| step.starts_with("Summarised "))
+            .expect("a compaction step");
+        assert!(step.ends_with("earlier messages"), "{step}");
+        let messages = sessions.messages("t");
+        assert!(messages.len() < before);
+        assert!(matches!(&messages[0], Message::Note(text)
+            if text.contains("The person asked twenty questions.")));
+        // The model was asked with the summary in place of the oldest questions.
+        let seen = fake.seen.lock().unwrap();
+        let prompt = &seen[1].1.user_prompt;
+        assert!(
+            prompt.contains("The person asked twenty questions."),
+            "{prompt}"
+        );
+        assert!(!prompt.contains("question 0 "), "{prompt}");
+        assert!(prompt.contains("and now?"));
     }
 
     #[test]

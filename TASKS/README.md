@@ -591,7 +591,7 @@ subtask block (0299–0303) and the earlier corpus-themes follow-ups.
 - [x] 0350 Summaries of long documents *(backend, high — budget named in conversion errors, size-scaled deadline for agent reads, summaries combined in rounds instead of a 12-part cap; needs 0345)*
 - [ ] 0351 Agent harness: close the main gaps with Pi *(backend, agent — parent of 0352–0355; sub-agents, plan mode and a general hook system out of scope)*
 - [x] 0352 Agent edit_file tool with approval *(backend, agent, frontend — exact-string replace, diff approved by the person, fingerprint check; part of 0351)*
-- [ ] 0353 Agent conversation compaction by summary *(backend, agent — older exchanges summarised incrementally instead of dropped; part of 0351)*
+- [x] 0353 Agent conversation compaction by summary *(backend, agent — older exchanges summarised incrementally instead of dropped; part of 0351)*
 - [ ] 0354 Saved, resumable and forkable agent sessions *(backend, agent, frontend — terminal sessions persisted, chat keeps tool history, fork from here; needs 0353; part of 0351)*
 - [x] 0355 Steering a running agent turn *(backend, agent, frontend — messages typed during a turn delivered between tool rounds; part of 0351)*
 - [x] 0356 Assistant auto-approve mode *(frontend, agent, high — per-session `/auto`: commands, writes and edits run without asking unless very dangerous; part of 0351)*

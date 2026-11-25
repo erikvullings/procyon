@@ -104,7 +104,14 @@ impl<I: Send + 'static> TypedTool<I> for SummarizeFile {
             return ToolOutcome::error(failed, format!("{path} has no text to summarise."));
         }
         let focus = args.focus.as_deref().map(str::trim).unwrap_or_default();
-        match summarize(ctx, model, path, focus, &whole.text, part_bytes).await {
+        let report = |text: String| ctx.report(text);
+        let task = SummaryTask {
+            system: SUMMARY_SYSTEM,
+            name: path,
+            focus,
+            report: &report,
+        };
+        match summarize(&task, model, &whole.text, part_bytes).await {
             Ok((summary, parts)) => {
                 let read = whole.text.len().div_ceil(1024);
                 let scope = if whole.truncated {
@@ -130,20 +137,34 @@ impl<I: Send + 'static> TypedTool<I> for SummarizeFile {
     }
 }
 
+/// What [`summarize`] is asked: the instructions, what the text is called in the prompts, what to
+/// keep, and where progress goes.
+#[derive(Clone, Copy)]
+pub(crate) struct SummaryTask<'a> {
+    pub(crate) system: &'a str,
+    pub(crate) name: &'a str,
+    pub(crate) focus: &'a str,
+    pub(crate) report: &'a (dyn Fn(String) + Sync),
+}
+
 /// The summary of `text` and the number of parts it was summarised in.
 /// Reports each call through `ctx`, so the person sees how far a long document is.
 ///
 /// A text longer than one call is summarised part by part. The part summaries are then combined
 /// in rounds: consecutive summaries in groups that fit one call, until one summary is left, so
 /// no single call is given more than `part_bytes` whatever the document's length.
-async fn summarize(
-    ctx: &ToolContext<'_>,
+pub(crate) async fn summarize(
+    task: &SummaryTask<'_>,
     model: &dyn SideModel,
-    name: &str,
-    focus: &str,
     text: &str,
     part_bytes: usize,
 ) -> Result<(String, usize), SideModelError> {
+    let SummaryTask {
+        system,
+        name,
+        focus,
+        report,
+    } = *task;
     let parts = split_text(text, part_bytes);
     let focus_line = if focus.is_empty() {
         String::new()
@@ -151,19 +172,19 @@ async fn summarize(
         format!("Focus: {focus}\n")
     };
     if let [only] = parts.as_slice() {
-        ctx.report(format!("Summarising {name}"));
+        report(format!("Summarising {name}"));
         let prompt = format!("Document: {name}\n{focus_line}\n{only}");
-        return Ok((model.complete(SUMMARY_SYSTEM, &prompt).await?, 1));
+        return Ok((model.complete(system, &prompt).await?, 1));
     }
     let count = parts.len();
     let mut summaries = Vec::with_capacity(count);
     for (index, part) in parts.iter().enumerate() {
-        ctx.report(format!("Summarising {name}: part {} of {count}", index + 1));
+        report(format!("Summarising {name}: part {} of {count}", index + 1));
         let prompt = format!(
             "Document: {name}, part {} of {count}\n{focus_line}Summarise this part.\n\n{part}",
             index + 1
         );
-        let summary = model.complete(SUMMARY_SYSTEM, &prompt).await?;
+        let summary = model.complete(system, &prompt).await?;
         summaries.push(Covered {
             first: index + 1,
             last: index + 1,
@@ -187,13 +208,13 @@ async fn summarize(
                 .collect::<Vec<_>>()
                 .join("\n\n");
             let prompt = if last_round {
-                ctx.report(format!("Summarising {name}: combining {count} parts"));
+                report(format!("Summarising {name}: combining {count} parts"));
                 format!(
                     "Document: {name}\n{focus_line}These are summaries of its {count} parts, in \
                      order. Write one summary of the whole document.\n\n{joined}"
                 )
             } else {
-                ctx.report(format!(
+                report(format!(
                     "Summarising {name}: combining parts {first}-{last} of {count}"
                 ));
                 format!(
@@ -202,7 +223,7 @@ async fn summarize(
                      {first}-{last}.\n\n{joined}"
                 )
             };
-            let summary = model.complete(SUMMARY_SYSTEM, &prompt).await?;
+            let summary = model.complete(system, &prompt).await?;
             combined.push(Covered {
                 first,
                 last,

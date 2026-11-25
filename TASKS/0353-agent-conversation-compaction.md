@@ -1,6 +1,6 @@
 # 0353 Agent conversation compaction by summary
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: backend, agent
 Depends on: none
@@ -41,3 +41,22 @@ bytes, and combining summaries in rounds.
   turn, and never more than once per turn.
 
 ## Agent Notes
+- 2026-11-25 claude: done for the terminal assistant.
+  - `fm-agent/src/compact.rs`: `needs_compaction` (over `COMPACT_AT_PERCENT` = 80 % of the
+    budget, as Pi does: long before the window is full, where models slow down and drift),
+    `compaction_cut` (earliest person message after which the rest fits
+    `KEEP_AFTER_COMPACTING_PERCENT` = 40 %, so a call never loses its question), `compact` (one
+    `SideModel` call with a conversation-specific prompt; a long history goes through the same
+    split-and-combine-in-rounds path as `summarize_file`, now `summarize(SummaryTask, ..)`), and
+    `Compaction::message` (a note "Summary of the conversation so far:"). Incremental: an earlier
+    summary is the first message, so it is folded into the next one.
+  - Terminal: `compact_if_needed` runs once per request before the model is asked, shows
+    progress and a step ("Summarised N earlier messages"); `Sessions::messages` /
+    `replace_prefix` (skipped if the conversation changed meanwhile). On failure a step says so
+    and `fit_messages` leaves the oldest part out, as before. `/compact` (summarise everything)
+    stays.
+  - Not done: chat (`chat_agent.rs`) still only drops old exchanges with `fit_messages`; its
+    conversations are rebuilt from the saved document per request, so a summary needs to be
+    stored there first — left for 0354, which changes that document.
+  - Verified: fm-agent 111 tests (5 compaction); terminal_assist 88 (new
+    `a_long_session_is_summarised_before_the_model_is_asked`); clippy `-D warnings` clean.
