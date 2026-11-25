@@ -7,6 +7,7 @@ mod documents;
 mod remote;
 mod sandbox;
 mod skill_store;
+mod web;
 
 use std::path::{Path, PathBuf};
 
@@ -25,6 +26,7 @@ pub(crate) use self::documents::{Documents, SkillFolderDocuments, is_document};
 use self::sandbox::continuation;
 pub(crate) use self::sandbox::{FileCall, ToolHost};
 use self::skill_store::ProviderStore;
+pub(crate) use self::web::WebReader;
 use crate::chat::ChatGenerator;
 use crate::llm_profiles::{LlmChatGeneration, LlmProfileError, LlmRole, ReplyFormat};
 

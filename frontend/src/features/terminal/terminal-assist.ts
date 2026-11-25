@@ -76,6 +76,8 @@ export interface TerminalAssistRequest {
   readonly autoApprove?: boolean;
   /** The active workspace, so `search_notes` may use the notes index (task 0337). */
   readonly workspaceId?: string;
+  /** Whether the assistant may read public web pages (task 0363). */
+  readonly allowWeb?: boolean;
   /** The session's thinking effort (`/effort`, task 0361); absent uses the chat role's default. */
   readonly thinking?: ThinkingEffort;
   /** The session's trusted root: the folder it started in (task 0343). */

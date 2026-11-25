@@ -198,6 +198,7 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
         terminal_follow_pane: settings.terminal_follow_pane,
         terminal_auto_run_read_only: settings.terminal_auto_run_read_only,
         terminal_allow_file_writes: settings.terminal_allow_file_writes,
+        assistant_web_access: settings.assistant_web_access,
         terminal_hide_function_keys: settings.terminal_hide_function_keys,
         picture_info: PictureInfoSettingsDto {
             caption_fields: settings.picture_info.caption_fields,
@@ -392,6 +393,7 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
         terminal_follow_pane: settings.terminal_follow_pane,
         terminal_auto_run_read_only: settings.terminal_auto_run_read_only,
         terminal_allow_file_writes: settings.terminal_allow_file_writes,
+        assistant_web_access: settings.assistant_web_access,
         terminal_hide_function_keys: settings.terminal_hide_function_keys,
         picture_info: PictureInfoSettings {
             caption_fields: settings.picture_info.caption_fields,

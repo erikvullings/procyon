@@ -132,6 +132,10 @@ const fn terminal_allow_file_writes_default() -> bool {
     true
 }
 
+const fn assistant_web_access_default() -> bool {
+    true
+}
+
 const fn terminal_hide_function_keys_default() -> bool {
     true
 }
@@ -510,6 +514,9 @@ pub struct SettingsDto {
     /// Whether the assistant may create files (after approval, task 0338).
     #[serde(default = "terminal_allow_file_writes_default")]
     pub terminal_allow_file_writes: bool,
+    /// Whether the assistants may read public web pages (task 0363).
+    #[serde(default = "assistant_web_access_default")]
+    pub assistant_web_access: bool,
     /// Whether the function-key bar is hidden while the terminal is open.
     #[serde(default = "terminal_hide_function_keys_default")]
     pub terminal_hide_function_keys: bool,

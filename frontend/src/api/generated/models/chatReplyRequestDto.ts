@@ -10,6 +10,8 @@ import type { ThinkingEffortDto } from './thinkingEffortDto.ts';
  * reply is saved only when it completes.
  */
 export interface ChatReplyRequestDto {
+  /** Whether the model may read public web pages with `web_fetch` (task 0363). */
+  allowWeb?: boolean;
   /** The person's message. */
   content: string;
   /**

@@ -70,6 +70,8 @@ describe('chat wiring', () => {
       content: 'How many?',
       context: 'Folder listing of /notes:\n- a.txt',
       retry: false,
+      // Reading public pages is on unless the setting turns it off (task 0363).
+      allowWeb: true,
     });
     expect(entry.attachments).toEqual([]);
     expect(entry.messages.map((message) => message.role)).toEqual(['user', 'assistant']);

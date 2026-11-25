@@ -43,7 +43,7 @@ pub struct WholeText {
 /// the time, not what one call is given.
 pub const MAX_SUMMARY_PARTS: usize = 48;
 /// Smallest part, whatever the host says, so a tiny window still makes progress.
-const MIN_PART_BYTES: usize = 4 * 1024;
+pub(crate) const MIN_PART_BYTES: usize = 4 * 1024;
 
 const SUMMARY_SYSTEM: &str = "You summarise one document for someone who has not read it. Be \
      factual: keep the title, authors and date when the text gives them, the main argument, the \

@@ -11620,6 +11620,10 @@
           "content"
         ],
         "properties": {
+          "allowWeb": {
+            "type": "boolean",
+            "description": "Whether the model may read public web pages with `web_fetch` (task 0363)."
+          },
           "content": {
             "type": "string",
             "description": "The person's message."
@@ -28260,6 +28264,10 @@
           "viewerInSeparateWindow"
         ],
         "properties": {
+          "assistantWebAccess": {
+            "type": "boolean",
+            "description": "Whether the assistants may read public web pages (task 0363)."
+          },
           "checkForBetaUpdates": {
             "type": "boolean",
             "description": "Whether update checks also offer beta releases (not yet approved for the stable channel)."

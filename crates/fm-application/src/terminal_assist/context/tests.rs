@@ -24,6 +24,7 @@ fn request(context: TerminalContextDto) -> TerminalAssistRequestDto {
         auto_approve: false,
         workspace_id: None,
         thinking: None,
+        allow_web: false,
     }
 }
 

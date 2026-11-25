@@ -302,6 +302,8 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
           retry: request.retry,
           ...(toolsFolder === undefined ? {} : { toolsFolder }),
           ...(entry.thinking === undefined ? {} : { thinking: entry.thinking }),
+          // Reading public pages is on unless the setting turns it off (task 0363).
+          ...((shellState.currentSettings?.assistantWebAccess ?? true) ? { allowWeb: true } : {}),
           ...(images.length > 0 ? { images: images.map(({ data }) => ({ data })) } : {}),
         },
         (event) => {

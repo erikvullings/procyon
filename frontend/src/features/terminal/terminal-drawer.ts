@@ -124,6 +124,8 @@ export interface TerminalDrawerAttrs {
   readonly autoRunReadOnly?: boolean;
   /** Whether the assistant may offer to create files after approval (task 0338). */
   readonly allowFileWrites?: boolean;
+  /** Whether the assistant may read public web pages (task 0363); `/web off` overrides it. */
+  readonly allowWeb?: boolean;
   /** The person's home folder (local), so auto-approve can tell when a command reaches it. */
   readonly homeDirectory?: string | undefined;
   /** The terminal's shell on `host` (see `terminalHost`) moved to this absolute folder; the pane follows. */
@@ -195,6 +197,8 @@ function slashHelp(command: SlashCommandName): string {
       return t('terminal', 'slashHelpFork');
     case 'effort':
       return t('terminal', 'slashHelpEffort');
+    case 'web':
+      return t('terminal', 'slashHelpWeb');
     case 'help':
       return t('terminal', 'slashHelpHelp');
   }
@@ -420,6 +424,8 @@ type LiveTerminal = {
    * dangerous, and files and edits are approved. Lasts while the tab lives; never saved.
    */
   autoApprove: boolean;
+  /** Whether `/web off` turned reading web pages off for this session (task 0363). */
+  webOff: boolean;
   /** The session's thinking effort (`/effort`, task 0361); unset uses the chat role's default. */
   thinking: ThinkingEffort | undefined;
 };
@@ -875,6 +881,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           ...(input.skill === undefined ? {} : { skill: input.skill }),
           ...(live.assistRoot === undefined ? {} : { root: live.assistRoot.uri }),
           allowFileWrites: attrs.allowFileWrites !== false,
+          allowWeb: attrs.allowWeb !== false && !live.webOff,
           ...(live.autoApprove ? { autoApprove: true } : {}),
           ...(live.thinking === undefined ? {} : { thinking: live.thinking }),
         },
@@ -1786,6 +1793,19 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       case 'fork':
         runAsyncCommand(live, question, () => forkSession(live, argument));
         return;
+      case 'web': {
+        // `/web` toggles, `/web on|off` sets; the setting must allow it at all.
+        const choice = argument.trim().toLowerCase();
+        live.webOff = choice === 'off' ? true : choice === 'on' ? false : !live.webOff;
+        const text =
+          attrs.allowWeb === false
+            ? t('terminal', 'webDisabled')
+            : live.webOff
+              ? t('terminal', 'webOff')
+              : t('terminal', 'webOn');
+        showCommandOutput(live, question, infoAnsi([text]));
+        return;
+      }
       case 'effort': {
         // `/effort` shows the effort, `/effort <level>` sets it, `/effort default` clears it.
         const choice = argument.trim().toLowerCase();
@@ -2104,6 +2124,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         queued: undefined,
         steering: [],
         autoApprove: false,
+        webOff: false,
         thinking: undefined,
       };
       terminals.set(key, live);

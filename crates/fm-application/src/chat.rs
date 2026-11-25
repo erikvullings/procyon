@@ -297,6 +297,7 @@ impl ChatService {
                     question,
                     transcript: prompts,
                     images,
+                    allow_web: request.allow_web,
                     thinking,
                     cancellation: &cancellation,
                 };
@@ -734,6 +735,7 @@ mod tests {
             retry: false,
             tools_folder: None,
             thinking: None,
+            allow_web: false,
         }
     }
 

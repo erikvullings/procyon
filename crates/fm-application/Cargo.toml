@@ -22,6 +22,8 @@ calamine.workspace = true
 chrono.workspace = true
 csv-async = { version = "1.3.1", features = ["tokio"] }
 dirs.workspace = true
+dom_query.workspace = true
+dom_smoothie.workspace = true
 ferrodoc.workspace = true
 fm-domain.workspace = true
 fm-agent.workspace = true

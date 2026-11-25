@@ -150,6 +150,8 @@ pub struct ToolContext<'a> {
     pub documents: Option<&'a dyn SkillDocuments>,
     /// Model calls outside the conversation (`summarize_file`), when the host has them.
     pub side_model: Option<&'a dyn SideModel>,
+    /// Reading web pages (`web_fetch`, task 0363), when the host allows it.
+    pub web: Option<&'a dyn crate::web::WebAccess>,
     /// Where a long-running tool reports what it is doing, as one short line such as
     /// `Summarising a.pdf: part 2 of 5`. [`run_turn`](crate::run_turn) sets it for each call and
     /// shows the person the latest report until the call's step line replaces it. Report through
@@ -166,6 +168,7 @@ impl<'a> ToolContext<'a> {
             files: None,
             documents: None,
             side_model: None,
+            web: None,
             progress: None,
         }
     }

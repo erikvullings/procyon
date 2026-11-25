@@ -420,6 +420,7 @@ export const fr = {
     terminalFollowPane: 'Terminal et panneau se suivent (même dossier)',
     terminalAutoRunReadOnly: 'Exécuter sans demander les commandes en lecture seule',
     terminalAllowFileWrites: 'Autoriser l’assistant à créer des fichiers (après approbation)',
+    assistantWebAccess: 'Autoriser les assistants à lire des pages web publiques',
     terminalHideFunctionKeys:
       'Masquer la barre des touches de fonction quand le terminal est ouvert',
     toolCalling: 'Appel natif d’outils',
@@ -2883,6 +2884,11 @@ export const fr = {
     resumeDeleted: '« {title} » supprimée.',
     slashHelpEffort:
       'afficher ou régler l’effort de réflexion de cette session (/effort off, low, medium, high ou default)',
+    slashHelpWeb:
+      'activer ou désactiver la lecture de pages web pour cette session (/web on, /web off)',
+    webOn: 'L’assistant peut lire des pages web publiques dans cette session.',
+    webOff: 'La lecture de pages web est désactivée pour cette session.',
+    webDisabled: 'La lecture de pages web est désactivée dans les Réglages.',
     effortShown: 'Effort de réflexion pour cette session : {effort}.',
     effortDefault: 'la valeur par défaut du modèle de discussion',
     effortUnknown: 'Utilisez /effort off, low, medium, high ou default.',

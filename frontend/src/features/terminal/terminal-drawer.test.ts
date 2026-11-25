@@ -1583,6 +1583,29 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     expect(assist).not.toHaveBeenCalled();
   });
 
+  it('lets the assistant read web pages unless /web off turns it off for the session', async () => {
+    await mountWith({});
+    ask('# what changed upstream?');
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledOnce());
+    expect(sentAt(0)).toMatchObject({ allowWeb: true });
+    await markPrompt();
+    ask('# /web off');
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain('Reading web pages is off for this session.'),
+    );
+    await markPrompt();
+    ask('# and now?');
+    await vi.waitFor(() => expect(assist).toHaveBeenCalledTimes(2));
+    expect(sentAt(1)).toMatchObject({ allowWeb: false });
+    await markPrompt();
+    ask('# /web on');
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain(
+        'The assistant may read public web pages in this session.',
+      ),
+    );
+  });
+
   it('sets the session thinking effort with /effort and sends it with each question', async () => {
     await mountWith({});
     ask('# /effort high');

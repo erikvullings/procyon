@@ -1,6 +1,6 @@
 # 0363 Read-only web_fetch tool for the assistants
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: backend, agent
 Depends on: none
@@ -57,3 +57,40 @@ rather than asked about.
 
 ## Agent Notes
 - 2026-11-25 claude: planned.
+- 2026-11-25 claude: started; paused because other uncommitted work (0360-style: argument
+  aliases, `ArgumentError`, `ModelProfile`, `repair_tool_arguments`, `match_edit`) is in progress
+  in the same `fm-agent` files and its tests do not compile yet (`turn/tests.rs`: `run.most`).
+  - Done, uncommitted: `crates/fm-agent/src/web.rs` (`WebFetch` tool, `WebAccess` trait,
+    `WebPage`, `WebError`, `url_problem`: https/http only, no user info, secrets in the URL,
+    parts over 200 characters or encoded runs of 120+ refused before sending; page text marked
+    as untrusted data; a long page summarised with `summarize` and `focus`, else cut with a
+    note; 4 tests). Additive edits: `lib.rs` (module, exports, `WebFetch` in
+    `read_only_registry`), `tool.rs` (`ToolContext.web`), `summarize.rs` (`MIN_PART_BYTES`
+    pub(crate)). The library builds with both sets of changes.
+  - Next: `fm-application` fetcher (resolve once, refuse non-public addresses on every hop,
+    `reqwest` with no redirects/cookies, 2 MiB cap, HTML via `dom_smoothie` Markdown with
+    `strict_visibility`, PDF via a temp folder and the folder tools' `read_whole`), wire `web`
+    into chat and terminal `ToolContext`s, remove the tool from the registry when off, setting
+    and `/web on|off`, i18n, tests.
+- 2026-11-25 claude: done (resumed after 0360 was committed).
+  - `fm-application/src/agent_host/web.rs` `WebReader` (implements `WebAccess`): http upgraded to
+    https, other schemes refused; every hop resolves the host and refuses it unless all its
+    addresses are public (loopback, private, shared 100.64/10, link-local incl. cloud metadata,
+    multicast, documentation, reserved, `localhost` names, IPv4-mapped IPv6); the connection goes
+    to exactly the checked addresses (`resolve_to_addrs`), no proxy, no redirects followed by
+    reqwest (5 handled by hand, each re-checked), no cookies; 2 MiB download cap. HTML through
+    `dom_smoothie` (Markdown, `strict_visibility` drops hidden text) with a `dom_query` body-text
+    fallback; text/JSON/XML/Markdown as is; PDF written to a temp folder and read by the folder
+    tools (the same conversion as documents); other types refused.
+  - Setting `assistantWebAccess` (Settings → terminal section, on by default; fm-settings,
+    DTO, mapping, frontend model). Requests carry `allowWeb` (chat: the setting; terminal: the
+    setting unless `/web off`). When off, `web_fetch` is removed from the registry, so the model
+    is not told about it. No prompt per page: each read is a step line.
+  - Not done: the "matches file contents read this turn" exfiltration heuristic (only secrets,
+    long parts and encoded runs are refused); chat reads the web only when "Let the assistant look
+    in this folder" is on, since the chat runs tools only then.
+  - Verified: fm-agent web 4, fetcher 5 (public-address rule, local names refused, scheme
+    upgrade, HTML to Markdown without hidden text, text types), terminal `web_fetch` offered only
+    when allowed, drawer `/web`; fm-agent + fm-application 1753 and frontend 4229 pass;
+    `pnpm lint` clean. Live check (ignored test) against example.com.
+

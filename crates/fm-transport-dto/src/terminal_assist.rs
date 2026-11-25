@@ -166,6 +166,10 @@ pub struct TerminalAssistRequestDto {
     /// (task 0337). Without it notes are searched by text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace_id: Option<Uuid>,
+    /// Whether the assistant may read public web pages with `web_fetch` (task 0363): the setting,
+    /// unless the session turned it off with `/web off`.
+    #[serde(default)]
+    pub allow_web: bool,
     /// The session's thinking effort (`/effort`, task 0361); absent uses the chat role's default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thinking: Option<crate::ThinkingEffortDto>,

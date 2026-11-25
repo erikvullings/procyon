@@ -333,8 +333,14 @@ async fn ask_turn(
     let files = FolderTools::open(providers, folder);
     let (host, documents) = (files.host(), files.documents());
     // Calls are understood for every tool; the prompt describes `write_file` only when allowed.
-    let registry = agent_tools::registry(true);
-    let prompt_registry = agent_tools::registry(request.allow_file_writes);
+    let mut registry = agent_tools::registry(true);
+    let mut prompt_registry = agent_tools::registry(request.allow_file_writes);
+    if !request.allow_web {
+        // Off: the model is not told about a tool it may not use (task 0363).
+        registry.remove("web_fetch");
+        prompt_registry.remove("web_fetch");
+    }
+    let web = crate::agent_host::WebReader::new(providers);
     let mut steps = Vec::new();
     let mut question_text = String::new();
 
@@ -481,6 +487,9 @@ async fn ask_turn(
         files: Some(&files),
         documents: Some(&skill_documents),
         side_model: Some(&side_calls),
+        web: request
+            .allow_web
+            .then_some(&web as &dyn fm_agent::WebAccess),
         ..ToolContext::new(&project.skills)
     };
     compact_if_needed(
@@ -1002,6 +1011,7 @@ mod tests {
             auto_approve: false,
             workspace_id: None,
             thinking: None,
+            allow_web: false,
         }
     }
 
@@ -1023,6 +1033,7 @@ mod tests {
             auto_approve: false,
             workspace_id: None,
             thinking: None,
+            allow_web: false,
         }
     }
 
@@ -1161,6 +1172,7 @@ mod tests {
             auto_approve: false,
             workspace_id: None,
             thinking: None,
+            allow_web: false,
         }
     }
 
@@ -1336,6 +1348,27 @@ mod tests {
         let seen = fake.seen.lock().unwrap();
         let prompt = &seen[1].1.user_prompt;
         assert!(prompt.contains("Exit status 0. Output:\nok. 3 passed\nAPI_KEY=[redacted]"));
+    }
+
+    #[tokio::test]
+    async fn web_fetch_is_offered_only_when_reading_the_web_is_allowed() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = scripted(&["No.", "Yes."]);
+        let sessions = Sessions::default();
+        ask_in(&fake, &sessions, ask_request("off", "hi", dir.path()))
+            .await
+            .unwrap();
+        let mut on = ask_request("on", "hi", dir.path());
+        on.allow_web = true;
+        ask_in(&fake, &sessions, on).await.unwrap();
+        let seen = fake.seen.lock().unwrap();
+        let mentions = |index: usize| {
+            let generation = &seen[index].1;
+            generation.system_prompt.contains("web_fetch")
+                || generation.tools.iter().any(|tool| tool.name == "web_fetch")
+        };
+        assert!(!mentions(0), "off: the model is not told about web_fetch");
+        assert!(mentions(1), "on: web_fetch is offered");
     }
 
     #[tokio::test]

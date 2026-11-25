@@ -412,6 +412,7 @@ export const en = {
     terminalFollowPane: 'Terminal and pane follow each other (same folder)',
     terminalAutoRunReadOnly: 'Run read-only commands without asking',
     terminalAllowFileWrites: 'Let the assistant create files (after approval)',
+    assistantWebAccess: 'Let the assistants read public web pages',
     terminalHideFunctionKeys: 'Hide the function-key bar while the terminal is open',
     toolCalling: 'Native tool calling',
     toolCalling_pending: 'not checked yet',
@@ -2803,6 +2804,10 @@ export const en = {
     resumeDeleted: 'Deleted “{title}”.',
     slashHelpEffort:
       "show or set this session's thinking effort (/effort off, low, medium, high or default)",
+    slashHelpWeb: 'turn reading web pages on or off for this session (/web on, /web off)',
+    webOn: 'The assistant may read public web pages in this session.',
+    webOff: 'Reading web pages is off for this session.',
+    webDisabled: 'Reading web pages is turned off in Settings.',
     effortShown: 'Thinking effort for this session: {effort}.',
     effortDefault: "the chat model's default",
     effortUnknown: 'Use /effort off, low, medium, high or default.',

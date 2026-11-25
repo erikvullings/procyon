@@ -18,7 +18,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::agent_host::{
     FolderTools, ModelSideCalls, READ_FILE_DESCRIPTION, SkillFolderDocuments, SkillScope,
-    chat_failure, generation_parts, note_proposal_dto, project_context, tool_calling,
+    WebReader, chat_failure, generation_parts, note_proposal_dto, project_context, tool_calling,
 };
 use crate::chat::ChatGenerator;
 use crate::llm_profiles::{
@@ -77,6 +77,8 @@ pub(crate) struct AgentRun<'a> {
     pub(crate) question: &'a str,
     pub(crate) transcript: String,
     pub(crate) images: Vec<LlmImageAttachment>,
+    /// Whether `web_fetch` may read public web pages (task 0363).
+    pub(crate) allow_web: bool,
     /// The conversation's thinking effort (task 0361).
     pub(crate) thinking: ThinkingRequest,
     pub(crate) cancellation: &'a CancellationToken,
@@ -90,6 +92,11 @@ pub(crate) async fn run(
     on_event: &mut (dyn FnMut(ChatReplyEventDto) + Send),
 ) -> Result<AgentReply, ChatFailureDto> {
     let mut registry = read_only_registry::<NoteProposal>();
+    if !input.allow_web {
+        // Off: the model is not told about a tool it may not use.
+        registry.remove("web_fetch");
+    }
+    let web = WebReader::new(tooling.providers);
     registry.describe("read_file", READ_FILE_DESCRIPTION);
     let files = FolderTools::open(tooling.providers, input.folder);
     let project = project_context(
@@ -127,6 +134,7 @@ pub(crate) async fn run(
         files: Some(&files),
         documents: Some(&skill_documents),
         side_model: Some(&side_calls),
+        web: input.allow_web.then_some(&web as &dyn fm_agent::WebAccess),
         ..ToolContext::new(&catalogue)
     };
     let options = TurnOptions {

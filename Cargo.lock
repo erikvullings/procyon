@@ -2866,6 +2866,8 @@ dependencies = [
  "chrono",
  "csv-async",
  "dirs",
+ "dom_query 0.30.0",
+ "dom_smoothie",
  "ed25519-dalek",
  "ferrodoc",
  "fm-agent",

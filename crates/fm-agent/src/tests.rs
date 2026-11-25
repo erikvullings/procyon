@@ -273,6 +273,7 @@ fn the_registries_offer_the_documented_tools_with_their_effects() {
             "run_command",
             "search_notes",
             "summarize_file",
+            "web_fetch",
         ]
     );
     let read_only = read_only_registry::<Interrupt>();

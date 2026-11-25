@@ -29,6 +29,8 @@ import type { ThemeDto } from './themeDto.ts';
  * Versioned global settings. Live workspace content is deliberately absent.
  */
 export interface SettingsDto {
+  /** Whether the assistants may read public web pages (task 0363). */
+  assistantWebAccess?: boolean;
   /** Whether update checks also offer beta releases (not yet approved for the stable channel). */
   checkForBetaUpdates?: boolean;
   /** Whether the desktop host checks for signed application updates after startup. */

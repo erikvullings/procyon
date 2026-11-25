@@ -750,6 +750,16 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                         onchange: (checked: boolean) =>
                           update(current, { terminalAllowFileWrites: checked }),
                       }),
+                      // Reading is low-risk: no prompt per page, each read is a step line (0363).
+                      m(Switch, {
+                        className: 'col s12 m6',
+                        label: t('settings', 'assistantWebAccess'),
+                        checked: activeDraft.assistantWebAccess,
+                        left: t('settings', 'off'),
+                        right: t('settings', 'on'),
+                        onchange: (checked: boolean) =>
+                          update(current, { assistantWebAccess: checked }),
+                      }),
                       m(Switch, {
                         className: 'col s12 m6',
                         label: t('settings', 'terminalHideFunctionKeys'),

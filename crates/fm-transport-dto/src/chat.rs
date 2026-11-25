@@ -118,6 +118,9 @@ pub struct ChatReplyRequestDto {
     /// Without it the model only answers from the conversation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools_folder: Option<String>,
+    /// Whether the model may read public web pages with `web_fetch` (task 0363).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub allow_web: bool,
     /// The conversation's thinking effort (task 0361); absent uses the chat role's default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thinking: Option<crate::ThinkingEffortDto>,

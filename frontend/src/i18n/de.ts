@@ -424,6 +424,7 @@ export const de = {
     terminalFollowPane: 'Terminal und Bereich folgen einander (gleicher Ordner)',
     terminalAutoRunReadOnly: 'Schreibgeschützte Befehle ohne Nachfrage ausführen',
     terminalAllowFileWrites: 'Assistent darf Dateien erstellen (nach Freigabe)',
+    assistantWebAccess: 'Assistenten dürfen öffentliche Webseiten lesen',
     terminalHideFunctionKeys: 'Funktionstastenleiste ausblenden, solange das Terminal offen ist',
     toolCalling: 'Native Werkzeugaufrufe',
     toolCalling_pending: 'noch nicht geprüft',
@@ -2886,6 +2887,10 @@ export const de = {
     resumeDeleted: '„{title}“ gelöscht.',
     slashHelpEffort:
       'Denkaufwand dieser Sitzung anzeigen oder festlegen (/effort off, low, medium, high oder default)',
+    slashHelpWeb: 'Lesen von Webseiten für diese Sitzung ein- oder ausschalten (/web on, /web off)',
+    webOn: 'Der Assistent darf in dieser Sitzung öffentliche Webseiten lesen.',
+    webOff: 'Das Lesen von Webseiten ist für diese Sitzung aus.',
+    webDisabled: 'Das Lesen von Webseiten ist in den Einstellungen ausgeschaltet.',
     effortShown: 'Denkaufwand für diese Sitzung: {effort}.',
     effortDefault: 'die Vorgabe des Chatmodells',
     effortUnknown: 'Verwende /effort off, low, medium, high oder default.',

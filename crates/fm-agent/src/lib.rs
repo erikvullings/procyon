@@ -63,6 +63,7 @@ mod text;
 mod tool;
 mod tools;
 mod turn;
+mod web;
 
 pub use self::compact::{
     COMPACT_AT_PERCENT, COMPACTED_INTRO, Compaction, KEEP_AFTER_COMPACTING_PERCENT, compact,
@@ -103,6 +104,7 @@ pub use self::turn::{
     ContinueNudge, ModelProfile, TurnEnd, TurnEvent, TurnHost, TurnOptions, announces_more_work,
     run_turn,
 };
+pub use self::web::{MAX_PAGE_TEXT_BYTES, WebAccess, WebError, WebFetch, WebPage, url_problem};
 
 use self::skill_tools::{ReadSkill, ReadSkillFile};
 use self::summarize::SummarizeFile;
@@ -129,7 +131,8 @@ where
         .register(Typed(ProposeNote))
         .register(Typed(ProposeNoteUpdate))
         .register(Typed(ReadSkill))
-        .register(Typed(ReadSkillFile));
+        .register(Typed(ReadSkillFile))
+        .register(Typed(WebFetch));
     registry
 }
 

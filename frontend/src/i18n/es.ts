@@ -415,6 +415,7 @@ export const es = {
     terminalFollowPane: 'Terminal y panel se siguen (misma carpeta)',
     terminalAutoRunReadOnly: 'Ejecutar sin preguntar los comandos de solo lectura',
     terminalAllowFileWrites: 'Permitir que el asistente cree archivos (tras aprobación)',
+    assistantWebAccess: 'Permitir que los asistentes lean páginas web públicas',
     terminalHideFunctionKeys:
       'Ocultar la barra de teclas de función mientras el terminal está abierto',
     toolCalling: 'Llamada nativa a herramientas',
@@ -2865,6 +2866,11 @@ export const es = {
     resumeDeleted: '“{title}” eliminada.',
     slashHelpEffort:
       'muestra o define el esfuerzo de razonamiento de esta sesión (/effort off, low, medium, high o default)',
+    slashHelpWeb:
+      'activar o desactivar la lectura de páginas web en esta sesión (/web on, /web off)',
+    webOn: 'El asistente puede leer páginas web públicas en esta sesión.',
+    webOff: 'La lectura de páginas web está desactivada en esta sesión.',
+    webDisabled: 'La lectura de páginas web está desactivada en Ajustes.',
     effortShown: 'Esfuerzo de razonamiento para esta sesión: {effort}.',
     effortDefault: 'el predeterminado del modelo de chat',
     effortUnknown: 'Usa /effort off, low, medium, high o default.',

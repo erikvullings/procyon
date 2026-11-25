@@ -417,6 +417,7 @@ export const pl = {
     terminalFollowPane: 'Terminal i panel podążają za sobą (ten sam folder)',
     terminalAutoRunReadOnly: 'Uruchamiaj polecenia tylko do odczytu bez pytania',
     terminalAllowFileWrites: 'Pozwól asystentowi tworzyć pliki (po zatwierdzeniu)',
+    assistantWebAccess: 'Pozwól asystentom czytać publiczne strony internetowe',
     terminalHideFunctionKeys: 'Ukryj pasek klawiszy funkcyjnych, gdy terminal jest otwarty',
     toolCalling: 'Natywne wywołania narzędzi',
     toolCalling_pending: 'jeszcze nie sprawdzono',
@@ -2856,6 +2857,10 @@ export const pl = {
     resumeDeleted: 'Usunięto „{title}”.',
     slashHelpEffort:
       'pokaż lub ustaw poziom rozumowania tej sesji (/effort off, low, medium, high lub default)',
+    slashHelpWeb: 'włącz lub wyłącz czytanie stron w tej sesji (/web on, /web off)',
+    webOn: 'Asystent może w tej sesji czytać publiczne strony internetowe.',
+    webOff: 'Czytanie stron jest wyłączone w tej sesji.',
+    webDisabled: 'Czytanie stron jest wyłączone w Ustawieniach.',
     effortShown: 'Poziom rozumowania dla tej sesji: {effort}.',
     effortDefault: 'domyślny modelu czatu',
     effortUnknown: 'Użyj /effort off, low, medium, high lub default.',

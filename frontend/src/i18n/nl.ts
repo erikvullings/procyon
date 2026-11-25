@@ -414,6 +414,7 @@ export const nl = {
     terminalFollowPane: 'Terminal en paneel volgen elkaar (zelfde map)',
     terminalAutoRunReadOnly: 'Alleen-lezen opdrachten uitvoeren zonder te vragen',
     terminalAllowFileWrites: 'Assistent mag bestanden maken (na goedkeuring)',
+    assistantWebAccess: 'Assistenten mogen openbare webpagina’s lezen',
     terminalHideFunctionKeys: 'Functietoetsenbalk verbergen zolang de terminal open is',
     toolCalling: 'Native tool-aanroepen',
     toolCalling_pending: 'nog niet gecontroleerd',
@@ -2856,6 +2857,10 @@ export const nl = {
     resumeDeleted: '“{title}” verwijderd.',
     slashHelpEffort:
       'toon of stel het denkniveau van deze sessie in (/effort off, low, medium, high of default)',
+    slashHelpWeb: 'webpagina’s lezen aan- of uitzetten voor deze sessie (/web on, /web off)',
+    webOn: 'De assistent mag in deze sessie openbare webpagina’s lezen.',
+    webOff: 'Webpagina’s lezen staat uit voor deze sessie.',
+    webDisabled: 'Webpagina’s lezen staat uit in Instellingen.',
     effortShown: 'Denkniveau voor deze sessie: {effort}.',
     effortDefault: 'de standaard van het chatmodel',
     effortUnknown: 'Gebruik /effort off, low, medium, high of default.',

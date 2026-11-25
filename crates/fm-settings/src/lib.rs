@@ -862,6 +862,9 @@ pub struct Settings {
     pub terminal_auto_run_read_only: bool,
     /// Whether the assistant may create files after approval (task 0338).
     pub terminal_allow_file_writes: bool,
+    /// Whether the assistants may read public web pages (`web_fetch`, task 0363). No prompt per
+    /// page: each read shows as a step line.
+    pub assistant_web_access: bool,
     /// Whether the function-key bar is hidden while the terminal is open.
     pub terminal_hide_function_keys: bool,
     /// Picture captions under grid tiles and hover tooltips (task 0347).
@@ -969,6 +972,7 @@ impl Default for Settings {
             terminal_follow_pane: true,
             terminal_auto_run_read_only: true,
             terminal_allow_file_writes: true,
+            assistant_web_access: true,
             terminal_hide_function_keys: true,
             picture_info: PictureInfoSettings::default(),
             document_hub: DocumentHubSettings::default(),
