@@ -1,6 +1,6 @@
 # 0351 Agent harness: close the main gaps with Pi
 
-Status: in_progress
+Status: done
 Priority: medium
 Subsystem: backend, agent
 Depends on: none
@@ -44,3 +44,7 @@ narrow typed seam to `fm-agent`, not a general hook system.
   read for it; its tool, session, compaction and steering behaviour is as known from earlier
   releases, so check `docs/sessions.md`, `docs/compaction.md` and `docs/rpc.md` in the Pi repo
   before copying a detail.
+- 2026-11-25 claude: done. 0352 (edit_file), 0353 (compaction at 80 %), 0354 (saved terminal
+  sessions, `/resume`), 0355 (steering) and 0356 (auto-approve) are in. Follow-ups: 0358 (session
+  memory through the notes folder's semantic index), 0359 (chat history, chat compaction, forks,
+  deleting saved sessions). Not tried in the running desktop app; all verified by tests.
