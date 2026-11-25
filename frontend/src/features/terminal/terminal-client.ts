@@ -6,6 +6,7 @@ import type {
   TerminalAssistReply,
   TerminalAssistRequest,
   TerminalAssistSkill,
+  TerminalSavedSession,
 } from './terminal-assist';
 
 export type TerminalEvent =
@@ -44,6 +45,10 @@ export interface TerminalClient {
    * (task 0355). `false` when it was not queued.
    */
   assistSteer?(sessionId: string, text: string): Promise<boolean>;
+  /** The saved assistant sessions, most recent first (`/resume`, task 0354). */
+  assistSaved?(): Promise<readonly TerminalSavedSession[]>;
+  /** Continues a saved session in this tab's session; `null` when it is gone. */
+  assistResume?(savedId: string, sessionId: string): Promise<TerminalSavedSession | null>;
   /** The paths under a session's root, for `@` completion (task 0343). */
   assistFiles?(root: string): Promise<TerminalAssistFiles>;
   /** The skills `/` can invoke in a folder: folder skills and notes (task 0343). */
@@ -78,6 +83,9 @@ export const tauriTerminalClient: TerminalClient = {
   assistClose: (sessionId) => invoke<void>('terminal_assist_close', { sessionId }),
   assistCancel: (sessionId) => invoke<void>('terminal_assist_cancel', { sessionId }),
   assistSteer: (sessionId, text) => invoke<boolean>('terminal_assist_steer', { sessionId, text }),
+  assistSaved: () => invoke<TerminalSavedSession[]>('terminal_assist_saved_sessions'),
+  assistResume: (savedId, sessionId) =>
+    invoke<TerminalSavedSession | null>('terminal_assist_resume', { savedId, sessionId }),
   assistFiles: (root) => invoke<TerminalAssistFiles>('terminal_assist_files', { root }),
   assistSkills: (workingDirectory) =>
     invoke<TerminalAssistSkill[]>('terminal_assist_skills', { workingDirectory }),

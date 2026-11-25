@@ -592,7 +592,9 @@ subtask block (0299–0303) and the earlier corpus-themes follow-ups.
 - [ ] 0351 Agent harness: close the main gaps with Pi *(backend, agent — parent of 0352–0355; sub-agents, plan mode and a general hook system out of scope)*
 - [x] 0352 Agent edit_file tool with approval *(backend, agent, frontend — exact-string replace, diff approved by the person, fingerprint check; part of 0351)*
 - [x] 0353 Agent conversation compaction by summary *(backend, agent — older exchanges summarised incrementally instead of dropped; part of 0351)*
-- [ ] 0354 Saved, resumable and forkable agent sessions *(backend, agent, frontend — terminal sessions persisted, chat keeps tool history, fork from here; needs 0353; part of 0351)*
+- [x] 0354 Saved, resumable and forkable agent sessions *(backend, agent, frontend — terminal sessions persisted, chat keeps tool history, fork from here; needs 0353; part of 0351)*
 - [x] 0355 Steering a running agent turn *(backend, agent, frontend — messages typed during a turn delivered between tool rounds; part of 0351)*
 - [x] 0356 Assistant auto-approve mode *(frontend, agent, high — per-session `/auto`: commands, writes and edits run without asking unless very dangerous; part of 0351)*
 - [x] 0357 Document hub virtual folder with per-extension subfolders *(backend, frontend, settings, medium — one-click "Documents" virtual folder over a configurable base path (default ~) and extension list, with a virtual subfolder per extension; extends 0162, shares plumbing with 0330)*
+- [ ] 0358 Assistant session memory through the semantic index *(backend, agent, semantic — session summaries as Markdown records in the notes folder, indexed under its consent, found with `search_notes`; needs 0353, 0354)*
+- [ ] 0359 Chat conversations: tool history, compaction and forks *(backend, agent, frontend — schema 2 with agent messages, chat compaction, fork from here, delete saved terminal sessions; split from 0353/0354)*

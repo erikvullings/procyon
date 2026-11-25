@@ -2840,6 +2840,11 @@ export const fr = {
     slashHelpClear: 'oublier la conversation, garder le dossier',
     slashHelpCompact: 'remplacer la conversation par un résumé',
     slashHelpModel: 'lister les modèles de chat ou en choisir un',
+    slashHelpResume: 'lister les sessions enregistrées, ou en reprendre une ici (/resume 2)',
+    resumeList: 'Sessions enregistrées (questions, date, dossier) :',
+    resumeNone: "Aucune session enregistrée pour l'instant.",
+    resumeGone: "Cette session n'est plus enregistrée.",
+    resumed: 'Reprise de « {title} » ({count} questions).',
     slashHelpAuto:
       "activer ou désactiver l'approbation automatique : exécuter des commandes, créer des fichiers et appliquer des modifications sans demander, sauf pour les commandes très dangereuses",
     slashAutoOn:

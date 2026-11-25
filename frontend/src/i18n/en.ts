@@ -2762,6 +2762,11 @@ export const en = {
     slashHelpClear: 'forget the conversation, keep the folder',
     slashHelpCompact: 'replace the conversation by a summary',
     slashHelpModel: 'list the chat models, or switch to one',
+    slashHelpResume: 'list saved sessions, or continue one here (/resume 2)',
+    resumeList: 'Saved sessions (questions, date, folder):',
+    resumeNone: 'No saved sessions yet.',
+    resumeGone: 'That session is no longer saved.',
+    resumed: 'Continuing “{title}” ({count} questions).',
     slashHelpAuto:
       'turn auto-approve on or off: run commands, create files and apply edits without asking, except very dangerous commands',
     slashAutoOn:

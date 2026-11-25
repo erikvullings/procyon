@@ -2816,6 +2816,11 @@ export const it = {
     slashHelpClear: 'dimentica la conversazione, mantieni la cartella',
     slashHelpCompact: 'sostituisci la conversazione con un riepilogo',
     slashHelpModel: 'elenca i modelli di chat o passa a uno',
+    slashHelpResume: 'elenca le sessioni salvate, o riprendine una qui (/resume 2)',
+    resumeList: 'Sessioni salvate (domande, data, cartella):',
+    resumeNone: 'Ancora nessuna sessione salvata.',
+    resumeGone: 'Quella sessione non è più salvata.',
+    resumed: 'Si riprende «{title}» ({count} domande).',
     slashHelpAuto:
       "attiva o disattiva l'approvazione automatica: esegui comandi, crea file e applica modifiche senza chiedere, tranne i comandi molto pericolosi",
     slashAutoOn:

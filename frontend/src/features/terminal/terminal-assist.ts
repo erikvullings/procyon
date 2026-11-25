@@ -118,6 +118,17 @@ export type TerminalAssistEvent =
   /** A message sent while the assistant worked reached the model (task 0355). */
   | { readonly kind: 'steered'; readonly text: string };
 
+/** A saved assistant session, for `/resume` (task 0354). */
+export interface TerminalSavedSession {
+  readonly id: string;
+  /** Its first question, shortened. */
+  readonly title: string;
+  /** Its folder, as a location URI. */
+  readonly folder: string;
+  readonly updatedAt: string;
+  readonly questions: number;
+}
+
 /** A byte count for people: `812 B`, `1.2 KiB`. */
 export function byteSize(bytes: number): string {
   return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KiB`;

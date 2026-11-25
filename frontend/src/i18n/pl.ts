@@ -2814,6 +2814,11 @@ export const pl = {
     slashHelpClear: 'zapomnij rozmowę, zachowaj folder',
     slashHelpCompact: 'zastąp rozmowę podsumowaniem',
     slashHelpModel: 'wyświetl modele czatu lub przełącz na jeden z nich',
+    slashHelpResume: 'pokaż zapisane sesje lub kontynuuj jedną tutaj (/resume 2)',
+    resumeList: 'Zapisane sesje (pytania, data, folder):',
+    resumeNone: 'Brak zapisanych sesji.',
+    resumeGone: 'Ta sesja nie jest już zapisana.',
+    resumed: 'Kontynuacja „{title}” (pytania: {count}).',
     slashHelpAuto:
       'włącz lub wyłącz automatyczne zatwierdzanie: uruchamianie poleceń, tworzenie plików i wprowadzanie zmian bez pytania, z wyjątkiem bardzo niebezpiecznych poleceń',
     slashAutoOn:

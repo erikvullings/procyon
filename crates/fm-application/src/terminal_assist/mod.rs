@@ -7,6 +7,7 @@ mod agent_tools;
 mod commands;
 mod context;
 mod edit;
+mod saved;
 mod session;
 mod write;
 
@@ -20,13 +21,14 @@ use fm_agent::{
 };
 
 pub(crate) use fm_agent::{NotesAccess, redact_secrets};
+pub(crate) use saved::STORE_DIRECTORY as SAVED_SESSIONS_DIRECTORY;
 pub(crate) use session::Sessions;
 
 use fm_transport_dto::{
     ChatFailureDto, TerminalAssistEventDto, TerminalAssistFilesDto, TerminalAssistKindDto,
     TerminalAssistReplyDto, TerminalAssistRequestDto, TerminalAssistSkillDto,
-    TerminalEditRequestDto, TerminalToolResultDto, TerminalWriteDecisionDto,
-    TerminalWriteRequestDto,
+    TerminalEditRequestDto, TerminalSavedSessionDto, TerminalToolResultDto,
+    TerminalWriteDecisionDto, TerminalWriteRequestDto,
 };
 use fm_vfs::ProviderRegistry;
 use tokio_util::sync::CancellationToken;
@@ -179,6 +181,17 @@ pub(crate) async fn skills(
     commands::list_skills(terminal, working_directory).await
 }
 
+/// A saved session as the terminal lists it (task 0354).
+pub(crate) fn saved_session_dto(summary: saved::SavedSummary) -> TerminalSavedSessionDto {
+    TerminalSavedSessionDto {
+        id: summary.id,
+        title: summary.title,
+        folder: summary.folder,
+        updated_at: summary.updated_at,
+        questions: u32::try_from(summary.questions).unwrap_or(u32::MAX),
+    }
+}
+
 /// Queues a message for a session's running request (task 0355). `false` when the message is
 /// empty, too long, or the queue is full.
 pub(crate) fn steer(sessions: &Sessions, id: &str, text: &str) -> bool {
@@ -271,9 +284,11 @@ async fn ask(
     on_event: &mut (dyn FnMut(TerminalAssistEventDto) + Send),
 ) -> Result<TerminalAssistReplyDto, ChatFailureDto> {
     let id = request.session_id.clone();
+    let folder = tools_folder(&request).to_owned();
     let reply = ask_turn(generator, terminal, request, on_event).await;
     if let Some(id) = id {
         terminal.sessions.drop_steering(&id);
+        terminal.sessions.save(&id, &folder);
     }
     reply
 }

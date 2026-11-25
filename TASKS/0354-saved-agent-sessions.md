@@ -1,6 +1,6 @@
 # 0354 Saved, resumable and forkable agent sessions
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: backend, agent, frontend
 Depends on: 0353
@@ -38,3 +38,21 @@ that can be resumed and forked from any earlier message.
   conversations (local only), and offer delete.
 
 ## Agent Notes
+- 2026-11-25 claude: done for the terminal assistant; chat moved to 0359.
+  - `fm_agent::Message`/`ToolCallRecord` are serde types now (host-neutral session format).
+  - `terminal_assist/saved.rs`: `SavedSessions` under `<settings data>/terminal-sessions/`, one
+    JSON document per session (schema 1: id, title = first question, folder, updated, question
+    count, the stored turns incl. tool calls and results, already redacted and bounded), written
+    via temp file + rename after every question, at most 50 kept (oldest removed), file names
+    sanitised from the tab's session id.
+  - `Sessions::persistent` (the service uses it), `saved()`, `resume(from, into)`: copies a saved
+    conversation into the tab's session, so the original stays and the copy is a fork from its
+    end. Service `terminal_assist_saved_sessions` / `terminal_assist_resume`, Tauri commands of the
+    same name, `TerminalSavedSessionDto`.
+  - Terminal: `/resume` lists up to 20 (title, questions, date, folder), `/resume N` continues one.
+  - Decision: terminal sessions and chat conversations keep separate stores; they have different
+    shapes (chat is per workspace, text plus steps) and 0359 extends chat's own document.
+  - Not done (0359): fork from an earlier question, deleting a saved session from the UI, chat tool
+    history and chat compaction.
+  - Verified: 2 store tests (restart + resume-as-copy, pruning and unsafe ids); drawer `/resume`
+    test; terminal_assist and message tests 115 pass; clippy clean; frontend 464 pass.

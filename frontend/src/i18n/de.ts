@@ -2844,6 +2844,11 @@ export const de = {
     slashHelpClear: 'Unterhaltung vergessen, Ordner behalten',
     slashHelpCompact: 'Unterhaltung durch eine Zusammenfassung ersetzen',
     slashHelpModel: 'Chat-Modelle auflisten oder zu einem wechseln',
+    slashHelpResume: 'gespeicherte Sitzungen auflisten oder eine hier fortsetzen (/resume 2)',
+    resumeList: 'Gespeicherte Sitzungen (Fragen, Datum, Ordner):',
+    resumeNone: 'Noch keine gespeicherten Sitzungen.',
+    resumeGone: 'Diese Sitzung ist nicht mehr gespeichert.',
+    resumed: '„{title}“ wird fortgesetzt ({count} Fragen).',
     slashHelpAuto:
       'automatische Freigabe ein- oder ausschalten: Befehle ausführen, Dateien anlegen und Änderungen übernehmen, ohne zu fragen, außer bei sehr gefährlichen Befehlen',
     slashAutoOn:

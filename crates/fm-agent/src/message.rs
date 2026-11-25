@@ -8,10 +8,11 @@
 
 use std::collections::HashSet;
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// One call the model made, as the conversation records it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolCallRecord {
     /// The endpoint's id for the call, or one the loop made up; results refer to it.
     pub id: String,
@@ -21,8 +22,9 @@ pub struct ToolCallRecord {
     pub arguments: Value,
 }
 
-/// One message of an agent conversation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One message of an agent conversation. Serialisable, so a host can save a session (task 0354).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Message {
     /// What the person said (with any context the host attached), as the host words it.
     User(String),

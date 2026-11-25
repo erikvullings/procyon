@@ -2829,6 +2829,11 @@ export const pt = {
     slashHelpClear: 'esquecer a conversa, manter a pasta',
     slashHelpCompact: 'substituir a conversa por um resumo',
     slashHelpModel: 'listar os modelos de chat ou mudar para um',
+    slashHelpResume: 'listar as sessões guardadas, ou continuar uma aqui (/resume 2)',
+    resumeList: 'Sessões guardadas (perguntas, data, pasta):',
+    resumeNone: 'Ainda não há sessões guardadas.',
+    resumeGone: 'Essa sessão já não está guardada.',
+    resumed: 'A continuar «{title}» ({count} perguntas).',
     slashHelpAuto:
       'ativar ou desativar a aprovação automática: executar comandos, criar arquivos e aplicar alterações sem perguntar, exceto comandos muito perigosos',
     slashAutoOn:

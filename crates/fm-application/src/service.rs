@@ -658,7 +658,11 @@ impl FileManagerService {
             llm_profiles,
             file_assistant: crate::file_assistant::FileAssistantService::default(),
             chat: crate::chat::ChatService::default(),
-            terminal_sessions: crate::terminal_assist::Sessions::default(),
+            terminal_sessions: crate::terminal_assist::Sessions::persistent(
+                settings_store
+                    .directory()
+                    .join(crate::terminal_assist::SAVED_SESSIONS_DIRECTORY),
+            ),
             skill_index: Arc::new(fm_agent::SkillIndex::new()),
             chat_conversations,
             image_prompts,
@@ -3573,6 +3577,27 @@ impl FileManagerService {
     /// Forgets one terminal tab's assistant session, when the tab closes.
     pub fn terminal_assist_close(&self, session_id: &str) {
         self.terminal_sessions.close(session_id);
+    }
+
+    /// The saved terminal assistant sessions, most recent first (`/resume`, task 0354).
+    pub fn terminal_assist_saved_sessions(&self) -> Vec<fm_transport_dto::TerminalSavedSessionDto> {
+        self.terminal_sessions
+            .saved()
+            .into_iter()
+            .map(crate::terminal_assist::saved_session_dto)
+            .collect()
+    }
+
+    /// Continues a saved session in a tab's session; the saved original stays as it was.
+    /// `None` when no such session is saved.
+    pub fn terminal_assist_resume(
+        &self,
+        saved_id: &str,
+        session_id: &str,
+    ) -> Option<fm_transport_dto::TerminalSavedSessionDto> {
+        self.terminal_sessions
+            .resume(saved_id, session_id)
+            .map(crate::terminal_assist::saved_session_dto)
     }
 
     /// Gives a terminal tab's running request a message the person sent meanwhile; the model sees

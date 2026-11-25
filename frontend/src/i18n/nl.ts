@@ -2814,6 +2814,11 @@ export const nl = {
     slashHelpClear: 'vergeet het gesprek, houd de map',
     slashHelpCompact: 'vervang het gesprek door een samenvatting',
     slashHelpModel: 'toon de chatmodellen, of wissel naar een ervan',
+    slashHelpResume: 'toon opgeslagen sessies, of ga hier verder met één (/resume 2)',
+    resumeList: 'Opgeslagen sessies (vragen, datum, map):',
+    resumeNone: 'Nog geen opgeslagen sessies.',
+    resumeGone: 'Die sessie is niet meer opgeslagen.',
+    resumed: 'Verder met “{title}” ({count} vragen).',
     slashHelpAuto:
       'automatisch goedkeuren aan- of uitzetten: opdrachten uitvoeren, bestanden maken en wijzigingen toepassen zonder te vragen, behalve zeer gevaarlijke opdrachten',
     slashAutoOn:

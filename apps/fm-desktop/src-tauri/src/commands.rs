@@ -2981,6 +2981,24 @@ pub(crate) fn terminal_assist_close(state: State<'_, AppState>, session_id: Stri
     state.service.terminal_assist_close(&session_id);
 }
 
+/// The saved terminal assistant sessions, most recent first (task 0354).
+#[tauri::command]
+pub(crate) fn terminal_assist_saved_sessions(
+    state: State<'_, AppState>,
+) -> Vec<fm_transport_dto::TerminalSavedSessionDto> {
+    state.service.terminal_assist_saved_sessions()
+}
+
+/// Continues a saved session in a tab's assistant session (task 0354).
+#[tauri::command]
+pub(crate) fn terminal_assist_resume(
+    state: State<'_, AppState>,
+    saved_id: String,
+    session_id: String,
+) -> Option<fm_transport_dto::TerminalSavedSessionDto> {
+    state.service.terminal_assist_resume(&saved_id, &session_id)
+}
+
 /// Gives a terminal tab's running assistant request a message sent meanwhile (task 0355).
 #[tauri::command]
 pub(crate) fn terminal_assist_steer(

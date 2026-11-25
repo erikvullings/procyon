@@ -9,6 +9,7 @@ use fm_agent::{Message, ToolCallRecord, fit_messages, render_text};
 use fm_transport_dto::TerminalBlockDto;
 
 use super::edit::PendingEdit;
+use super::saved::{SavedSessions, SavedSummary};
 use crate::file_assistant::truncate_to_bytes;
 
 /// Most sessions kept; the least recently used is dropped first.
@@ -38,8 +39,9 @@ const MAX_SENT_BLOCKS: usize = 200;
 /// Longest stored turn, in bytes.
 const MAX_TURN_BYTES: usize = 12 * 1024;
 
-#[derive(Debug, Clone)]
-enum Turn {
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) enum Turn {
     Person {
         question: String,
         context: String,
@@ -49,6 +51,11 @@ enum Turn {
 }
 
 impl Turn {
+    /// Whether this is one of the person's questions.
+    pub(super) fn is_person(&self) -> bool {
+        matches!(self, Self::Person { .. })
+    }
+
     fn message(&self) -> Message {
         match self {
             Self::Person { question, context } if !context.is_empty() => Message::User(format!(
@@ -116,9 +123,71 @@ struct State {
 #[derive(Debug, Default)]
 pub(crate) struct Sessions {
     state: Mutex<State>,
+    /// Where sessions are saved (task 0354); in memory only without it.
+    store: Option<SavedSessions>,
 }
 
 impl Sessions {
+    /// Sessions that are also saved under `root`, so they can be resumed later.
+    pub(crate) fn persistent(root: std::path::PathBuf) -> Self {
+        Self {
+            state: Mutex::default(),
+            store: Some(SavedSessions::new(root)),
+        }
+    }
+
+    /// Saves a session as it is now, titled by its first question.
+    pub(super) fn save(&self, id: &str, folder: &str) {
+        let Some(store) = &self.store else {
+            return;
+        };
+        let (title, turns) = {
+            let state = self.lock();
+            let Some(session) = state.sessions.get(id) else {
+                return;
+            };
+            let title = session
+                .turns
+                .iter()
+                .find_map(|turn| match turn {
+                    Turn::Person { question, .. } => Some(question.clone()),
+                    Turn::Agent(_) => None,
+                })
+                .unwrap_or_default();
+            (title, session.turns.clone())
+        };
+        store.save(id, folder, &title, &turns);
+    }
+
+    /// The saved sessions, most recent first; empty without a store.
+    pub(crate) fn saved(&self) -> Vec<SavedSummary> {
+        self.store
+            .as_ref()
+            .map(SavedSessions::list)
+            .unwrap_or_default()
+    }
+
+    /// Continues the saved session `from` in the tab session `into`, replacing what `into` held.
+    /// The saved original is not changed. `None` when there is no such saved session.
+    pub(crate) fn resume(&self, from: &str, into: &str) -> Option<SavedSummary> {
+        let record = self.store.as_ref()?.load(from)?;
+        let summary = SavedSummary {
+            id: record.id.clone(),
+            title: record.title.clone(),
+            folder: record.folder.clone(),
+            updated_at: record.updated_at.clone(),
+            questions: record.questions,
+        };
+        let turns = record.turns;
+        self.with(into, |session| {
+            *session = Session {
+                turns,
+                ..Session::default()
+            };
+        });
+        Some(summary)
+    }
+
     fn lock(&self) -> MutexGuard<'_, State> {
         self.state
             .lock()

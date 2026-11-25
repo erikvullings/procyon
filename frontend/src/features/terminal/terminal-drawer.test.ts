@@ -1421,6 +1421,27 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     expect(assist).not.toHaveBeenCalled();
   });
 
+  it('lists saved sessions with /resume and continues one with /resume <number>', async () => {
+    const saved = {
+      id: 'old-tab',
+      title: 'where are the decoy files?',
+      folder: 'file:///home/repo',
+      updatedAt: '2026-11-24T10:00:00Z',
+      questions: 3,
+    };
+    const assistSaved = vi.fn(async () => [saved]);
+    const assistResume = vi.fn(async (_savedId: string, _sessionId: string) => saved);
+    await mountWith({ assistSaved, assistResume });
+    ask('# /resume');
+    await vi.waitFor(() => expect(root.textContent).toContain('1. where are the decoy files?'));
+    await markPrompt();
+    ask('# /resume 1');
+    await vi.waitFor(() => expect(assistResume).toHaveBeenCalledOnce());
+    expect(assistResume.mock.calls[0]?.[0]).toBe('old-tab');
+    await vi.waitFor(() => expect(root.textContent).toContain('Continuing'));
+    expect(assist).not.toHaveBeenCalled();
+  });
+
   it('lists the chat models with /model and switches with /model <number>', async () => {
     const select = vi.fn<TerminalModels['select']>(async () => undefined);
     const models: TerminalModels = {

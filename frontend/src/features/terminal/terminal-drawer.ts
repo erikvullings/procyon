@@ -71,6 +71,7 @@ import {
   type TerminalAssistEvent,
   type TerminalAssistReply,
   type TerminalAssistSource,
+  type TerminalSavedSession,
   type TerminalToolResult,
   type TerminalWriteDecision,
   transcriptTail,
@@ -178,6 +179,8 @@ function slashHelp(command: SlashCommandName): string {
       return t('terminal', 'slashHelpModel');
     case 'auto':
       return t('terminal', 'slashHelpAuto');
+    case 'resume':
+      return t('terminal', 'slashHelpResume');
     case 'help':
       return t('terminal', 'slashHelpHelp');
   }
@@ -328,6 +331,8 @@ type LiveTerminal = {
     | undefined;
   /** The models `/model` listed last, so `/model 2` picks from what was shown. */
   models: readonly ModelChoice[];
+  /** The sessions `/resume` listed last, so `/resume 2` picks from what was shown. */
+  savedSessions: readonly TerminalSavedSession[];
   /** The question in the chat input; `undefined` while the input is closed. */
   composer: string | undefined;
   /** Moves focus into the chat input when it is next drawn. */
@@ -1663,6 +1668,9 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       case 'model':
         runAsyncCommand(live, question, () => switchModel(live, attrs.models, argument));
         return;
+      case 'resume':
+        runAsyncCommand(live, question, () => resumeSession(live, argument));
+        return;
       case 'auto': {
         const choice = argument.toLowerCase();
         live.autoApprove = choice === 'on' ? true : choice === 'off' ? false : !live.autoApprove;
@@ -1692,6 +1700,33 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         present(live, token, noticeAnsi(assistFailureText(String(error))), undefined),
       )
       .finally(() => m.redraw());
+  }
+
+  /** `/resume`: lists the saved sessions; `/resume <n>` continues one in this tab (task 0354). */
+  async function resumeSession(live: LiveTerminal, argument: string): Promise<string> {
+    const client = currentAttrs?.client;
+    if (client?.assistSaved === undefined || client.assistResume === undefined) {
+      return noticeAnsi(t('terminal', 'slashUnsupported'));
+    }
+    const number = Number.parseInt(argument, 10);
+    const chosen = Number.isInteger(number) ? live.savedSessions[number - 1] : undefined;
+    if (chosen === undefined) {
+      live.savedSessions = (await client.assistSaved())
+        .filter((saved) => saved.id !== live.assistSession)
+        .slice(0, 20);
+      if (live.savedSessions.length === 0) return infoAnsi([t('terminal', 'resumeNone')]);
+      return infoAnsi([
+        t('terminal', 'resumeList'),
+        ...live.savedSessions.map(
+          (saved, index) =>
+            `${index + 1}. ${saved.title}  (${saved.questions}, ${saved.updatedAt.slice(0, 10)}, ${saved.folder})`,
+        ),
+      ]);
+    }
+    const resumed = await client.assistResume(chosen.id, live.assistSession);
+    if (resumed === null) return noticeAnsi(t('terminal', 'resumeGone'));
+    live.assistActive = true;
+    return infoAnsi([t('terminal', 'resumed', { title: resumed.title, count: resumed.questions })]);
   }
 
   /** `/model`: lists the chat models; `/model <n|name>` switches the chat role to one. */
@@ -1876,6 +1911,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         skillCache: undefined,
         fileLoad: undefined,
         models: [],
+        savedSessions: [],
         composer: undefined,
         composerFocus: false,
         queued: undefined,

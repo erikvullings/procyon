@@ -222,6 +222,22 @@ pub enum TerminalAssistEventDto {
     },
 }
 
+/// A saved assistant session, for `/resume` (task 0354).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalSavedSessionDto {
+    /// The session to resume.
+    pub id: String,
+    /// Its first question, shortened.
+    pub title: String,
+    /// Its folder, as a location URI.
+    pub folder: String,
+    /// When it last changed, as an RFC 3339 timestamp.
+    pub updated_at: String,
+    /// How many questions it holds.
+    pub questions: u32,
+}
+
 /// The files under a session's root, for `@` completion (task 0343).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
