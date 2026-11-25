@@ -1,5 +1,4 @@
-//! `edit_file` (task 0352): changes an existing text file by replacing exact text, as Pi's `edit`
-//! does. The tool only checks its arguments and interrupts the turn with an [`EditRequest`]; the
+//! `edit_file` (task 0352): changes an existing text file by replacing text. The tool only checks its arguments and interrupts the turn with an [`EditRequest`]; the
 //! host reads the file, applies the edit with [`apply_edit`], shows the person the change and
 //! writes it once they approve. So an edit never happens unseen, whatever a document the model
 //! read told it to do.
@@ -34,10 +33,14 @@ pub struct EditRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum EditError {
     /// The text does not occur; `closest` is the most similar line, to help the next try.
-    #[error("the text to replace was not found in the file.{}", closest_hint(.closest.as_ref()))]
+    #[error("the text to replace was not found in the file.{} Trailing-whitespace matches: {trailing}. Indentation matches: {indentation}. Read the file again and copy a unique block.", closest_hint(.closest.as_ref()))]
     NotFound {
         /// The 1-based number and text of the line that looks most like the first line sought.
         closest: Option<(usize, String)>,
+        /// Candidates ignoring trailing whitespace.
+        trailing: usize,
+        /// Candidates after a uniform indentation shift.
+        indentation: usize,
     },
     /// The text occurs more than once and `replace_all` was not set.
     #[error(
@@ -59,9 +62,34 @@ fn closest_hint(closest: Option<&(usize, String)>) -> String {
     })
 }
 
-/// The file's text with `edit` applied. A file with Windows line endings is matched and changed
-/// with them, so the model may write `\n` as usual.
+/// The tier that matched the requested text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditMatch {
+    /// Verbatim replacement.
+    Exact,
+    /// Differences in trailing whitespace only.
+    TrailingWhitespace,
+    /// Differences in indentation as well as trailing whitespace.
+    Indentation,
+}
+
+impl std::fmt::Display for EditMatch {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Exact => "exact",
+            Self::TrailingWhitespace => "ignoring trailing whitespace",
+            Self::Indentation => "adjusting indentation",
+        })
+    }
+}
+
+/// Applies an edit and returns the edited content.
 pub fn apply_edit(content: &str, edit: &EditRequest) -> Result<String, EditError> {
+    match_edit(content, edit).map(|(text, _)| text)
+}
+
+/// Applies an edit and reports the matching tier. Existing line endings are kept.
+pub fn match_edit(content: &str, edit: &EditRequest) -> Result<(String, EditMatch), EditError> {
     let crlf = content.contains("\r\n");
     let lines = |text: &str| {
         if crlf && !text.contains("\r\n") {
@@ -77,16 +105,138 @@ pub fn apply_edit(content: &str, edit: &EditRequest) -> Result<String, EditError
     }
     let count = content.matches(old.as_str()).count();
     match count {
-        0 => Err(EditError::NotFound {
-            closest: closest_line(content, &edit.old_text),
-        }),
-        1 => Ok(content.replacen(old.as_str(), &new, 1)),
-        _ if edit.replace_all => Ok(content.replace(old.as_str(), &new)),
-        _ => Err(EditError::Ambiguous { count }),
+        0 => {}
+        1 => return Ok((content.replacen(&old, &new, 1), EditMatch::Exact)),
+        _ if edit.replace_all => return Ok((content.replace(&old, &new), EditMatch::Exact)),
+        _ => return Err(EditError::Ambiguous { count }),
+    }
+    let (trailing, candidate) = whitespace_matches(content, &old, false);
+    if let Some((range, _)) = candidate {
+        return replace_match(content, range, new, EditMatch::TrailingWhitespace);
+    }
+    let (indentation, candidate) = whitespace_matches(content, &old, true);
+    if let Some((range, shift)) = candidate
+        && let Some(replacement) = new
+            .split_inclusive('\n')
+            .map(|line| shift.apply(line))
+            .collect::<Option<String>>()
+    {
+        return replace_match(content, range, replacement, EditMatch::Indentation);
+    }
+    Err(EditError::NotFound {
+        closest: closest_line(content, &old),
+        trailing,
+        indentation,
+    })
+}
+
+fn replace_match(
+    content: &str,
+    range: std::ops::Range<usize>,
+    replacement: String,
+    tier: EditMatch,
+) -> Result<(String, EditMatch), EditError> {
+    if content[range.clone()] == replacement {
+        return Err(EditError::Unchanged);
+    }
+    let mut edited = content.to_owned();
+    edited.replace_range(range, &replacement);
+    Ok((edited, tier))
+}
+
+/// An indentation shift uses literal whitespace, so tabs keep their original meaning.
+#[derive(Clone, Copy, Default)]
+struct IndentShift<'a> {
+    remove: &'a str,
+    add: &'a str,
+}
+
+impl IndentShift<'_> {
+    fn apply(self, line: &str) -> Option<String> {
+        if line.trim().is_empty() {
+            return Some(line.to_owned());
+        }
+        Some(format!("{}{}", self.add, line.strip_prefix(self.remove)?))
+    }
+
+    fn matches(self, wanted: &str, actual: &str) -> bool {
+        if wanted.is_empty() && actual.is_empty() {
+            return true;
+        }
+        wanted.strip_prefix(self.remove) == actual.strip_prefix(self.add)
+            && wanted.starts_with(self.remove)
     }
 }
 
-/// The line of `content` sharing the most words with the first non-blank line of `sought`.
+fn whitespace_matches<'a>(
+    content: &'a str,
+    old: &'a str,
+    reindent: bool,
+) -> (usize, Option<(std::ops::Range<usize>, IndentShift<'a>)>) {
+    let mut offset = 0;
+    let lines: Vec<_> = content
+        .split_inclusive('\n')
+        .map(|line| {
+            let start = offset;
+            offset += line.len();
+            (start, line)
+        })
+        .collect();
+    let trim = |line: &'a str| line.trim_end_matches([' ', '\t', '\r', '\n']);
+    let wanted: Vec<_> = old.split_inclusive('\n').map(trim).collect();
+    let Some(anchor) = wanted.iter().position(|line| !line.is_empty()) else {
+        return (0, None);
+    };
+    let ends_in_newline = old.ends_with('\n');
+    let mut count = 0;
+    let mut candidate = None;
+    for block in lines.windows(wanted.len()) {
+        let actual_anchor = trim(block[anchor].1);
+        let shift = if reindent {
+            let source = &wanted[anchor]
+                [..wanted[anchor].len() - wanted[anchor].trim_start_matches([' ', '\t']).len()];
+            let destination = &actual_anchor
+                [..actual_anchor.len() - actual_anchor.trim_start_matches([' ', '\t']).len()];
+            if let Some(add) = destination.strip_suffix(source) {
+                IndentShift { remove: "", add }
+            } else if let Some(remove) = source.strip_suffix(destination) {
+                IndentShift { remove, add: "" }
+            } else {
+                IndentShift {
+                    remove: source,
+                    add: destination,
+                }
+            }
+        } else {
+            IndentShift::default()
+        };
+        if !shift.matches(wanted[anchor], actual_anchor) {
+            continue;
+        }
+        let (start, last) = block[block.len() - 1];
+        if ends_in_newline && !last.ends_with('\n') {
+            continue;
+        }
+        if wanted
+            .iter()
+            .zip(block)
+            .all(|(wanted, (_, actual))| shift.matches(wanted, trim(actual)))
+        {
+            count += 1;
+            if count == 1 {
+                let end = if ends_in_newline {
+                    last
+                } else {
+                    last.trim_end_matches(['\r', '\n'])
+                };
+                candidate = Some((block[0].0..start + end.len(), shift));
+            }
+        }
+    }
+    (count, candidate.filter(|_| count == 1))
+}
+
+/// The closest line to the first non-blank line of `sought`, for a recovery hint.
 fn closest_line(content: &str, sought: &str) -> Option<(usize, String)> {
     let first = sought
         .lines()
@@ -101,11 +251,16 @@ fn closest_line(content: &str, sought: &str) -> Option<(usize, String)> {
                 .split_whitespace()
                 .filter(|word| words.contains(word))
                 .count();
-            (shared, index, line)
+            let prefix = first
+                .bytes()
+                .zip(line.trim_start().bytes())
+                .take_while(|(a, b)| a == b)
+                .count();
+            (shared, prefix, index, line)
         })
-        .filter(|(shared, ..)| *shared > 0)
-        .max_by_key(|(shared, index, _)| (*shared, std::cmp::Reverse(*index)))
-        .map(|(_, index, line)| {
+        .filter(|(_, _, _, line)| !line.trim().is_empty())
+        .max_by_key(|(shared, prefix, index, _)| (*shared, *prefix, std::cmp::Reverse(*index)))
+        .map(|(_, _, index, line)| {
             (
                 index + 1,
                 crate::text::truncate_to_bytes(line.trim(), 200).to_owned(),
@@ -132,6 +287,14 @@ pub struct EditFile;
 #[async_trait]
 impl<I: From<EditRequest> + Send + 'static> TypedTool<I> for EditFile {
     type Args = EditFileArgs;
+
+    fn argument_aliases(&self) -> &'static [(&'static str, &'static [&'static str])] {
+        &[
+            ("path", &["file_path", "filename"]),
+            ("old_text", &["old_string"]),
+            ("new_text", &["new_string"]),
+        ]
+    }
 
     fn name(&self) -> &'static str {
         "edit_file"

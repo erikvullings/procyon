@@ -3540,16 +3540,13 @@ struct StreamedCall {
 
 /// A native tool call as a text-protocol line (`TOOL {"id":..,"name":..,"arguments":{..}}`), so
 /// the agent loop reads native and text calls the same way and can answer the call by its id.
-/// Arguments that are not a JSON object become a call without arguments: the tool then reports
-/// what is missing.
+/// Malformed arguments are kept as a string so the harness reports the error to the model.
 fn tool_call_line(id: Option<&str>, name: &str, arguments: &str) -> Option<String> {
     if name.is_empty() {
         return None;
     }
-    let arguments = match serde_json::from_str::<Value>(arguments.trim()) {
-        Ok(Value::Object(object)) => Value::Object(object),
-        _ => Value::Object(serde_json::Map::new()),
-    };
+    let arguments = fm_agent::repair_tool_arguments(arguments)
+        .unwrap_or_else(|| Value::String(arguments.to_owned()));
     Some(fm_agent::tool_call_line(id, name, &arguments))
 }
 
@@ -4172,10 +4169,10 @@ mod tests {
             text,
             "Let me look.\nTOOL {\"id\":\"c1\",\"name\":\"read_file\",\"arguments\":{\"path\":\"a.txt\"}}"
         );
-        // Arguments that are not an object still name the tool, so it can say what is missing.
+        // Invalid JSON reaches the turn loop and is rejected there.
         assert_eq!(
             tool_call_line(None, "list_dir", "not json").as_deref(),
-            Some("TOOL {\"name\":\"list_dir\",\"arguments\":{}}")
+            Some("TOOL {\"name\":\"list_dir\",\"arguments\":\"not json\"}")
         );
         assert_eq!(tool_call_line(None, "", "{}"), None);
     }

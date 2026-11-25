@@ -1,6 +1,6 @@
 # 0360 Agent harness robustness across models
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: backend, agent
 Depends on: none
@@ -79,3 +79,25 @@ guidance in errors, loop detection and a way to measure any of it.
 - 2026-11-25 claude: planned from the harness-correlation discussion. Out of scope: per-model tool
   renaming, fuzzy edit matching, vendor-specific edit formats (apply-patch) unless the eval shows
   a clear gain.
+
+- 2026-11-25: Implemented and evaluated the neutral profile through a local Ollama
+  OpenAI-compatible endpoint with native tool calling. The runner uses three fixed fixtures,
+  including a capped read and an edit with an approval result. Each model ran each task once.
+
+  | Model | Read | Capped read | Edit | Success | Rounds | Failed calls by cause |
+  | --- | --- | --- | --- | --- | ---: | ---: | --- |
+  | `llama3.2:3b` | No (2 rounds) | No (2 rounds) | Yes (2 rounds) | 1/3 | 6 | None |
+  | `granite4.2:latest` | Yes (2 rounds) | Yes (2 rounds) | Yes (3 rounds) | 3/3 | 7 | None |
+
+  Llama missed the expected final answers after successful reads. The sample does not establish
+  whether a different calling mode or prompt would help. The hosts use the neutral profile.
+
+  Run against explicitly configured models from the workspace root:
+
+  ```sh
+  FM_AGENT_EVAL_URL=http://127.0.0.1:11434/v1/chat/completions \
+  FM_AGENT_EVAL_MODELS=llama3.2:3b,granite4.2:latest \
+  cargo test -p fm-agent --test endpoint_eval -- --ignored --nocapture
+  ```
+
+  Set `FM_AGENT_EVAL_API_KEY` if the endpoint requires bearer authentication.

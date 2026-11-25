@@ -6,6 +6,7 @@
 //! concurrency of tool runs, and the steps shown to the person.
 
 use std::borrow::Cow;
+use std::hash::{DefaultHasher, Hash as _, Hasher as _};
 
 use async_trait::async_trait;
 use std::pin::pin;
@@ -61,6 +62,8 @@ pub enum TurnEvent {
     /// What a tool that is still running is doing (see [`ToolContext::report`]). Each report
     /// replaces the one before; the tool's [`Step`](Self::Step) replaces the last.
     Progress(String),
+    /// The model kept making a call after a repetition warning.
+    LoopStopped(String),
     /// A message the person sent during the turn reached the model ([`TurnHost::take_steering`]).
     Steered(String),
 }
@@ -76,6 +79,8 @@ pub enum TurnEnd<I> {
     Cancelled,
     /// The model kept calling tools until [`TurnOptions::max_steps`].
     StepLimit,
+    /// Repetition guard stopped further tool execution.
+    LoopStopped(String),
     /// A tool stopped the turn for the person. Its call has no result in the conversation yet: the
     /// host records what happened as that call's result and may run the turn again.
     Interrupted {
@@ -110,9 +115,48 @@ impl Default for ContinueNudge {
     }
 }
 
+/// Measured model-specific adjustments. The neutral profile follows host defaults.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ModelProfile {
+    /// Short prompt notes for the model's tool dialect.
+    pub prompt_notes: &'static str,
+    /// Preferred calling mode, subject to host capabilities.
+    pub preferred_calling: Option<crate::ToolCalling>,
+    /// Optional cap on bytes returned from a tool call.
+    pub max_result_bytes: Option<usize>,
+    /// Whether to use the host's parallelism limit.
+    pub parallel_calls: Option<bool>,
+}
+
+impl ModelProfile {
+    /// Selects a profile for the configured model ID. The measured profile list is empty.
+    pub fn for_model(_model_id: &str) -> Self {
+        Self::default()
+    }
+
+    /// Adds the model dialect notes to the system prompt.
+    pub fn append_prompt_notes(self, prompt: &mut String) {
+        if !self.prompt_notes.is_empty() {
+            prompt.push_str("\n\n");
+            prompt.push_str(self.prompt_notes);
+        }
+    }
+
+    /// Calling mode to use given support reported by the endpoint.
+    pub fn calling(self, native_supported: bool) -> crate::ToolCalling {
+        if native_supported && self.preferred_calling != Some(crate::ToolCalling::Text) {
+            crate::ToolCalling::Native
+        } else {
+            crate::ToolCalling::Text
+        }
+    }
+}
+
 /// The bounds and messages of a turn.
 #[derive(Debug, Clone)]
 pub struct TurnOptions {
+    /// Capability and context adjustments for the selected model.
+    pub profile: ModelProfile,
     /// Most model replies with tool calls in one turn.
     pub max_steps: usize,
     /// Most calls run from one reply; later ones are ignored.
@@ -136,6 +180,7 @@ pub struct TurnOptions {
 impl Default for TurnOptions {
     fn default() -> Self {
         Self {
+            profile: ModelProfile::default(),
             max_steps: 24,
             max_calls_per_reply: 8,
             max_concurrent_calls: 4,
@@ -187,6 +232,19 @@ where
     H: TurnHost,
     I: Send + 'static,
 {
+    let mut limits = options.clone();
+    if options.profile.parallel_calls == Some(false) {
+        limits.max_concurrent_calls = 1;
+    }
+    if let Some(maximum) = options.profile.max_result_bytes {
+        limits.max_result_bytes = Some(
+            options
+                .max_result_bytes
+                .map_or(maximum, |host| host.min(maximum)),
+        );
+    }
+    let options = &limits;
+    let mut repeats = RepeatedCalls::default();
     let mut worked = false;
     let mut nudges = 0;
     for step in 0..options.max_steps {
@@ -203,7 +261,7 @@ where
             .await?;
         streamer.finish(&mut |text| on_event(TurnEvent::Line(text.to_owned())));
         let reply = raw.trim();
-        let calls = registry.parse(reply, options.max_calls_per_reply);
+        let calls = registry.parse_turn(reply, options.max_calls_per_reply);
         // Held lines looked like a call; they are shown after all when the reply had none.
         if calls.is_empty() {
             streamer.release_held(&mut |text| on_event(TurnEvent::Line(text.to_owned())));
@@ -225,7 +283,7 @@ where
                     .id
                     .clone()
                     .unwrap_or_else(|| format!("call_{step}_{index}")),
-                name: call.tool.name().to_owned(),
+                name: call.name.clone(),
                 arguments: call.args.clone(),
             })
             .collect();
@@ -247,7 +305,9 @@ where
             return Ok(TurnEnd::Answer(kept.to_owned()));
         }
         worked = true;
-        if let Some(end) = run_calls(host, ctx, options, calls, records, on_event).await {
+        if let Some(end) =
+            run_calls(host, ctx, options, calls, records, (on_event, &mut repeats)).await
+        {
             return Ok(end);
         }
         deliver_steering(host, on_event);
@@ -268,6 +328,42 @@ fn deliver_steering<H: TurnHost>(
     any
 }
 
+const REPEAT_WARNING: &str =
+    "This call returned the same result three times. Change your approach before calling it again.";
+
+type CallKey = (String, String);
+
+#[derive(Default)]
+struct RepeatedCalls(std::collections::HashMap<CallKey, (u64, usize)>);
+
+impl RepeatedCalls {
+    fn key<I>(call: &ParsedCall<I>) -> CallKey {
+        let mut args = call
+            .tool
+            .normalize_arguments(call.args.clone())
+            .unwrap_or_else(|_| call.args.clone());
+        args.sort_all_objects();
+        (call.name.clone(), args.to_string())
+    }
+
+    fn should_stop(&self, key: &CallKey) -> bool {
+        self.0.get(key).is_some_and(|(_, count)| *count == 3)
+    }
+
+    fn observe(&mut self, key: CallKey, text: &str) -> bool {
+        let mut hasher = DefaultHasher::new();
+        text.hash(&mut hasher);
+        let fingerprint = hasher.finish();
+        let (previous, count) = self.0.entry(key).or_default();
+        if *previous != fingerprint {
+            *previous = fingerprint;
+            *count = 0;
+        }
+        *count += 1;
+        *count == 3
+    }
+}
+
 /// Runs the calls of one reply: consecutive read-only calls together (bounded), the others alone,
 /// results recorded in call order. A call that interrupts ends the turn once its batch is done:
 /// the calls of the batch that ran keep their results, later calls get the skipped message.
@@ -278,7 +374,7 @@ async fn run_calls<H, I>(
     options: &TurnOptions,
     calls: Vec<ParsedCall<I>>,
     records: Vec<ToolCallRecord>,
-    on_event: &mut (dyn FnMut(TurnEvent) + Send),
+    (on_event, repeats): (&mut (dyn FnMut(TurnEvent) + Send), &mut RepeatedCalls),
 ) -> Option<TurnEnd<I>>
 where
     H: TurnHost,
@@ -294,20 +390,47 @@ where
             }
             return Some(TurnEnd::Cancelled);
         }
+        let key = RepeatedCalls::key(&first.0);
+        if repeats.should_stop(&key) {
+            let note = format!(
+                "Stopped after repeated calls to {} returned the same result.",
+                first.1.name
+            );
+            for (_, record) in std::iter::once(first).chain(pending) {
+                host.push_result(&record, crate::message::NOT_RUN_RESULT);
+            }
+            host.push_note(&note);
+            on_event(TurnEvent::LoopStopped(note.clone()));
+            return Some(TurnEnd::LoopStopped(note));
+        }
+        let mut keys = vec![key];
         let mut batch = vec![first];
         if batch[0].0.tool.effect() == ToolEffect::ReadOnly {
-            while let Some(next) =
-                pending.next_if(|(call, _)| call.tool.effect() == ToolEffect::ReadOnly)
-            {
+            while let Some(next) = pending.next_if(|(call, _)| {
+                if call.tool.effect() != ToolEffect::ReadOnly {
+                    return false;
+                }
+                let key = RepeatedCalls::key(call);
+                if repeats.should_stop(&key) || keys.contains(&key) {
+                    return false;
+                }
+                keys.push(key);
+                true
+            }) {
                 batch.push(next);
             }
         }
         let outcomes = run_batch(ctx, options, batch, on_event).await;
-        for (outcome, record) in outcomes {
+        for ((outcome, record), key) in outcomes.into_iter().zip(keys) {
             match outcome {
                 ToolOutcome::Output(ToolOutput { step, text }) => {
                     on_event(TurnEvent::Step(step));
-                    host.push_result(&record, &result_for_model(options, &text));
+                    let mut result = result_for_model(options, &text);
+                    if repeats.observe(key, &text) {
+                        result.push('\n');
+                        result.push_str(REPEAT_WARNING);
+                    }
+                    host.push_result(&record, &result);
                 }
                 ToolOutcome::Interrupt(interrupt) if stop.is_none() => {
                     stop = Some((record, interrupt));

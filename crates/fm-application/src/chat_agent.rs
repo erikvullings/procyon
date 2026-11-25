@@ -102,12 +102,13 @@ pub(crate) async fn run(
     )
     .await;
     let catalogue = project.skills;
-    let calling = tool_calling(generator).await;
+    let (calling, profile) = tool_calling(generator).await;
     let mut base = format!("{}{TOOLS_INTRO}", input.system_prompt);
     if !project.instructions.is_empty() {
         base.push_str("\n\n");
         base.push_str(&project.instructions);
     }
+    profile.append_prompt_notes(&mut base);
     let mut turn = ChatTurn {
         generator,
         system_prompt: compose_system_prompt(&base, &registry, calling, &catalogue, input.question),
@@ -129,6 +130,7 @@ pub(crate) async fn run(
         ..ToolContext::new(&catalogue)
     };
     let options = TurnOptions {
+        profile,
         // The chat bounds the saved answer itself.
         max_answer_bytes: None,
         filter_result: Some(redact_secrets),
@@ -140,7 +142,7 @@ pub(crate) async fn run(
             TurnEvent::Line(text) => ChatReplyEventDto::Delta {
                 text: format!("{text}\n"),
             },
-            TurnEvent::Step(text) => {
+            TurnEvent::Step(text) | TurnEvent::LoopStopped(text) => {
                 // Kept with the reply, short, so the lookups stay visible when the conversation
                 // is reopened.
                 steps.push(truncate_to_bytes(&text, MAX_STEP_BYTES).to_owned());
@@ -153,7 +155,7 @@ pub(crate) async fn run(
     })
     .await?;
     let end = match end {
-        TurnEnd::Answer(text) => AgentEnd::Answer(text),
+        TurnEnd::Answer(text) | TurnEnd::LoopStopped(text) => AgentEnd::Answer(text),
         TurnEnd::EmptyReply => return Err(ChatFailureDto::Empty),
         TurnEnd::Cancelled => return Err(ChatFailureDto::Cancelled),
         TurnEnd::StepLimit => {

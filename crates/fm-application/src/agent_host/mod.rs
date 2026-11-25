@@ -381,12 +381,19 @@ fn home_instruction_candidates(local: &StoreHandle, home: &Path) -> Vec<Instruct
 
 /// How the chat role's model calls tools: natively once a probe found it can, else the text
 /// protocol.
-pub(crate) async fn tool_calling(generator: &impl ChatGenerator) -> ToolCalling {
-    if generator.native_tool_calling(LlmRole::Chat).await {
-        ToolCalling::Native
-    } else {
-        ToolCalling::Text
-    }
+pub(crate) async fn tool_calling(
+    generator: &impl ChatGenerator,
+) -> (ToolCalling, fm_agent::ModelProfile) {
+    let profile = fm_agent::ModelProfile::for_model(
+        generator
+            .model_id(LlmRole::Chat)
+            .as_deref()
+            .unwrap_or_default(),
+    );
+    (
+        profile.calling(generator.native_tool_calling(LlmRole::Chat).await),
+        profile,
+    )
 }
 
 /// A conversation as a generation request takes it: for the text protocol, all of it rendered as

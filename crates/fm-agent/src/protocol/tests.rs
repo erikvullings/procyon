@@ -7,7 +7,7 @@ fn known(name: &str) -> bool {
 }
 
 fn calls(reply: &str) -> Vec<RawCall> {
-    parse_calls(reply, &known, 8)
+    parse_calls(reply, &known, 8, false)
 }
 
 fn one(reply: &str) -> RawCall {
@@ -46,7 +46,7 @@ fn tool_lines_stop_at_the_limit_and_skip_unknown_tools() {
         .chain(["TOOL {\"tool\":\"rm\",\"path\":\"/\"}".to_owned()])
         .collect::<Vec<_>>()
         .join("\n");
-    assert_eq!(parse_calls(&reply, &known, 8).len(), 8);
+    assert_eq!(parse_calls(&reply, &known, 8, false).len(), 8);
     assert!(calls("TOOL {\"tool\":\"rm\",\"path\":\"/\"}").is_empty());
     assert!(calls("TOOLS are nice {\"tool\":\"echo\"} indeed").is_empty());
 }

@@ -32,22 +32,33 @@ const CALL_PREFIXES: [&str; 7] = [
 
 /// Every call of a reply, in order, at most `max`. `TOOL` lines win; without them, the first call
 /// in another form counts (models that do not batch write one).
-pub(crate) fn parse_calls(reply: &str, known: &dyn Fn(&str) -> bool, max: usize) -> Vec<RawCall> {
+pub(crate) fn parse_calls(
+    reply: &str,
+    known: &dyn Fn(&str) -> bool,
+    max: usize,
+    report_unknown: bool,
+) -> Vec<RawCall> {
     let tool_lines: Vec<RawCall> = reply
         .lines()
         .filter_map(|line| line.trim_start().strip_prefix("TOOL"))
         .filter(|rest| rest.starts_with([' ', '\t', '{']))
-        .filter_map(|rest| object_call(rest.trim_start(), known))
+        .filter_map(|rest| object_call(rest.trim_start(), &|name| report_unknown || known(name)))
         .take(max)
         .collect();
     if !tool_lines.is_empty() {
         return tool_lines;
     }
-    first_loose_call(reply, known).into_iter().collect()
+    first_loose_call(reply, known, report_unknown)
+        .into_iter()
+        .collect()
 }
 
 /// The first call in one of the tolerated forms, standing at the start of a line.
-fn first_loose_call(reply: &str, known: &dyn Fn(&str) -> bool) -> Option<RawCall> {
+fn first_loose_call(
+    reply: &str,
+    known: &dyn Fn(&str) -> bool,
+    report_unknown: bool,
+) -> Option<RawCall> {
     let mut offset = 0;
     for line in reply.split_inclusive('\n') {
         let start = offset;
@@ -70,13 +81,14 @@ fn first_loose_call(reply: &str, known: &dyn Fn(&str) -> bool) -> Option<RawCall
         // The object may continue on the next lines (a pretty-printed call).
         let from = start + (line.len() - rest.len());
         let tail = &reply[from..];
+        let known_or_tagged = |name: &str| (report_unknown && tagged) || known(name);
         if tail.starts_with('{') {
-            if let Some(call) = object_call(tail, known) {
+            if let Some(call) = object_call(tail, &known_or_tagged) {
                 return Some(call);
             }
-        } else if let Some(call) = tag_call(tail, known) {
+        } else if let Some(call) = tag_call(tail, &|name| report_unknown || known(name)) {
             return Some(call);
-        } else if tagged && let Some(call) = garbled_call(tail, known) {
+        } else if tagged && let Some(call) = garbled_call(tail, &known_or_tagged) {
             return Some(call);
         }
     }
@@ -130,11 +142,7 @@ fn trailing_call(reply: &str, known: &dyn Fn(&str) -> bool) -> Option<RawCall> {
 /// `{"tool": "x", ...}` or `{"name": "x", "arguments": {...}}` at the start of `text`.
 fn object_call(text: &str, known: &dyn Fn(&str) -> bool) -> Option<RawCall> {
     let object = balanced_object(text)?;
-    // Cheap rejection before parsing: code and data in an answer rarely name either key.
-    if !object.contains("\"tool\"") && !object.contains("\"name\"") {
-        return None;
-    }
-    let Value::Object(mut fields) = serde_json::from_str::<Value>(object).ok()? else {
+    let Value::Object(mut fields) = repair_json(object)? else {
         return None;
     };
     let (id, name, args) = match fields.remove("tool") {
@@ -150,7 +158,9 @@ fn object_call(text: &str, known: &dyn Fn(&str) -> bool) -> Option<RawCall> {
                 .or_else(|| fields.remove("parameters"))
             {
                 // Some endpoints send the arguments as a JSON string.
-                Some(Value::String(encoded)) => serde_json::from_str(&encoded).ok()?,
+                Some(Value::String(encoded)) => {
+                    repair_tool_arguments(&encoded).unwrap_or(Value::String(encoded))
+                }
                 Some(args) => args,
                 None => Value::Object(Map::new()),
             };
@@ -172,7 +182,7 @@ fn tag_call(text: &str, known: &dyn Fn(&str) -> bool) -> Option<RawCall> {
     }
     let body = after[name_end..].replace("<|\"|>", "\"");
     let object = balanced_object(&body)?;
-    let args: Value = serde_json::from_str(&quote_bare_keys(object)).ok()?;
+    let args: Value = repair_json(object)?;
     args.is_object().then(|| RawCall {
         id: None,
         name: name.to_owned(),
@@ -187,20 +197,21 @@ pub(crate) fn balanced_object(text: &str) -> Option<&str> {
         return None;
     }
     let mut depth = 0usize;
-    let mut in_string = false;
+    let mut quote = None;
     let mut escaped = false;
     for (index, character) in text.char_indices() {
-        if in_string {
-            match character {
-                _ if escaped => escaped = false,
-                '\\' => escaped = true,
-                '"' => in_string = false,
-                _ => {}
+        if let Some(delimiter) = quote {
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == delimiter {
+                quote = None;
             }
             continue;
         }
         match character {
-            '"' => in_string = true,
+            '"' | '\'' => quote = Some(character),
             '{' => depth += 1,
             '}' => {
                 depth = depth.checked_sub(1)?;
@@ -214,45 +225,74 @@ pub(crate) fn balanced_object(text: &str) -> Option<&str> {
     None
 }
 
-/// `{path:"a",n:2}` as JSON: wraps each bare key (an identifier after `{` or `,`) in quotes.
-fn quote_bare_keys(object: &str) -> String {
-    let mut out = String::with_capacity(object.len() + 8);
-    let mut in_string = false;
-    let mut escaped = false;
+/// Parses native arguments with the same repairs as explicit text calls.
+pub fn repair_tool_arguments(input: &str) -> Option<Value> {
+    match repair_json(input)? {
+        Value::String(encoded) => repair_json(&encoded).filter(|value| value.is_object()),
+        value => Some(value),
+    }
+}
+
+fn repair_json(input: &str) -> Option<Value> {
+    serde_json::from_str(input)
+        .or_else(|_| serde_json::from_str(&repair_json_syntax(input)))
+        .ok()
+}
+
+/// Quotes bare keys and single-quoted strings, and drops trailing commas outside strings.
+fn repair_json_syntax(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut quote = None;
     let mut expects_key = false;
-    let mut chars = object.chars().peekable();
-    while let Some(c) = chars.next() {
-        if in_string {
-            out.push(c);
-            match c {
-                _ if escaped => escaped = false,
-                '\\' => escaped = true,
-                '"' => in_string = false,
-                _ => {}
+    let mut chars = input.chars().peekable();
+    while let Some(character) = chars.next() {
+        if let Some(delimiter) = quote {
+            match character {
+                '\\' => {
+                    if let Some(escaped) = chars.next() {
+                        if !(delimiter == '\'' && escaped == '\'') {
+                            out.push('\\');
+                        }
+                        out.push(escaped);
+                    }
+                }
+                c if c == delimiter => {
+                    quote = None;
+                    out.push('"');
+                }
+                '"' => out.push_str("\\\""),
+                c => out.push(c),
             }
             continue;
         }
-        match c {
-            '"' => {
-                in_string = true;
+        match character {
+            '"' | '\'' => {
+                quote = Some(character);
                 expects_key = false;
-                out.push(c);
+                out.push('"');
             }
-            '{' | ',' => {
+            ',' => {
+                if !matches!(chars.clone().find(|c| !c.is_whitespace()), Some('}' | ']')) {
+                    out.push(',');
+                }
                 expects_key = true;
-                out.push(c);
+            }
+            '{' => {
+                expects_key = true;
+                out.push(character);
             }
             c if expects_key && (c.is_ascii_alphabetic() || c == '_') => {
-                out.push('"');
-                out.push(c);
-                while let Some(&next) = chars.peek() {
-                    if !(next.is_ascii_alphanumeric() || next == '_') {
-                        break;
-                    }
-                    out.push(next);
-                    chars.next();
+                let mut key = String::from(c);
+                while let Some(next) = chars.next_if(|c| c.is_ascii_alphanumeric() || *c == '_') {
+                    key.push(next);
                 }
-                out.push('"');
+                if chars.clone().find(|c| !c.is_whitespace()) == Some(':') {
+                    out.push('"');
+                    out.push_str(&key);
+                    out.push('"');
+                } else {
+                    out.push_str(&key);
+                }
                 expects_key = false;
             }
             c => {

@@ -178,6 +178,23 @@ impl<'a> ToolContext<'a> {
     }
 }
 
+/// An argument object could not be normalized or decoded.
+#[derive(Debug, Error)]
+pub enum ArgumentError {
+    /// The model sent a scalar or array in place of an object.
+    #[error("expected a JSON object")]
+    ExpectedObject,
+    /// Two spellings resolved to the same declared field.
+    #[error("argument {0} was supplied more than once (including aliases)")]
+    Duplicate(String),
+    /// Unknown and missing fields, with spelling suggestions.
+    #[error("{0}")]
+    FieldNames(String),
+    /// The value did not fit the tool's argument type.
+    #[error(transparent)]
+    Decode(#[from] serde_json::Error),
+}
+
 /// One tool the model may call, with raw JSON arguments. Most tools implement [`TypedTool`]
 /// instead and are registered wrapped in [`Typed`].
 #[async_trait]
@@ -191,6 +208,10 @@ pub trait AgentTool<I>: Send + Sync {
     /// Whether the tool may run alongside other read-only calls.
     fn effect(&self) -> ToolEffect {
         ToolEffect::Exclusive
+    }
+    /// Canonical arguments used for validation and repeat detection.
+    fn normalize_arguments(&self, args: Value) -> Result<Value, ArgumentError> {
+        Ok(args)
     }
     /// Runs the tool with its raw arguments.
     async fn run(&self, ctx: &ToolContext<'_>, args: Value) -> ToolOutcome<I>;
@@ -216,6 +237,10 @@ pub trait TypedTool<I>: Send + Sync {
     /// JSON Schema of the arguments; derived from `Args` unless overridden.
     fn input_schema(&self) -> Value {
         schema_for::<Self::Args>()
+    }
+    /// Accepted alternative spellings grouped by schema property.
+    fn argument_aliases(&self) -> &'static [(&'static str, &'static [&'static str])] {
+        &[]
     }
     /// Runs the tool with checked arguments.
     async fn run_typed(&self, ctx: &ToolContext<'_>, args: Self::Args) -> ToolOutcome<I>;
@@ -246,25 +271,84 @@ where
         self.0.effect()
     }
 
-    async fn run(&self, ctx: &ToolContext<'_>, args: Value) -> ToolOutcome<I> {
-        // A model that has no arguments to give often sends `null` or nothing at all.
+    fn normalize_arguments(&self, args: Value) -> Result<Value, ArgumentError> {
+        let schema = self.0.input_schema();
         let args = if args.is_null() {
-            Value::Object(serde_json::Map::new())
+            serde_json::json!({})
         } else {
             args
         };
-        match serde_json::from_value::<T::Args>(args) {
+        let Some(args) = args.as_object() else {
+            return Err(ArgumentError::ExpectedObject);
+        };
+        let mut normalized = serde_json::Map::new();
+        for (key, value) in args {
+            let canonical = schema["properties"]
+                .as_object()
+                .and_then(|properties| {
+                    properties
+                        .keys()
+                        .find(|name| same_argument(name, key))
+                        .map(String::as_str)
+                })
+                .or_else(|| {
+                    self.0
+                        .argument_aliases()
+                        .iter()
+                        .find_map(|(name, aliases)| {
+                            aliases
+                                .iter()
+                                .any(|alias| same_argument(alias, key))
+                                .then_some(*name)
+                        })
+                })
+                .unwrap_or(key);
+            if normalized
+                .insert(canonical.to_owned(), value.clone())
+                .is_some()
+            {
+                return Err(ArgumentError::Duplicate(canonical.to_owned()));
+            }
+        }
+        Ok(Value::Object(normalized))
+    }
+
+    async fn run(&self, ctx: &ToolContext<'_>, args: Value) -> ToolOutcome<I> {
+        let decoded = self.normalize_arguments(args).and_then(|args| {
+            let schema = self.0.input_schema();
+            crate::registry::check_argument_names(&schema, &args)
+                .map_err(ArgumentError::FieldNames)?;
+            serde_json::from_value::<T::Args>(args).map_err(ArgumentError::from)
+        });
+        match decoded {
             Ok(args) => self.0.run_typed(ctx, args).await,
-            Err(error) => ToolOutcome::output(
+            Err(error) => ToolOutcome::error(
                 format!("Could not call {}", self.0.name()),
                 format!(
-                    "Error: invalid arguments for {}: {error}. Arguments: {}",
+                    "invalid arguments for {}: {error}. Arguments: {}",
                     self.0.name(),
                     crate::registry::arguments_hint(&self.0.input_schema())
                 ),
             ),
         }
     }
+}
+
+fn same_argument(left: &str, right: &str) -> bool {
+    left == right || snake_case(left) == snake_case(right)
+}
+
+fn snake_case(name: &str) -> String {
+    let mut snake = String::with_capacity(name.len());
+    for character in name.chars() {
+        if character.is_ascii_uppercase() {
+            snake.push('_');
+            snake.push(character.to_ascii_lowercase());
+        } else {
+            snake.push(character);
+        }
+    }
+    snake
 }
 
 /// The JSON Schema of `T` as tool-calling endpoints accept it: one inline object schema, without

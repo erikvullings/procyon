@@ -441,7 +441,7 @@ async fn ask_turn(
         sessions.push_person(&id, question, &context);
     }
 
-    let calling = tool_calling(generator).await;
+    let (calling, profile) = tool_calling(generator).await;
     // A continuation after an approval has no new question: the notes that matched the last one
     // still apply.
     let skills_question = if question_text.is_empty() {
@@ -462,7 +462,11 @@ async fn ask_turn(
         generator,
         sessions,
         id: &id,
-        system_prompt: ask_prompt(&prompt_registry, &project, &skills_question, calling),
+        system_prompt: {
+            let mut prompt = ask_prompt(&prompt_registry, &project, &skills_question, calling);
+            profile.append_prompt_notes(&mut prompt);
+            prompt
+        },
         budget: session::conversation_budget(generator.context_window(LlmRole::Chat).await),
         calling,
         tools: prompt_registry.specs_for(calling),
@@ -488,12 +492,15 @@ async fn ask_turn(
         &mut steps,
     )
     .await;
-    let options = turn_options();
+    let options = TurnOptions {
+        profile,
+        ..turn_options()
+    };
     loop {
         let end = run_turn(&mut turn, &registry, &ctx, &options, &mut |event| {
             on_event(match event {
                 TurnEvent::Line(text) => TerminalAssistEventDto::Line { text },
-                TurnEvent::Step(text) => {
+                TurnEvent::Step(text) | TurnEvent::LoopStopped(text) => {
                     steps.push(text.clone());
                     TerminalAssistEventDto::Step { text }
                 }
@@ -503,7 +510,7 @@ async fn ask_turn(
         })
         .await?;
         let interrupt = match end {
-            TurnEnd::Answer(text) => return Ok(stopped(text, steps)),
+            TurnEnd::Answer(text) | TurnEnd::LoopStopped(text) => return Ok(stopped(text, steps)),
             TurnEnd::EmptyReply => return Err(ChatFailureDto::Empty),
             TurnEnd::Cancelled => return Ok(stopped(String::new(), steps)),
             TurnEnd::StepLimit => {

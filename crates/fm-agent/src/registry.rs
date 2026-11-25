@@ -70,6 +70,8 @@ impl<I> Clone for ToolRegistry<I> {
 pub struct ParsedCall<I> {
     /// The endpoint's id for a native call, when it sent one.
     pub id: Option<String>,
+    /// The name supplied by the model.
+    pub name: String,
     /// The tool that was named.
     pub tool: Arc<dyn AgentTool<I>>,
     /// Its arguments as the model wrote them.
@@ -138,14 +140,31 @@ impl<I> ToolRegistry<I> {
     /// The calls of a model reply, in order, at most `max` (see the protocol module for the forms
     /// that count).
     pub fn parse(&self, reply: &str, max: usize) -> Vec<ParsedCall<I>> {
+        self.parse_calls(reply, max, false)
+    }
+
+    pub(crate) fn parse_turn(&self, reply: &str, max: usize) -> Vec<ParsedCall<I>> {
+        self.parse_calls(reply, max, true)
+    }
+
+    fn parse_calls(&self, reply: &str, max: usize, report_unknown: bool) -> Vec<ParsedCall<I>> {
         let known = |name: &str| self.tools.contains_key(name);
-        parse_calls(reply, &known, max)
+        parse_calls(reply, &known, max, report_unknown)
             .into_iter()
             .filter_map(|RawCall { id, name, args }| {
-                let entry = self.tools.get(name.as_str())?;
+                let tool = if let Some(entry) = self.tools.get(name.as_str()) {
+                    Arc::clone(&entry.tool)
+                } else if report_unknown {
+                    let suggestion = closest_name(&name, self.names())
+                        .map_or_else(String::new, |closest| format!(" Did you mean {closest:?}?"));
+                    Arc::new(UnknownTool(format!("unknown tool {name:?}.{suggestion}")))
+                } else {
+                    return None;
+                };
                 Some(ParsedCall {
                     id,
-                    tool: Arc::clone(&entry.tool),
+                    name,
+                    tool,
                     args,
                 })
             })
@@ -240,6 +259,60 @@ fn required_of(schema: &Value) -> Vec<&str> {
         .unwrap_or_default()
 }
 
+/// Picks the closest declared spelling by edit distance, preferring alphabetical ties.
+fn closest_name<'a>(input: &str, names: impl Iterator<Item = &'a str>) -> Option<&'a str> {
+    let input: Vec<_> = input.chars().take(128).collect();
+    names.min_by_key(|name| {
+        let mut row: Vec<_> = (0..=input.len()).collect();
+        for (index, character) in name.chars().enumerate() {
+            let mut diagonal = row[0];
+            row[0] = index + 1;
+            for (column, input) in input.iter().enumerate() {
+                let previous = row[column + 1];
+                row[column + 1] = (diagonal + usize::from(character != *input))
+                    .min(1 + previous.min(row[column]));
+                diagonal = previous;
+            }
+        }
+        (row[input.len()], *name)
+    })
+}
+
+pub(crate) fn check_argument_names(schema: &Value, args: &Value) -> Result<(), String> {
+    let Some(args) = args.as_object() else {
+        return Ok(());
+    };
+    let properties = schema["properties"].as_object();
+    let missing: Vec<_> = required_of(schema)
+        .into_iter()
+        .filter(|key| !args.contains_key(*key))
+        .collect();
+    let mut errors = Vec::new();
+    for key in args.keys() {
+        if properties.is_some_and(|properties| properties.contains_key(key)) {
+            continue;
+        }
+        let suggestion = closest_name(
+            key,
+            properties
+                .into_iter()
+                .flat_map(|map| map.keys().map(String::as_str)),
+        );
+        errors.push(match suggestion {
+            Some(name) => format!("unknown field {key:?}; did you mean {name:?}?"),
+            None => format!("unknown field {key:?}"),
+        });
+    }
+    if !missing.is_empty() {
+        errors.push(format!("missing required fields: {}", missing.join(", ")));
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join(" "))
+    }
+}
+
 /// `path (string), offset (integer, optional)` from a schema.
 pub(crate) fn arguments_hint(schema: &Value) -> String {
     let required = required_of(schema);
@@ -285,4 +358,22 @@ fn example_call(name: &str, schema: &Value) -> String {
         }
     }
     call.to_string()
+}
+
+struct UnknownTool(String);
+
+#[async_trait::async_trait]
+impl<I> AgentTool<I> for UnknownTool {
+    fn name(&self) -> &'static str {
+        "unknown"
+    }
+    fn description(&self) -> &'static str {
+        ""
+    }
+    fn input_schema(&self) -> Value {
+        Value::Null
+    }
+    async fn run(&self, _ctx: &crate::ToolContext<'_>, _args: Value) -> crate::ToolOutcome<I> {
+        crate::ToolOutcome::error("Could not call tool", &self.0)
+    }
 }

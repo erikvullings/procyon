@@ -140,6 +140,11 @@ pub(crate) trait ChatGenerator: Send + Sync {
         false
     }
 
+    /// The ID of the model selected for this role.
+    fn model_id(&self, _role: LlmRole) -> Option<String> {
+        None
+    }
+
     /// The role's model context window in tokens, when known: how much conversation may be sent.
     async fn context_window(&self, _role: LlmRole) -> Option<u32> {
         None
@@ -162,6 +167,10 @@ impl ChatGenerator for LlmProfileService {
 
     async fn native_tool_calling(&self, role: LlmRole) -> bool {
         self.role_uses_native_tools(role).await
+    }
+
+    fn model_id(&self, role: LlmRole) -> Option<String> {
+        self.resolve_role(role).ok().map(|resolved| resolved.model)
     }
 
     async fn context_window(&self, role: LlmRole) -> Option<u32> {

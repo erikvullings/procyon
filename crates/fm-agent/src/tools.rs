@@ -29,6 +29,10 @@ pub(crate) struct ListDir;
 impl<I: Send + 'static> TypedTool<I> for ListDir {
     type Args = ListDirArgs;
 
+    fn argument_aliases(&self) -> &'static [(&'static str, &'static [&'static str])] {
+        &[("path", &["file_path", "filename"])]
+    }
+
     fn name(&self) -> &'static str {
         "list_dir"
     }
@@ -66,6 +70,10 @@ pub(crate) struct ReadFile;
 #[async_trait]
 impl<I: Send + 'static> TypedTool<I> for ReadFile {
     type Args = ReadFileArgs;
+
+    fn argument_aliases(&self) -> &'static [(&'static str, &'static [&'static str])] {
+        &[("path", &["file_path", "filename"])]
+    }
 
     fn name(&self) -> &'static str {
         "read_file"
@@ -108,6 +116,10 @@ pub(crate) struct Grep;
 #[async_trait]
 impl<I: Send + 'static> TypedTool<I> for Grep {
     type Args = GrepArgs;
+
+    fn argument_aliases(&self) -> &'static [(&'static str, &'static [&'static str])] {
+        &[("path", &["file_path", "filename"])]
+    }
 
     fn name(&self) -> &'static str {
         "grep"
@@ -160,6 +172,10 @@ pub(crate) struct RunCommand;
 #[async_trait]
 impl<I: From<CommandRequest> + Send + 'static> TypedTool<I> for RunCommand {
     type Args = RunCommandArgs;
+
+    fn argument_aliases(&self) -> &'static [(&'static str, &'static [&'static str])] {
+        &[("command", &["cmd"])]
+    }
 
     fn name(&self) -> &'static str {
         "run_command"

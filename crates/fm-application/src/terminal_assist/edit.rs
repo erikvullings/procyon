@@ -8,7 +8,7 @@
 
 use std::hash::{DefaultHasher, Hash as _, Hasher as _};
 
-use fm_agent::{EditRequest, MAX_EDITED_FILE_BYTES, apply_edit};
+use fm_agent::{EditMatch, EditRequest, MAX_EDITED_FILE_BYTES, match_edit};
 use fm_domain::{EntryId, Location};
 use fm_vfs::{EntryRef, ProviderRegistry, WriteOptions};
 use similar::{ChangeTag, TextDiff};
@@ -29,6 +29,7 @@ pub(crate) struct PendingEdit {
     /// Fingerprint of the text the edit was made from.
     before: u64,
     after: String,
+    tier: EditMatch,
     /// Unified diff for the person.
     pub(crate) diff: String,
     pub(crate) added: usize,
@@ -44,8 +45,8 @@ impl PendingEdit {
     /// The text for the model once it is written.
     pub(crate) fn result(&self) -> String {
         format!(
-            "Edited {}: {} line(s) added, {} removed.",
-            self.path, self.added, self.removed
+            "Edited {}: {} line(s) added, {} removed (matched {}).",
+            self.path, self.added, self.removed, self.tier
         )
     }
 }
@@ -74,13 +75,14 @@ pub(crate) async fn prepare(
         .await
         .map_err(|error| error.to_string())?;
     let before = read_text(providers, &location, path).await?;
-    let after = apply_edit(&before, request).map_err(|error| error.to_string())?;
+    let (after, tier) = match_edit(&before, request).map_err(|error| error.to_string())?;
     let (diff, added, removed) = diff(path, &before, &after);
     Ok(PendingEdit {
         path: path.to_owned(),
         location,
         before: fingerprint(&before),
         after,
+        tier,
         diff,
         added,
         removed,

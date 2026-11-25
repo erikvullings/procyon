@@ -69,7 +69,8 @@ pub use self::compact::{
     compaction_cut, needs_compaction,
 };
 pub use self::edit::{
-    EditError, EditFile, EditRequest, MAX_EDIT_TEXT_BYTES, MAX_EDITED_FILE_BYTES, apply_edit,
+    EditError, EditFile, EditMatch, EditRequest, MAX_EDIT_TEXT_BYTES, MAX_EDITED_FILE_BYTES,
+    apply_edit, match_edit,
 };
 pub use self::instructions::{
     INSTRUCTION_FILE_NAMES, InstructionFile, InstructionSource, MAX_INSTRUCTION_BYTES,
@@ -80,7 +81,7 @@ pub use self::message::{
 };
 pub use self::notes::{NoteProposal, NoteToolCall, NotesAccess};
 pub use self::paths::{is_credential_folder, is_secret_name};
-pub use self::protocol::tool_call_line;
+pub use self::protocol::{repair_tool_arguments, tool_call_line};
 pub use self::redact::redact_secrets;
 pub use self::registry::{ParsedCall, ToolCalling, ToolRegistry, ToolSpec, compose_system_prompt};
 pub use self::skills::{
@@ -94,12 +95,13 @@ pub use self::store::{
 pub use self::summarize::{MAX_SUMMARY_PARTS, SideModel, SideModelError, WholeText};
 pub use self::text::{newest_bytes, truncate_to_bytes};
 pub use self::tool::{
-    AgentTool, DocumentError, FileTools, SkillDocuments, ToolContext, ToolEffect, ToolOutcome,
-    ToolOutput, Typed, TypedTool, schema_for,
+    AgentTool, ArgumentError, DocumentError, FileTools, SkillDocuments, ToolContext, ToolEffect,
+    ToolOutcome, ToolOutput, Typed, TypedTool, schema_for,
 };
 pub use self::tools::CommandRequest;
 pub use self::turn::{
-    ContinueNudge, TurnEnd, TurnEvent, TurnHost, TurnOptions, announces_more_work, run_turn,
+    ContinueNudge, ModelProfile, TurnEnd, TurnEvent, TurnHost, TurnOptions, announces_more_work,
+    run_turn,
 };
 
 use self::skill_tools::{ReadSkill, ReadSkillFile};

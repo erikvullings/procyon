@@ -73,6 +73,10 @@ struct WriteFile;
 impl TypedTool<TerminalInterrupt> for WriteFile {
     type Args = WriteFileArgs;
 
+    fn argument_aliases(&self) -> &'static [(&'static str, &'static [&'static str])] {
+        &[("path", &["file_path", "filename"])]
+    }
+
     fn name(&self) -> &'static str {
         "write_file"
     }
