@@ -59,6 +59,9 @@ pub struct ModelThinking {
     /// A fallback for a whole family: its switch is shared, its levels are not verified.
     #[serde(default)]
     pub family: bool,
+    /// Where and how the entry was checked against a running server.
+    #[serde(default)]
+    pub tested: Vec<String>,
 }
 
 impl ModelThinking {

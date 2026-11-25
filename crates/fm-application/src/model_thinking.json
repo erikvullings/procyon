@@ -1,9 +1,12 @@
 {
-  "_comment": "How model families control thinking (task 0361). Read from each model's chat template and card on Hugging Face (2026-11-25). The first entry whose `match` text occurs in the model id (case-insensitive) applies, so list specific families before general ones. `thinking`: none (never thinks), toggle (a chat-template switch turns it on or off), always (cannot be turned off). `switch`: the chat_template_kwargs name of the toggle. `levels`: the reasoning_effort value to send per effort; a missing level sends none. `family`: true marks a fallback for a whole family whose switch is shared but whose levels are not verified; a level is then tried and dropped when the server refuses it.",
+  "_comment": "How model families control thinking (task 0361). Read from each model's chat template and card on Hugging Face (2026-11-25). The first entry whose `match` text occurs in the model id (case-insensitive) applies, so list specific families before general ones. `thinking`: none (never thinks), toggle (a chat-template switch turns it on or off), always (cannot be turned off). `switch`: the chat_template_kwargs name of the toggle. `levels`: the reasoning_effort value to send per effort; a missing level sends none. `tested`: where and how the entry was checked against a running server (see scripts/probe-thinking.py). `family`: true marks a fallback for a whole family whose switch is shared but whose levels are not verified; a level is then tried and dropped when the server refuses it.",
   "models": [
     {
       "match": ["inkling-2"],
       "source": "thinkingmachines/Inkling-2-Mini",
+      "tested": [
+        "oMLX 0.8.3, Inkling-2-Mini-oQ4e-mtp (2026-11-25): every value accepted, unknown ones ignored; reasoning grows with effort (none about half of xhigh)."
+      ],
       "thinking": "always",
       "defaultOn": true,
       "levels": { "off": "none", "low": "low", "medium": "medium", "high": "high" },
@@ -12,6 +15,10 @@
     {
       "match": ["qwen3.8"],
       "source": "Qwen/Qwen3.8-27B",
+      "tested": [
+        "oMLX 0.8.3, Dirk-Qwen3.8-27B (2026-11-25): every value accepted, unknown ones ignored; enable_thinking=false or reasoning_effort=none turns thinking off.",
+        "SGLang on DGX Spark, qwen3.8-27b with its own template (lean default, high and max map to xhigh, minimal to low) (2026-11-25): unknown values return 400; enable_thinking=false or none turns thinking off."
+      ],
       "thinking": "toggle",
       "switch": "enable_thinking",
       "defaultOn": true,
@@ -21,6 +28,9 @@
     {
       "match": ["gemma-4", "gemma4"],
       "source": "google/gemma-4-26B-A4B-it",
+      "tested": [
+        "oMLX 0.8.3, gemma-4-26B-A4B-it (2026-11-25): no thinking unless enable_thinking=true; reasoning_effort is ignored."
+      ],
       "thinking": "toggle",
       "switch": "enable_thinking",
       "defaultOn": false,

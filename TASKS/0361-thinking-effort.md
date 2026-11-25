@@ -92,4 +92,17 @@ without the thinking capability.
   - Verified: 3 new Rust tests (catalogue validity and lookups for the 12 models, listed and family
     attempts, chat effort saved), 2 frontend (restore on open, support line); fm-application +
     fm-server 1850 and frontend 4216 pass; `pnpm lint` clean.
+- 2026-11-25 claude: checked against running servers with `scripts/probe-thinking.py`.
+  - oMLX 0.8.3 never refuses a value (`bogus` answers 200): unknown values are ignored, so the
+    fallback never triggers there and the catalogue's values matter. Inkling: reasoning grows
+    with effort. Dirk-Qwen3.8: `none` or `enable_thinking=false` turn thinking off. Gemma 4: no
+    thinking unless `enable_thinking=true`; `reasoning_effort` ignored. Qwen3.8-Flash-Next does
+    not fit in this Mac's memory ceiling (74 GB, 507 from oMLX).
+  - DGX Spark (spark-1 and spark-2, SGLang): both serve `qwen3.8-27b`, with their own chat
+    template (`lean` default, high/max → xhigh, minimal → low). Unknown values return 400, which
+    the fallback handles. spark-301b serves `inkling-2-mini`. Both families were already listed;
+    the results are in the entries' new `tested` field.
+  - Found: `spark-cockpit` in ~/.zshrc tunnels spark-1/2's model API to remote port 8001, but the
+    API listens on 30001 (nginx proxy) / 30000 (SGLang), so local 30002/30003 reset; keys are in
+    ~/.config/qwen38/spark-{1,2}-api-key. Not changed (the person's shell config).
 
