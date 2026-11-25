@@ -10,6 +10,7 @@ import type {
   LlmRoleAssignment,
   LlmRoles,
   ThinkingEffort,
+  ThinkingSupport,
 } from '../../models';
 import { THINKING_EFFORTS } from '../../models/llm-profile';
 import { canAssignRole, LLM_ROLES, type RoleStatus, roleStatus } from '../../models/llm-roles';
@@ -35,6 +36,29 @@ interface RoleDraft {
   allowCloud: boolean;
   /** The default thinking effort (chat role, task 0361). */
   thinking: ThinkingEffort;
+}
+
+/** What the chat model supports for thinking, in one line (task 0361). */
+export function thinkingSupportText(support: ThinkingSupport): string {
+  const parts: string[] = [];
+  if (!support.thinks) parts.push(t('llmRoles', 'supportNone'));
+  else if (!support.canTurnOff) parts.push(t('llmRoles', 'supportAlways'));
+  else parts.push(t('llmRoles', support.defaultOn ? 'supportToggleOn' : 'supportToggleOff'));
+  if (support.thinks) {
+    parts.push(
+      support.levels.length > 0
+        ? t('llmRoles', 'supportLevels', {
+            levels: support.levels.map((level) => thinkingLabel(level)).join(', '),
+          })
+        : t('llmRoles', support.verified ? 'supportNoLevels' : 'supportLevelsTried'),
+    );
+  }
+  parts.push(
+    t('llmRoles', support.verified ? 'supportSource' : 'supportFamily', {
+      source: support.source,
+    }),
+  );
+  return parts.join(' ');
 }
 
 /** The label of a thinking effort. */
@@ -307,6 +331,9 @@ export const LlmRoleManagement: FactoryComponent<LlmRoleManagementAttrs> = () =>
               drafts = { ...drafts, [role]: { ...draft, thinking: value } };
             },
           })
+        : undefined,
+      role === 'chat' && savedRole?.thinkingSupport != null
+        ? m('p.fm-llm-role-notice', thinkingSupportText(savedRole.thinkingSupport))
         : undefined,
       // Only chat may reach the cloud without the flag; embeddings and images need it turned on.
       role !== 'chat'

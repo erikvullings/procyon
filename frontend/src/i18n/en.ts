@@ -2454,6 +2454,15 @@ export const en = {
     thinkingLow: 'Low',
     thinkingMedium: 'Medium',
     thinkingHigh: 'High',
+    supportNone: 'This model does not think.',
+    supportAlways: 'This model always thinks; it cannot be turned off.',
+    supportToggleOn: 'Thinking can be turned off; it is on by default.',
+    supportToggleOff: 'Thinking can be turned on; it is off by default.',
+    supportLevels: 'Levels it distinguishes: {levels}.',
+    supportNoLevels: 'Low, medium and high think alike.',
+    supportLevelsTried: 'Levels are tried and dropped if the model refuses them.',
+    supportSource: 'From the model card of {source}.',
+    supportFamily: 'Guessed from its model family ({source}).',
     cloudHintImage:
       'The words you type are sent to this cloud endpoint, and the pictures come back from it. Turn this on only if you accept that.',
     imageModelHint:

@@ -2090,6 +2090,15 @@ export const it = {
     thinkingLow: 'Basso',
     thinkingMedium: 'Medio',
     thinkingHigh: 'Alto',
+    supportNone: 'Questo modello non ragiona.',
+    supportAlways: 'Questo modello ragiona sempre; non si può disattivare.',
+    supportToggleOn: 'Il ragionamento si può disattivare; è attivo per impostazione predefinita.',
+    supportToggleOff: 'Il ragionamento si può attivare; è spento per impostazione predefinita.',
+    supportLevels: 'Livelli che distingue: {levels}.',
+    supportNoLevels: 'Basso, medio e alto ragionano allo stesso modo.',
+    supportLevelsTried: 'I livelli vengono provati e tralasciati se il modello li rifiuta.',
+    supportSource: 'Dalla scheda del modello {source}.',
+    supportFamily: 'Dedotto dalla famiglia del modello ({source}).',
     cloudHintImage:
       'Le parole che digiti vengono inviate a questo endpoint cloud e le immagini tornano da esso. Attiva solo se accetti.',
     imageModelHint:

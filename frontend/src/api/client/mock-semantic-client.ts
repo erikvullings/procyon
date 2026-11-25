@@ -1357,6 +1357,7 @@ export class MockSemanticClient implements SemanticClient {
         title: conversation.title,
         updatedAt: new Date().toISOString(),
         messages: structuredClone(conversation.messages.slice(0, keep)),
+        ...(conversation.thinking == null ? {} : { thinking: conversation.thinking }),
       };
       this.ctx.chatConversations.set(fork.id, { workspaceId, conversation: fork });
       return structuredClone(fork);
@@ -1392,6 +1393,9 @@ export class MockSemanticClient implements SemanticClient {
         context: request.context ?? null,
       });
       if (conversation.title === '') conversation.title = request.content.slice(0, 60);
+      // As the backend, the effort is kept with the conversation (task 0361).
+      if (request.thinking == null) delete conversation.thinking;
+      else conversation.thinking = request.thinking;
       // The mock follows the same consent rule as the backend: a cloud chat endpoint needs consent.
       const assignment = this.ctx.llmRoles.chat;
       const profile =

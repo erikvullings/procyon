@@ -2094,6 +2094,15 @@ export const pt = {
     thinkingLow: 'Baixo',
     thinkingMedium: 'Médio',
     thinkingHigh: 'Alto',
+    supportNone: 'Este modelo não raciocina.',
+    supportAlways: 'Este modelo raciocina sempre; não é possível desligar.',
+    supportToggleOn: 'O raciocínio pode ser desligado; está ligado por predefinição.',
+    supportToggleOff: 'O raciocínio pode ser ligado; está desligado por predefinição.',
+    supportLevels: 'Níveis que distingue: {levels}.',
+    supportNoLevels: 'Baixo, médio e alto raciocinam da mesma forma.',
+    supportLevelsTried: 'Os níveis são tentados e omitidos se o modelo os recusar.',
+    supportSource: 'Segundo o cartão do modelo {source}.',
+    supportFamily: 'Deduzido da família do modelo ({source}).',
     cloudHintImage:
       'As palavras que escreve são enviadas para este endpoint na nuvem e as imagens vêm dele. Ative apenas se aceitar isso.',
     imageModelHint:

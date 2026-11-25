@@ -2103,6 +2103,15 @@ export const fr = {
     thinkingLow: 'Faible',
     thinkingMedium: 'Moyen',
     thinkingHigh: 'Élevé',
+    supportNone: 'Ce modèle ne réfléchit pas.',
+    supportAlways: 'Ce modèle réfléchit toujours ; impossible de le désactiver.',
+    supportToggleOn: 'La réflexion peut être désactivée ; elle est active par défaut.',
+    supportToggleOff: 'La réflexion peut être activée ; elle est désactivée par défaut.',
+    supportLevels: 'Niveaux qu’il distingue : {levels}.',
+    supportNoLevels: 'Faible, moyen et élevé réfléchissent de la même façon.',
+    supportLevelsTried: 'Les niveaux sont essayés et abandonnés si le modèle les refuse.',
+    supportSource: 'D’après la fiche du modèle {source}.',
+    supportFamily: 'Déduit de sa famille de modèles ({source}).',
     cloudHintImage:
       'Les mots que vous saisissez sont envoyés à ce point de terminaison cloud, et les images en reviennent. Ne activez cette option que si vous l’acceptez.',
     imageModelHint:

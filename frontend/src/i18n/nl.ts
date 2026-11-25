@@ -2498,6 +2498,15 @@ export const nl = {
     thinkingLow: 'Laag',
     thinkingMedium: 'Gemiddeld',
     thinkingHigh: 'Hoog',
+    supportNone: 'Dit model denkt niet na.',
+    supportAlways: 'Dit model denkt altijd na; dat kan niet uit.',
+    supportToggleOn: 'Nadenken kan uit; standaard staat het aan.',
+    supportToggleOff: 'Nadenken kan aan; standaard staat het uit.',
+    supportLevels: 'Niveaus die het onderscheidt: {levels}.',
+    supportNoLevels: 'Laag, gemiddeld en hoog denken hetzelfde.',
+    supportLevelsTried: 'Niveaus worden geprobeerd en weggelaten als het model ze weigert.',
+    supportSource: 'Uit de modelkaart van {source}.',
+    supportFamily: 'Afgeleid van de modelfamilie ({source}).',
     cloudHintImage:
       'De woorden die je typt gaan naar dit cloud-eindpunt en de afbeeldingen komen ervan terug. Zet dit alleen aan als je dat accepteert.',
     imageModelHint:

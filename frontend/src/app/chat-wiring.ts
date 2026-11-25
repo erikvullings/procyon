@@ -133,6 +133,8 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
       const conversation = await client.getChatConversation(entry.workspaceId, conversationId);
       if (entry.conversationId !== conversationId) return;
       entry.messages = [...conversation.messages];
+      // The effort the conversation was last asked with (task 0361).
+      entry.thinking = conversation.thinking ?? undefined;
     } catch {
       if (entry.conversationId === conversationId) entry.error = t('chat', 'loadFailed');
     }
@@ -151,6 +153,7 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
       ];
       entry.conversationId = conversation.id;
       entry.messages = [];
+      entry.thinking = undefined;
       entry.failure = undefined;
       entry.error = undefined;
     } catch {
@@ -203,6 +206,7 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
       ];
       entry.conversationId = fork.id;
       entry.messages = [...fork.messages];
+      entry.thinking = fork.thinking ?? undefined;
       entry.failure = undefined;
       entry.error = undefined;
       entry.streamedText = undefined;

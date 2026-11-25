@@ -3,6 +3,7 @@
  * Run `pnpm api:generate` (or `pnpm api:check`) to regenerate.
  */
 import type { ChatMessageDto } from './chatMessageDto.ts';
+import type { ThinkingEffortDto } from './thinkingEffortDto.ts';
 
 /**
  * A saved conversation with its messages.
@@ -12,6 +13,7 @@ export interface ChatConversationDto {
   id: string;
   /** Messages in order, oldest first. */
   messages: ChatMessageDto[];
+  thinking?: ThinkingEffortDto | null;
   /** Title; empty until the person renames it or the first message sets it. */
   title: string;
   /** When the conversation last changed, as an RFC 3339 timestamp. */

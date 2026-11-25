@@ -182,6 +182,9 @@ pub struct ThinkingAttempt {
     pub effort: Option<&'static str>,
     /// `think` for Ollama.
     pub ollama_think: OllamaThink,
+    /// A chat-template switch (`chat_template_kwargs`) and its value, for a model whose template
+    /// is known ([`crate::model_thinking`]).
+    pub template: Option<(&'static str, bool)>,
 }
 
 impl ThinkingAttempt {
@@ -189,6 +192,7 @@ impl ThinkingAttempt {
         switch: ReasoningSwitch::Plain,
         effort: None,
         ollama_think: OllamaThink::Off,
+        template: None,
     };
 
     const fn switch(switch: ReasoningSwitch) -> Self {
@@ -219,23 +223,35 @@ impl ThinkingAttempt {
 }
 
 /// The ways to ask `profile`'s endpoint for `effort`, in the order they are tried; the last one
-/// asks for nothing the endpoint could reject. Which values a model takes is not disclosed by
-/// OpenAI-compatible servers, so the list goes from the closest match to none at all.
+/// asks for nothing the endpoint could reject. A model whose family is listed in
+/// [`crate::model_thinking`] is asked the way its chat template expects; any other model is asked
+/// by trial, from the closest match down to nothing at all, since OpenAI-compatible servers do not
+/// disclose which values a model takes.
 pub fn thinking_attempts(profile: &LlmProfile, effort: ThinkingEffort) -> Vec<ThinkingAttempt> {
+    let known = crate::model_thinking::lookup(&profile.model);
     if profile.preset == LlmPreset::Ollama {
-        // Ollama: a boolean, or a level for gpt-oss (which ignores booleans). A model without the
-        // thinking capability refuses `think: true`.
-        return match effort.level() {
-            None => vec![ThinkingAttempt::ollama(OllamaThink::Off)],
-            Some(level) if profile.model.to_ascii_lowercase().contains("gpt-oss") => vec![
-                ThinkingAttempt::ollama(OllamaThink::Level(level)),
-                ThinkingAttempt::ollama(OllamaThink::Off),
-            ],
-            Some(_) => vec![
-                ThinkingAttempt::ollama(OllamaThink::On),
-                ThinkingAttempt::ollama(OllamaThink::Off),
-            ],
-        };
+        return ollama_attempts(profile, known, effort);
+    }
+    if let Some(entry) = known {
+        let local = supports_reasoning_switch(profile.preset);
+        let mut attempts = Vec::with_capacity(3);
+        let first = known_attempt(entry, effort, local);
+        // A family fallback shares the switch, not verified levels: try the plain level name
+        // first, and keep the switch alone if the server refuses it.
+        if entry.family
+            && first.effort.is_none()
+            && let Some(level) = effort.level()
+        {
+            attempts.push(ThinkingAttempt {
+                effort: Some(level),
+                ..first
+            });
+        }
+        attempts.push(first);
+        if first != ThinkingAttempt::PLAIN {
+            attempts.push(ThinkingAttempt::PLAIN);
+        }
+        return attempts;
     }
     if let Some(level) = effort.level() {
         return vec![ThinkingAttempt::effort(level), ThinkingAttempt::PLAIN];
@@ -265,6 +281,61 @@ pub fn thinking_attempts(profile: &LlmProfile, effort: ThinkingEffort) -> Vec<Th
             ThinkingAttempt::PLAIN,
         ],
         _ => vec![ThinkingAttempt::PLAIN],
+    }
+}
+
+/// Ollama: a boolean, or a level for gpt-oss (which ignores booleans). A model without the thinking
+/// capability refuses `think: true`, so a listed model that never thinks is not asked to.
+fn ollama_attempts(
+    profile: &LlmProfile,
+    known: Option<&'static crate::model_thinking::ModelThinking>,
+    effort: ThinkingEffort,
+) -> Vec<ThinkingAttempt> {
+    use crate::model_thinking::ThinkingKind;
+    let off = ThinkingAttempt::ollama(OllamaThink::Off);
+    let Some(level) = effort.level() else {
+        return vec![off];
+    };
+    if known.is_some_and(|entry| entry.thinking == ThinkingKind::None) {
+        return vec![off];
+    }
+    if profile.model.to_ascii_lowercase().contains("gpt-oss") {
+        return vec![ThinkingAttempt::ollama(OllamaThink::Level(level)), off];
+    }
+    vec![ThinkingAttempt::ollama(OllamaThink::On), off]
+}
+
+/// The request a listed model's chat template expects for `effort`. `local` endpoints keep
+/// thinking off for [`ThinkingEffort::Auto`], as they always did; elsewhere Auto asks nothing.
+fn known_attempt(
+    entry: &'static crate::model_thinking::ModelThinking,
+    effort: ThinkingEffort,
+    local: bool,
+) -> ThinkingAttempt {
+    use crate::model_thinking::{LevelName, ThinkingKind};
+    let level = match effort {
+        ThinkingEffort::Auto if local => LevelName::Off,
+        ThinkingEffort::Auto => return ThinkingAttempt::PLAIN,
+        ThinkingEffort::Off => LevelName::Off,
+        ThinkingEffort::Low => LevelName::Low,
+        ThinkingEffort::Medium => LevelName::Medium,
+        ThinkingEffort::High => LevelName::High,
+    };
+    let effort = entry.level(level);
+    match entry.thinking {
+        ThinkingKind::None => ThinkingAttempt::PLAIN,
+        ThinkingKind::Always => ThinkingAttempt {
+            effort,
+            ..ThinkingAttempt::PLAIN
+        },
+        ThinkingKind::Toggle => ThinkingAttempt {
+            effort,
+            template: entry
+                .switch
+                .as_deref()
+                .map(|name| (name, level != LevelName::Off)),
+            ..ThinkingAttempt::PLAIN
+        },
     }
 }
 
@@ -536,6 +607,8 @@ pub struct LlmProbeRequest {
     pub reasoning_effort: Option<&'static str>,
     /// Ollama's `think`.
     pub ollama_think: OllamaThink,
+    /// A chat-template switch and its value (`chat_template_kwargs`), for a known model.
+    pub template_switch: Option<(&'static str, bool)>,
 }
 
 impl LlmProbeRequest {
@@ -545,6 +618,7 @@ impl LlmProbeRequest {
             reasoning_switch: attempt.switch,
             reasoning_effort: attempt.effort,
             ollama_think: attempt.ollama_think,
+            template_switch: attempt.template,
             ..self.clone()
         }
     }
@@ -554,6 +628,7 @@ impl LlmProbeRequest {
         self.reasoning_switch != ReasoningSwitch::Plain
             || self.reasoning_effort.is_some()
             || self.ollama_think != OllamaThink::Off
+            || self.template_switch.is_some()
     }
 }
 
@@ -571,6 +646,7 @@ impl std::fmt::Debug for LlmProbeRequest {
             .field("reasoning_switch", &self.reasoning_switch)
             .field("reasoning_effort", &self.reasoning_effort)
             .field("ollama_think", &self.ollama_think)
+            .field("template_switch", &self.template_switch)
             .finish()
     }
 }
@@ -768,7 +844,7 @@ impl ReqwestLlmProbeTransport {
             cancellation,
         )
         .await?;
-        if request.asks_thinking() && matches!(response.status().as_u16(), 400 | 422) {
+        if request.asks_thinking() && matches!(response.status().as_u16(), 400 | 422 | 500) {
             return Ok(ChatOutcome::Rejected);
         }
         let response = refused_generation(response).await?;
@@ -997,7 +1073,7 @@ impl LlmProbeTransport for ReqwestLlmProbeTransport {
         )
         .await?;
         let status = response.status().as_u16();
-        if request.asks_thinking() && matches!(status, 400 | 422) {
+        if request.asks_thinking() && matches!(status, 400 | 422 | 500) {
             return Ok(ChatOutcome::Rejected);
         }
         let response = refused_generation(response).await?;
@@ -2056,7 +2132,10 @@ impl LlmProfileService {
                 .map(|value| value.clamp(0.0, profile.advanced.temperature)),
             ..generation
         };
-        let learns_switch = supports_reasoning_switch(profile.preset) && effort.level().is_none();
+        // A listed model is asked as its template expects; only an unlisted one learns the switch.
+        let learns_switch = supports_reasoning_switch(profile.preset)
+            && effort.level().is_none()
+            && crate::model_thinking::lookup(&profile.model).is_none();
         let key = (id, profile.model.clone(), effort);
         let mut candidates = thinking_attempts(&profile, effort);
         // The variant that worked for this model and effort before goes first (this session).
@@ -2460,6 +2539,7 @@ impl LlmProfileService {
             reasoning_switch: ReasoningSwitch::Plain,
             reasoning_effort: None,
             ollama_think: OllamaThink::Off,
+            template_switch: None,
         })
     }
 
@@ -2854,6 +2934,9 @@ fn openai_generation_body(
     }
     if let Some(effort) = request.reasoning_effort {
         body["reasoning_effort"] = json!(effort);
+    }
+    if let Some((name, on)) = request.template_switch {
+        body["chat_template_kwargs"][name] = json!(on);
     }
     body
 }
@@ -3493,11 +3576,36 @@ impl LlmProfileError {
 
 fn assignment_to_dto(assignment: RoleAssignment) -> LlmRoleAssignmentDto {
     LlmRoleAssignmentDto {
+        thinking_support: thinking_support(&assignment.model),
         profile_id: assignment.profile_id,
         model: assignment.model,
         allow_cloud: assignment.allow_cloud,
         thinking: thinking_to_dto(assignment.thinking),
     }
+}
+
+/// What `model` supports for thinking, when its family is listed.
+pub(crate) fn thinking_support(model: &str) -> Option<fm_transport_dto::ThinkingSupportDto> {
+    use crate::model_thinking::{LevelName, ThinkingKind};
+    let entry = crate::model_thinking::lookup(model)?;
+    let levels = [
+        (LevelName::Low, ThinkingEffortDto::Low),
+        (LevelName::Medium, ThinkingEffortDto::Medium),
+        (LevelName::High, ThinkingEffortDto::High),
+    ]
+    .into_iter()
+    .filter(|(level, _)| entry.level(*level).is_some())
+    .map(|(_, dto)| dto)
+    .collect();
+    Some(fm_transport_dto::ThinkingSupportDto {
+        thinks: entry.thinking != ThinkingKind::None,
+        can_turn_off: entry.thinking == ThinkingKind::Toggle,
+        default_on: entry.default_on,
+        levels,
+        verified: !entry.family,
+        source: entry.source.clone(),
+        note: entry.note.clone(),
+    })
 }
 
 pub(crate) fn thinking_to_dto(effort: ThinkingEffort) -> ThinkingEffortDto {
@@ -3793,6 +3901,7 @@ mod tests {
             reasoning_switch: ReasoningSwitch::Both,
             reasoning_effort: None,
             ollama_think: OllamaThink::Off,
+            template_switch: None,
         };
         let generation = LlmChatGeneration {
             followups: Vec::new(),
@@ -3880,6 +3989,7 @@ mod tests {
             reasoning_switch: ReasoningSwitch::Plain,
             reasoning_effort: None,
             ollama_think: OllamaThink::Off,
+            template_switch: None,
         }
     }
 
@@ -4447,6 +4557,7 @@ mod tests {
             reasoning_switch: ReasoningSwitch::Plain,
             reasoning_effort: None,
             ollama_think: OllamaThink::Off,
+            template_switch: None,
         };
         let body = ollama_generation_body(
             &request,
@@ -4485,6 +4596,7 @@ mod tests {
             reasoning_switch: ReasoningSwitch::Plain,
             reasoning_effort: None,
             ollama_think: OllamaThink::Off,
+            template_switch: None,
         };
         let generation = |temperature| LlmChatGeneration {
             followups: Vec::new(),
@@ -5233,6 +5345,103 @@ mod tests {
     }
 
     #[test]
+    fn listed_models_are_asked_the_way_their_chat_template_expects() {
+        let profile = |preset: LlmPreset, model: &str| {
+            let mut profile =
+                profile_from_draft(Uuid::new_v4(), draft(preset, "http://127.0.0.1:8000"), None);
+            profile.model = model.to_owned();
+            profile
+        };
+        let first = |preset, model, effort| thinking_attempts(&profile(preset, model), effort)[0];
+        // Qwen3.8 (and ThinkingCap on it): its highest level is `xhigh`; `high` would fail.
+        let qwen = first(
+            LlmPreset::Omlx,
+            "ThinkingCap-Qwen3.8-27B-MLX-4bit-DWQ",
+            ThinkingEffort::High,
+        );
+        assert_eq!(qwen.effort, Some("xhigh"));
+        assert_eq!(qwen.template, Some(("enable_thinking", true)));
+        // Locally, Auto keeps thinking off through the template switch, with no effort.
+        let auto = first(
+            LlmPreset::Omlx,
+            "Qwen3.8-Flash-Next-oQ4e-mtp",
+            ThinkingEffort::Auto,
+        );
+        assert_eq!(auto.template, Some(("enable_thinking", false)));
+        assert_eq!(auto.effort, None);
+        // Gemma 4 only switches; Inkling only takes an effort, and `none` is its least.
+        let gemma = first(
+            LlmPreset::Omlx,
+            "gemma-4-26B-A4B-it-QAT-MLX-4bit",
+            ThinkingEffort::Low,
+        );
+        assert_eq!(
+            (gemma.template, gemma.effort),
+            (Some(("enable_thinking", true)), None)
+        );
+        let inkling = first(
+            LlmPreset::Omlx,
+            "Inkling-2-Mini-oQ4e-mtp",
+            ThinkingEffort::Off,
+        );
+        assert_eq!((inkling.template, inkling.effort), (None, Some("none")));
+        // Every listed attempt ends with one that asks nothing.
+        assert_eq!(
+            thinking_attempts(
+                &profile(LlmPreset::Omlx, "Inkling-2-Mini"),
+                ThinkingEffort::High
+            ),
+            [ThinkingAttempt::effort("high"), ThinkingAttempt::PLAIN]
+        );
+        // A family member without its own entry: the family switch with a level to try, then the
+        // switch alone.
+        assert_eq!(
+            thinking_attempts(
+                &profile(LlmPreset::Omlx, "Qwen3.6-35B-A3B"),
+                ThinkingEffort::High
+            ),
+            [
+                ThinkingAttempt {
+                    effort: Some("high"),
+                    template: Some(("enable_thinking", true)),
+                    ..ThinkingAttempt::PLAIN
+                },
+                ThinkingAttempt {
+                    template: Some(("enable_thinking", true)),
+                    ..ThinkingAttempt::PLAIN
+                },
+                ThinkingAttempt::PLAIN
+            ]
+        );
+        // On Ollama a model that never thinks is not asked to.
+        assert_eq!(
+            thinking_attempts(
+                &profile(LlmPreset::Ollama, "llama3.2:3b"),
+                ThinkingEffort::High
+            ),
+            [ThinkingAttempt::ollama(OllamaThink::Off)]
+        );
+        // The template switch reaches the body next to any other kwargs.
+        let request = LlmProbeRequest {
+            url: "http://localhost:8000/v1/chat/completions".into(),
+            ollama_generation_url: None,
+            model: "m".into(),
+            api_key: None,
+            api_key_header: "authorization",
+            headers: BTreeMap::new(),
+            timeout: Duration::from_secs(5),
+            reasoning_switch: ReasoningSwitch::Plain,
+            reasoning_effort: None,
+            ollama_think: OllamaThink::Off,
+            template_switch: None,
+        }
+        .with_thinking(qwen);
+        let body = openai_generation_body(&request, &tiny_generation(), request.reasoning_switch);
+        assert_eq!(body["chat_template_kwargs"]["enable_thinking"], true);
+        assert_eq!(body["reasoning_effort"], "xhigh");
+    }
+
+    #[test]
     fn the_request_bodies_carry_the_thinking_attempt() {
         let mut request = LlmProbeRequest {
             url: "http://localhost:8000/v1/chat/completions".into(),
@@ -5245,6 +5454,7 @@ mod tests {
             reasoning_switch: ReasoningSwitch::Plain,
             reasoning_effort: None,
             ollama_think: OllamaThink::Off,
+            template_switch: None,
         };
         let plain = openai_generation_body(&request, &tiny_generation(), ReasoningSwitch::Plain);
         assert!(plain.get("reasoning_effort").is_none());
@@ -5822,6 +6032,7 @@ mod tests {
             reasoning_switch: ReasoningSwitch::Plain,
             reasoning_effort: None,
             ollama_think: OllamaThink::Off,
+            template_switch: None,
         };
         let body = ollama_generation_body(
             &request,
@@ -6405,6 +6616,7 @@ mod tests {
             reasoning_switch: ReasoningSwitch::Plain,
             reasoning_effort: None,
             ollama_think: OllamaThink::Off,
+            template_switch: None,
         };
         let tool = ToolSpec {
             name: "read_file",

@@ -58,6 +58,7 @@ mod link_operation;
 pub mod llm_profiles;
 mod map_tiles;
 pub mod media_stream;
+pub mod model_thinking;
 pub mod rejection;
 mod split_combine;
 mod split_manifest;

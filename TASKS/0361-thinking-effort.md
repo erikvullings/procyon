@@ -69,4 +69,27 @@ without the thinking capability.
     override, chat request), 3 frontend (chat select, terminal `/effort`, settings row);
     fm-application + fm-server 1847 and frontend 4214 pass; `pnpm lint` clean; checked in the
     browser (mock): the picker in the chat header and the default in Settings.
+- 2026-11-25 claude: model catalogue, family fallback, effort saved with the chat.
+  - `model_thinking.json` + `model_thinking.rs`: the maintained list of model families and how
+    they control thinking (`none` / `toggle` with its `chat_template_kwargs` switch / `always`,
+    default on or off, `reasoning_effort` value per level, source repo, note). Pre-populated from
+    the chat templates and cards on Hugging Face of the models configured or installed here:
+    Inkling-2-Mini (effort none..max, `none` does not fully disable), Qwen3.8 27B/Flash-Next incl.
+    ThinkingCap and Dirk (`enable_thinking`; only low/medium/xhigh, others raise a template error,
+    so High sends `xhigh`), Gemma 4 (`enable_thinking`, off by default, no levels), Ornith 1.5,
+    Granite 4.2 (only `low` changes anything), Qwen3 14B, Kimi K2.5 (`thinking`), MiniMax M2.x
+    (always thinks), DeepSeek V4 (`thinking`; Max mode not offered), gpt-oss, Llama 3.x (none).
+  - A listed model gets exactly what its template expects, then nothing; an unlisted one is still
+    tried as before. Family fallbacks (`family: true`: qwen, gemma, granite, deepseek) reuse the
+    family's switch and try the plain level name first, dropping it when refused. A 500 counts as
+    a refusal too when the request asked for thinking (a template error may surface as 500).
+  - `ThinkingSupportDto` on the role assignment; Settings shows one line under the chat role's
+    effort ("Thinking can be turned off; it is on by default. Levels it distinguishes: … From the
+    model card of …", or "Guessed from its model family").
+  - Chat: the conversation stores the effort it was last asked with (`thinking`, optional field,
+    schema 2 unchanged), restored when it is opened, copied by a fork; mock does the same.
+  - Not verified against the live servers: what status oMLX returns for a template error.
+  - Verified: 3 new Rust tests (catalogue validity and lookups for the 12 models, listed and family
+    attempts, chat effort saved), 2 frontend (restore on open, support line); fm-application +
+    fm-server 1850 and frontend 4216 pass; `pnpm lint` clean.
 

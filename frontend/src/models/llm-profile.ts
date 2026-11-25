@@ -18,6 +18,7 @@ export type {
   SaveLlmProfileRequestDto as SaveLlmProfileRequest,
   SaveLlmRoleRequestDto as SaveLlmRoleRequest,
   ThinkingEffortDto as ThinkingEffort,
+  ThinkingSupportDto as ThinkingSupport,
 } from '../api/generated/models';
 
 import type { ThinkingEffortDto } from '../api/generated/models';

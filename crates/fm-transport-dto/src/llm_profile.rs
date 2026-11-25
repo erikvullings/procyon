@@ -203,6 +203,28 @@ pub enum ThinkingEffortDto {
     High,
 }
 
+/// What a model supports for thinking, from its chat template and model card (task 0361).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ThinkingSupportDto {
+    /// Whether the model thinks at all.
+    pub thinks: bool,
+    /// Whether thinking can be turned off.
+    pub can_turn_off: bool,
+    /// Whether it thinks when nothing is asked.
+    pub default_on: bool,
+    /// The efforts that change how much it thinks; empty when it only switches on and off.
+    pub levels: Vec<ThinkingEffortDto>,
+    /// Whether the entry was read from this model's own card; `false` for a family fallback, whose
+    /// levels are tried rather than known.
+    pub verified: bool,
+    /// The Hugging Face repository the entry was read from.
+    pub source: String,
+    /// What else the card says about thinking.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
 /// One role's endpoint, model and cloud permission.
 #[allow(missing_docs)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -214,6 +236,9 @@ pub struct LlmRoleAssignmentDto {
     /// The default thinking effort of the role's replies (chat role).
     #[serde(default)]
     pub thinking: ThinkingEffortDto,
+    /// What the role's model supports for thinking, when its family is known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking_support: Option<ThinkingSupportDto>,
 }
 
 /// The configured role bindings. An absent role is not assigned.

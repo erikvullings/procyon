@@ -11373,6 +11373,17 @@
             },
             "description": "Messages in order, oldest first."
           },
+          "thinking": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ThinkingEffortDto",
+                "description": "The thinking effort the conversation was last asked with (task 0361); absent uses the chat\nrole's default."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "title": {
             "type": "string",
             "description": "Title; empty until the person renames it or the first message sets it."
@@ -20191,6 +20202,17 @@
           "thinking": {
             "$ref": "#/components/schemas/ThinkingEffortDto",
             "description": "The default thinking effort of the role's replies (chat role)."
+          },
+          "thinkingSupport": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ThinkingSupportDto",
+                "description": "What the role's model supports for thinking, when its family is known."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -30844,6 +30866,54 @@
           "medium",
           "high"
         ]
+      },
+      "ThinkingSupportDto": {
+        "type": "object",
+        "description": "What a model supports for thinking, from its chat template and model card (task 0361).",
+        "required": [
+          "thinks",
+          "canTurnOff",
+          "defaultOn",
+          "levels",
+          "verified",
+          "source"
+        ],
+        "properties": {
+          "canTurnOff": {
+            "type": "boolean",
+            "description": "Whether thinking can be turned off."
+          },
+          "defaultOn": {
+            "type": "boolean",
+            "description": "Whether it thinks when nothing is asked."
+          },
+          "levels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ThinkingEffortDto"
+            },
+            "description": "The efforts that change how much it thinks; empty when it only switches on and off."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What else the card says about thinking."
+          },
+          "source": {
+            "type": "string",
+            "description": "The Hugging Face repository the entry was read from."
+          },
+          "thinks": {
+            "type": "boolean",
+            "description": "Whether the model thinks at all."
+          },
+          "verified": {
+            "type": "boolean",
+            "description": "Whether the entry was read from this model's own card; `false` for a family fallback, whose\nlevels are tried rather than known."
+          }
+        }
       },
       "ToolCallingProbeDto": {
         "type": "object",

@@ -2093,6 +2093,15 @@ export const es = {
     thinkingLow: 'Bajo',
     thinkingMedium: 'Medio',
     thinkingHigh: 'Alto',
+    supportNone: 'Este modelo no razona.',
+    supportAlways: 'Este modelo siempre razona; no se puede desactivar.',
+    supportToggleOn: 'El razonamiento se puede desactivar; está activo por defecto.',
+    supportToggleOff: 'El razonamiento se puede activar; está desactivado por defecto.',
+    supportLevels: 'Niveles que distingue: {levels}.',
+    supportNoLevels: 'Bajo, medio y alto razonan igual.',
+    supportLevelsTried: 'Los niveles se prueban y se omiten si el modelo los rechaza.',
+    supportSource: 'Según la ficha del modelo {source}.',
+    supportFamily: 'Deducido de su familia de modelos ({source}).',
     cloudHintImage:
       'Las palabras que escribes se envían a este endpoint en la nube y las imágenes vuelven de él. Actívalo solo si te parece bien.',
     imageModelHint:

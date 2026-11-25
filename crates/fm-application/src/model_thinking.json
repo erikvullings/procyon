@@ -1,0 +1,133 @@
+{
+  "_comment": "How model families control thinking (task 0361). Read from each model's chat template and card on Hugging Face (2026-11-25). The first entry whose `match` text occurs in the model id (case-insensitive) applies, so list specific families before general ones. `thinking`: none (never thinks), toggle (a chat-template switch turns it on or off), always (cannot be turned off). `switch`: the chat_template_kwargs name of the toggle. `levels`: the reasoning_effort value to send per effort; a missing level sends none. `family`: true marks a fallback for a whole family whose switch is shared but whose levels are not verified; a level is then tried and dropped when the server refuses it.",
+  "models": [
+    {
+      "match": ["inkling-2"],
+      "source": "thinkingmachines/Inkling-2-Mini",
+      "thinking": "always",
+      "defaultOn": true,
+      "levels": { "off": "none", "low": "low", "medium": "medium", "high": "high" },
+      "note": "Effort none..max (default 0.9, about high); none does not fully disable reasoning."
+    },
+    {
+      "match": ["qwen3.8"],
+      "source": "Qwen/Qwen3.8-27B",
+      "thinking": "toggle",
+      "switch": "enable_thinking",
+      "defaultOn": true,
+      "levels": { "low": "low", "medium": "medium", "high": "xhigh" },
+      "note": "The template accepts only low, medium and xhigh (default) and raises an error for others. Covers Qwen3.8-Flash-Next and fine-tunes such as ThinkingCap and Dirk."
+    },
+    {
+      "match": ["gemma-4", "gemma4"],
+      "source": "google/gemma-4-26B-A4B-it",
+      "thinking": "toggle",
+      "switch": "enable_thinking",
+      "defaultOn": false,
+      "levels": {},
+      "note": "Thinking is off unless enable_thinking is set; no effort levels."
+    },
+    {
+      "match": ["ornith-1.5", "ornith1.5"],
+      "source": "ornith-ai/Ornith-1.5-122B",
+      "thinking": "toggle",
+      "switch": "enable_thinking",
+      "defaultOn": true,
+      "levels": {}
+    },
+    {
+      "match": ["granite-4.2", "granite4.2"],
+      "source": "ibm-granite/granite-4.2-8b",
+      "thinking": "toggle",
+      "switch": "enable_thinking",
+      "defaultOn": true,
+      "levels": { "low": "low" },
+      "note": "reasoning_effort low shortens thinking; other values think normally."
+    },
+    {
+      "match": ["kimi-k2"],
+      "source": "moonshotai/Kimi-K2.5",
+      "thinking": "toggle",
+      "switch": "thinking",
+      "defaultOn": true,
+      "levels": {}
+    },
+    {
+      "match": ["minimax-m2"],
+      "source": "MiniMaxAI/MiniMax-M2.7",
+      "thinking": "always",
+      "defaultOn": true,
+      "levels": {},
+      "note": "Interleaved thinking that cannot be turned off."
+    },
+    {
+      "match": ["deepseek-v4"],
+      "source": "deepseek-ai/DeepSeek-V4-Pro",
+      "thinking": "toggle",
+      "switch": "thinking",
+      "defaultOn": true,
+      "levels": {},
+      "note": "Non-think, Think High and Think Max modes; Max needs a special system prompt and is not offered."
+    },
+    {
+      "match": ["gpt-oss"],
+      "source": "openai/gpt-oss-20b",
+      "thinking": "always",
+      "defaultOn": true,
+      "levels": { "off": "low", "low": "low", "medium": "medium", "high": "high" },
+      "note": "Reasoning cannot be turned off; low is the least."
+    },
+    {
+      "match": ["qwen3:", "qwen3-"],
+      "source": "Qwen/Qwen3-14B",
+      "thinking": "toggle",
+      "switch": "enable_thinking",
+      "defaultOn": true,
+      "levels": {}
+    },
+    {
+      "match": ["llama3", "llama-3"],
+      "source": "meta-llama/Llama-3.2-3B-Instruct",
+      "thinking": "none",
+      "defaultOn": false,
+      "levels": {}
+    },
+    {
+      "match": ["qwen"],
+      "source": "Qwen (family)",
+      "family": true,
+      "thinking": "toggle",
+      "switch": "enable_thinking",
+      "defaultOn": true,
+      "levels": {},
+      "note": "Qwen3 and later share enable_thinking; levels differ by generation (Qwen3.8 takes only low, medium and xhigh)."
+    },
+    {
+      "match": ["gemma"],
+      "source": "Gemma (family)",
+      "family": true,
+      "thinking": "toggle",
+      "switch": "enable_thinking",
+      "defaultOn": false,
+      "levels": {}
+    },
+    {
+      "match": ["granite"],
+      "source": "Granite (family)",
+      "family": true,
+      "thinking": "toggle",
+      "switch": "enable_thinking",
+      "defaultOn": true,
+      "levels": {}
+    },
+    {
+      "match": ["deepseek"],
+      "source": "DeepSeek (family)",
+      "family": true,
+      "thinking": "toggle",
+      "switch": "thinking",
+      "defaultOn": true,
+      "levels": {}
+    }
+  ]
+}

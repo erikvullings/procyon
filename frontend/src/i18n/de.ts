@@ -2114,6 +2114,15 @@ export const de = {
     thinkingLow: 'Niedrig',
     thinkingMedium: 'Mittel',
     thinkingHigh: 'Hoch',
+    supportNone: 'Dieses Modell denkt nicht.',
+    supportAlways: 'Dieses Modell denkt immer; das lässt sich nicht abschalten.',
+    supportToggleOn: 'Denken lässt sich abschalten; standardmäßig ist es an.',
+    supportToggleOff: 'Denken lässt sich einschalten; standardmäßig ist es aus.',
+    supportLevels: 'Stufen, die es unterscheidet: {levels}.',
+    supportNoLevels: 'Niedrig, mittel und hoch denken gleich.',
+    supportLevelsTried: 'Stufen werden versucht und weggelassen, wenn das Modell sie ablehnt.',
+    supportSource: 'Aus der Modellkarte von {source}.',
+    supportFamily: 'Aus der Modellfamilie abgeleitet ({source}).',
     cloudHintImage:
       'Die von Ihnen eingegebenen Wörter werden an diesen Cloud-Endpunkt gesendet; die Bilder kommen von ihm zurück. Aktivieren Sie dies nur, wenn Sie damit einverstanden sind.',
     imageModelHint:

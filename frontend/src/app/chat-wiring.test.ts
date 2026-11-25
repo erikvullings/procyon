@@ -318,6 +318,38 @@ describe('chat wiring', () => {
     expect(entry.partialReply).toBeUndefined();
   });
 
+  it('sends the chosen thinking effort and restores it when the conversation opens', async () => {
+    const requests: ChatReplyRequest[] = [];
+    const client = {
+      streamChatReply: vi.fn(
+        (request: ChatReplyRequest, onEvent: (event: ChatReplyEvent) => void) => {
+          requests.push(request);
+          onEvent({ type: 'done', text: 'Done.' });
+          return Promise.resolve();
+        },
+      ),
+      listChatConversations: vi.fn(() => Promise.resolve([])),
+      getChatConversation: vi.fn(() =>
+        Promise.resolve({
+          id: 'c2',
+          title: 'Deep',
+          updatedAt: '2026-11-25T10:00:00.000Z',
+          messages: [],
+          thinking: 'high' as const,
+        }),
+      ),
+    };
+    const { shell, entry } = fakeShell(client);
+    const wiring = createChatWiring(shell, { replaceWorkspace: vi.fn() });
+    wiring.setThinking(entry.key, 'low');
+    await wiring.send(client as unknown as FileManagerClient, entry.key, 'Quick one');
+    expect(requests[0]?.thinking).toBe('low');
+
+    wiring.select(client as unknown as FileManagerClient, entry.key, 'c2');
+    await vi.waitFor(() => expect(entry.conversationId).toBe('c2'));
+    await vi.waitFor(() => expect(entry.thinking).toBe('high'));
+  });
+
   it('attaches nothing when the other pane shows no folder', () => {
     const { shell, entry } = fakeShell({});
     const wiring = createChatWiring(shell, { replaceWorkspace: vi.fn() });

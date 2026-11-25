@@ -2085,6 +2085,15 @@ export const pl = {
     thinkingLow: 'Niski',
     thinkingMedium: 'Średni',
     thinkingHigh: 'Wysoki',
+    supportNone: 'Ten model nie rozumuje.',
+    supportAlways: 'Ten model zawsze rozumuje; nie da się tego wyłączyć.',
+    supportToggleOn: 'Rozumowanie można wyłączyć; domyślnie jest włączone.',
+    supportToggleOff: 'Rozumowanie można włączyć; domyślnie jest wyłączone.',
+    supportLevels: 'Poziomy, które rozróżnia: {levels}.',
+    supportNoLevels: 'Niski, średni i wysoki rozumują tak samo.',
+    supportLevelsTried: 'Poziomy są próbowane i pomijane, gdy model je odrzuci.',
+    supportSource: 'Według karty modelu {source}.',
+    supportFamily: 'Wywnioskowano z rodziny modelu ({source}).',
     cloudHintImage:
       'Wpisane słowa trafiają do tego punktu końcowego w chmurze, a obrazy z niego wracają. Włącz tylko, jeśli to akceptujesz.',
     imageModelHint:

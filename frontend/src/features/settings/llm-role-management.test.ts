@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MockFileManagerClient } from '../../api/client/mock-file-manager-client';
 import { setLocale } from '../../i18n';
 import type { LlmApiCapability, LlmProfile } from '../../models';
-import { LlmRoleManagement } from './llm-role-management';
+import { LlmRoleManagement, thinkingSupportText } from './llm-role-management';
 
 let root: HTMLElement;
 
@@ -308,5 +308,45 @@ describe('LlmRoleManagement', () => {
       ).toBeNull();
       expect(model?.querySelector('input')).toBeTruthy();
     });
+  });
+});
+
+describe('thinking support line', () => {
+  it('says what the model card lists, and when it is only a family guess', () => {
+    setLocale('en');
+    expect(
+      thinkingSupportText({
+        thinks: true,
+        canTurnOff: true,
+        defaultOn: true,
+        levels: ['low', 'medium', 'high'],
+        verified: true,
+        source: 'Qwen/Qwen3.8-27B',
+      }),
+    ).toBe(
+      'Thinking can be turned off; it is on by default. Levels it distinguishes: Low, Medium, High. From the model card of Qwen/Qwen3.8-27B.',
+    );
+    expect(
+      thinkingSupportText({
+        thinks: true,
+        canTurnOff: true,
+        defaultOn: true,
+        levels: [],
+        verified: false,
+        source: 'Qwen (family)',
+      }),
+    ).toContain(
+      'Levels are tried and dropped if the model refuses them. Guessed from its model family',
+    );
+    expect(
+      thinkingSupportText({
+        thinks: false,
+        canTurnOff: false,
+        defaultOn: false,
+        levels: [],
+        verified: true,
+        source: 'meta-llama/Llama-3.2-3B-Instruct',
+      }),
+    ).toBe('This model does not think. From the model card of meta-llama/Llama-3.2-3B-Instruct.');
   });
 });

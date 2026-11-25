@@ -60,6 +60,10 @@ pub struct ChatConversationDto {
     pub updated_at: String,
     /// Messages in order, oldest first.
     pub messages: Vec<ChatMessageDto>,
+    /// The thinking effort the conversation was last asked with (task 0361); absent uses the chat
+    /// role's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<crate::ThinkingEffortDto>,
 }
 
 /// Renames a saved conversation.

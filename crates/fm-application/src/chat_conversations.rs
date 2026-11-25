@@ -16,6 +16,8 @@ use std::sync::Mutex;
 
 use chrono::{SecondsFormat, Utc};
 use fm_agent::Message;
+
+use crate::llm_profiles::ThinkingEffort;
 use fm_settings::{SettingsStore, VersionedDocument};
 use fm_transport_dto::{
     ChatConversationDto, ChatConversationSummaryDto, ChatMessageDto, ChatRoleDto,
@@ -109,6 +111,10 @@ pub(crate) struct ChatConversation {
     /// The summary of the oldest messages, once the conversation grew long enough.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compaction: Option<ChatCompaction>,
+    /// The thinking effort the conversation was last asked with (task 0361); `None` follows the
+    /// chat role's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<ThinkingEffort>,
 }
 
 /// The versioned file that holds one conversation.
@@ -232,6 +238,7 @@ impl ChatConversationService {
             updated_at: now(),
             messages: Vec::new(),
             compaction: None,
+            thinking: None,
         };
         let mut all = self.lock()?;
         save(&self.root, workspace, &conversation)?;
@@ -320,6 +327,23 @@ impl ChatConversationService {
         })
     }
 
+    /// Remembers the thinking effort the conversation is asked with; nothing is written when it
+    /// did not change.
+    pub(crate) fn set_thinking(
+        &self,
+        workspace: Uuid,
+        id: Uuid,
+        thinking: Option<ThinkingEffort>,
+    ) -> Result<(), ChatConversationError> {
+        if self.get(workspace, id)?.thinking == thinking {
+            return Ok(());
+        }
+        self.update(workspace, id, |conversation| {
+            conversation.thinking = thinking;
+            Ok(())
+        })
+    }
+
     /// Starts a new conversation with the first `keep` messages of `id` ("fork from here"); the
     /// original stays as it was. A summary that reaches past `keep` is left behind, so the fork is
     /// summarised again from its own messages when it grows long.
@@ -349,6 +373,7 @@ impl ChatConversationService {
                 .compaction
                 .clone()
                 .filter(|compaction| compaction.covered <= keep),
+            thinking: original.thinking,
         };
         save(&self.root, workspace, &fork)?;
         all.entry(workspace)
@@ -471,6 +496,9 @@ pub(crate) fn conversation_to_dto(conversation: ChatConversation) -> ChatConvers
         id: conversation.id,
         title: conversation.title,
         updated_at: conversation.updated_at,
+        thinking: conversation
+            .thinking
+            .map(crate::llm_profiles::thinking_to_dto),
         messages: conversation
             .messages
             .into_iter()

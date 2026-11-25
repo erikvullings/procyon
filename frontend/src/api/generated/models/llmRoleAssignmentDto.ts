@@ -3,6 +3,7 @@
  * Run `pnpm api:generate` (or `pnpm api:check`) to regenerate.
  */
 import type { ThinkingEffortDto } from './thinkingEffortDto.ts';
+import type { ThinkingSupportDto } from './thinkingSupportDto.ts';
 
 /**
  * One role's endpoint, model and cloud permission.
@@ -13,4 +14,5 @@ export interface LlmRoleAssignmentDto {
   profileId: string;
   /** The default thinking effort of the role's replies (chat role). */
   thinking?: ThinkingEffortDto;
+  thinkingSupport?: ThinkingSupportDto | null;
 }

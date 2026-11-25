@@ -269,9 +269,10 @@ impl ChatService {
         )
         .await;
         let prompts = build_prompts(&saved);
-        let thinking = ThinkingRequest::Conversation(
-            request.thinking.map(crate::llm_profiles::thinking_from_dto),
-        );
+        let chosen = request.thinking.map(crate::llm_profiles::thinking_from_dto);
+        // The effort is kept with the conversation, so it is chosen again when it is reopened.
+        conversations.set_thinking(request.workspace_id, request.conversation_id, chosen)?;
+        let thinking = ThinkingRequest::Conversation(chosen);
         let mut steps = Vec::new();
         let mut exchanges = Vec::new();
         let outcome = match (tooling, request.tools_folder.as_deref()) {
@@ -798,13 +799,26 @@ mod tests {
             unchosen,
         )
         .await;
-        let seen = generator.seen.lock().unwrap();
+        {
+            let seen = generator.seen.lock().unwrap();
+            assert_eq!(
+                seen[0].1.thinking,
+                ThinkingRequest::Conversation(Some(crate::llm_profiles::ThinkingEffort::High))
+            );
+            // Without a choice the chat role's default applies.
+            assert_eq!(seen[1].1.thinking, ThinkingRequest::Conversation(None));
+        }
+        // The choice is kept with the conversation, so reopening it chooses it again.
+        let mut again = request(workspace, id, "Once more", None);
+        again.thinking = Some(fm_transport_dto::ThinkingEffortDto::Low);
+        run(&ChatService::default(), &generator, &conversations, again).await;
+        let reopened =
+            ChatConversationService::new(&SettingsStore::new(_directory.path())).unwrap();
         assert_eq!(
-            seen[0].1.thinking,
-            ThinkingRequest::Conversation(Some(crate::llm_profiles::ThinkingEffort::High))
+            crate::chat_conversations::conversation_to_dto(reopened.get(workspace, id).unwrap())
+                .thinking,
+            Some(fm_transport_dto::ThinkingEffortDto::Low)
         );
-        // Without a choice the chat role's default applies.
-        assert_eq!(seen[1].1.thinking, ThinkingRequest::Conversation(None));
     }
 
     #[tokio::test]
@@ -1016,6 +1030,7 @@ mod tests {
             updated_at: String::new(),
             messages,
             compaction: None,
+            thinking: None,
         };
         let prompt = build_prompts(&conversation);
         assert!(prompt.len() <= MAX_PROMPT_BYTES);
