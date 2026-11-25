@@ -1328,6 +1328,9 @@ export const fr = {
     willSend: 'Envoyé avec votre prochain message :',
     remove: 'Retirer',
     attachedContext: 'Contexte joint',
+    forkQuestion: 'Bifurquer : nouvelle discussion avant cette question',
+    forkReply: 'Bifurquer : nouvelle discussion jusqu’à cette réponse',
+    forkFailed: 'Impossible de bifurquer la conversation.',
     noFolder: 'Ouvrez un dossier dans l’autre volet pour le joindre.',
     noSelection: 'Sélectionnez des éléments du dossier pour les joindre.',
     consentRequired:
@@ -2840,11 +2843,20 @@ export const fr = {
     slashHelpClear: 'oublier la conversation, garder le dossier',
     slashHelpCompact: 'remplacer la conversation par un résumé',
     slashHelpModel: 'lister les modèles de chat ou en choisir un',
-    slashHelpResume: 'lister les sessions enregistrées, ou en reprendre une ici (/resume 2)',
+    slashHelpResume:
+      'lister les sessions enregistrées, en reprendre une ici (/resume 2) ou en supprimer une (/resume delete 2)',
     resumeList: 'Sessions enregistrées (questions, date, dossier) :',
     resumeNone: "Aucune session enregistrée pour l'instant.",
     resumeGone: "Cette session n'est plus enregistrée.",
     resumed: 'Reprise de « {title} » ({count} questions).',
+    slashHelpFork:
+      'lister les questions de cette session, ou démarrer une nouvelle session avant l’une d’elles (/fork 2)',
+    forkList: 'Questions de cette session :',
+    forkNone: 'Aucune question dans cette session pour l’instant.',
+    forked:
+      'Nouvelle session à partir d’avant la question {number}. La question est dans la saisie pour la reposer ou la modifier.',
+    forkGone: 'Il n’y a pas de question {number}.',
+    resumeDeleted: '« {title} » supprimée.',
     slashHelpAuto:
       "activer ou désactiver l'approbation automatique : exécuter des commandes, créer des fichiers et appliquer des modifications sans demander, sauf pour les commandes très dangereuses",
     slashAutoOn:

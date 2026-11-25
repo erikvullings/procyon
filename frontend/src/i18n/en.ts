@@ -1703,6 +1703,9 @@ export const en = {
     willSend: 'Sent with your next message:',
     remove: 'Remove',
     attachedContext: 'Attached context',
+    forkQuestion: 'Fork: new chat from before this question',
+    forkReply: 'Fork: new chat up to this reply',
+    forkFailed: 'The conversation could not be forked.',
     noFolder: 'Open a folder in the other pane to attach it.',
     noSelection: 'Select entries in the folder to attach them.',
     consentRequired: 'This endpoint needs consent in Settings before the chat can use it.',
@@ -2762,11 +2765,19 @@ export const en = {
     slashHelpClear: 'forget the conversation, keep the folder',
     slashHelpCompact: 'replace the conversation by a summary',
     slashHelpModel: 'list the chat models, or switch to one',
-    slashHelpResume: 'list saved sessions, or continue one here (/resume 2)',
+    slashHelpResume:
+      'list saved sessions, continue one here (/resume 2) or delete one (/resume delete 2)',
     resumeList: 'Saved sessions (questions, date, folder):',
     resumeNone: 'No saved sessions yet.',
     resumeGone: 'That session is no longer saved.',
     resumed: 'Continuing “{title}” ({count} questions).',
+    slashHelpFork: "list this session's questions, or start a new session before one (/fork 2)",
+    forkList: 'Questions in this session:',
+    forkNone: 'No questions in this session yet.',
+    forked:
+      'New session from before question {number}. The question is in the input to ask again or change.',
+    forkGone: 'There is no question {number}.',
+    resumeDeleted: 'Deleted “{title}”.',
     slashHelpAuto:
       'turn auto-approve on or off: run commands, create files and apply edits without asking, except very dangerous commands',
     slashAutoOn:

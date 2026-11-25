@@ -1733,6 +1733,9 @@ export const nl = {
     willSend: 'Wordt met je volgende bericht verzonden:',
     remove: 'Verwijderen uit lijst',
     attachedContext: 'Toegevoegde context',
+    forkQuestion: 'Splitsen: nieuwe chat van vóór deze vraag',
+    forkReply: 'Splitsen: nieuwe chat tot en met dit antwoord',
+    forkFailed: 'Het gesprek kon niet worden gesplitst.',
     noFolder: 'Open een map in het andere paneel om die toe te voegen.',
     noSelection: 'Selecteer items in de map om ze toe te voegen.',
     consentRequired:
@@ -2814,11 +2817,20 @@ export const nl = {
     slashHelpClear: 'vergeet het gesprek, houd de map',
     slashHelpCompact: 'vervang het gesprek door een samenvatting',
     slashHelpModel: 'toon de chatmodellen, of wissel naar een ervan',
-    slashHelpResume: 'toon opgeslagen sessies, of ga hier verder met één (/resume 2)',
+    slashHelpResume:
+      'toon opgeslagen sessies, ga hier verder met één (/resume 2) of verwijder er één (/resume delete 2)',
     resumeList: 'Opgeslagen sessies (vragen, datum, map):',
     resumeNone: 'Nog geen opgeslagen sessies.',
     resumeGone: 'Die sessie is niet meer opgeslagen.',
     resumed: 'Verder met “{title}” ({count} vragen).',
+    slashHelpFork:
+      'toon de vragen van deze sessie, of begin een nieuwe sessie vóór één ervan (/fork 2)',
+    forkList: 'Vragen in deze sessie:',
+    forkNone: 'Nog geen vragen in deze sessie.',
+    forked:
+      'Nieuwe sessie van vóór vraag {number}. De vraag staat in de invoer om opnieuw te stellen of aan te passen.',
+    forkGone: 'Er is geen vraag {number}.',
+    resumeDeleted: '“{title}” verwijderd.',
     slashHelpAuto:
       'automatisch goedkeuren aan- of uitzetten: opdrachten uitvoeren, bestanden maken en wijzigingen toepassen zonder te vragen, behalve zeer gevaarlijke opdrachten',
     slashAutoOn:

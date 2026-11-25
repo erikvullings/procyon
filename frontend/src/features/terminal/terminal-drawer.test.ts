@@ -1442,6 +1442,75 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     expect(assist).not.toHaveBeenCalled();
   });
 
+  it('starts /resume and /new under a new session id, so saved sessions are not overwritten', async () => {
+    const saved = {
+      id: 'old-tab',
+      title: 'decoys',
+      folder: 'file:///home/repo',
+      updatedAt: '2026-11-24T10:00:00Z',
+      questions: 1,
+    };
+    const assistResume = vi.fn(async (_savedId: string, _sessionId: string) => saved);
+    await mountWith({ assistSaved: async () => [saved], assistResume });
+    ask('# /clear');
+    await vi.waitFor(() => expect(assistClose).toHaveBeenCalledOnce());
+    const first = assistClose.mock.calls[0]?.[0];
+    await markPrompt();
+    ask('# /resume');
+    await vi.waitFor(() => expect(root.textContent).toContain('1. decoys'));
+    await markPrompt();
+    ask('# /resume 1');
+    await vi.waitFor(() => expect(assistResume).toHaveBeenCalledOnce());
+    const into = assistResume.mock.calls[0]?.[1];
+    expect(into).toBeDefined();
+    expect(into).not.toBe(first);
+    expect(into).not.toBe('old-tab');
+  });
+
+  it('deletes a listed saved session with /resume delete <number>', async () => {
+    const saved = {
+      id: 'old-tab',
+      title: 'decoys',
+      folder: 'file:///home/repo',
+      updatedAt: '2026-11-24T10:00:00Z',
+      questions: 1,
+    };
+    const assistDeleteSaved = vi.fn(async (_savedId: string) => true);
+    await mountWith({
+      assistSaved: async () => [saved],
+      assistResume: async () => saved,
+      assistDeleteSaved,
+    });
+    ask('# /resume');
+    await vi.waitFor(() => expect(root.textContent).toContain('1. decoys'));
+    await markPrompt();
+    ask('# /resume delete 1');
+    await vi.waitFor(() => expect(assistDeleteSaved).toHaveBeenCalledWith('old-tab'));
+    await vi.waitFor(() => expect(root.textContent).toContain('Deleted “decoys”.'));
+    expect(assist).not.toHaveBeenCalled();
+  });
+
+  it('lists questions with /fork and forks before one, with it in the input', async () => {
+    const assistQuestions = vi.fn(async (_sessionId: string) => ['first?', 'second?']);
+    const assistFork = vi.fn(async (_sessionId: string, question: number, _into: string) =>
+      question === 2 ? 'second?' : null,
+    );
+    await mountWith({ assistQuestions, assistFork });
+    ask('# /fork');
+    await vi.waitFor(() => expect(root.textContent).toContain('2. second?'));
+    await markPrompt();
+    ask('# /fork 2');
+    await vi.waitFor(() => expect(assistFork).toHaveBeenCalledOnce());
+    const [from, question, into] = assistFork.mock.calls[0] ?? [];
+    expect(question).toBe(2);
+    expect(into).not.toBe(from);
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain('New session from before question 2'),
+    );
+    await vi.waitFor(() => expect(chatText()).toBe('second?'));
+    expect(assist).not.toHaveBeenCalled();
+  });
+
   it('lists the chat models with /model and switches with /model <number>', async () => {
     const select = vi.fn<TerminalModels['select']>(async () => undefined);
     const models: TerminalModels = {

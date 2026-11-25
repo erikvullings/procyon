@@ -361,6 +361,16 @@ export const activityIcon = trustedStrokeIcon(
   'fm-icon-activity',
 );
 
+/** "git-fork" — start a new conversation from an earlier message (task 0359). */
+export const gitForkIcon = trustedStrokeIcon(
+  '<path d="M12 18m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />' +
+    '<path d="M7 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />' +
+    '<path d="M17 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />' +
+    '<path d="M7 8v2a2 2 0 0 0 2 2h6a2 2 0 0 0 2 -2v-2" />' +
+    '<path d="M12 12l0 4" />',
+  'fm-icon-git-fork',
+);
+
 /** "copy" — copy text/image content or a metadata field to the clipboard. */
 export const copyIcon = trustedStrokeIcon(
   '<path d="M9 3m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z" />' +

@@ -1210,6 +1210,15 @@ export class MockFileManagerClient implements FileManagerClient {
     return this.semanticClient.renameChatConversation(workspaceId, conversationId, title, signal);
   }
 
+  forkChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    keep: number,
+    signal?: AbortSignal,
+  ): Promise<ChatConversation> {
+    return this.semanticClient.forkChatConversation(workspaceId, conversationId, keep, signal);
+  }
+
   deleteChatConversation(
     workspaceId: WorkspaceId,
     conversationId: string,

@@ -70,6 +70,14 @@ pub struct RenameChatConversationRequestDto {
     pub title: String,
 }
 
+/// Starts a new conversation from the start of a saved one ("fork from here", task 0359).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ForkChatConversationRequestDto {
+    /// How many leading messages the new conversation keeps; at most the conversation's length.
+    pub keep: u32,
+}
+
 /// Asks for the next reply in a saved conversation. The person's message is saved first; the
 /// reply is saved only when it completes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]

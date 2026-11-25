@@ -3493,6 +3493,21 @@ impl FileManagerService {
         ))
     }
 
+    /// Starts a new chat conversation with the first messages of another (task 0359); the
+    /// original is not changed.
+    pub fn fork_chat_conversation(
+        &self,
+        workspace_id: Uuid,
+        conversation_id: Uuid,
+        request: fm_transport_dto::ForkChatConversationRequestDto,
+    ) -> Result<fm_transport_dto::ChatConversationDto, ApplicationError> {
+        let keep = usize::try_from(request.keep).unwrap_or(usize::MAX);
+        Ok(crate::chat_conversations::conversation_to_dto(
+            self.chat_conversations
+                .fork(workspace_id, conversation_id, keep)?,
+        ))
+    }
+
     /// Deletes a chat conversation and everything saved in it.
     pub fn delete_chat_conversation(
         &self,
@@ -3598,6 +3613,28 @@ impl FileManagerService {
         self.terminal_sessions
             .resume(saved_id, session_id)
             .map(crate::terminal_assist::saved_session_dto)
+    }
+
+    /// Deletes a saved terminal assistant session (`/resume delete`, task 0359).
+    pub fn terminal_assist_delete_saved(&self, saved_id: &str) -> bool {
+        self.terminal_sessions.delete_saved(saved_id)
+    }
+
+    /// The questions of a terminal tab's assistant session, oldest first (`/fork`, task 0359).
+    pub fn terminal_assist_questions(&self, session_id: &str) -> Vec<String> {
+        self.terminal_sessions.questions(session_id)
+    }
+
+    /// Starts the tab session `into` with the history of `session_id` before its `question`-th
+    /// question (1-based), and returns that question; the original is not changed.
+    pub fn terminal_assist_fork(
+        &self,
+        session_id: &str,
+        question: u32,
+        into: &str,
+    ) -> Option<String> {
+        let question = usize::try_from(question).ok()?;
+        self.terminal_sessions.fork(session_id, question, into)
     }
 
     /// Gives a terminal tab's running request a message the person sent meanwhile; the model sees

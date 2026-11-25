@@ -178,6 +178,40 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
     m.redraw();
   }
 
+  /**
+   * Starts a new conversation with the first `keep` messages of the open one and opens it
+   * (task 0359); the original stays as it was.
+   */
+  async function forkConversation(
+    client: FileManagerClient,
+    key: string,
+    keep: number,
+  ): Promise<void> {
+    const entry = entryOf(key);
+    const from = entry?.conversationId;
+    if (entry === undefined || from === undefined || entry.pendingRequestId !== undefined) return;
+    try {
+      const fork = await client.forkChatConversation(entry.workspaceId, from, keep);
+      entry.conversations = [
+        {
+          id: fork.id,
+          title: fork.title,
+          updatedAt: fork.updatedAt,
+          messageCount: fork.messages.length,
+        },
+        ...entry.conversations,
+      ];
+      entry.conversationId = fork.id;
+      entry.messages = [...fork.messages];
+      entry.failure = undefined;
+      entry.error = undefined;
+      entry.streamedText = undefined;
+    } catch {
+      entry.error = t('chat', 'forkFailed');
+    }
+    m.redraw();
+  }
+
   async function deleteConversation(
     client: FileManagerClient,
     key: string,
@@ -525,6 +559,8 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
       void renameConversation(client, key, id, title),
     remove: (client: FileManagerClient, key: string, id: string) =>
       void deleteConversation(client, key, id),
+    fork: (client: FileManagerClient, key: string, keep: number) =>
+      void forkConversation(client, key, keep),
     send: (client: FileManagerClient, key: string, draft: string) => void send(client, key, draft),
     retry: (client: FileManagerClient, key: string) => void retry(client, key),
     stop,

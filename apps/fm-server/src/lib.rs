@@ -433,6 +433,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::chat::get_chat_conversation))
         .routes(utoipa_axum::routes!(routes::chat::rename_chat_conversation))
         .routes(utoipa_axum::routes!(routes::chat::delete_chat_conversation))
+        .routes(utoipa_axum::routes!(routes::chat::fork_chat_conversation))
         .routes(utoipa_axum::routes!(routes::chat::stream_chat_reply))
         .routes(utoipa_axum::routes!(routes::chat::cancel_chat_reply))
         .routes(utoipa_axum::routes!(

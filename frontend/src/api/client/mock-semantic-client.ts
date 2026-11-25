@@ -1341,6 +1341,28 @@ export class MockSemanticClient implements SemanticClient {
     });
   }
 
+  forkChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    keep: number,
+    signal?: AbortSignal,
+  ): Promise<ChatConversation> {
+    return this.ctx.perform('forkChatConversation', signal, () => {
+      const { conversation } = chatRecord(this.ctx.chatConversations, workspaceId, conversationId);
+      if (!Number.isInteger(keep) || keep < 0 || keep > conversation.messages.length) {
+        throw new MockClientError('invalidRequest', 'The fork point is past the end');
+      }
+      const fork: ChatConversation = {
+        id: crypto.randomUUID(),
+        title: conversation.title,
+        updatedAt: new Date().toISOString(),
+        messages: structuredClone(conversation.messages.slice(0, keep)),
+      };
+      this.ctx.chatConversations.set(fork.id, { workspaceId, conversation: fork });
+      return structuredClone(fork);
+    });
+  }
+
   deleteChatConversation(
     workspaceId: WorkspaceId,
     conversationId: string,

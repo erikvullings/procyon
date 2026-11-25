@@ -11,7 +11,7 @@ use axum::{
 };
 use fm_transport_dto::{
     CancelChatReplyRequestDto, ChatConversationDto, ChatConversationSummaryDto, ChatReplyEventDto,
-    ChatReplyRequestDto, RenameChatConversationRequestDto,
+    ChatReplyRequestDto, ForkChatConversationRequestDto, RenameChatConversationRequestDto,
 };
 use tokio::sync::mpsc;
 use tower_http::request_id::RequestId;
@@ -114,6 +114,36 @@ pub(crate) async fn rename_chat_conversation(
     state
         .service
         .rename_chat_conversation(workspace_id, conversation_id, request)
+        .map(Json)
+        .map_err(|error| ApiError::new(error, request_id))
+}
+
+/// Starts a new chat conversation with the first messages of another ("fork from here").
+#[utoipa::path(
+    post,
+    path = "/api/v1/workspaces/{workspaceId}/chat/conversations/{conversationId}/fork",
+    operation_id = "forkChatConversation",
+    params(
+        ("workspaceId" = Uuid, Path, description = "The workspace that owns the conversation"),
+        ("conversationId" = Uuid, Path, description = "The conversation to fork"),
+    ),
+    request_body = ForkChatConversationRequestDto,
+    responses(
+        (status = 200, description = "The new conversation", body = ChatConversationDto),
+        (status = 400, description = "The fork point is past the end", body = fm_transport_dto::ApplicationErrorDto),
+        (status = 404, description = "No such conversation", body = fm_transport_dto::ApplicationErrorDto),
+    )
+)]
+pub(crate) async fn fork_chat_conversation(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Path((workspace_id, conversation_id)): Path<(Uuid, Uuid)>,
+    Json(request): Json<ForkChatConversationRequestDto>,
+) -> Result<Json<ChatConversationDto>, ApiError> {
+    let request_id = extract_request_id(&request_id);
+    state
+        .service
+        .fork_chat_conversation(workspace_id, conversation_id, request)
         .map(Json)
         .map_err(|error| ApiError::new(error, request_id))
 }

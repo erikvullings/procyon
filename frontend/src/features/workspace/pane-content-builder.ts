@@ -230,6 +230,7 @@ export interface PaneContentContext {
     select(key: string, conversationId: string): void;
     rename(key: string, conversationId: string, title: string): void;
     remove(key: string, conversationId: string): void;
+    fork(key: string, keep: number): void;
     send(key: string, draft: string): void;
     stop(key: string): void;
     retry(key: string): void;
@@ -1288,6 +1289,7 @@ export function createPaneContentBuilder(
                   context.chatActions?.rename(chat.key, conversationId, title),
                 onDelete: (conversationId: string) =>
                   context.chatActions?.remove(chat.key, conversationId),
+                onFork: (keep: number) => context.chatActions?.fork(chat.key, keep),
                 onSend: (draft: string) => context.chatActions?.send(chat.key, draft),
                 onStop: () => context.chatActions?.stop(chat.key),
                 onRetry: () => context.chatActions?.retry(chat.key),

@@ -1340,6 +1340,9 @@ export const de = {
     willSend: 'Wird mit deiner nächsten Nachricht gesendet:',
     remove: 'Entfernen',
     attachedContext: 'Angehängter Kontext',
+    forkQuestion: 'Abzweigen: neuer Chat ab vor dieser Frage',
+    forkReply: 'Abzweigen: neuer Chat bis zu dieser Antwort',
+    forkFailed: 'Die Unterhaltung konnte nicht abgezweigt werden.',
     noFolder: 'Öffne im anderen Bereich einen Ordner, um ihn anzuhängen.',
     noSelection: 'Wähle Einträge im Ordner aus, um sie anzuhängen.',
     consentRequired:
@@ -2844,11 +2847,20 @@ export const de = {
     slashHelpClear: 'Unterhaltung vergessen, Ordner behalten',
     slashHelpCompact: 'Unterhaltung durch eine Zusammenfassung ersetzen',
     slashHelpModel: 'Chat-Modelle auflisten oder zu einem wechseln',
-    slashHelpResume: 'gespeicherte Sitzungen auflisten oder eine hier fortsetzen (/resume 2)',
+    slashHelpResume:
+      'gespeicherte Sitzungen auflisten, eine hier fortsetzen (/resume 2) oder eine löschen (/resume delete 2)',
     resumeList: 'Gespeicherte Sitzungen (Fragen, Datum, Ordner):',
     resumeNone: 'Noch keine gespeicherten Sitzungen.',
     resumeGone: 'Diese Sitzung ist nicht mehr gespeichert.',
     resumed: '„{title}“ wird fortgesetzt ({count} Fragen).',
+    slashHelpFork:
+      'Fragen dieser Sitzung auflisten oder eine neue Sitzung vor einer davon beginnen (/fork 2)',
+    forkList: 'Fragen in dieser Sitzung:',
+    forkNone: 'Noch keine Fragen in dieser Sitzung.',
+    forked:
+      'Neue Sitzung ab vor Frage {number}. Die Frage steht in der Eingabe, um sie erneut zu stellen oder zu ändern.',
+    forkGone: 'Es gibt keine Frage {number}.',
+    resumeDeleted: '„{title}“ gelöscht.',
     slashHelpAuto:
       'automatische Freigabe ein- oder ausschalten: Befehle ausführen, Dateien anlegen und Änderungen übernehmen, ohne zu fragen, außer bei sehr gefährlichen Befehlen',
     slashAutoOn:

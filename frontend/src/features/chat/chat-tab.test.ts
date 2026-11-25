@@ -47,6 +47,7 @@ describe('ChatTab header', () => {
         onSelect: noop,
         onRename: noop,
         onDelete: noop,
+        onFork: noop,
         onSend: noop,
         onStop: noop,
         onRetry: noop,
@@ -90,5 +91,70 @@ describe('ChatTab header', () => {
   it('offers no settings button where Settings cannot be opened', () => {
     render({ onNewTab: noop });
     expect(root.querySelector('.fm-chat-header [aria-label="Open AI settings"]')).toBeNull();
+  });
+});
+
+describe('ChatTab fork from here', () => {
+  let root: HTMLElement;
+
+  beforeEach(() => {
+    root = document.createElement('div');
+    document.body.appendChild(root);
+  });
+
+  afterEach(() => {
+    m.render(root, null);
+    root.remove();
+  });
+
+  function render(onFork: (keep: number) => void): void {
+    m.render(
+      root,
+      m(ChatTab, {
+        entry: {
+          ...entry(),
+          messages: [
+            { role: 'user', content: 'Which files are large?' },
+            { role: 'assistant', content: 'The ISO.' },
+          ],
+        },
+        folderAvailable: false,
+        folderSelection: { selected: 0, selectedFiles: 0, fileTooLarge: false },
+        onNew: noop,
+        onSelect: noop,
+        onRename: noop,
+        onDelete: noop,
+        onFork,
+        onSend: noop,
+        onStop: noop,
+        onRetry: noop,
+        onToggleTools: noop,
+        onAttachFolder: () => undefined,
+        onAttachSelection: () => undefined,
+        onAttachFileContents: noop,
+        onDetach: noop,
+        images: [],
+        onPasteImages: noop,
+        onRemoveImage: noop,
+      }),
+    );
+  }
+
+  it('forks before a question and puts it in the draft, or up to and with a reply', () => {
+    const onFork = vi.fn();
+    render(onFork);
+    const question = root.querySelector(
+      '[aria-label="Fork: new chat from before this question"]',
+    ) as HTMLButtonElement;
+    question.click();
+    expect(onFork).toHaveBeenLastCalledWith(0);
+    render(onFork);
+    expect((root.querySelector('textarea') as HTMLTextAreaElement).value).toBe(
+      'Which files are large?',
+    );
+    (
+      root.querySelector('[aria-label="Fork: new chat up to this reply"]') as HTMLButtonElement
+    ).click();
+    expect(onFork).toHaveBeenLastCalledWith(2);
   });
 });

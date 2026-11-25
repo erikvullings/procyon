@@ -112,6 +112,11 @@ impl SavedSessions {
             .filter(|record| record.schema == SCHEMA_VERSION && record.id == id)
     }
 
+    /// Deletes one saved session; `false` when it was not there.
+    pub(super) fn delete(&self, id: &str) -> bool {
+        fs::remove_file(self.path(id)).is_ok()
+    }
+
     fn records(&self) -> Vec<(PathBuf, SavedSession)> {
         let Ok(entries) = fs::read_dir(&self.root) else {
             return Vec::new();
@@ -203,6 +208,54 @@ mod tests {
         let original = later.resume("tab-a", "tab-c").unwrap();
         assert_eq!(original.questions, 1);
         assert!(later.resume("missing", "tab-d").is_none());
+    }
+
+    #[test]
+    fn a_fork_keeps_the_history_before_a_question_and_leaves_the_original() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = sessions(dir.path());
+        for (question, answer) in [
+            ("first?", "One."),
+            ("second?", "Two."),
+            ("third?", "Three."),
+        ] {
+            store.push_person("tab-a", question, "");
+            store.push_assistant("tab-a", answer, &[]);
+        }
+        store.save("tab-a", "file:///work");
+        assert_eq!(
+            store.questions("tab-a"),
+            vec!["first?", "second?", "third?"]
+        );
+
+        assert_eq!(store.fork("tab-a", 2, "tab-b").as_deref(), Some("second?"));
+        let forked = store.render("tab-b");
+        assert!(
+            forked.contains("first?") && forked.contains("One."),
+            "{forked}"
+        );
+        assert!(!forked.contains("second?"), "{forked}");
+        store.push_person("tab-b", "another second?", "");
+        assert_eq!(store.questions("tab-a").len(), 3);
+        assert_eq!(store.questions("tab-b"), vec!["first?", "another second?"]);
+        assert!(store.fork("tab-a", 0, "x").is_none());
+        assert!(store.fork("tab-a", 4, "x").is_none());
+
+        // A session no longer in memory forks from its saved copy.
+        store.close("tab-a");
+        assert_eq!(store.fork("tab-a", 3, "tab-c").as_deref(), Some("third?"));
+    }
+
+    #[test]
+    fn a_saved_session_can_be_deleted() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = sessions(dir.path());
+        store.push_person("tab-a", "question", "");
+        store.save("tab-a", "file:///work");
+        assert!(store.delete_saved("tab-a"));
+        assert!(store.saved().is_empty());
+        assert!(!store.delete_saved("tab-a"));
+        assert!(store.resume("tab-a", "tab-b").is_none());
     }
 
     #[test]

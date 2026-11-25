@@ -7,6 +7,7 @@ export const SLASH_COMMANDS = [
   'clear',
   'compact',
   'resume',
+  'fork',
   'model',
   'auto',
   'help',

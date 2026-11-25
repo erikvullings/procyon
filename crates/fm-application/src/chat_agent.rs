@@ -30,6 +30,8 @@ const MAX_EXCHANGE_BYTES: usize = 192 * 1024;
 const MAX_TOOL_BYTES: usize = 16 * 1024;
 /// Longest step line kept with a reply, in bytes.
 const MAX_STEP_BYTES: usize = 200;
+/// Most bytes of tool exchanges saved with a reply (task 0359); the oldest drop out first.
+const MAX_SAVED_EXCHANGE_BYTES: usize = 24 * 1024;
 
 const TOOLS_INTRO: &str = "\nYou can look things up in the folder the person chose, in their \
      notes and in the skills listed below. Paths are relative to that folder and cannot leave it. \
@@ -56,6 +58,16 @@ pub(crate) enum AgentEnd {
     Proposal(NoteProposalDto),
 }
 
+/// A finished chat turn with tools.
+pub(crate) struct AgentReply {
+    pub(crate) end: AgentEnd,
+    /// The step lines shown while it ran.
+    pub(crate) steps: Vec<String>,
+    /// The model's calls and their (redacted, bounded) results, without the final answer, to be
+    /// saved with the reply so a later question still has them (task 0359).
+    pub(crate) exchanges: Vec<Message>,
+}
+
 /// Everything one turn with tools needs besides the model.
 pub(crate) struct AgentRun<'a> {
     pub(crate) system_prompt: &'a str,
@@ -72,7 +84,7 @@ pub(crate) async fn run(
     tooling: &ChatTooling<'_>,
     input: AgentRun<'_>,
     on_event: &mut (dyn FnMut(ChatReplyEventDto) + Send),
-) -> Result<(AgentEnd, Vec<String>), ChatFailureDto> {
+) -> Result<AgentReply, ChatFailureDto> {
     let mut registry = read_only_registry::<NoteProposal>();
     registry.describe("read_file", READ_FILE_DESCRIPTION);
     let files = FolderTools::open(tooling.providers, input.folder);
@@ -135,18 +147,35 @@ pub(crate) async fn run(
         });
     })
     .await?;
-    match end {
-        TurnEnd::Answer(text) => Ok((AgentEnd::Answer(text), steps)),
-        TurnEnd::EmptyReply => Err(ChatFailureDto::Empty),
-        TurnEnd::Cancelled => Err(ChatFailureDto::Cancelled),
-        TurnEnd::StepLimit => Ok((
-            AgentEnd::Answer("I stopped after many steps. Ask again to continue.".to_owned()),
-            steps,
-        )),
-        TurnEnd::Interrupted { interrupt, .. } => {
-            Ok((AgentEnd::Proposal(note_proposal_dto(interrupt)), steps))
+    let end = match end {
+        TurnEnd::Answer(text) => AgentEnd::Answer(text),
+        TurnEnd::EmptyReply => return Err(ChatFailureDto::Empty),
+        TurnEnd::Cancelled => return Err(ChatFailureDto::Cancelled),
+        TurnEnd::StepLimit => {
+            AgentEnd::Answer("I stopped after many steps. Ask again to continue.".to_owned())
         }
+        TurnEnd::Interrupted { interrupt, .. } => AgentEnd::Proposal(note_proposal_dto(interrupt)),
+    };
+    Ok(AgentReply {
+        end,
+        steps,
+        exchanges: saved_exchanges(turn.exchanges),
+    })
+}
+
+/// The exchanges worth saving with a reply: the calls and their results, without the final answer
+/// (saved as the reply's text), the newest within [`MAX_SAVED_EXCHANGE_BYTES`].
+fn saved_exchanges(mut exchanges: Vec<Message>) -> Vec<Message> {
+    if matches!(exchanges.last(), Some(Message::Assistant { calls, .. }) if calls.is_empty()) {
+        exchanges.pop();
     }
+    if !exchanges
+        .iter()
+        .any(|message| matches!(message, Message::Assistant { calls, .. } if !calls.is_empty()))
+    {
+        return Vec::new();
+    }
+    fit_messages(&exchanges, MAX_SAVED_EXCHANGE_BYTES)
 }
 
 /// The chat's side of a turn: the chat role, the conversation, and this answer's tool exchanges.

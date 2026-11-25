@@ -1325,6 +1325,9 @@ export const pt = {
     willSend: 'Enviado com a sua próxima mensagem:',
     remove: 'Remover',
     attachedContext: 'Contexto anexado',
+    forkQuestion: 'Ramificar: novo chat a partir de antes desta pergunta',
+    forkReply: 'Ramificar: novo chat até esta resposta',
+    forkFailed: 'Não foi possível ramificar a conversa.',
     noFolder: 'Abra uma pasta no outro painel para a anexar.',
     noSelection: 'Selecione itens da pasta para os anexar.',
     consentRequired:
@@ -2829,11 +2832,20 @@ export const pt = {
     slashHelpClear: 'esquecer a conversa, manter a pasta',
     slashHelpCompact: 'substituir a conversa por um resumo',
     slashHelpModel: 'listar os modelos de chat ou mudar para um',
-    slashHelpResume: 'listar as sessões guardadas, ou continuar uma aqui (/resume 2)',
+    slashHelpResume:
+      'lista as sessões guardadas, continua uma aqui (/resume 2) ou elimina uma (/resume delete 2)',
     resumeList: 'Sessões guardadas (perguntas, data, pasta):',
     resumeNone: 'Ainda não há sessões guardadas.',
     resumeGone: 'Essa sessão já não está guardada.',
     resumed: 'A continuar «{title}» ({count} perguntas).',
+    slashHelpFork:
+      'lista as perguntas desta sessão, ou inicia uma nova sessão antes de uma (/fork 2)',
+    forkList: 'Perguntas nesta sessão:',
+    forkNone: 'Ainda não há perguntas nesta sessão.',
+    forked:
+      'Nova sessão a partir de antes da pergunta {number}. A pergunta está na entrada para a repetir ou alterar.',
+    forkGone: 'Não existe a pergunta {number}.',
+    resumeDeleted: '“{title}” eliminada.',
     slashHelpAuto:
       'ativar ou desativar a aprovação automática: executar comandos, criar arquivos e aplicar alterações sem perguntar, exceto comandos muito perigosos',
     slashAutoOn:

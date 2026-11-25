@@ -2,6 +2,11 @@
 //! directory, `chat-conversations/<workspace>/<conversation>/conversation.json` under the settings
 //! data root. A change rewrites only that conversation's file. Conversations never leave the
 //! machine except in a reply request, which [`crate::chat`] sends.
+//!
+//! Schema 2 (task 0359) keeps what the model saw while it wrote a reply (its tool calls and their
+//! results, [`ChatMessage::exchanges`]) and the summary of older messages
+//! ([`ChatConversation::compaction`]), so a reopened conversation gives the model what it had.
+//! Schema 1 documents load unchanged: they simply have neither.
 
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
@@ -10,6 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use chrono::{SecondsFormat, Utc};
+use fm_agent::Message;
 use fm_settings::{SettingsStore, VersionedDocument};
 use fm_transport_dto::{
     ChatConversationDto, ChatConversationSummaryDto, ChatMessageDto, ChatRoleDto,
@@ -22,7 +28,7 @@ use uuid::Uuid;
 use crate::error::ApplicationError;
 
 /// Schema of one conversation document written by this build.
-const DOCUMENT_SCHEMA_VERSION: u32 = 1;
+const DOCUMENT_SCHEMA_VERSION: u32 = 2;
 /// Directory under the settings data root that holds every workspace's conversations.
 const STORE_DIRECTORY: &str = "chat-conversations";
 /// Longest title, in characters.
@@ -74,6 +80,20 @@ pub(crate) struct ChatMessage {
     /// What the tools looked up while the model wrote this reply (task 0339).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub steps: Vec<String>,
+    /// The model's tool calls and their results while it wrote this reply, oldest first, already
+    /// redacted and bounded; the reply itself is `content` (task 0359).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exchanges: Vec<Message>,
+}
+
+/// The summary that stands in for a conversation's oldest messages (task 0359).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ChatCompaction {
+    /// The summary, without its introduction.
+    pub summary: String,
+    /// How many leading messages it stands for; it always ends before a message of the person.
+    pub covered: usize,
 }
 
 /// One saved conversation.
@@ -86,6 +106,9 @@ pub(crate) struct ChatConversation {
     pub updated_at: String,
     #[serde(default)]
     pub messages: Vec<ChatMessage>,
+    /// The summary of the oldest messages, once the conversation grew long enough.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compaction: Option<ChatCompaction>,
 }
 
 /// The versioned file that holds one conversation.
@@ -105,17 +128,34 @@ impl VersionedDocument for ConversationDocument {
 
     fn migrate(value: Value, version: u32) -> Result<Value, Self::MigrationError> {
         match version {
+            // Schema 2 only adds optional fields.
+            1 => {
+                let mut value = value;
+                if let Some(object) = value.as_object_mut() {
+                    object.insert("schemaVersion".to_owned(), DOCUMENT_SCHEMA_VERSION.into());
+                }
+                Ok(value)
+            }
             DOCUMENT_SCHEMA_VERSION => Ok(value),
             _ => Err(ChatConversationError::Persistence),
         }
     }
 
     fn validate(&self) -> Result<(), Self::MigrationError> {
-        if self.conversation.title.chars().count() <= MAX_TITLE_CHARS {
-            Ok(())
-        } else {
-            Err(ChatConversationError::Invalid("a stored title is too long"))
+        if self.conversation.title.chars().count() > MAX_TITLE_CHARS {
+            return Err(ChatConversationError::Invalid("a stored title is too long"));
         }
+        if self
+            .conversation
+            .compaction
+            .as_ref()
+            .is_some_and(|compaction| compaction.covered > self.conversation.messages.len())
+        {
+            return Err(ChatConversationError::Invalid(
+                "a stored summary covers more than the conversation",
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -191,6 +231,7 @@ impl ChatConversationService {
             title: String::new(),
             updated_at: now(),
             messages: Vec::new(),
+            compaction: None,
         };
         let mut all = self.lock()?;
         save(&self.root, workspace, &conversation)?;
@@ -260,6 +301,60 @@ impl ChatConversationService {
             conversation.updated_at = now();
             Ok(conversation.clone())
         })
+    }
+
+    /// Stores the summary of the oldest messages, unless the conversation changed meanwhile (it no
+    /// longer has `expected_len` messages), in which case the next reply summarises again.
+    pub(crate) fn set_compaction(
+        &self,
+        workspace: Uuid,
+        id: Uuid,
+        compaction: ChatCompaction,
+        expected_len: usize,
+    ) -> Result<(), ChatConversationError> {
+        self.update(workspace, id, |conversation| {
+            if conversation.messages.len() == expected_len && compaction.covered <= expected_len {
+                conversation.compaction = Some(compaction);
+            }
+            Ok(())
+        })
+    }
+
+    /// Starts a new conversation with the first `keep` messages of `id` ("fork from here"); the
+    /// original stays as it was. A summary that reaches past `keep` is left behind, so the fork is
+    /// summarised again from its own messages when it grows long.
+    pub(crate) fn fork(
+        &self,
+        workspace: Uuid,
+        id: Uuid,
+        keep: usize,
+    ) -> Result<ChatConversation, ChatConversationError> {
+        self.require_writable()?;
+        let mut all = self.lock()?;
+        let original = all
+            .get(&workspace)
+            .and_then(|conversations| conversations.get(&id))
+            .ok_or(ChatConversationError::NotFound)?;
+        if keep > original.messages.len() {
+            return Err(ChatConversationError::Invalid(
+                "the fork point is past the end of the conversation",
+            ));
+        }
+        let fork = ChatConversation {
+            id: Uuid::new_v4(),
+            title: original.title.clone(),
+            updated_at: now(),
+            messages: original.messages[..keep].to_vec(),
+            compaction: original
+                .compaction
+                .clone()
+                .filter(|compaction| compaction.covered <= keep),
+        };
+        save(&self.root, workspace, &fork)?;
+        all.entry(workspace)
+            .or_default()
+            .insert(fork.id, fork.clone());
+        Ok(fork)
     }
 
     /// Applies a change to one conversation and saves that conversation only. A failed save leaves
@@ -408,6 +503,7 @@ mod tests {
             content: content.to_owned(),
             context: None,
             steps: Vec::new(),
+            exchanges: Vec::new(),
         }
     }
 
@@ -514,6 +610,7 @@ mod tests {
                         content: "What is large here?".to_owned(),
                         context: Some("Folder listing:\n- big.iso (4 GB)".to_owned()),
                         steps: Vec::new(),
+                        exchanges: Vec::new(),
                     },
                 )
                 .unwrap();
@@ -600,6 +697,114 @@ mod tests {
             std::fs::read(damaged_dir.join("conversation.json")).unwrap(),
             b"{ not json"
         );
+    }
+
+    #[test]
+    fn a_schema_1_conversation_loads_and_is_saved_as_schema_2() {
+        let directory = tempdir().unwrap();
+        let workspace = Uuid::new_v4();
+        let id = Uuid::new_v4();
+        let dir = conversation_dir(&directory.path().join(STORE_DIRECTORY), workspace, id);
+        std::fs::create_dir_all(&dir).unwrap();
+        let v1 = serde_json::json!({
+            "schemaVersion": 1,
+            "id": id,
+            "title": "Old",
+            "updatedAt": "2026-01-01T00:00:00.000Z",
+            "messages": [
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": "hello", "steps": ["Read a.txt"]}
+            ]
+        });
+        std::fs::write(dir.join("conversation.json"), v1.to_string()).unwrap();
+
+        let service = store(directory.path());
+        let loaded = service.get(workspace, id).unwrap();
+        assert_eq!(loaded.messages.len(), 2);
+        assert_eq!(loaded.messages[1].steps, vec!["Read a.txt".to_owned()]);
+        assert!(loaded.messages[1].exchanges.is_empty());
+        assert!(loaded.compaction.is_none());
+
+        service.append(workspace, id, user("again")).unwrap();
+        let written: Value =
+            serde_json::from_slice(&std::fs::read(dir.join("conversation.json")).unwrap()).unwrap();
+        assert_eq!(written["schemaVersion"], 2);
+    }
+
+    #[test]
+    fn a_fork_shares_the_prefix_and_then_goes_its_own_way() {
+        let directory = tempdir().unwrap();
+        let service = store(directory.path());
+        let workspace = Uuid::new_v4();
+        let id = service.create(workspace).unwrap().id;
+        for text in ["one", "two", "three", "four"] {
+            service.append(workspace, id, user(text)).unwrap();
+        }
+        let summary = ChatCompaction {
+            summary: "About one.".into(),
+            covered: 1,
+        };
+        service
+            .set_compaction(workspace, id, summary.clone(), 4)
+            .unwrap();
+
+        let fork = service.fork(workspace, id, 2).unwrap();
+        assert_ne!(fork.id, id);
+        assert_eq!(fork.title, "one");
+        let texts = |conversation: &ChatConversation| -> Vec<String> {
+            conversation
+                .messages
+                .iter()
+                .map(|m| m.content.clone())
+                .collect()
+        };
+        assert_eq!(texts(&fork), vec!["one", "two"]);
+        assert_eq!(fork.compaction, Some(summary));
+        service.append(workspace, fork.id, user("other")).unwrap();
+        assert_eq!(
+            texts(&service.get(workspace, id).unwrap()),
+            vec!["one", "two", "three", "four"]
+        );
+        assert_eq!(
+            texts(&service.get(workspace, fork.id).unwrap()),
+            vec!["one", "two", "other"]
+        );
+
+        // A summary reaching past the fork point stays behind.
+        service
+            .set_compaction(
+                workspace,
+                id,
+                ChatCompaction {
+                    summary: "About one to three.".into(),
+                    covered: 3,
+                },
+                4,
+            )
+            .unwrap();
+        assert!(service.fork(workspace, id, 2).unwrap().compaction.is_none());
+        assert_eq!(
+            service.fork(workspace, id, 5),
+            Err(ChatConversationError::Invalid(
+                "the fork point is past the end of the conversation"
+            ))
+        );
+    }
+
+    #[test]
+    fn a_summary_is_not_stored_when_the_conversation_changed_meanwhile() {
+        let directory = tempdir().unwrap();
+        let service = store(directory.path());
+        let workspace = Uuid::new_v4();
+        let id = service.create(workspace).unwrap().id;
+        service.append(workspace, id, user("one")).unwrap();
+        service.append(workspace, id, user("two")).unwrap();
+        let summary = ChatCompaction {
+            summary: "About one.".into(),
+            covered: 1,
+        };
+        service.set_compaction(workspace, id, summary, 1).unwrap();
+        assert!(service.get(workspace, id).unwrap().compaction.is_none());
     }
 
     #[test]

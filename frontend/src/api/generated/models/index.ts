@@ -168,6 +168,7 @@ export * from './findLinkReplacementsRequestDto.ts';
 export * from './findLinkReplacementsResponseDto.ts';
 export * from './folderThumbnailStyleDto.ts';
 export * from './forgetFolderViewRequestDto.ts';
+export * from './forkChatConversationRequestDto.ts';
 export * from './ftpConnectionConfigurationDto.ts';
 export * from './gemmaMediaSelectionDto.ts';
 export * from './generatedImageBytesParams.ts';

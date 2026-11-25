@@ -842,9 +842,9 @@ main.fm-workspace {
   overflow: auto;
   padding: 0.375rem 0.5rem;
   border: 1px solid var(--fm-border);
-  border-radius: 4px;
+  border-radius: var(--fm-radius);
   font-family: var(--fm-font-mono);
-  font-size: 0.8125rem;
+  font-size: var(--fm-type-label);
   line-height: 1.35;
   white-space: pre;
 }

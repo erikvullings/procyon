@@ -1324,6 +1324,9 @@ export const es = {
     willSend: 'Se envía con tu próximo mensaje:',
     remove: 'Quitar',
     attachedContext: 'Contexto adjunto',
+    forkQuestion: 'Bifurcar: nuevo chat desde antes de esta pregunta',
+    forkReply: 'Bifurcar: nuevo chat hasta esta respuesta',
+    forkFailed: 'No se pudo bifurcar la conversación.',
     noFolder: 'Abre una carpeta en el otro panel para adjuntarla.',
     noSelection: 'Selecciona elementos de la carpeta para adjuntarlos.',
     consentRequired:
@@ -2823,11 +2826,20 @@ export const es = {
     slashHelpClear: 'olvidar la conversación, conservar la carpeta',
     slashHelpCompact: 'sustituir la conversación por un resumen',
     slashHelpModel: 'listar los modelos de chat o cambiar a uno',
-    slashHelpResume: 'listar las sesiones guardadas o continuar una aquí (/resume 2)',
+    slashHelpResume:
+      'lista las sesiones guardadas, continúa una aquí (/resume 2) o elimina una (/resume delete 2)',
     resumeList: 'Sesiones guardadas (preguntas, fecha, carpeta):',
     resumeNone: 'Todavía no hay sesiones guardadas.',
     resumeGone: 'Esa sesión ya no está guardada.',
     resumed: 'Continuando «{title}» ({count} preguntas).',
+    slashHelpFork:
+      'lista las preguntas de esta sesión, o empieza una nueva sesión antes de una (/fork 2)',
+    forkList: 'Preguntas de esta sesión:',
+    forkNone: 'Todavía no hay preguntas en esta sesión.',
+    forked:
+      'Nueva sesión desde antes de la pregunta {number}. La pregunta está en la entrada para volver a hacerla o cambiarla.',
+    forkGone: 'No hay pregunta {number}.',
+    resumeDeleted: '“{title}” eliminada.',
     slashHelpAuto:
       'activar o desactivar la aprobación automática: ejecutar comandos, crear archivos y aplicar cambios sin preguntar, salvo comandos muy peligrosos',
     slashAutoOn:

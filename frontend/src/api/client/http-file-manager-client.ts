@@ -288,6 +288,7 @@ import {
   getChatConversation as requestChatConversation,
   createChatConversation as requestChatConversationCreate,
   deleteChatConversation as requestChatConversationDelete,
+  forkChatConversation as requestChatConversationFork,
   renameChatConversation as requestChatConversationRename,
   listChatConversations as requestChatConversations,
   cancelChatReply as requestChatReplyCancel,
@@ -2898,6 +2899,24 @@ export class HttpFileManagerClient implements FileManagerClient {
     );
     if (response.status !== 200) {
       throw unexpectedResponseError('renameChatConversation', response.status);
+    }
+    return response.data;
+  }
+
+  async forkChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    keep: number,
+    signal?: AbortSignal,
+  ): Promise<ChatConversation> {
+    const response = await requestChatConversationFork(
+      workspaceId,
+      conversationId,
+      { keep },
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 200) {
+      throw unexpectedResponseError('forkChatConversation', response.status);
     }
     return response.data;
   }

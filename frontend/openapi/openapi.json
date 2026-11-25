@@ -10214,6 +10214,76 @@
         }
       }
     },
+    "/api/v1/workspaces/{workspaceId}/chat/conversations/{conversationId}/fork": {
+      "post": {
+        "summary": "Starts a new chat conversation with the first messages of another (\"fork from here\").",
+        "operationId": "forkChatConversation",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "description": "The workspace that owns the conversation",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "conversationId",
+            "in": "path",
+            "description": "The conversation to fork",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForkChatConversationRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The new conversation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatConversationDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The fork point is past the end",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such conversation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/workspaces/{workspaceId}/commands": {
       "post": {
         "summary": "Applies a semantic mutation command (spec §5.3.9). The path's\n`workspaceId` must match the id embedded in the command body.",
@@ -15417,6 +15487,21 @@
           "location": {
             "$ref": "#/components/schemas/LocationDto",
             "description": "The folder whose remembered sort, columns and view mode should be dropped."
+          }
+        }
+      },
+      "ForkChatConversationRequestDto": {
+        "type": "object",
+        "description": "Starts a new conversation from the start of a saved one (\"fork from here\", task 0359).",
+        "required": [
+          "keep"
+        ],
+        "properties": {
+          "keep": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many leading messages the new conversation keeps; at most the conversation's length.",
+            "minimum": 0
           }
         }
       },

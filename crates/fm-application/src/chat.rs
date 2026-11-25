@@ -16,9 +16,13 @@ use fm_transport_dto::{
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::chat_agent::{AgentEnd, AgentRun, ChatTooling};
+use fm_agent::{Message, render_text};
+
+use crate::agent_host::ModelSideCalls;
+use crate::chat_agent::{AgentEnd, AgentReply, AgentRun, ChatTooling};
 use crate::chat_conversations::{
-    ChatConversation, ChatConversationError, ChatConversationService, ChatMessage, ChatRole,
+    ChatCompaction, ChatConversation, ChatConversationError, ChatConversationService, ChatMessage,
+    ChatRole,
 };
 use crate::file_assistant::{VisibleText, truncate_to_bytes};
 use crate::llm_profiles::{
@@ -248,13 +252,24 @@ impl ChatService {
                     content,
                     context,
                     steps: Vec::new(),
+                    exchanges: Vec::new(),
                 },
             )?
         };
-        let prompts = build_prompts(&saved);
         let cancellation = CancellationToken::new();
         self.lock().insert(request.request_id, cancellation.clone());
+        let saved = compact_if_needed(
+            generator,
+            conversations,
+            (request.workspace_id, request.conversation_id),
+            saved,
+            &cancellation,
+            on_event,
+        )
+        .await;
+        let prompts = build_prompts(&saved);
         let mut steps = Vec::new();
+        let mut exchanges = Vec::new();
         let outcome = match (tooling, request.tools_folder.as_deref()) {
             (Some(tooling), Some(folder)) => {
                 let question = saved
@@ -271,15 +286,21 @@ impl ChatService {
                     cancellation: &cancellation,
                 };
                 match crate::chat_agent::run(generator, tooling, run, on_event).await {
-                    Ok((AgentEnd::Answer(text), looked_up)) => {
+                    Ok(AgentReply {
+                        end,
+                        steps: looked_up,
+                        exchanges: seen,
+                    }) => {
                         steps = looked_up;
-                        Ok(text)
-                    }
-                    Ok((AgentEnd::Proposal(proposal), looked_up)) => {
-                        steps = looked_up;
-                        let title = proposal.draft.title.clone();
-                        on_event(ChatReplyEventDto::NoteProposal { proposal });
-                        Ok(format!("I drafted a note for you to review: {title}"))
+                        exchanges = seen;
+                        match end {
+                            AgentEnd::Answer(text) => Ok(text),
+                            AgentEnd::Proposal(proposal) => {
+                                let title = proposal.draft.title.clone();
+                                on_event(ChatReplyEventDto::NoteProposal { proposal });
+                                Ok(format!("I drafted a note for you to review: {title}"))
+                            }
+                        }
                     }
                     Err(failure) => Err(ChatReplyError::from(failure)),
                 }
@@ -331,6 +352,7 @@ impl ChatService {
                 content: text.to_owned(),
                 context: None,
                 steps,
+                exchanges,
             },
         )?;
         Ok(text.to_owned())
@@ -424,34 +446,178 @@ fn validate_message(
     Ok((content.to_owned(), context))
 }
 
-/// Renders the conversation for the model, newest messages first in the budget. The latest
-/// message is always included.
+/// Summarises the oldest messages before the model is asked when the conversation takes more
+/// than [`fm_agent::COMPACT_AT_PERCENT`] of [`MAX_PROMPT_BYTES`] (task 0359), and stores the
+/// summary in the conversation so a later reply does not summarise again. Returns the conversation
+/// as it is to be sent. A failed summary is reported as a step; the oldest messages then drop out
+/// in [`build_prompts`], as before.
+async fn compact_if_needed(
+    generator: &impl ChatGenerator,
+    conversations: &ChatConversationService,
+    (workspace, id): (Uuid, Uuid),
+    conversation: ChatConversation,
+    cancellation: &CancellationToken,
+    on_event: &mut (dyn FnMut(ChatReplyEventDto) + Send),
+) -> ChatConversation {
+    let (messages, origins) = history_messages(&conversation);
+    if !fm_agent::needs_compaction(&messages, MAX_PROMPT_BYTES) {
+        return conversation;
+    }
+    on_event(ChatReplyEventDto::Progress {
+        text: "Summarising the earlier conversation".to_owned(),
+    });
+    let side_calls = ModelSideCalls::new(generator, cancellation.clone()).await;
+    let outcome = fm_agent::compact(&messages, MAX_PROMPT_BYTES, &side_calls, &|_| {}).await;
+    let step = match outcome {
+        Ok(Some(compaction)) => {
+            // The cut is at one of the person's messages; it maps to that saved message.
+            let Some(&covered) = origins.get(compaction.covered) else {
+                return conversation;
+            };
+            let stored = ChatCompaction {
+                summary: compaction.summary,
+                covered,
+            };
+            let expected = conversation.messages.len();
+            if conversations
+                .set_compaction(workspace, id, stored, expected)
+                .is_err()
+            {
+                return conversation;
+            }
+            let summarised = covered.saturating_sub(
+                conversation
+                    .compaction
+                    .as_ref()
+                    .map_or(0, |earlier| earlier.covered),
+            );
+            let Ok(updated) = conversations.get(workspace, id) else {
+                return conversation;
+            };
+            on_event(ChatReplyEventDto::Step {
+                text: format!("Summarised {summarised} earlier messages"),
+            });
+            return updated;
+        }
+        Ok(None) => return conversation,
+        Err(_) if cancellation.is_cancelled() => return conversation,
+        Err(_) => "Could not summarise the earlier conversation; its oldest part is left out",
+    };
+    on_event(ChatReplyEventDto::Step {
+        text: step.to_owned(),
+    });
+    conversation
+}
+
+/// The conversation as agent messages, from its summary on, and for each message the index of
+/// the saved message it came from (the summary maps to the first message after it). Used to decide
+/// on and make a summary; [`build_prompts`] renders the same content.
+fn history_messages(conversation: &ChatConversation) -> (Vec<Message>, Vec<usize>) {
+    let start = covered(conversation);
+    let mut messages = Vec::new();
+    let mut origins = Vec::new();
+    if let Some(compaction) = &conversation.compaction {
+        messages.push(summary_message(compaction));
+        origins.push(start);
+    }
+    for (index, message) in conversation.messages.iter().enumerate().skip(start) {
+        for part in message_parts(message) {
+            messages.push(part);
+            origins.push(index);
+        }
+    }
+    (messages, origins)
+}
+
+/// How many leading messages the summary stands for.
+fn covered(conversation: &ChatConversation) -> usize {
+    conversation
+        .compaction
+        .as_ref()
+        .map_or(0, |compaction| compaction.covered)
+        .min(conversation.messages.len())
+}
+
+fn summary_message(compaction: &ChatCompaction) -> Message {
+    fm_agent::Compaction {
+        summary: compaction.summary.clone(),
+        covered: compaction.covered,
+    }
+    .message()
+}
+
+/// One saved message as agent messages: the person's message with its context, or a reply
+/// preceded by the lookups the model made for it.
+fn message_parts(message: &ChatMessage) -> Vec<Message> {
+    match message.role {
+        ChatRole::User => {
+            let context = message
+                .context
+                .as_deref()
+                .map(|text| format!("Context attached by the person:\n{text}\n\n"))
+                .unwrap_or_default();
+            vec![Message::User(format!(
+                "{context}Person: {}",
+                message.content
+            ))]
+        }
+        ChatRole::Assistant => {
+            let mut parts: Vec<Message> = message.exchanges.iter().map(past_exchange).collect();
+            parts.push(Message::Assistant {
+                text: message.content.clone(),
+                calls: Vec::new(),
+            });
+            parts
+        }
+    }
+}
+
+/// An earlier reply's lookup, worded so it reads as history rather than as a call to repeat:
+/// the conversation goes to the model as text, and `TOOL` lines in it could be taken for the
+/// format of a new call.
+fn past_exchange(message: &Message) -> Message {
+    match message {
+        Message::Assistant { text, calls } if !calls.is_empty() => {
+            let mut said = Message::prose(text);
+            for call in calls {
+                if !said.is_empty() {
+                    said.push('\n');
+                }
+                said.push_str(&format!(
+                    "(looked up with {} {})",
+                    call.name, call.arguments
+                ));
+            }
+            Message::Assistant {
+                text: said,
+                calls: Vec::new(),
+            }
+        }
+        other => other.clone(),
+    }
+}
+
+/// Renders the conversation for the model: the summary of the oldest messages, then the newest
+/// messages that fit in the budget. The latest message is always included.
 fn build_prompts(conversation: &ChatConversation) -> String {
+    let summary = conversation
+        .compaction
+        .as_ref()
+        .map(|compaction| render_text(&[summary_message(compaction)]))
+        .unwrap_or_default();
+    let budget = MAX_PROMPT_BYTES.saturating_sub(summary.len());
     let mut sections: Vec<String> = Vec::new();
     let mut total = 0;
-    for message in conversation.messages.iter().rev() {
-        let section = render(message);
-        if total + section.len() > MAX_PROMPT_BYTES && !sections.is_empty() {
+    for message in conversation.messages[covered(conversation)..].iter().rev() {
+        let section = render_text(&message_parts(message));
+        if total + section.len() > budget && !sections.is_empty() {
             break;
         }
         total += section.len();
         sections.push(section);
     }
     sections.reverse();
-    sections.concat()
-}
-
-fn render(message: &ChatMessage) -> String {
-    let label = match message.role {
-        ChatRole::User => "Person",
-        ChatRole::Assistant => "Assistant",
-    };
-    let context = message
-        .context
-        .as_deref()
-        .map(|text| format!("Context attached by the person:\n{text}\n\n"))
-        .unwrap_or_default();
-    format!("{context}{label}: {}\n\n", message.content)
+    format!("{summary}{}", sections.concat())
 }
 
 #[cfg(test)]
@@ -808,6 +974,7 @@ mod tests {
                 content: format!("{index}:{}", "p".repeat(4 * 1024)),
                 context: None,
                 steps: Vec::new(),
+                exchanges: Vec::new(),
             });
         }
         let conversation = ChatConversation {
@@ -815,6 +982,7 @@ mod tests {
             title: String::new(),
             updated_at: String::new(),
             messages,
+            compaction: None,
         };
         let prompt = build_prompts(&conversation);
         assert!(prompt.len() <= MAX_PROMPT_BYTES);
@@ -1085,6 +1253,129 @@ mod tests {
         assert_eq!(saved.messages[1].content, "It says alpha beta.");
         // The lookups stay with the reply, so they are still shown when the conversation reopens.
         assert_eq!(saved.messages[1].steps, vec!["Read a.txt".to_owned()]);
+    }
+
+    #[tokio::test]
+    async fn a_later_question_still_sees_what_the_tools_found_earlier() {
+        let (_directory, conversations) = store();
+        let workspace = Uuid::new_v4();
+        let id = conversations.create(workspace).unwrap().id;
+        let folder = tempdir().unwrap();
+        std::fs::write(folder.path().join("a.txt"), "alpha beta").unwrap();
+        let mut providers = fm_vfs::ProviderRegistry::new();
+        providers.register(std::sync::Arc::new(
+            fm_vfs_local::LocalFileSystemProvider::new(),
+        ));
+        let generator = scripted(&[
+            r#"TOOL {"tool":"read_file","path":"a.txt"}"#,
+            "It says alpha beta.",
+            "Yes, beta.",
+        ]);
+        let tooling = local_tooling(&providers);
+        let service = ChatService::default();
+        service
+            .stream(
+                &generator,
+                &conversations,
+                Some(&tooling),
+                folder_request(workspace, id, folder.path()),
+                &mut |_| {},
+            )
+            .await;
+        let saved = conversations.get(workspace, id).unwrap();
+        // The call and its result are saved with the reply, the answer itself is not repeated.
+        assert!(matches!(
+            saved.messages[1].exchanges.as_slice(),
+            [Message::Assistant { calls, .. }, Message::ToolResult { text, .. }]
+                if calls[0].name == "read_file" && text.contains("alpha beta")
+        ));
+
+        let mut next = folder_request(workspace, id, folder.path());
+        next.content = "Does it mention beta?".into();
+        service
+            .stream(
+                &generator,
+                &conversations,
+                Some(&tooling),
+                next,
+                &mut |_| {},
+            )
+            .await;
+        let requests = generator.seen.lock().unwrap();
+        let prompt = &requests[2].user_prompt;
+        assert!(prompt.contains("alpha beta"), "{prompt}");
+        assert!(prompt.contains("(looked up with read_file"), "{prompt}");
+        // Earlier calls read as history, never as a call line to copy.
+        assert!(!prompt.contains("TOOL {"), "{prompt}");
+    }
+
+    #[tokio::test]
+    async fn a_long_conversation_is_summarised_once_and_the_summary_is_kept() {
+        let (_directory, conversations) = store();
+        let workspace = Uuid::new_v4();
+        let id = conversations.create(workspace).unwrap().id;
+        for index in 0..12 {
+            for role in [ChatRole::User, ChatRole::Assistant] {
+                conversations
+                    .append(
+                        workspace,
+                        id,
+                        ChatMessage {
+                            role,
+                            content: format!("{index}:{}", "w".repeat(4 * 1024)),
+                            context: None,
+                            steps: Vec::new(),
+                            exchanges: Vec::new(),
+                        },
+                    )
+                    .unwrap();
+            }
+        }
+        let service = ChatService::default();
+        let generator = fake(Outcome::Text("They compared twelve files.".into()));
+        let events = run(
+            &service,
+            &generator,
+            &conversations,
+            request(workspace, id, "And the last one?", None),
+        )
+        .await;
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event, ChatReplyEventDto::Step { text } if text.starts_with("Summarised")))
+        );
+        let saved = conversations.get(workspace, id).unwrap();
+        let compaction = saved.compaction.clone().unwrap();
+        assert!(compaction.covered > 0 && compaction.covered < 25);
+        // The summary ends before one of the person's messages.
+        assert_eq!(saved.messages[compaction.covered].role, ChatRole::User);
+        {
+            let requests = generator.seen.lock().unwrap();
+            // Summary calls (a long history is summarised in parts), then the reply.
+            assert!(requests.len() >= 2);
+            let prompt = &requests.last().unwrap().1.user_prompt;
+            assert!(prompt.starts_with("Summary of the conversation so far:\nThey compared"));
+            assert!(!prompt.contains("Person: 0:"));
+            assert!(prompt.ends_with("Person: And the last one?\n\n"));
+        }
+
+        // Reopened, the stored summary is used as it is: no new summary call.
+        let reopened =
+            ChatConversationService::new(&SettingsStore::new(_directory.path())).unwrap();
+        assert_eq!(
+            reopened.get(workspace, id).unwrap().compaction,
+            Some(compaction)
+        );
+        let generator = fake(Outcome::Text("Fine.".into()));
+        run(
+            &service,
+            &generator,
+            &reopened,
+            request(workspace, id, "Thanks", None),
+        )
+        .await;
+        assert_eq!(generator.seen.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]

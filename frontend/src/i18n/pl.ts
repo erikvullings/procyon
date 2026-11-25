@@ -1320,6 +1320,9 @@ export const pl = {
     willSend: 'Zostanie wysłane z twoją następną wiadomością:',
     remove: 'Usuń',
     attachedContext: 'Dołączony kontekst',
+    forkQuestion: 'Rozgałęź: nowy czat sprzed tego pytania',
+    forkReply: 'Rozgałęź: nowy czat do tej odpowiedzi',
+    forkFailed: 'Nie udało się rozgałęzić rozmowy.',
     noFolder: 'Otwórz folder w drugim panelu, aby go dołączyć.',
     noSelection: 'Zaznacz elementy w folderze, aby je dołączyć.',
     consentRequired:
@@ -2814,11 +2817,20 @@ export const pl = {
     slashHelpClear: 'zapomnij rozmowę, zachowaj folder',
     slashHelpCompact: 'zastąp rozmowę podsumowaniem',
     slashHelpModel: 'wyświetl modele czatu lub przełącz na jeden z nich',
-    slashHelpResume: 'pokaż zapisane sesje lub kontynuuj jedną tutaj (/resume 2)',
+    slashHelpResume:
+      'wyświetl zapisane sesje, kontynuuj jedną tutaj (/resume 2) lub usuń jedną (/resume delete 2)',
     resumeList: 'Zapisane sesje (pytania, data, folder):',
     resumeNone: 'Brak zapisanych sesji.',
     resumeGone: 'Ta sesja nie jest już zapisana.',
     resumed: 'Kontynuacja „{title}” (pytania: {count}).',
+    slashHelpFork:
+      'wyświetl pytania tej sesji lub rozpocznij nową sesję przed jednym z nich (/fork 2)',
+    forkList: 'Pytania w tej sesji:',
+    forkNone: 'W tej sesji nie ma jeszcze pytań.',
+    forked:
+      'Nowa sesja sprzed pytania {number}. Pytanie jest w polu wprowadzania, aby zadać je ponownie lub zmienić.',
+    forkGone: 'Nie ma pytania {number}.',
+    resumeDeleted: 'Usunięto „{title}”.',
     slashHelpAuto:
       'włącz lub wyłącz automatyczne zatwierdzanie: uruchamianie poleceń, tworzenie plików i wprowadzanie zmian bez pytania, z wyjątkiem bardzo niebezpiecznych poleceń',
     slashAutoOn:

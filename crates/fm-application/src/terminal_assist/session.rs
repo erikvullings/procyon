@@ -188,6 +188,59 @@ impl Sessions {
         Some(summary)
     }
 
+    /// Deletes a saved session; `false` when there was none. A tab still showing it keeps its own
+    /// copy in memory.
+    pub(crate) fn delete_saved(&self, id: &str) -> bool {
+        self.store.as_ref().is_some_and(|store| store.delete(id))
+    }
+
+    /// The person's questions in a session, oldest first: what `/fork` numbers. Taken from the tab's
+    /// session, or from its saved copy when the tab's session is no longer in memory.
+    pub(crate) fn questions(&self, id: &str) -> Vec<String> {
+        self.turns(id)
+            .iter()
+            .filter_map(|turn| match turn {
+                Turn::Person { question, .. } => Some(question.clone()),
+                Turn::Agent(_) => None,
+            })
+            .collect()
+    }
+
+    /// Starts the tab session `into` with the history of `from` before its `question`-th question
+    /// (1-based) and returns that question, for the person to ask again or change ("fork from
+    /// here", task 0359). `from` is not changed. `None` when there is no such question.
+    pub(crate) fn fork(&self, from: &str, question: usize, into: &str) -> Option<String> {
+        let turns = self.turns(from);
+        let (index, asked) = turns
+            .iter()
+            .enumerate()
+            .filter_map(|(index, turn)| match turn {
+                Turn::Person { question, .. } => Some((index, question.clone())),
+                Turn::Agent(_) => None,
+            })
+            .nth(question.checked_sub(1)?)?;
+        let kept = turns[..index].to_vec();
+        self.with(into, |session| {
+            *session = Session {
+                turns: kept,
+                ..Session::default()
+            };
+        });
+        Some(asked)
+    }
+
+    /// The stored turns of a session: in memory, else saved.
+    fn turns(&self, id: &str) -> Vec<Turn> {
+        if let Some(session) = self.lock().sessions.get(id) {
+            return session.turns.clone();
+        }
+        self.store
+            .as_ref()
+            .and_then(|store| store.load(id))
+            .map(|record| record.turns)
+            .unwrap_or_default()
+    }
+
     fn lock(&self) -> MutexGuard<'_, State> {
         self.state
             .lock()

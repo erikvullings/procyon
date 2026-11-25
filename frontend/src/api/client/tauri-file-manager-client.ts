@@ -1831,6 +1831,19 @@ export class TauriFileManagerClient implements FileManagerClient {
     });
   }
 
+  forkChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    keep: number,
+    _signal?: AbortSignal,
+  ): Promise<ChatConversation> {
+    return invoke<ChatConversation>('fork_chat_conversation', {
+      workspaceId,
+      conversationId,
+      request: { keep },
+    });
+  }
+
   deleteChatConversation(
     workspaceId: WorkspaceId,
     conversationId: string,

@@ -181,6 +181,8 @@ function slashHelp(command: SlashCommandName): string {
       return t('terminal', 'slashHelpAuto');
     case 'resume':
       return t('terminal', 'slashHelpResume');
+    case 'fork':
+      return t('terminal', 'slashHelpFork');
     case 'help':
       return t('terminal', 'slashHelpHelp');
   }
@@ -294,8 +296,11 @@ type LiveTerminal = {
   markSeen: boolean;
   /** The rest of the suggested command, when one matches what is typed. */
   suggestion: string | undefined;
-  /** Identifies this tab's assistant conversation in the host (task 0336). */
-  readonly assistSession: string;
+  /**
+   * Identifies this tab's assistant conversation in the host (task 0336). A new conversation
+   * (`/new`, `/clear`, `/resume`, `/fork`) gets a new id, so the saved one stays as it was.
+   */
+  assistSession: string;
   /** Context parts the person removed with a chip; they stay removed for this tab. */
   readonly removedChips: Set<RemovableChipId>;
   /** Called with the block of the command the assistant started once it finishes. */
@@ -1632,6 +1637,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     const forget = (): void => {
       live.requestId += 1;
       void attrs.client.assistClose(live.assistSession).catch(() => undefined);
+      live.assistSession = crypto.randomUUID();
       live.models = [];
     };
     switch (name) {
@@ -1671,6 +1677,9 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       case 'resume':
         runAsyncCommand(live, question, () => resumeSession(live, argument));
         return;
+      case 'fork':
+        runAsyncCommand(live, question, () => forkSession(live, argument));
+        return;
       case 'auto': {
         const choice = argument.toLowerCase();
         live.autoApprove = choice === 'on' ? true : choice === 'off' ? false : !live.autoApprove;
@@ -1702,14 +1711,32 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       .finally(() => m.redraw());
   }
 
-  /** `/resume`: lists the saved sessions; `/resume <n>` continues one in this tab (task 0354). */
+  /**
+   * `/resume`: lists the saved sessions; `/resume <n>` continues one in this tab (task 0354) and
+   * `/resume delete <n>` deletes one (task 0359).
+   */
   async function resumeSession(live: LiveTerminal, argument: string): Promise<string> {
     const client = currentAttrs?.client;
     if (client?.assistSaved === undefined || client.assistResume === undefined) {
       return noticeAnsi(t('terminal', 'slashUnsupported'));
     }
-    const number = Number.parseInt(argument, 10);
+    const deleting = /^delete\s+/i.exec(argument);
+    const number = Number.parseInt(
+      deleting === null ? argument : argument.slice(deleting[0].length),
+      10,
+    );
     const chosen = Number.isInteger(number) ? live.savedSessions[number - 1] : undefined;
+    if (chosen !== undefined && deleting !== null) {
+      if (client.assistDeleteSaved === undefined)
+        return noticeAnsi(t('terminal', 'slashUnsupported'));
+      const deleted = await client.assistDeleteSaved(chosen.id);
+      // Numbers shown before stay valid for the sessions that are left.
+      live.savedSessions = live.savedSessions.map((saved) =>
+        saved.id === chosen.id ? { ...saved, title: '—', questions: 0 } : saved,
+      );
+      if (!deleted) return noticeAnsi(t('terminal', 'resumeGone'));
+      return infoAnsi([t('terminal', 'resumeDeleted', { title: chosen.title })]);
+    }
     if (chosen === undefined) {
       live.savedSessions = (await client.assistSaved())
         .filter((saved) => saved.id !== live.assistSession)
@@ -1723,10 +1750,47 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         ),
       ]);
     }
-    const resumed = await client.assistResume(chosen.id, live.assistSession);
+    // A new id: going on saves under it, so neither the saved session nor this tab's earlier one
+    // is overwritten.
+    const into = crypto.randomUUID();
+    const resumed = await client.assistResume(chosen.id, into);
     if (resumed === null) return noticeAnsi(t('terminal', 'resumeGone'));
-    live.assistActive = true;
+    switchSession(live, into);
     return infoAnsi([t('terminal', 'resumed', { title: resumed.title, count: resumed.questions })]);
+  }
+
+  /**
+   * `/fork`: lists this session's questions; `/fork <n>` starts a new session with the history
+   * before question n and puts that question in the input to ask again or change (task 0359).
+   */
+  async function forkSession(live: LiveTerminal, argument: string): Promise<string> {
+    const client = currentAttrs?.client;
+    if (client?.assistQuestions === undefined || client.assistFork === undefined) {
+      return noticeAnsi(t('terminal', 'slashUnsupported'));
+    }
+    const number = Number.parseInt(argument, 10);
+    if (!Number.isInteger(number)) {
+      const questions = await client.assistQuestions(live.assistSession);
+      if (questions.length === 0) return infoAnsi([t('terminal', 'forkNone')]);
+      return infoAnsi([
+        t('terminal', 'forkList'),
+        ...questions.map((asked, index) => `${index + 1}. ${asked.split('\n')[0] ?? ''}`),
+      ]);
+    }
+    const into = crypto.randomUUID();
+    const asked = await client.assistFork(live.assistSession, number, into);
+    if (asked === null) return noticeAnsi(t('terminal', 'forkGone', { number }));
+    switchSession(live, into);
+    live.composer = asked;
+    live.composerFocus = true;
+    return infoAnsi([t('terminal', 'forked', { number })]);
+  }
+
+  /** Makes `into` this tab's assistant session; the earlier one stays saved, not in memory. */
+  function switchSession(live: LiveTerminal, into: string): void {
+    void currentAttrs?.client.assistClose(live.assistSession).catch(() => undefined);
+    live.assistSession = into;
+    live.assistActive = true;
   }
 
   /** `/model`: lists the chat models; `/model <n|name>` switches the chat role to one. */

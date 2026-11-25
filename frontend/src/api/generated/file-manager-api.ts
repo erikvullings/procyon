@@ -80,6 +80,7 @@ import type {
   FindLinkReplacementsResponseDto,
   FinderTagsDto,
   ForgetFolderViewRequestDto,
+  ForkChatConversationRequestDto,
   GenerateDocumentSummaryRequestDto,
   GenerateImagesRequestDto,
   GenerateKnowledgeAnswerRequestDto,
@@ -10865,6 +10866,57 @@ export const renameChatConversation = async (workspaceId: string,
     method: 'PATCH',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(renameChatConversationRequestDto)
+  }
+);}
+
+
+
+export type forkChatConversationResponse200 = {
+  data: ChatConversationDto
+  status: 200
+}
+
+export type forkChatConversationResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type forkChatConversationResponse404 = {
+  data: ApplicationErrorDto
+  status: 404
+}
+
+export type forkChatConversationResponseSuccess = (forkChatConversationResponse200) & {
+  headers: Headers;
+};
+export type forkChatConversationResponseError = (forkChatConversationResponse400 | forkChatConversationResponse404) & {
+  headers: Headers;
+};
+
+export type forkChatConversationResponse = (forkChatConversationResponseSuccess | forkChatConversationResponseError)
+
+export const getForkChatConversationUrl = (workspaceId: string,
+    conversationId: string,) => {
+
+
+
+
+  return `/api/v1/workspaces/${workspaceId}/chat/conversations/${conversationId}/fork`
+}
+
+/**
+ * @summary Starts a new chat conversation with the first messages of another ("fork from here").
+ */
+export const forkChatConversation = async (workspaceId: string,
+    conversationId: string,
+    forkChatConversationRequestDto: ForkChatConversationRequestDto, options?: Parameters<typeof fetchMutator>[1]): Promise<forkChatConversationResponse> => {
+
+  return fetchMutator<forkChatConversationResponse>(getForkChatConversationUrl(workspaceId,conversationId),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(forkChatConversationRequestDto)
   }
 );}
 

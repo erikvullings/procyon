@@ -74,7 +74,7 @@ pub use attributes::{
 pub use chat::{
     CancelChatReplyRequestDto, ChatConversationDto, ChatConversationSummaryDto, ChatFailureDto,
     ChatImageDto, ChatMessageDto, ChatReplyEventDto, ChatReplyRequestDto, ChatRoleDto,
-    RenameChatConversationRequestDto,
+    ForkChatConversationRequestDto, RenameChatConversationRequestDto,
 };
 pub use checksum::{
     ChecksumAlgorithmDto, ChecksumEntryDto, ChecksumFileDto, ChecksumPageDto, DuplicateGroupDto,

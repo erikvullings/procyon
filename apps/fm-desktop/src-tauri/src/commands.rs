@@ -2932,6 +2932,20 @@ pub(crate) fn rename_chat_conversation(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Starts a new chat conversation with the first messages of another (task 0359).
+#[tauri::command]
+pub(crate) fn fork_chat_conversation(
+    state: State<'_, AppState>,
+    workspace_id: Uuid,
+    conversation_id: Uuid,
+    request: fm_transport_dto::ForkChatConversationRequestDto,
+) -> Result<fm_transport_dto::ChatConversationDto, ApplicationErrorDto> {
+    state
+        .service
+        .fork_chat_conversation(workspace_id, conversation_id, request)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Deletes a chat conversation and everything saved in it.
 #[tauri::command]
 pub(crate) fn delete_chat_conversation(
@@ -2979,6 +2993,34 @@ pub(crate) async fn terminal_assist_stream(
 #[tauri::command]
 pub(crate) fn terminal_assist_close(state: State<'_, AppState>, session_id: String) {
     state.service.terminal_assist_close(&session_id);
+}
+
+/// Deletes a saved terminal assistant session (task 0359).
+#[tauri::command]
+pub(crate) fn terminal_assist_delete_saved(state: State<'_, AppState>, saved_id: String) -> bool {
+    state.service.terminal_assist_delete_saved(&saved_id)
+}
+
+/// The questions of a terminal tab's assistant session, oldest first (task 0359).
+#[tauri::command]
+pub(crate) fn terminal_assist_questions(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Vec<String> {
+    state.service.terminal_assist_questions(&session_id)
+}
+
+/// Starts a tab session with the history before one question of another (task 0359).
+#[tauri::command]
+pub(crate) fn terminal_assist_fork(
+    state: State<'_, AppState>,
+    session_id: String,
+    question: u32,
+    into: String,
+) -> Option<String> {
+    state
+        .service
+        .terminal_assist_fork(&session_id, question, &into)
 }
 
 /// The saved terminal assistant sessions, most recent first (task 0354).

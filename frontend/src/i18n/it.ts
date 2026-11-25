@@ -1320,6 +1320,9 @@ export const it = {
     willSend: 'Inviato con il tuo prossimo messaggio:',
     remove: 'Rimuovi',
     attachedContext: 'Contesto allegato',
+    forkQuestion: 'Dirama: nuova chat da prima di questa domanda',
+    forkReply: 'Dirama: nuova chat fino a questa risposta',
+    forkFailed: 'Impossibile diramare la conversazione.',
     noFolder: 'Apri una cartella nell’altro riquadro per allegarla.',
     noSelection: 'Seleziona elementi nella cartella per allegarli.',
     consentRequired:
@@ -2816,11 +2819,20 @@ export const it = {
     slashHelpClear: 'dimentica la conversazione, mantieni la cartella',
     slashHelpCompact: 'sostituisci la conversazione con un riepilogo',
     slashHelpModel: 'elenca i modelli di chat o passa a uno',
-    slashHelpResume: 'elenca le sessioni salvate, o riprendine una qui (/resume 2)',
+    slashHelpResume:
+      'elenca le sessioni salvate, riprendine una qui (/resume 2) o eliminane una (/resume delete 2)',
     resumeList: 'Sessioni salvate (domande, data, cartella):',
     resumeNone: 'Ancora nessuna sessione salvata.',
     resumeGone: 'Quella sessione non è più salvata.',
     resumed: 'Si riprende «{title}» ({count} domande).',
+    slashHelpFork:
+      'elenca le domande di questa sessione, o avvia una nuova sessione prima di una (/fork 2)',
+    forkList: 'Domande in questa sessione:',
+    forkNone: 'Ancora nessuna domanda in questa sessione.',
+    forked:
+      'Nuova sessione da prima della domanda {number}. La domanda è nell’input per riproporla o modificarla.',
+    forkGone: 'Non c’è una domanda {number}.',
+    resumeDeleted: '“{title}” eliminata.',
     slashHelpAuto:
       "attiva o disattiva l'approvazione automatica: esegui comandi, crea file e applica modifiche senza chiedere, tranne i comandi molto pericolosi",
     slashAutoOn:

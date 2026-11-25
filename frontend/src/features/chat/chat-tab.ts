@@ -7,6 +7,7 @@ import {
   closeIcon,
   copyIcon,
   cornerDownLeftIcon,
+  gitForkIcon,
   messageCircleIcon,
   pencilIcon,
   playerStopIcon,
@@ -51,6 +52,8 @@ export interface ChatTabAttrs {
   readonly onSelect: (conversationId: string) => void;
   readonly onRename: (conversationId: string, title: string) => void;
   readonly onDelete: (conversationId: string) => void;
+  /** Starts a new conversation with the first `keep` messages of the open one (task 0359). */
+  readonly onFork: (keep: number) => void;
   readonly onSend: (draft: string) => void;
   readonly onStop: () => void;
   readonly onRetry: () => void;
@@ -321,7 +324,7 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
             m(
               '.fm-chat-messages',
               { role: 'log', 'aria-live': 'polite' },
-              entry.messages.map((message) =>
+              entry.messages.map((message, index) =>
                 m(`.fm-chat-message.fm-chat-message-${message.role}`, [
                   m('.fm-chat-message-head', [
                     m(
@@ -330,6 +333,21 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
                     ),
                     iconButton(t('chat', 'copy'), copyIcon({ size: 14 }), () =>
                       copyText(message.content),
+                    ),
+                    // From a question: the history before it, with the question in the draft to
+                    // ask again or change. From a reply: the history up to and with it.
+                    iconButton(
+                      t('chat', message.role === 'user' ? 'forkQuestion' : 'forkReply'),
+                      gitForkIcon({ size: 14 }),
+                      () => {
+                        if (message.role === 'user') {
+                          draft = message.content;
+                          attrs.onFork(index);
+                        } else {
+                          attrs.onFork(index + 1);
+                        }
+                      },
+                      entry.pendingRequestId !== undefined,
                     ),
                   ]),
                   message.steps && message.steps.length > 0

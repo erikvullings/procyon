@@ -228,6 +228,7 @@ export type MockClientMethod =
   | 'createChatConversation'
   | 'getChatConversation'
   | 'renameChatConversation'
+  | 'forkChatConversation'
   | 'deleteChatConversation'
   | 'streamChatReply'
   | 'generateImages'

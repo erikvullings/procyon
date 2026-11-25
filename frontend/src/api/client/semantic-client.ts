@@ -371,6 +371,14 @@ export interface SemanticClient {
     signal?: AbortSignal,
   ): Promise<ChatConversation>;
 
+  /** A new conversation with the first `keep` messages of another; the original is unchanged. */
+  forkChatConversation(
+    workspaceId: WorkspaceId,
+    conversationId: string,
+    keep: number,
+    signal?: AbortSignal,
+  ): Promise<ChatConversation>;
+
   deleteChatConversation(
     workspaceId: WorkspaceId,
     conversationId: string,

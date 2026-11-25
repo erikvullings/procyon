@@ -49,6 +49,15 @@ export interface TerminalClient {
   assistSaved?(): Promise<readonly TerminalSavedSession[]>;
   /** Continues a saved session in this tab's session; `null` when it is gone. */
   assistResume?(savedId: string, sessionId: string): Promise<TerminalSavedSession | null>;
+  /** Deletes a saved session (`/resume delete`, task 0359); `false` when it was not saved. */
+  assistDeleteSaved?(savedId: string): Promise<boolean>;
+  /** The person's questions in a session, oldest first (`/fork`, task 0359). */
+  assistQuestions?(sessionId: string): Promise<readonly string[]>;
+  /**
+   * Starts the session `into` with the history of `sessionId` before its `question`-th question
+   * (1-based) and returns that question; `null` when there is no such question.
+   */
+  assistFork?(sessionId: string, question: number, into: string): Promise<string | null>;
   /** The paths under a session's root, for `@` completion (task 0343). */
   assistFiles?(root: string): Promise<TerminalAssistFiles>;
   /** The skills `/` can invoke in a folder: folder skills and notes (task 0343). */
@@ -86,6 +95,10 @@ export const tauriTerminalClient: TerminalClient = {
   assistSaved: () => invoke<TerminalSavedSession[]>('terminal_assist_saved_sessions'),
   assistResume: (savedId, sessionId) =>
     invoke<TerminalSavedSession | null>('terminal_assist_resume', { savedId, sessionId }),
+  assistDeleteSaved: (savedId) => invoke<boolean>('terminal_assist_delete_saved', { savedId }),
+  assistQuestions: (sessionId) => invoke<string[]>('terminal_assist_questions', { sessionId }),
+  assistFork: (sessionId, question, into) =>
+    invoke<string | null>('terminal_assist_fork', { sessionId, question, into }),
   assistFiles: (root) => invoke<TerminalAssistFiles>('terminal_assist_files', { root }),
   assistSkills: (workingDirectory) =>
     invoke<TerminalAssistSkill[]>('terminal_assist_skills', { workingDirectory }),
