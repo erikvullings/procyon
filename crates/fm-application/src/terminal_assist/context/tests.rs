@@ -6,12 +6,22 @@ use super::{
     AttachedFile, path_from_location, render_activity, render_context, render_state, state_sections,
 };
 
+/// A local folder, as a `file:` location and as the native path it names.
+#[cfg(not(windows))]
+const FOLDER_URI: &str = "file:///tmp/my%20dir";
+#[cfg(not(windows))]
+const FOLDER: &str = "/tmp/my dir";
+#[cfg(windows)]
+const FOLDER_URI: &str = "file:///C:/tmp/my%20dir";
+#[cfg(windows)]
+const FOLDER: &str = r"C:\tmp\my dir";
+
 fn request(context: TerminalContextDto) -> TerminalAssistRequestDto {
     TerminalAssistRequestDto {
         kind: TerminalAssistKindDto::Ask,
         transcript: String::new(),
         request: Some("q".into()),
-        working_directory: "file:///tmp/my%20dir".into(),
+        working_directory: FOLDER_URI.into(),
         root: None,
         skill: None,
         shell: Some("zsh".into()),
@@ -30,10 +40,7 @@ fn request(context: TerminalContextDto) -> TerminalAssistRequestDto {
 
 #[test]
 fn a_file_location_becomes_a_path_and_others_do_not() {
-    assert_eq!(
-        path_from_location("file:///tmp/my%20dir"),
-        Some("/tmp/my dir".into())
-    );
+    assert_eq!(path_from_location(FOLDER_URI), Some(FOLDER.into()));
     assert_eq!(path_from_location("sftp://conn/home/me"), None);
     assert_eq!(path_from_location("not a uri"), None);
 }
@@ -47,7 +54,7 @@ fn a_local_shell_reports_system_shell_and_folder() {
         std::env::consts::ARCH
     )));
     assert!(text.contains("Shell: zsh"));
-    assert!(text.contains("Working directory: /tmp/my dir"));
+    assert!(text.contains(&format!("Working directory: {FOLDER}")));
 }
 
 #[test]
@@ -165,7 +172,7 @@ fn state_and_activity_are_rendered_apart_and_together() {
     });
     let state = render_state(&asked);
     let activity = render_activity(&asked.context.blocks, &[]);
-    assert!(state.contains("Working directory: /tmp/my dir"));
+    assert!(state.contains(&format!("Working directory: {FOLDER}")));
     assert!(!state.contains("Recent commands"));
     assert!(activity.starts_with("Recent commands, oldest first:\n$ ls (exit 0)"));
     assert_eq!(render_context(&asked, &[]), format!("{state}\n{activity}"));
@@ -183,7 +190,11 @@ fn the_state_comes_in_parts_that_change_independently() {
     let sections = state_sections(&asked);
     let keys: Vec<&str> = sections.iter().map(|(key, _)| *key).collect();
     assert_eq!(keys, ["header", "otherPane", "selection", "listing"]);
-    assert!(sections[0].1.contains("Working directory: /tmp/my dir"));
+    assert!(
+        sections[0]
+            .1
+            .contains(&format!("Working directory: {FOLDER}"))
+    );
     assert_eq!(sections[1].1, "Other pane folder: /other");
     assert_eq!(sections[2].1, "Selected in the folder: a.txt");
     assert_eq!(sections[3].1, "Folder listing (2 names):\n- a.txt\n- b.txt");
