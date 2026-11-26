@@ -1,6 +1,6 @@
 # 0333 Local LLM assistance in the terminal pane
 
-Status: in_progress
+Status: done
 Priority: medium
 Subsystem: frontend, backend, settings
 Depends on: 0126, 0322
@@ -139,3 +139,6 @@ Cross-cutting:
     scrollback rewritten; not built. Decision needed: drop it from the spec, or accept a different
     form (for example a per-block "show last lines" toggle).
   - Not verified in the Tauri app: history suggestions with a real history file, shell name.
+- 2026-11-26 claude: closed. Block collapse is dropped: xterm.js cannot fold rows, and the owner
+  chose to drop it rather than rewrite the scrollback. Copy, rerun and explain/fix remain. Browser
+  builds have no assistant (the drawer is Tauri-only). Not verified in the Tauri app.
