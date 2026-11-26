@@ -211,6 +211,11 @@ when either checked-in HTTP artifact is stale relative to the backend.
   symlinks.
 - Before finishing: run `pnpm run lint` and the relevant tests; report incomplete or
   platform-untested behaviour explicitly rather than silently.
+- Tests must not hardcode Unix paths or `file:///` literals. `file:///tmp/...` has no drive letter,
+  so `path_from_location` returns `None` on Windows and the Windows CI job fails. Build locations
+  and expected paths per platform (`#[cfg(windows)]` constants such as `file:///C:/tmp/...` and
+  `C:\tmp\...`), or derive them from a temp dir. Check `windows-latest` results before calling a
+  test change done; macOS runs do not catch this.
 
 ## Release process
 
