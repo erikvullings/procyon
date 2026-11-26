@@ -11442,7 +11442,7 @@
       },
       "ChatImageDto": {
         "type": "object",
-        "description": "One image sent with a chat message. The format is detected from the bytes (PNG, JPEG or WebP).",
+        "description": "One PNG, JPEG or WebP image sent with a chat message.",
         "required": [
           "data"
         ],
@@ -11450,6 +11450,13 @@
           "data": {
             "type": "string",
             "description": "The encoded image, base64 without a data-URL prefix."
+          },
+          "mediaType": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The declared MIME type. Older clients may omit it and let the server detect it."
           }
         }
       },

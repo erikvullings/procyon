@@ -163,7 +163,7 @@ pub(crate) trait ChatGenerator: Send + Sync {
 #[async_trait]
 impl ChatGenerator for LlmProfileService {
     async fn accepts_images(&self, role: LlmRole) -> Result<bool, LlmProfileError> {
-        self.role_accepts_images(role).await
+        self.role_accepts_images(role)
     }
 
     async fn native_tool_calling(&self, role: LlmRole) -> bool {
@@ -444,6 +444,9 @@ fn validate_images(images: &[ChatImageDto]) -> Result<Vec<LlmImageAttachment>, C
     let mut total = 0usize;
     let mut attachments = Vec::with_capacity(images.len());
     for image in images {
+        if image.data.len() > (MAX_IMAGE_BYTES - total).div_ceil(3) * 4 {
+            return Err(ChatReplyError::InvalidRequest("the images are too large"));
+        }
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(image.data.as_bytes())
             .map_err(|_| ChatReplyError::InvalidRequest("an image is not valid base64"))?;
@@ -464,6 +467,15 @@ fn validate_images(images: &[ChatImageDto]) -> Result<Vec<LlmImageAttachment>, C
                 ));
             }
         };
+        if image
+            .media_type
+            .as_deref()
+            .is_some_and(|declared| declared != media_type)
+        {
+            return Err(ChatReplyError::InvalidRequest(
+                "the image type does not match its data",
+            ));
+        }
         let (width, height) = reader
             .into_dimensions()
             .map_err(|_| ChatReplyError::InvalidRequest("an image is not a readable file"))?;
@@ -796,7 +808,10 @@ mod tests {
     fn with_images(mut request: ChatReplyRequestDto, images: &[String]) -> ChatReplyRequestDto {
         request.images = images
             .iter()
-            .map(|data| ChatImageDto { data: data.clone() })
+            .map(|data| ChatImageDto {
+                media_type: None,
+                data: data.clone(),
+            })
             .collect();
         request
     }
@@ -1193,33 +1208,71 @@ mod tests {
     fn refuses_images_that_are_unreadable_oversize_or_too_many() {
         let not_an_image = base64::engine::general_purpose::STANDARD.encode(b"plain text");
         assert_eq!(
-            validate_images(&[ChatImageDto { data: not_an_image }]),
+            validate_images(&[ChatImageDto {
+                media_type: None,
+                data: not_an_image
+            }]),
             Err(ChatReplyError::InvalidRequest(
                 "images must be PNG, JPEG or WebP"
             ))
         );
         assert_eq!(
-            validate_images(&[ChatImageDto { data: png(1025, 8) }]),
+            validate_images(&[ChatImageDto {
+                media_type: None,
+                data: png(1025, 8)
+            }]),
             Err(ChatReplyError::InvalidRequest(
                 "an image is larger than 1024 pixels"
             ))
         );
         assert_eq!(
-            validate_images(&[ChatImageDto { data: "!!".into() }]),
+            validate_images(&[ChatImageDto {
+                media_type: None,
+                data: "!!".into()
+            }]),
             Err(ChatReplyError::InvalidRequest(
                 "an image is not valid base64"
             ))
         );
-        let five = vec![ChatImageDto { data: png(1, 1) }; 5];
+        let five = vec![
+            ChatImageDto {
+                media_type: None,
+                data: png(1, 1)
+            };
+            5
+        ];
         assert_eq!(
             validate_images(&five),
             Err(ChatReplyError::InvalidRequest("too many images"))
         );
         assert_eq!(
-            validate_images(&[ChatImageDto { data: png(1024, 1) }])
-                .unwrap()
-                .len(),
+            validate_images(&[ChatImageDto {
+                media_type: None,
+                data: png(1024, 1)
+            }])
+            .unwrap()
+            .len(),
             1
+        );
+    }
+
+    #[test]
+    fn refuses_images_with_mismatched_types_or_excess_encoded_data() {
+        assert_eq!(
+            validate_images(&[ChatImageDto {
+                media_type: Some("image/jpeg".into()),
+                data: png(1, 1),
+            }]),
+            Err(ChatReplyError::InvalidRequest(
+                "the image type does not match its data"
+            ))
+        );
+        assert_eq!(
+            validate_images(&[ChatImageDto {
+                media_type: None,
+                data: "A".repeat((MAX_IMAGE_BYTES.div_ceil(3) + 1) * 4),
+            }]),
+            Err(ChatReplyError::InvalidRequest("the images are too large"))
         );
     }
 
@@ -1303,7 +1356,7 @@ mod tests {
     #[async_trait]
     impl ChatGenerator for Scripted {
         async fn accepts_images(&self, _role: LlmRole) -> Result<bool, LlmProfileError> {
-            Ok(false)
+            Ok(true)
         }
 
         async fn generate_for_role(
@@ -1378,7 +1431,7 @@ mod tests {
                 &generator,
                 &conversations,
                 Some(&local_tooling(&providers)),
-                folder_request(workspace, id, folder.path()),
+                with_images(folder_request(workspace, id, folder.path()), &[png(8, 8)]),
                 &mut |event| seen.push(event),
             )
             .await;
@@ -1395,6 +1448,8 @@ mod tests {
         let requests = generator.seen.lock().unwrap();
         assert!(requests[0].system_prompt.contains("read_file"));
         assert!(requests[1].user_prompt.contains("alpha beta"));
+        assert_eq!(requests[0].images.len(), 1);
+        assert_eq!(requests[1].images, requests[0].images);
         let saved = conversations.get(workspace, id).unwrap();
         assert_eq!(saved.messages.len(), 2);
         assert_eq!(saved.messages[1].content, "It says alpha beta.");

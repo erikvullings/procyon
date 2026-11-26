@@ -263,16 +263,25 @@ describe('chat wiring', () => {
       listChatConversations: vi.fn(() => Promise.resolve([])),
     };
     const { shell, entry } = fakeShell(client);
-    entry.images = [{ id: 'i1', data: 'QUJD', previewUrl: 'data:image/jpeg;base64,QUJD' }];
+    entry.images = [
+      {
+        id: 'i1',
+        data: 'QUJD',
+        mediaType: 'image/jpeg',
+        previewUrl: 'data:image/jpeg;base64,QUJD',
+      },
+    ];
     const wiring = createChatWiring(shell, { replaceWorkspace: vi.fn() });
 
     await wiring.send(client as unknown as FileManagerClient, entry.key, 'What is this?');
 
-    expect(requests[0]?.images).toEqual([{ data: 'QUJD' }]);
+    expect(requests[0]?.images).toEqual([{ data: 'QUJD', mediaType: 'image/jpeg' }]);
     expect(entry.images).toEqual([]);
   });
 
-  it('refuses pasted images unless the chat endpoint is marked as accepting them', async () => {
+  it('checks vision before paste, blocks send during the check and refuses images without vision', async () => {
+    const encoding = vi.fn();
+    vi.stubGlobal('createImageBitmap', encoding);
     const client = {
       listLlmRoles: vi.fn(() =>
         Promise.resolve({ chat: { profileId: 'p1', model: 'm', allowCloud: false } }),
@@ -284,10 +293,18 @@ describe('chat wiring', () => {
     const { shell, entry } = fakeShell(client as unknown as Partial<FileManagerClient>);
     const wiring = createChatWiring(shell, { replaceWorkspace: vi.fn() });
 
-    await wiring.pasteImages(client as unknown as FileManagerClient, entry.key, [
+    const fileManager = client as unknown as FileManagerClient;
+    wiring.prepareImagePaste(fileManager);
+    expect(client.listLlmRoles).toHaveBeenCalledTimes(1);
+    const paste = wiring.pasteImages(fileManager, entry.key, [
       new Blob(['x'], { type: 'image/png' }),
     ]);
+    await wiring.send(fileManager, entry.key, 'Look');
+    await paste;
 
+    expect(client.listLlmRoles).toHaveBeenCalledTimes(1);
+    expect(encoding).not.toHaveBeenCalled();
+    expect(entry.messages).toEqual([]);
     expect(entry.images).toEqual([]);
   });
 

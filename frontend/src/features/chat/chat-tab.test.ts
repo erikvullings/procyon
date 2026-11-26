@@ -58,6 +58,7 @@ describe('ChatTab header', () => {
         onAttachFileContents: noop,
         onDetach: noop,
         images: [],
+        onPrepareImagePaste: noop,
         onPasteImages: noop,
         onRemoveImage: noop,
         ...overrides,
@@ -71,6 +72,27 @@ describe('ChatTab header', () => {
       (node) => node.getAttribute('aria-label') ?? '',
     );
   }
+
+  it('routes image items to attachment handling and keeps native text paste available', () => {
+    const onPrepareImagePaste = vi.fn();
+    const onPasteImages = vi.fn();
+    render({ onPrepareImagePaste, onPasteImages });
+    const input = root.querySelector('textarea') as HTMLTextAreaElement;
+    input.focus();
+    expect(onPrepareImagePaste).toHaveBeenCalledTimes(1);
+
+    const image = new File(['image'], 'clipboard.png', { type: 'image/png' });
+    const textItem = { kind: 'string', type: 'text/plain', getAsFile: () => null };
+    const imageItem = { kind: 'file', type: 'image/png', getAsFile: () => image };
+    for (const items of [[textItem], [textItem, imageItem]]) {
+      const event = new Event('paste', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'clipboardData', {
+        value: { items, getData: () => 'Short clipboard text' },
+      });
+      expect(input.dispatchEvent(event)).toBe(true);
+    }
+    expect(onPasteImages).toHaveBeenCalledExactlyOnceWith([image]);
+  });
 
   it('offers a new chat, the AI settings and a new tab, in that order', () => {
     render({ onNewTab: noop, onOpenSettings: noop });
@@ -136,6 +158,7 @@ describe('ChatTab fork from here', () => {
         onAttachFileContents: noop,
         onDetach: noop,
         images: [],
+        onPrepareImagePaste: noop,
         onPasteImages: noop,
         onRemoveImage: noop,
       }),
@@ -165,6 +188,7 @@ describe('ChatTab fork from here', () => {
         onAttachFileContents: noop,
         onDetach: noop,
         images: [],
+        onPrepareImagePaste: noop,
         onPasteImages: noop,
         onRemoveImage: noop,
       }),
