@@ -4,16 +4,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { verifySemanticWorkerSource } from './check-desktop-gemma-release.mjs';
-import {
-  riskAcceptedGemmaLimitations,
-  validateRiskAcceptedGemmaApproval,
-} from './gemma-risk-acceptance-contract.mjs';
+import { optInGemmaLimitations, validateOptInGemmaApproval } from './gemma-opt-in-contract.mjs';
 import { verifySemanticComponentRelease } from './verify-semantic-component-release.mjs';
 
-export { riskAcceptedGemmaLimitations, validateRiskAcceptedGemmaApproval };
+export { optInGemmaLimitations, validateOptInGemmaApproval };
 
-export const riskAcceptedGemmaManifestPath = fileURLToPath(
-  new URL('../docs/evaluations/semantic-gemma-risk-accepted-v1.json', import.meta.url),
+export const optInGemmaManifestPath = fileURLToPath(
+  new URL('../docs/evaluations/semantic-gemma-opt-in-v1.json', import.meta.url),
 );
 
 const targets = ['linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64'];
@@ -47,7 +44,7 @@ function matchesCandidateTargets(candidateTargets, approvalTargets) {
   });
 }
 
-export function checkRiskAcceptedGemmaRelease(
+export function checkOptInGemmaRelease(
   assetsRoot,
   candidateRoot,
   approval,
@@ -58,7 +55,7 @@ export function checkRiskAcceptedGemmaRelease(
     path.join(candidateRoot, 'semantic-component-release.json'),
   );
   const candidate = JSON.parse(candidateBytes);
-  const approvalDetails = validateRiskAcceptedGemmaApproval(approval);
+  const approvalDetails = validateOptInGemmaApproval(approval);
   if (
     !Number.isSafeInteger(expectedRunId) ||
     expectedRunId <= 0 ||
@@ -77,7 +74,7 @@ export function checkRiskAcceptedGemmaRelease(
     approval.releaseTag !== candidate.releaseTag ||
     approval.qualificationRunId !== candidate.qualificationRunId
   ) {
-    throw new Error('Gemma risk acceptance does not match the exact new signed candidate');
+    throw new Error('Gemma opt-in approval does not match the exact new signed candidate');
   }
 
   verifySemanticComponentRelease(
@@ -118,32 +115,29 @@ export function checkRiskAcceptedGemmaRelease(
         model?.artifact_id !== gemmaArtifacts[gemmaFiles[0]]?.[0]?.id ||
         !modelFilesMatch
       ) {
-        throw new Error('signed Gemma catalog differs from the risk-accepted candidate');
+        throw new Error('signed Gemma catalog differs from the opt-in candidate');
       }
     },
   );
   return { releaseTag: candidate.releaseTag, sourceRevision: candidate.sourceRevision };
 }
 
-export function checkRiskAcceptedGemmaDesktopRelease(
+export function checkOptInGemmaDesktopRelease(
   manifest,
   semanticEnabled,
-  riskAcceptedEnabled,
   desktopTarget,
   releaseSourceRevision,
   repositoryRoot = process.cwd(),
 ) {
-  if (semanticEnabled !== 'true' || riskAcceptedEnabled !== 'true') {
-    throw new Error(
-      'risk-accepted Gemma desktop requires independent semantic and owner approvals',
-    );
+  if (semanticEnabled !== 'true') {
+    throw new Error('opt-in Gemma desktop requires SEMANTIC_RELEASE_QUALIFIED=true');
   }
-  validateRiskAcceptedGemmaApproval(manifest);
+  validateOptInGemmaApproval(manifest);
   if (Object.keys(manifest.targets ?? {}).length !== targets.length) {
-    throw new Error('risk-accepted Gemma requires an approved four-target component release');
+    throw new Error('opt-in Gemma requires an approved four-target component release');
   }
   if (!targets.includes(desktopTarget) || !manifest.targets[desktopTarget]) {
-    throw new Error('risk-accepted Gemma desktop target is not in the signed component release');
+    throw new Error('opt-in Gemma desktop target is not in the signed component release');
   }
   if (!/^[0-9a-f]{40}$/u.test(releaseSourceRevision ?? '')) {
     throw new Error('desktop release source must be a 40-character commit');
@@ -168,22 +162,17 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     ) {
       throw new Error('desktop release requires a target and a 40-character source commit');
     }
-    checkRiskAcceptedGemmaDesktopRelease(
-      JSON.parse(fs.readFileSync(riskAcceptedGemmaManifestPath, 'utf8')),
+    checkOptInGemmaDesktopRelease(
+      JSON.parse(fs.readFileSync(optInGemmaManifestPath, 'utf8')),
       process.env.SEMANTIC_RELEASE_QUALIFIED,
-      process.env.SEMANTIC_GEMMA_RISK_ACCEPTED,
       desktopTarget,
       releaseSourceRevision,
     );
-    console.log(
-      `Risk-accepted Gemma desktop target ${desktopTarget} uses the exact signed candidate`,
-    );
+    console.log(`Opt-in Gemma desktop target ${desktopTarget} uses the exact signed candidate`);
   } else {
     const [, , assetsRoot, candidateRoot, runId, releaseTag] = process.argv;
     if (!assetsRoot || !candidateRoot || !runId || !releaseTag) {
-      throw new Error(
-        'Usage: gemma-risk-acceptance.mjs <assets> <candidate-lock> <run-id> <release-tag>',
-      );
+      throw new Error('Usage: gemma-opt-in.mjs <assets> <candidate-lock> <run-id> <release-tag>');
     }
     const expectedRunId = Number(runId);
     if (!Number.isSafeInteger(expectedRunId) || expectedRunId <= 0) {
@@ -191,10 +180,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     }
     console.log(
       JSON.stringify(
-        checkRiskAcceptedGemmaRelease(
+        checkOptInGemmaRelease(
           assetsRoot,
           candidateRoot,
-          JSON.parse(fs.readFileSync(riskAcceptedGemmaManifestPath, 'utf8')),
+          JSON.parse(fs.readFileSync(optInGemmaManifestPath, 'utf8')),
           expectedRunId,
           releaseTag,
         ),

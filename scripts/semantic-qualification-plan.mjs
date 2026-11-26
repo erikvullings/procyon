@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { semanticWorkerChanges } from './check-desktop-gemma-release.mjs';
-import { riskAcceptedGemmaManifestPath } from './gemma-risk-acceptance.mjs';
+import { optInGemmaManifestPath } from './gemma-opt-in.mjs';
 import { autoQualificationTag } from './semantic-release-tags.mjs';
 
 /**
@@ -37,7 +37,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.env.GITHUB_SHA ??
     execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   const plan = planSemanticQualification({
-    manifest: JSON.parse(fs.readFileSync(riskAcceptedGemmaManifestPath, 'utf8')),
+    manifest: JSON.parse(fs.readFileSync(optInGemmaManifestPath, 'utf8')),
     revision,
     runNumber: Number(process.env.GITHUB_RUN_NUMBER),
     changesBetween: (from, to) => semanticWorkerChanges(from, to, cwd),

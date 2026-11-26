@@ -23,7 +23,7 @@ collection basket gathers files across folders and providers.
 | **Move data safely** | Cancellable and resumable copy, move, rename, duplicate, trash, archive, and synchronization jobs with explicit conflict handling |
 | **Work across providers** | Local files, SFTP, FTP/FTPS, WebDAV, S3-compatible storage, OneDrive, archives, and mounted network volumes |
 | **Inspect files in place** | Fast text with syntax highlighting for 40+ languages, hex dumps of binary files, SQLite databases (browse, search, filter, read-only SQL), image, video, PDF, archive, CSV/TSV, JSON, Excel, DOCX, and PPTX previews plus an integrated text editor |
-| **Search by meaning and ask** | Optional local-only semantic search, enabled with consent per folder and powered by multilingual E5 by default. Knowledge search finds relevant passages; Ask produces retrieval-augmented answers with page-level citations. EmbeddingGemma 2 is an opt-in alternative for image, audio, and video indexing; the v0.6.0 release is risk-accepted, not five-gate qualified, and CPU-only PDF page-image indexing is capped and slow. |
+| **Search by meaning and ask** | Optional local-only semantic search, enabled with consent per folder and powered by multilingual E5 by default. Knowledge search finds relevant passages; Ask produces retrieval-augmented answers with page-level citations. EmbeddingGemma 2 is an opt-in alternative for image, audio, and video indexing; five-gate qualification is pending, and CPU-only PDF page-image indexing is capped and slow. |
 | **Adapt the workflow** | Configurable shortcuts, light and dark themes, native platform actions, an optional separate viewer window, and resource-limited Lua and JavaScript plugins |
 
 Procyon never implements file mutations in the frontend. Every operation goes through the same
@@ -165,9 +165,9 @@ On macOS arm64, `pnpm dev:tauri:semantic:gemma` (Metal is always on) compiles th
 experimental image-only Metal path; the worker selects Metal automatically
 when a device is available and falls back to CPU for unavailable devices or
 mixed image/audio/video libraries. Audio and video are CPU-only.
-EmbeddingGemma 2 ships in v0.6.0 as an opt-in, risk-accepted package. It has
-not passed the repository's five-gate installed-app qualification; see the
-[release risk and limitations](docs/evaluations/embeddinggemma-risk-accepted-release-2026-10-18.md).
+EmbeddingGemma 2 has been available as an opt-in model since v0.6.0. Its five-gate
+installed-app qualification is pending. See the
+[original release and qualification notes](docs/evaluations/embeddinggemma-risk-accepted-release-2026-10-18.md).
 E5 remains the default. On CPU-only machines, PDF page-image indexing is capped
 and slow; PDF text remains indexed.
 
@@ -189,12 +189,11 @@ package is universal; Intel Macs run it without semantic search, as with the
 E5 build. Gemma does not replace the regular E5 build. Windows GPU behavior and CPU
 performance have not been qualified; report issues with platform and hardware
 details.
-Standard release builds remain Gemma-disabled unless the release owner records
-the required risk acceptance and approves a **new**, signed Gemma candidate.
-The desktop release compiles `semantic-gemma` and fetches that candidate's
-reviewed, signed target catalog. E5 stays the default, and Gemma search quality
-is not established. Included
-folders can be removed directly from **Settings → Semantic library**, even when
+Standard desktop releases with semantic search enabled include the signed EmbeddingGemma 2
+catalog. E5 stays the default. The desktop workflow verifies that the signed candidate covers
+the tagged worker source. Run `pnpm run release:preflight` before tagging.
+
+Included folders can be removed directly from **Settings → Semantic library**, even when
 their sources are unavailable; confirm the displayed cleanup inventory to
 remove their local index data without deleting original files. Moving, deleting,
 or temporarily disconnecting an included root does not automatically purge its
@@ -504,12 +503,10 @@ The v0.6.0 opt-in Gemma macOS package is Apple Silicon (arm64) only. Later
 Gemma macOS packages are universal: Intel Macs run Procyon and receive updates,
 but semantic search is unavailable on them. Gemma is also available in the
 Linux x86-64 and Windows x86-64 installers. All builds use the
-`updater-latest` channel unless beta releases are enabled. The Gemma package is downloaded directly from its GitHub
-Release and does not replace the stable cask or Chocolatey package. E5 remains
-the default. This risk-accepted release is not five-gate qualified; CPU
-resource ceilings, CPU fallback, Windows GPU behavior, cross-host citation
-parity, and upgrade/rollback remain unverified. Use E5 if Gemma does not meet
-your needs and report reproducible issues.
+`updater-latest` channel unless beta releases are enabled. The stable Homebrew cask and
+Chocolatey package use the regular desktop release assets. E5 remains the default.
+Five-gate qualification is pending for the opt-in model, including resource ceilings,
+CPU fallback, Windows GPU behavior, cross-host citation parity, and upgrade and rollback.
 
 ## Desktop releases
 
@@ -524,7 +521,7 @@ does not touch Homebrew or Chocolatey (which has human reviewers). After smoke-t
 approve it by running the **Promote desktop release** workflow with the tag: it publishes the very
 assets that were tested to `updater-latest` (and `updater-beta`), updates Homebrew, and submits
 Chocolatey, without rebuilding. To skip the beta step, run `release-desktop.yml` manually for an
-existing tag with `channel: stable`. Stable builds poll `updater-latest`; beta builds poll
+existing tag that contains the current release scripts with `channel: stable`. Stable builds poll `updater-latest`; beta builds poll
 `updater-beta`, which also receives every stable release so beta users never lag behind.
 Release notes and a manual smoke pass are required before promoting a beta. Protected release
 configuration includes `APPLE_CERTIFICATE`, `APPLE_API_KEY_P8`, `HOMEBREW_TAP_TOKEN`, and
@@ -549,9 +546,8 @@ measured worker peaks, and cannot publish a release; its candidate-bound report 
 **no-go** without host/VFS, resource-ceiling, fallback, and quality evidence.
 The five-gate-qualified Gemma publication check separately requires reviewed four-target
 installed PDF evidence from a successful exact-source qualification run; merely adding signed
-PDFium payloads or a worker-only synthetic report cannot satisfy that gate. The distinct
-risk-accepted path records the release owner's acceptance of the outstanding risks and does not
-represent missing qualification evidence as passing.
+PDFium payloads or a worker-only synthetic report cannot satisfy that gate. The regular
+opt-in path verifies the signed candidate and records the model’s outstanding qualification limits.
 The read-only PDF qualification also runs a separate one-page enrolled-host smoke through
 the installed worker, replaces that synthetic file with a two-page scan, and checks that
 the edited source's two page citations replace the old generation before checking deletion.

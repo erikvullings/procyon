@@ -93,7 +93,7 @@ jobs:
   homebrew:
     name: Publish cross-platform Homebrew cask
     needs: promote
-    if: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && vars.SEMANTIC_GEMMA_RISK_ACCEPTED != 'true' }}
+    if: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' }}
     uses: ./.github/workflows/publish-homebrew.yml
     with:
       release_tag: ${{ inputs.release_tag }}
@@ -101,7 +101,7 @@ jobs:
 
   chocolatey:
     needs: promote
-    if: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' && vars.SEMANTIC_GEMMA_RISK_ACCEPTED != 'true' }}
+    if: ${{ vars.SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL != 'true' && vars.SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED != 'true' }}
     uses: ./.github/workflows/publish-chocolatey.yml
     with:
       release_tag: ${{ inputs.release_tag }}

@@ -1629,7 +1629,7 @@ export const pl = {
       'Pobieranie wielojęzyczne wyższej jakości, kosztem większego zużycia dysku, pamięci i czasu indeksowania.',
     gemmaDescription:
       'Natywne wyszukiwanie tekstu i kodu na CPU z opcjonalnym indeksowaniem obrazów, dźwięku i wideo. Wymaga osobnej, świeżo zindeksowanej biblioteki.',
-    gemmaRiskAcceptedDescription:
+    gemmaOptInDescription:
       'Model opcjonalny; domyślnie nadal używany jest wielojęzyczny E5. Gemma nie ukończyła jeszcze pełnej kwalifikacji: zużycie zasobów, wydajność CPU, nawigacja między hostami, aktualizacja/wycofanie, indeksowanie prywatnych multimediów i GPU w systemie Windows nie są w pełni zweryfikowane. W razie potrzeby użyj E5 i zgłoś problemy z CPU lub GPU w systemie Windows. Gemma w systemie macOS wymaga Apple Silicon.',
     gemmaSetupTitle: 'Nowa biblioteka EmbeddingGemma 2',
     gemmaDimensions: 'Wymiary osadzenia',

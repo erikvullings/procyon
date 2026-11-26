@@ -1644,7 +1644,7 @@ export const fr = {
       'Récupération multilingue de meilleure qualité, avec un coût plus élevé en disque, mémoire et indexation.',
     gemmaDescription:
       "Recherche native sur CPU dans le texte et le code, avec indexation facultative des images, de l'audio et de la vidéo. Nécessite une bibliothèque distincte, fraîchement indexée.",
-    gemmaRiskAcceptedDescription:
+    gemmaOptInDescription:
       "Modèle facultatif ; E5 multilingue reste le choix par défaut. Gemma n'a pas encore terminé la qualification complète : l'utilisation des ressources, les performances CPU, la navigation entre hôtes, la mise à niveau/restauration, l'indexation de médias privés et le GPU Windows ne sont pas entièrement vérifiés. Utilisez E5 si nécessaire et signalez les problèmes de CPU ou de GPU Windows. Gemma sur macOS nécessite Apple Silicon.",
     gemmaSetupTitle: 'Nouvelle bibliothèque EmbeddingGemma 2',
     gemmaDimensions: "Dimensions d'embedding",

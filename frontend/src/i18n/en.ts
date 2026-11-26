@@ -2006,7 +2006,7 @@ export const en = {
     gemmaQualifiedName: 'EmbeddingGemma 2',
     gemmaDescription:
       'Native CPU text and code search with optional image, audio, and video indexing. Requires a separate, freshly indexed library.',
-    gemmaRiskAcceptedDescription:
+    gemmaOptInDescription:
       'Optional model; multilingual E5 remains the default. Gemma has not completed the full qualification yet: resource use, CPU performance, cross-host navigation, upgrade/rollback, private-media indexing, and Windows GPU are not fully verified. Use E5 if needed and file an issue for CPU or Windows GPU problems. Gemma on macOS requires Apple Silicon.',
     gemmaSetupTitle: 'New EmbeddingGemma 2 library',
     gemmaFreshLibraryExplanation:

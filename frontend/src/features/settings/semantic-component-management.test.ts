@@ -155,8 +155,8 @@ describe('SemanticComponentManagement', () => {
     expect(profileCopy()).not.toContain('experimental');
   });
 
-  it('describes risk-accepted Gemma as unqualified in Settings', async () => {
-    vi.stubEnv('VITE_GEMMA_RISK_ACCEPTED', 'true');
+  it('describes opt-in Gemma as unqualified in Settings', async () => {
+    vi.stubEnv('VITE_GEMMA_OPT_IN', 'true');
     const client = new MockFileManagerClient({ semanticLifecycle: 'installedEnabled' });
     await withGemmaProfile(client);
     mountComponent(client);

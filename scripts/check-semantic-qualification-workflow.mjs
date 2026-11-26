@@ -180,43 +180,41 @@ export function checkSemanticQualificationWorkflow(workflowPath = defaultWorkflo
       'non-experimental Gemma publication must require independent five-gate approval and verify exact signed assets',
     );
   }
-  const riskAcceptedCheck = publishSteps.findIndex((step) =>
-    String(step.run ?? '').includes('gemma-risk-acceptance.mjs'),
+  const optInCheck = publishSteps.findIndex((step) =>
+    String(step.run ?? '').includes('gemma-opt-in.mjs'),
   );
-  const riskAcceptedSignatureCheck = publishSteps.findIndex(
+  const optInSignatureCheck = publishSteps.findIndex(
     (step) =>
       String(step.run ?? '').includes('semantic_production_catalog') &&
-      String(step.if ?? '').includes('approve_risk_accepted_gemma == true'),
+      String(step.if ?? '').includes('publish_opt_in_gemma == true'),
   );
-  const riskAcceptedCandidateDownload = publishSteps.findIndex(
+  const optInCandidateDownload = publishSteps.findIndex(
     (step) =>
       step.uses === 'actions/download-artifact@v8' &&
-      String(step.name ?? '').includes('risk-accepted') &&
-      String(step.if ?? '').includes('approve_risk_accepted_gemma == true'),
+      String(step.name ?? '').includes('opt-in') &&
+      String(step.if ?? '').includes('publish_opt_in_gemma == true'),
   );
-  const riskAcceptedRunCheck = publishSteps.findIndex(
+  const optInRunCheck = publishSteps.findIndex(
     (step) =>
-      step.name === 'Verify risk-accepted candidate run completed on its exact source' &&
-      String(step.if ?? '').includes('approve_risk_accepted_gemma == true'),
+      step.name === 'Verify opt-in candidate run completed on its exact source' &&
+      String(step.if ?? '').includes('publish_opt_in_gemma == true'),
   );
   if (
-    workflow.on.workflow_dispatch.inputs.approve_risk_accepted_gemma?.default !== false ||
-    !publishGate.includes("vars.SEMANTIC_GEMMA_RISK_ACCEPTED == 'true'") ||
-    !publishGate.includes('inputs.approve_risk_accepted_gemma != true') ||
+    workflow.on.workflow_dispatch.inputs.publish_opt_in_gemma?.default !== false ||
+    !publishGate.includes("vars.SEMANTIC_RELEASE_QUALIFIED == 'true'") ||
+    !publishGate.includes('inputs.publish_opt_in_gemma != true') ||
     !publishGate.includes("github.ref == 'refs/heads/main'") ||
-    riskAcceptedCheck < 0 ||
-    riskAcceptedCandidateDownload < 0 ||
-    riskAcceptedRunCheck < riskAcceptedCandidateDownload ||
-    riskAcceptedCheck <= riskAcceptedRunCheck ||
+    optInCheck < 0 ||
+    optInCandidateDownload < 0 ||
+    optInRunCheck < optInCandidateDownload ||
+    optInCheck <= optInRunCheck ||
     !publishCommands.includes('run.head_sha !== candidate.sourceRevision') ||
-    riskAcceptedSignatureCheck <= riskAcceptedCheck ||
-    publishIndex <= riskAcceptedSignatureCheck ||
-    !String(publishSteps[riskAcceptedCheck].if ?? '').includes(
-      'approve_risk_accepted_gemma == true',
-    )
+    optInSignatureCheck <= optInCheck ||
+    publishIndex <= optInSignatureCheck ||
+    !String(publishSteps[optInCheck].if ?? '').includes('publish_opt_in_gemma == true')
   ) {
     failures.push(
-      'risk-accepted Gemma publication must require separate owner approval, exact signed assets, and must not reuse qualification approval',
+      'opt-in Gemma publication requires the semantic release gate, a main-branch publication request, and exact signed assets',
     );
   }
   if (

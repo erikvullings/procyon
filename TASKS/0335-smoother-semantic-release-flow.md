@@ -1,6 +1,6 @@
 # 0335 Smoother semantic and desktop release flow
 
-Status: in_progress
+Status: done
 Priority: high
 Subsystem: release
 Depends on: none
@@ -117,3 +117,11 @@ approval step is mechanical bookkeeping.
   touches the closure is the real test (watch that the dispatch path of run 43824195561 style
   runs still works: `plan` is skipped there). Push-run approvals follow the `desktop-release`
   environment's reviewers rule.
+
+
+- 2026-11-26: made the signed opt-in Gemma candidate the standard catalog for semantic-enabled
+  desktop releases. Preflight and desktop packaging select the same default. The semantic
+  publication command reuses the approved model record and exact signed artifacts. Normal beta
+  promotion includes the package-manager jobs. The worker-source gate and four-target validation
+  remain in force. Worker pinning remains a design option. Hosted publication requires a real
+  release run to verify.

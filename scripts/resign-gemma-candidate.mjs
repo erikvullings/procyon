@@ -8,22 +8,22 @@ import {
   semanticWorkerChanges,
   verifySemanticWorkerSource,
 } from './check-desktop-gemma-release.mjs';
-import { riskAcceptedGemmaManifestPath } from './gemma-risk-acceptance.mjs';
-import { prepareRiskAcceptedGemmaManifest } from './prepare-risk-accepted-gemma-manifest.mjs';
+import { optInGemmaManifestPath } from './gemma-opt-in.mjs';
+import { prepareOptInGemmaManifest } from './prepare-opt-in-gemma-manifest.mjs';
 import { nextSemanticTag } from './semantic-release-tags.mjs';
 
 export { nextSemanticTag };
 
 /**
- * One-command version of "Re-signing the risk-accepted Gemma worker candidate"
+ * One-command version of "Re-signing the opt-in Gemma worker candidate"
  * (docs/semantic-operations.md). Every step of that procedure is kept; only the manual hand-offs go.
  *
  *   node scripts/resign-gemma-candidate.mjs
  *
- * It exits early (changing nothing) when the worker build inputs are unchanged since the signed
- * candidate, because then the desktop gate already passes. It never renews the risk acceptance:
+ * When the current candidate covers HEAD, the script only publishes it if publication is
+ * still pending. It carries forward the model approval:
  * the model revision, `approvedBy` and `approvedAt` carry over from the current manifest. A model
- * change is a new acceptance and goes through prepare-risk-accepted-gemma-manifest.mjs instead.
+ * change requires a new model approval and goes through prepare-opt-in-gemma-manifest.mjs instead.
  */
 
 const WORKFLOW = 'release-semantic-components.yml';
@@ -178,32 +178,55 @@ function push() {
   if (result.status !== 0) throw new Error('git push failed');
 }
 
+export function isSemanticReleasePublished(tag) {
+  try {
+    const release = JSON.parse(
+      sh('gh', ['api', `repos/{owner}/{repo}/releases/tags/${tag}`], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }),
+    );
+    return release.draft === false;
+  } catch (error) {
+    if (String(error.stderr).includes('HTTP 404')) return false;
+    throw error;
+  }
+}
+
+async function publishCandidate(tag, qualificationRun) {
+  const publishRun = await dispatch({
+    release_tag: tag,
+    qualification_run_id: String(qualificationRun),
+    publish_opt_in_gemma: 'true',
+  });
+  await waitForSuccess(publishRun, 'publish');
+  if (!isSemanticReleasePublished(tag)) {
+    throw new Error(
+      `${tag} was not published by run ${publishRun}; check the semantic publication job and release variables`,
+    );
+  }
+  log(`published ${tag}.`);
+}
+
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   const head = requireCleanMain();
-  const current = JSON.parse(fs.readFileSync(riskAcceptedGemmaManifestPath, 'utf8'));
+  const current = JSON.parse(fs.readFileSync(optInGemmaManifestPath, 'utf8'));
 
   const changed = semanticWorkerChanges(current.sourceRevision, head, process.cwd());
   if (changed.length === 0) {
-    log(
-      `worker build inputs unchanged since ${current.sourceRevision.slice(0, 8)}; no re-sign needed`,
-    );
+    verifySemanticWorkerSource(current.sourceRevision, head, process.cwd());
+    if (!isSemanticReleasePublished(current.releaseTag)) {
+      await publishCandidate(current.releaseTag, current.qualificationRunId);
+    } else {
+      log(`worker build inputs match published candidate ${current.releaseTag}`);
+    }
+    log(`tag the desktop release on ${head}.`);
     return;
   }
   log(`worker inputs changed since the signed candidate:\n  ${changed.join('\n  ')}`);
 
   const assertTagFree = (tag) => {
-    const published = gh([
-      'release',
-      'list',
-      '--limit',
-      '100',
-      '--json',
-      'tagName',
-      '-q',
-      '.[].tagName',
-    ]);
-    if (published.split('\n').includes(tag)) {
+    if (isSemanticReleasePublished(tag)) {
       throw new Error(`${tag} is already published (immutable): pass a new --tag`);
     }
   };
@@ -234,35 +257,29 @@ async function main() {
     currentTag: current.releaseTag,
   });
   assertTagFree(tag);
-  const manifest = prepareRiskAcceptedGemmaManifest(candidateBytes, {
-    modelRevision: current.riskAcceptedGemma.modelRevision,
-    approvedBy: current.riskAcceptedGemma.approvedBy,
-    approvedAt: current.riskAcceptedGemma.approvedAt,
+  const manifest = prepareOptInGemmaManifest(candidateBytes, {
+    modelRevision: current.optInGemma.modelRevision,
+    approvedBy: current.optInGemma.approvedBy,
+    approvedAt: current.optInGemma.approvedAt,
   });
   // The desktop gate's own condition: the candidate must be an ancestor of HEAD with no worker
   // build input changed since. HEAD itself may be newer (main moved, or the run was automatic).
   verifySemanticWorkerSource(manifest.sourceRevision, head, process.cwd());
-  fs.writeFileSync(riskAcceptedGemmaManifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  fs.writeFileSync(optInGemmaManifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
   // 3. Commit (touches no worker build input) and push.
-  sh('git', ['add', riskAcceptedGemmaManifestPath]);
+  sh('git', ['add', optInGemmaManifestPath]);
   sh('git', [
     'commit',
     '-q',
     '-m',
-    `chore(semantic): re-sign the risk-accepted Gemma candidate for ${tag}\n\nApproved by ${manifest.riskAcceptedGemma.approvedBy}.`,
+    `chore(semantic): re-sign the opt-in Gemma candidate for ${tag}\n\nApproved by ${manifest.optInGemma.approvedBy}.`,
   ]);
   push();
   const signedCommit = sh('git', ['rev-parse', 'HEAD']).trim();
 
   // 4. Publish the already-qualified run under the same immutable tag.
-  const publishRun = await dispatch({
-    release_tag: tag,
-    qualification_run_id: qualificationRun,
-    approve_risk_accepted_gemma: 'true',
-  });
-  await waitForSuccess(publishRun, 'publish');
-  log(`published ${tag}.`);
+  await publishCandidate(tag, qualificationRun);
   log(`tag the desktop release on ${signedCommit} (a descendant of the new sourceRevision).`);
 }
 

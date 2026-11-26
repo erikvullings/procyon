@@ -11,10 +11,8 @@ import {
   checkQualifiedGemmaDesktopRelease,
   qualifiedGemmaManifestPath,
 } from './check-qualified-gemma-release.mjs';
-import {
-  checkRiskAcceptedGemmaDesktopRelease,
-  riskAcceptedGemmaManifestPath,
-} from './gemma-risk-acceptance.mjs';
+import { checkOptInGemmaDesktopRelease, optInGemmaManifestPath } from './gemma-opt-in.mjs';
+import { isSemanticReleasePublished } from './resign-gemma-candidate.mjs';
 
 /**
  * Tells, before a desktop tag is pushed, whether `release-desktop.yml` would pass every gate that
@@ -22,7 +20,7 @@ import {
  * gate functions (never a re-implementation), so a pass here is a pass there. Read-only: it
  * fetches `origin/main` and reads GitHub repository variables and runs, and changes nothing.
  *
- *   pnpm release:preflight [--tag v0.7.0-16] [--revision <sha>] [--mode risk-accepted]
+ *   pnpm release:preflight [--tag v0.7.0-16] [--revision <sha>] [--mode opt-in]
  *                          [--no-fetch] [--no-gh]
  */
 
@@ -39,9 +37,8 @@ export const gemmaModes = {
     variable: 'SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED',
     manifestPath: qualifiedGemmaManifestPath,
   },
-  'risk-accepted': {
-    variable: 'SEMANTIC_GEMMA_RISK_ACCEPTED',
-    manifestPath: riskAcceptedGemmaManifestPath,
+  'opt-in': {
+    manifestPath: optInGemmaManifestPath,
   },
 };
 
@@ -57,16 +54,20 @@ export function workspaceVersion(rootManifestText) {
 
 /** Gemma modes the workflow would activate, from the repository variables it reads. */
 export function activeGemmaModes(vars) {
-  return Object.entries(gemmaModes)
-    .filter(([, { variable }]) => vars?.[variable] === 'true')
+  const overrides = Object.entries(gemmaModes)
+    .filter(([, { variable }]) => variable && vars?.[variable] === 'true')
     .map(([mode]) => mode);
+  return overrides.length === 0 && vars?.SEMANTIC_RELEASE_QUALIFIED === 'true'
+    ? ['opt-in']
+    : overrides;
 }
 
 /** Classifies a gate failure message so the report can name the exact remedy. */
 export function classifyGateFailure(message) {
   if (message.startsWith('semantic worker build inputs changed')) return 'worker-changed';
   if (message.includes('not an ancestor')) return 'not-ancestor';
-  if (/independent|owner approvals/u.test(message)) return 'variables';
+  if (/independent|owner approvals|requires SEMANTIC_RELEASE_QUALIFIED/u.test(message))
+    return 'variables';
   return 'manifest';
 }
 
@@ -75,7 +76,11 @@ export function classifyGateFailure(message) {
  * running) on a commit that is an ancestor of the release source with no worker build input
  * changed since, which is exactly the desktop gate's own condition.
  */
-export function classifyQualificationRuns(runs, revision, { isAncestor, changesBetween }) {
+export function classifyQualificationRuns(
+  runs,
+  revision,
+  { isAncestor, changesBetween, hasCandidate = () => true },
+) {
   const covering = runs
     .filter((run) => run.event === 'push')
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
@@ -89,7 +94,7 @@ export function classifyQualificationRuns(runs, revision, { isAncestor, changesB
       }
     });
   return {
-    reusable: covering.find((run) => run.conclusion === 'success'),
+    reusable: covering.find((run) => run.conclusion === 'success' && hasCandidate(run)),
     pending: covering.find((run) => run.status !== 'completed'),
   };
 }
@@ -112,7 +117,7 @@ export function remedies({ mode, kind, runs }) {
   if (kind !== 'worker-changed') {
     return ['fix the manifest named above, see docs/semantic-operations.md'];
   }
-  if (mode !== 'risk-accepted') {
+  if (mode !== 'opt-in') {
     return [
       `${mode} Gemma has no mechanical re-sign: it needs reviewed approval evidence, see docs/semantic-operations.md`,
     ];
@@ -152,27 +157,20 @@ function gate(mode, manifest, vars, revision, root) {
       root,
     );
   }
-  return checkRiskAcceptedGemmaDesktopRelease(
-    manifest,
-    qualified,
-    vars?.SEMANTIC_GEMMA_RISK_ACCEPTED,
-    desktopTarget,
-    revision,
-    root,
-  );
+  return checkOptInGemmaDesktopRelease(manifest, qualified, desktopTarget, revision, root);
 }
 
 /**
  * Evaluates every gate. `env` supplies everything with side effects so tests can fake it:
  * `{ root, tag, revision, vars, mode, existingTags, onOriginMain, dirty, readManifest,
- *    qualificationRuns, isAncestor, publishedTags }`. `vars` is undefined when GitHub could not
- * be read; then no variable gate is enforced and the active mode must be given or is inferred
- * from the manifests present.
+ *    qualificationRuns, isAncestor, hasCandidate, isPublished }`. When GitHub variables
+ * are unavailable, preflight assumes the regular opt-in path unless a mode is supplied.
  */
 export function runPreflight(env) {
   const checks = [];
   const add = (check) => checks.push(check);
-  const version = workspaceVersion(fs.readFileSync(`${env.root}/Cargo.toml`, 'utf8'));
+  const version =
+    env.version ?? workspaceVersion(fs.readFileSync(`${env.root}/Cargo.toml`, 'utf8'));
 
   add(
     env.tag === `v${version}`
@@ -220,7 +218,7 @@ export function runPreflight(env) {
   } else if (env.vars !== undefined) {
     modes = activeGemmaModes(env.vars);
   } else {
-    modes = Object.keys(gemmaModes).filter((mode) => env.readManifest(mode) !== undefined);
+    modes = ['opt-in'];
     inferred = true;
   }
   if (env.vars === undefined) {
@@ -230,7 +228,7 @@ export function runPreflight(env) {
       level: 'warn',
       title: 'GitHub variables unreadable (gh missing or offline): variable gates not checked',
       detail: inferred
-        ? 'active Gemma mode inferred from manifests; pass --mode to pick one'
+        ? 'assuming the standard opt-in Gemma path; pass --mode to check an override'
         : undefined,
     });
   } else if (modes.length > 1) {
@@ -273,7 +271,6 @@ export function runPreflight(env) {
       SEMANTIC_RELEASE_QUALIFIED: 'true',
       SEMANTIC_GEMMA_EXPERIMENTAL_APPROVED: 'true',
       SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED: 'true',
-      SEMANTIC_GEMMA_RISK_ACCEPTED: 'true',
     };
     const candidate = `${mode} Gemma candidate ${manifest.releaseTag} (${manifest.sourceRevision.slice(0, 8)})`;
     try {
@@ -291,6 +288,7 @@ export function runPreflight(env) {
           ? classifyQualificationRuns(env.qualificationRuns, env.revision, {
               isAncestor: env.isAncestor,
               changesBetween: (from, to) => semanticWorkerChanges(from, to, env.root),
+              hasCandidate: env.hasCandidate,
             })
           : undefined;
       add({
@@ -301,13 +299,25 @@ export function runPreflight(env) {
         fix: remedies({ mode, kind, runs }),
       });
     }
-    if (env.publishedTags !== undefined && !env.publishedTags.includes(manifest.releaseTag)) {
+    const published = env.isPublished?.(manifest.releaseTag);
+    if (published === false) {
+      add({
+        id: `published-${mode}`,
+        ok: false,
+        title: `signed candidate ${manifest.releaseTag} needs a published GitHub release`,
+        detail: 'desktop builds fetch the signed catalog from it',
+        fix: [
+          mode === 'opt-in'
+            ? 'run node scripts/resign-gemma-candidate.mjs to publish the current candidate on main'
+            : 'publish the reviewed candidate following docs/semantic-operations.md',
+        ],
+      });
+    } else if (published === undefined) {
       add({
         id: `published-${mode}`,
         ok: true,
         level: 'warn',
-        title: `signed candidate ${manifest.releaseTag} is not a published GitHub release`,
-        detail: 'desktop builds fetch the signed catalog from it',
+        title: `could not verify publication of ${manifest.releaseTag}`,
       });
     }
   }
@@ -381,6 +391,7 @@ function main() {
     }
   }
   const revision = git(['rev-parse', options.revision ?? 'HEAD']);
+  const version = workspaceVersion(git(['show', `${revision}:Cargo.toml`]));
   const isAncestor = (ancestor, descendant) => {
     try {
       git(['merge-base', '--is-ancestor', ancestor, descendant]);
@@ -392,7 +403,8 @@ function main() {
   const variables = options.gh ? tryGh(['variable', 'list', '--json', 'name,value']) : undefined;
   const report = runPreflight({
     root: repoRoot,
-    tag: options.tag ?? `v${workspaceVersion(fs.readFileSync(`${repoRoot}/Cargo.toml`, 'utf8'))}`,
+    version,
+    tag: options.tag ?? `v${version}`,
     revision,
     vars:
       variables === undefined
@@ -402,10 +414,16 @@ function main() {
     existingTags: git(['tag', '--list']).split('\n'),
     onOriginMain: isAncestor(revision, 'origin/main'),
     dirty: git(['status', '--porcelain']) !== '',
-    readManifest: (mode) =>
-      fs.existsSync(gemmaModes[mode].manifestPath)
-        ? JSON.parse(fs.readFileSync(gemmaModes[mode].manifestPath, 'utf8'))
-        : undefined,
+    readManifest: (mode) => {
+      const path = gemmaModes[mode].manifestPath.slice(repoRoot.length);
+      let contents;
+      try {
+        contents = git(['show', `${revision}:${path}`]);
+      } catch {
+        return undefined;
+      }
+      return JSON.parse(contents);
+    },
     qualificationRuns: options.gh
       ? tryGh([
           'run',
@@ -421,10 +439,19 @@ function main() {
         ])
       : undefined,
     isAncestor,
-    publishedTags: options.gh
-      ? tryGh(['release', 'list', '--limit', '100', '--json', 'tagName'])?.map(
-          ({ tagName }) => tagName,
-        )
+    hasCandidate: ({ databaseId, headSha }) =>
+      tryGh(['api', `repos/{owner}/{repo}/actions/runs/${databaseId}/artifacts`])?.artifacts.some(
+        (artifact) =>
+          !artifact.expired && artifact.name === `semantic-component-candidate-${headSha}`,
+      ) ?? false,
+    isPublished: options.gh
+      ? (tag) => {
+          try {
+            return isSemanticReleasePublished(tag);
+          } catch {
+            return undefined;
+          }
+        }
       : undefined,
   });
   console.log(formatReport(report));

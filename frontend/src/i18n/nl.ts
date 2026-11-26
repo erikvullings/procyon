@@ -2045,7 +2045,7 @@ export const nl = {
     gemmaQualifiedName: 'EmbeddingGemma 2',
     gemmaDescription:
       'Tekst en code op de CPU, met optionele indexering van afbeeldingen, audio en video. Vereist een afzonderlijke, nieuwe index.',
-    gemmaRiskAcceptedDescription:
+    gemmaOptInDescription:
       'Optioneel model; meertalig E5 blijft de standaard. Gemma heeft de volledige kwalificatie nog niet doorlopen: resourcegebruik, CPU-prestaties, navigatie tussen hosts, upgrade/rollback, indexering van privémedia en Windows-GPU zijn nog niet volledig geverifieerd. Gebruik zo nodig E5 en meld problemen met CPU of Windows-GPU als issue. Gemma op macOS vereist Apple Silicon.',
     gemmaSetupTitle: 'Nieuwe EmbeddingGemma 2-bibliotheek',
     gemmaFreshLibraryExplanation:

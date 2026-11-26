@@ -1,4 +1,4 @@
-export const riskAcceptedGemmaLimitations = [
+export const optInGemmaLimitations = [
   'five-gate-qualification-not-performed',
   'metal-resource-gates-1a-and-1c-fail',
   'remaining-resource-cpu-fallback-cross-host-upgrade-rollback-and-private-media-gates-unqualified',
@@ -8,15 +8,15 @@ export const riskAcceptedGemmaLimitations = [
 
 const targets = ['linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64'];
 
-export function validateRiskAcceptedGemmaApproval(manifest) {
-  const approval = manifest?.riskAcceptedGemma;
+export function validateOptInGemmaApproval(manifest) {
+  const approval = manifest?.optInGemma;
   if (
     manifest?.schemaVersion !== 1 ||
     manifest?.decision !== 'go' ||
     manifest?.repository !== 'erikvullings/procyon' ||
     manifest?.experimentalGemma !== undefined ||
     manifest?.nonExperimentalGemma !== undefined ||
-    approval?.approval !== 'release-owner-risk-accepted-unqualified' ||
+    approval?.approval !== 'release-owner-approved-opt-in' ||
     !['go', 'noGo'].includes(approval?.candidateDecision) ||
     approval?.qualificationStatus !== 'not-five-gate-qualified' ||
     typeof manifest.releaseTag !== 'string' ||
@@ -34,10 +34,10 @@ export function validateRiskAcceptedGemmaApproval(manifest) {
     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/u.test(approval.approvedAt) ||
     !Number.isFinite(Date.parse(approval.approvedAt)) ||
     !Array.isArray(approval.acceptedLimitations) ||
-    approval.acceptedLimitations.length !== riskAcceptedGemmaLimitations.length ||
+    approval.acceptedLimitations.length !== optInGemmaLimitations.length ||
     new Set(approval.acceptedLimitations).size !== approval.acceptedLimitations.length ||
     JSON.stringify([...approval.acceptedLimitations].sort()) !==
-      JSON.stringify([...riskAcceptedGemmaLimitations].sort()) ||
+      JSON.stringify([...optInGemmaLimitations].sort()) ||
     Object.keys(manifest.targets ?? {})
       .sort()
       .join(',') !== [...targets].sort().join(',') ||
@@ -50,7 +50,7 @@ export function validateRiskAcceptedGemmaApproval(manifest) {
     )
   ) {
     throw new Error(
-      'Gemma risk acceptance must explicitly record the unqualified status, known limitations, and exact four-target signed candidate',
+      'Gemma opt-in approval must explicitly record the unqualified status, known limitations, and exact four-target signed candidate',
     );
   }
   return approval;

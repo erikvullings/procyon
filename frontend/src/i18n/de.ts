@@ -1656,7 +1656,7 @@ export const de = {
       'Mehrsprachiger Abruf in höherer Qualität mit größerem Platz-, Speicher- und Indizierungsaufwand.',
     gemmaDescription:
       'Native CPU-Text- und Codesuche mit optionaler Indizierung von Bildern, Audio und Video. Erfordert eine separate, neu indizierte Bibliothek.',
-    gemmaRiskAcceptedDescription:
+    gemmaOptInDescription:
       'Optionales Modell; mehrsprachiges E5 bleibt der Standard. Gemma hat die vollständige Qualifizierung noch nicht abgeschlossen: Ressourcenverbrauch, CPU-Leistung, hostübergreifende Navigation, Upgrade/Rollback, Indizierung privater Medien und Windows-GPU sind nicht vollständig verifiziert. Verwenden Sie bei Bedarf E5 und melden Sie Probleme mit CPU oder Windows-GPU als Issue. Gemma unter macOS erfordert Apple Silicon.',
     gemmaSetupTitle: 'Neue EmbeddingGemma-2-Bibliothek',
     gemmaDimensions: 'Einbettungsdimensionen',

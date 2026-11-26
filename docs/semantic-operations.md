@@ -277,18 +277,18 @@ catalog/signature hashes. After that lock is reviewed and committed as
 artifacts from the named qualification run, verifies every payload against the signed catalogs and
 lock, and creates the component release without rebuilding.
 
-#### Re-signing the risk-accepted Gemma worker candidate
+#### Re-signing the opt-in Gemma worker candidate
 
-Desktop releases refuse a risk-accepted Gemma manifest whose `sourceRevision` predates any change
+Desktop releases refuse an opt-in Gemma manifest whose `sourceRevision` predates any change
 to the worker build inputs (`verifySemanticWorkerSource`).
 
 **One command:** on a clean, pushed `main`, run
 `node scripts/resign-gemma-candidate.mjs`. It does steps 2–5 below:
 qualifies the candidate on HEAD, re-runs only flaky failed jobs (bounded), builds and commits the
 manifest, pushes, and publishes the already-qualified run under the same immutable tag. It exits
-early, changing nothing, when the worker build inputs are unchanged. It never renews the risk
-acceptance: `approvedBy` and `approvedAt` carry over from the current manifest, and a model change
-goes through `prepare-risk-accepted-gemma-manifest.mjs` instead. `--tag` overrides the next `semantic-v*` tag; `--qualification-run <id>`
+early when a published candidate already covers the worker inputs. If the manifest was pushed
+but publication did not complete, it retries publication from the recorded run. The model approval carries forward: `approvedBy` and `approvedAt` carry over from the current manifest, and a model change
+goes through `prepare-opt-in-gemma-manifest.mjs` instead. `--tag` overrides the next `semantic-v*` tag; `--qualification-run <id>`
 resumes from a qualification run that already succeeded, including the one a push to `main`
 starts automatically when worker build inputs change (its `semantic-v*-auto.N` tag is taken from
 the candidate, and the candidate may predate HEAD as long as no worker input changed since).
@@ -302,11 +302,11 @@ The manual steps, if the script cannot be used:
 2. Dispatch `release-semantic-components.yml` on `main` with a new immutable `release_tag`
    (for example `semantic-v0.7.1`), `qualify_gemma=true`, and no `qualification_run_id`. Note the run ID.
 3. Download the `semantic-component-candidate-<sha>` artifact and run
-   `node scripts/prepare-risk-accepted-gemma-manifest.mjs <semantic-component-release.json>
-   <model-revision> <approver> <UTC-time> docs/evaluations/semantic-gemma-risk-accepted-v1.json`.
+   `node scripts/prepare-opt-in-gemma-manifest.mjs <semantic-component-release.json>
+   <model-revision> <approver> <UTC-time> docs/evaluations/semantic-gemma-opt-in-v1.json`.
 4. Commit that manifest to `main`, touching no worker build inputs.
 5. Dispatch the same workflow on `main` with the same `release_tag`, `qualification_run_id=<run>`,
-   and `approve_risk_accepted_gemma=true` (needs `SEMANTIC_GEMMA_RISK_ACCEPTED=true`).
+   and `publish_opt_in_gemma=true` (needs `SEMANTIC_RELEASE_QUALIFIED=true`).
 6. Tag the desktop release on a descendant of the new `sourceRevision`.
 
 `SEMANTIC_COMPONENTS_RELEASE_QUALIFIED` gates that publication path.

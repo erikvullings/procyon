@@ -28,8 +28,8 @@
       "signatureSha256": "61ecbf26398e672d1cde727e092159ef06840d86049aca39190834ba66927af8"
     }
   },
-  "riskAcceptedGemma": {
-    "approval": "release-owner-risk-accepted-unqualified",
+  "optInGemma": {
+    "approval": "release-owner-approved-opt-in",
     "candidateDecision": "noGo",
     "qualificationStatus": "not-five-gate-qualified",
     "modelRevision": "914f7f89142e33e77833254d9c9b90c3cef7303b",

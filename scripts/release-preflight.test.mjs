@@ -6,8 +6,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { semanticWorkerChanges } from './check-desktop-gemma-release.mjs';
 import { checkSemanticQualificationWorkflow } from './check-semantic-qualification-workflow.mjs';
-import { riskAcceptedGemmaManifestPath } from './gemma-risk-acceptance.mjs';
-import { prepareRiskAcceptedGemmaManifest } from './prepare-risk-accepted-gemma-manifest.mjs';
+import { optInGemmaManifestPath } from './gemma-opt-in.mjs';
+import { prepareOptInGemmaManifest } from './prepare-opt-in-gemma-manifest.mjs';
 import {
   activeGemmaModes,
   classifyGateFailure,
@@ -21,14 +21,13 @@ import { resolveReleaseTag } from './resign-gemma-candidate.mjs';
 import { planSemanticQualification } from './semantic-qualification-plan.mjs';
 import { autoQualificationTag, nextSemanticTag } from './semantic-release-tags.mjs';
 
-const current = JSON.parse(fs.readFileSync(riskAcceptedGemmaManifestPath, 'utf8'));
+const current = JSON.parse(fs.readFileSync(optInGemmaManifestPath, 'utf8'));
 const goodVars = {
   SEMANTIC_RELEASE_QUALIFIED: 'true',
-  SEMANTIC_GEMMA_RISK_ACCEPTED: 'true',
 };
 
 /**
- * A repository with a worker crate, a worker lock closure and a risk-accepted manifest committed
+ * A repository with a worker crate, a worker lock closure and a opt-in manifest committed
  * on top of the candidate commit, mirroring how the real signed candidate flow lays out history.
  */
 function fixture(context) {
@@ -57,7 +56,7 @@ function fixture(context) {
     'rust-toolchain.toml': '[toolchain]\nchannel = "1.98.1"\n',
     'crates/fm-semantic-worker/src/lib.rs': 'pub fn worker() {}\n',
   });
-  const manifest = prepareRiskAcceptedGemmaManifest(
+  const manifest = prepareOptInGemmaManifest(
     Buffer.from(
       JSON.stringify({
         schemaVersion: 1,
@@ -71,7 +70,7 @@ function fixture(context) {
       }),
     ),
     {
-      modelRevision: current.riskAcceptedGemma.modelRevision,
+      modelRevision: current.optInGemma.modelRevision,
       approvedBy: 'owner',
       approvedAt: '2026-11-16T12:00:00Z',
     },
@@ -89,7 +88,7 @@ function environment(repo, overrides = {}) {
     existingTags: [],
     onOriginMain: true,
     dirty: false,
-    readManifest: (mode) => (mode === 'risk-accepted' ? repo.manifest : undefined),
+    readManifest: (mode) => (mode === 'opt-in' ? repo.manifest : undefined),
     qualificationRuns: [],
     isAncestor: (a, b) => {
       try {
@@ -99,7 +98,7 @@ function environment(repo, overrides = {}) {
         return false;
       }
     },
-    publishedTags: ['semantic-v0.7.8'],
+    isPublished: (tag) => tag === 'semantic-v0.7.8',
     ...overrides,
   };
 }
@@ -121,7 +120,7 @@ test('names the changed worker input and the one-command fix when the candidate 
   repo.commit('bump', { 'Cargo.toml': repo.cargo('0.7.0-2') });
   repo.commit('worker change', { 'crates/fm-semantic-worker/src/lib.rs': 'pub fn x() {}\n' });
   const report = runPreflight(environment(repo));
-  assert.deepEqual(failing(report), ['gemma-risk-accepted']);
+  assert.deepEqual(failing(report), ['gemma-opt-in']);
   const text = formatReport(report);
   assert.match(text, /crates\/fm-semantic-worker\/src\/lib\.rs/u);
   assert.match(text, /fix: node scripts\/resign-gemma-candidate\.mjs /u);
@@ -145,14 +144,16 @@ test('points at an automatic qualification run that already covers the release s
   });
   const report = runPreflight(
     environment(repo, {
+      hasCandidate: (run) => run.databaseId !== 4,
       qualificationRuns: [
         run(1, { event: 'workflow_dispatch' }),
         run(2, { conclusion: 'failure' }),
         run(3),
+        run(4, { createdAt: '2026-11-17T10:00:00Z' }),
       ],
     }),
   );
-  const fix = report.checks.find((check) => check.id === 'gemma-risk-accepted').fix.join('\n');
+  const fix = report.checks.find((check) => check.id === 'gemma-opt-in').fix.join('\n');
   assert.match(fix, /--qualification-run 3\b/u);
 });
 
@@ -178,7 +179,7 @@ test('does not reuse a qualification run whose commit predates a later worker ch
       ],
     }),
   );
-  const fix = report.checks.find((check) => check.id === 'gemma-risk-accepted').fix.join('\n');
+  const fix = report.checks.find((check) => check.id === 'gemma-opt-in').fix.join('\n');
   assert.doesNotMatch(fix, /--qualification-run/u);
 });
 
@@ -199,7 +200,7 @@ test('reports a run still in progress instead of suggesting a new one', () => {
   );
   assert.equal(runs.reusable, undefined);
   assert.equal(runs.pending?.databaseId, 7);
-  assert.match(remedies({ mode: 'risk-accepted', kind: 'worker-changed', runs })[0], /wait for/u);
+  assert.match(remedies({ mode: 'opt-in', kind: 'worker-changed', runs })[0], /wait for/u);
 });
 
 test('rejects a tag that differs from the version, exists, or is not on main', (context) => {
@@ -214,12 +215,16 @@ test('refuses combined Gemma modes and a missing qualification variable', (conte
   const repo = fixture(context);
   const combined = runPreflight(
     environment(repo, {
-      vars: { ...goodVars, SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL: 'true' },
+      vars: {
+        ...goodVars,
+        SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL: 'true',
+        SEMANTIC_GEMMA_NON_EXPERIMENTAL_APPROVED: 'true',
+      },
     }),
   );
   assert.ok(failing(combined).includes('modes'));
   const unqualified = runPreflight(
-    environment(repo, { vars: { SEMANTIC_GEMMA_RISK_ACCEPTED: 'true' } }),
+    environment(repo, { vars: { SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL: 'true' } }),
   );
   assert.ok(failing(unqualified).includes('variables'));
 });
@@ -231,13 +236,19 @@ test('warns, rather than guesses, when GitHub variables cannot be read', (contex
   assert.ok(report.checks.some((check) => check.level === 'warn' && check.id === 'variables'));
 });
 
+test('blocks a current candidate until its component release is published', (context) => {
+  const repo = fixture(context);
+  const report = runPreflight(environment(repo, { isPublished: () => false }));
+  assert.deepEqual(failing(report), ['published-opt-in']);
+  assert.match(report.checks.find((check) => check.id === 'published-opt-in').fix[0], /resign/u);
+});
+
 test('fails an active mode whose manifest is missing', (context) => {
   const repo = fixture(context);
   const report = runPreflight(
     environment(repo, {
       vars: {
         ...goodVars,
-        SEMANTIC_GEMMA_RISK_ACCEPTED: 'false',
         SEMANTIC_GEMMA_DESKTOP_EXPERIMENTAL: 'true',
       },
     }),
@@ -253,7 +264,7 @@ test('parses the workspace version, the active modes and gate failures', () => {
     '1.2.3-4',
   );
   assert.throws(() => workspaceVersion('[workspace]\n'), /not found/u);
-  assert.deepEqual(activeGemmaModes({ SEMANTIC_GEMMA_RISK_ACCEPTED: 'true' }), ['risk-accepted']);
+  assert.deepEqual(activeGemmaModes(goodVars), ['opt-in']);
   assert.deepEqual(activeGemmaModes(undefined), []);
   assert.equal(
     classifyGateFailure('semantic worker build inputs changed after signed candidate:\nx'),
@@ -264,9 +275,7 @@ test('parses the workspace version, the active modes and gate failures', () => {
     'not-ancestor',
   );
   assert.equal(
-    classifyGateFailure(
-      'risk-accepted Gemma desktop requires independent semantic and owner approvals',
-    ),
+    classifyGateFailure('opt-in Gemma desktop requires SEMANTIC_RELEASE_QUALIFIED=true'),
     'variables',
   );
   assert.equal(classifyGateFailure('anything else'), 'manifest');

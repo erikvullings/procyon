@@ -136,9 +136,7 @@ function profileDescription(profile: SemanticProfile): string {
     case 'embeddingGemma2':
       return t(
         'semanticComponents',
-        import.meta.env.VITE_GEMMA_RISK_ACCEPTED === 'true'
-          ? 'gemmaRiskAcceptedDescription'
-          : 'gemmaDescription',
+        import.meta.env.VITE_GEMMA_OPT_IN === 'true' ? 'gemmaOptInDescription' : 'gemmaDescription',
       );
   }
 }

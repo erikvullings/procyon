@@ -8,11 +8,11 @@ import { test } from 'node:test';
 import { createSemanticComponentReleaseManifest } from './create-semantic-component-release-manifest.mjs';
 import { semanticComponentReleasePlan } from './fetch-approved-semantic-catalog.mjs';
 import {
-  checkRiskAcceptedGemmaDesktopRelease,
-  checkRiskAcceptedGemmaRelease,
-  riskAcceptedGemmaLimitations,
-  validateRiskAcceptedGemmaApproval,
-} from './gemma-risk-acceptance.mjs';
+  checkOptInGemmaDesktopRelease,
+  checkOptInGemmaRelease,
+  optInGemmaLimitations,
+  validateOptInGemmaApproval,
+} from './gemma-opt-in.mjs';
 
 const targets = ['linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64'];
 const modelRevision = '9'.repeat(40);
@@ -22,7 +22,7 @@ function sha256(bytes) {
 }
 
 function fixture(context, sourceRevision = '1'.repeat(40)) {
-  const root = mkdtempSync(join(tmpdir(), 'gemma-risk-accepted-'));
+  const root = mkdtempSync(join(tmpdir(), 'gemma-opt-in-'));
   context.after(() => rmSync(root, { recursive: true, force: true }));
   const assets = join(root, 'assets');
   const candidateRoot = join(root, 'candidate');
@@ -91,40 +91,35 @@ function fixture(context, sourceRevision = '1'.repeat(40)) {
     ...candidate,
     schemaVersion: 1,
     decision: 'go',
-    riskAcceptedGemma: {
-      approval: 'release-owner-risk-accepted-unqualified',
+    optInGemma: {
+      approval: 'release-owner-approved-opt-in',
       candidateDecision: candidate.decision,
       qualificationStatus: 'not-five-gate-qualified',
       modelRevision,
       candidateManifestSha256: sha256(candidateBytes),
       approvedBy: 'release-owner',
       approvedAt: '2026-10-18T09:00:00Z',
-      acceptedLimitations: riskAcceptedGemmaLimitations,
+      acceptedLimitations: optInGemmaLimitations,
     },
   };
   return { assets, candidateRoot, candidate, candidateBytes, approval };
 }
 
-test('risk acceptance explicitly records unqualified status and accepted limitations', (context) => {
+test('opt-in approval explicitly records unqualified status and accepted limitations', (context) => {
   const { approval } = fixture(context);
-  assert.equal(
-    validateRiskAcceptedGemmaApproval(approval).qualificationStatus,
-    'not-five-gate-qualified',
-  );
+  assert.equal(validateOptInGemmaApproval(approval).qualificationStatus, 'not-five-gate-qualified');
   for (const mutate of [
     (manifest) => {
-      delete manifest.riskAcceptedGemma;
+      delete manifest.optInGemma;
     },
     (manifest) => {
-      manifest.riskAcceptedGemma.qualificationStatus = 'qualified';
+      manifest.optInGemma.qualificationStatus = 'qualified';
     },
     (manifest) => {
-      manifest.riskAcceptedGemma.acceptedLimitations.pop();
+      manifest.optInGemma.acceptedLimitations.pop();
     },
     (manifest) => {
-      manifest.riskAcceptedGemma.acceptedLimitations.push(
-        manifest.riskAcceptedGemma.acceptedLimitations[0],
-      );
+      manifest.optInGemma.acceptedLimitations.push(manifest.optInGemma.acceptedLimitations[0]);
     },
     (manifest) => {
       manifest.nonExperimentalGemma = {};
@@ -132,21 +127,21 @@ test('risk acceptance explicitly records unqualified status and accepted limitat
   ]) {
     const changed = structuredClone(approval);
     mutate(changed);
-    assert.throws(() => validateRiskAcceptedGemmaApproval(changed), /risk acceptance/u);
+    assert.throws(() => validateOptInGemmaApproval(changed), /opt-in approval/u);
   }
 });
 
-test('risk-accepted catalogs are usable only with the matching explicit manifest', (context) => {
+test('opt-in catalogs are usable only with the matching explicit manifest', (context) => {
   const { approval } = fixture(context);
   assert.equal(
     semanticComponentReleasePlan(approval, 'windows-x86_64').gemmaModelRevision,
     modelRevision,
   );
   const incompleteApproval = structuredClone(approval);
-  incompleteApproval.riskAcceptedGemma.acceptedLimitations.pop();
+  incompleteApproval.optInGemma.acceptedLimitations.pop();
   assert.throws(
     () => semanticComponentReleasePlan(incompleteApproval, 'windows-x86_64'),
-    /risk acceptance/u,
+    /opt-in approval/u,
   );
   const conflictingModes = structuredClone(approval);
   conflictingModes.experimentalGemma = {};
@@ -156,39 +151,24 @@ test('risk-accepted catalogs are usable only with the matching explicit manifest
   );
 });
 
-test('risk-accepted desktop packaging is opt-in and bound to signed targets', (context) => {
+test('opt-in Gemma desktop packaging requires semantic release enablement and a signed target', (context) => {
   const { approval } = fixture(context);
   assert.throws(
-    () =>
-      checkRiskAcceptedGemmaDesktopRelease(
-        approval,
-        'true',
-        'false',
-        'macos-aarch64',
-        '1'.repeat(40),
-      ),
-    /independent semantic and owner approvals/u,
+    () => checkOptInGemmaDesktopRelease(approval, 'false', 'macos-aarch64', '1'.repeat(40)),
+    /requires SEMANTIC_RELEASE_QUALIFIED/u,
   );
   assert.throws(
-    () =>
-      checkRiskAcceptedGemmaDesktopRelease(
-        approval,
-        'true',
-        'true',
-        'macos-universal',
-        '1'.repeat(40),
-      ),
+    () => checkOptInGemmaDesktopRelease(approval, 'true', 'macos-universal', '1'.repeat(40)),
     /not in the signed component release/u,
   );
   assert.throws(
-    () =>
-      checkRiskAcceptedGemmaDesktopRelease(approval, 'true', 'true', 'macos-aarch64', 'invalid'),
+    () => checkOptInGemmaDesktopRelease(approval, 'true', 'macos-aarch64', 'invalid'),
     /desktop release source/u,
   );
 });
 
-test('risk-accepted desktop source must preserve the signed worker inputs', (context) => {
-  const repositoryRoot = mkdtempSync(join(tmpdir(), 'gemma-risk-source-'));
+test('opt-in desktop source must preserve the signed worker inputs', (context) => {
+  const repositoryRoot = mkdtempSync(join(tmpdir(), 'gemma-opt-in-source-'));
   context.after(() => rmSync(repositoryRoot, { recursive: true, force: true }));
   execFileSync('git', ['init', '-q'], { cwd: repositoryRoot });
   execFileSync('git', ['config', 'user.email', 'test@example.invalid'], { cwd: repositoryRoot });
@@ -215,9 +195,8 @@ test('risk-accepted desktop source must preserve the signed worker inputs', (con
     encoding: 'utf8',
   }).trim();
   assert.doesNotThrow(() =>
-    checkRiskAcceptedGemmaDesktopRelease(
+    checkOptInGemmaDesktopRelease(
       approval,
-      'true',
       'true',
       'macos-aarch64',
       releaseRevision,
@@ -225,9 +204,8 @@ test('risk-accepted desktop source must preserve the signed worker inputs', (con
     ),
   );
   assert.doesNotThrow(() =>
-    checkRiskAcceptedGemmaDesktopRelease(
+    checkOptInGemmaDesktopRelease(
       approval,
-      'true',
       'true',
       'windows-x86_64',
       releaseRevision,
@@ -247,9 +225,8 @@ test('risk-accepted desktop source must preserve the signed worker inputs', (con
   }).trim();
   assert.throws(
     () =>
-      checkRiskAcceptedGemmaDesktopRelease(
+      checkOptInGemmaDesktopRelease(
         approval,
-        'true',
         'true',
         'macos-aarch64',
         changedWorkerRevision,
@@ -259,24 +236,24 @@ test('risk-accepted desktop source must preserve the signed worker inputs', (con
   );
 });
 
-test('risk acceptance approves only the exact candidate manifest, run, tag, source, and targets', (context) => {
+test('opt-in approval approves only the exact candidate manifest, run, tag, source, and targets', (context) => {
   const { assets, candidateRoot, candidate, candidateBytes, approval } = fixture(context);
-  assert.deepEqual(
-    checkRiskAcceptedGemmaRelease(assets, candidateRoot, approval, 42, 'semantic-v1'),
-    { releaseTag: 'semantic-v1', sourceRevision: candidate.sourceRevision },
-  );
+  assert.deepEqual(checkOptInGemmaRelease(assets, candidateRoot, approval, 42, 'semantic-v1'), {
+    releaseTag: 'semantic-v1',
+    sourceRevision: candidate.sourceRevision,
+  });
 
   const signaturePath = join(assets, 'semantic-catalog-linux-aarch64.sig');
   writeFileSync(signaturePath, 'changed signature');
   assert.throws(
-    () => checkRiskAcceptedGemmaRelease(assets, candidateRoot, approval, 42, 'semantic-v1'),
+    () => checkOptInGemmaRelease(assets, candidateRoot, approval, 42, 'semantic-v1'),
     /signature SHA-256 does not match approval/u,
   );
   writeFileSync(signaturePath, 'signature-linux-aarch64');
   const payloadPath = join(assets, 'embeddinggemma2-original.bin');
   writeFileSync(payloadPath, 'tampered model');
   assert.throws(
-    () => checkRiskAcceptedGemmaRelease(assets, candidateRoot, approval, 42, 'semantic-v1'),
+    () => checkOptInGemmaRelease(assets, candidateRoot, approval, 42, 'semantic-v1'),
     /payload embeddinggemma2-original\.bin SHA-256 does not match catalog/u,
   );
   writeFileSync(payloadPath, 'model.safetensors');
@@ -287,12 +264,12 @@ test('risk acceptance approves only the exact candidate manifest, run, tag, sour
     `${JSON.stringify(tamperedCandidate, null, 2)}\n`,
   );
   assert.throws(
-    () => checkRiskAcceptedGemmaRelease(assets, candidateRoot, approval, 42, 'semantic-v1'),
+    () => checkOptInGemmaRelease(assets, candidateRoot, approval, 42, 'semantic-v1'),
     /exact new signed candidate/u,
   );
   writeFileSync(join(candidateRoot, 'semantic-component-release.json'), candidateBytes);
   assert.throws(
-    () => checkRiskAcceptedGemmaRelease(assets, candidateRoot, approval, 43, 'semantic-v1'),
+    () => checkOptInGemmaRelease(assets, candidateRoot, approval, 43, 'semantic-v1'),
     /exact new signed candidate/u,
   );
 });

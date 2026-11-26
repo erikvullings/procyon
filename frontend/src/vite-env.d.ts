@@ -13,7 +13,7 @@
 interface ImportMetaEnv {
   readonly VITE_RUNTIME?: string;
   readonly VITE_API_BASE_URL?: string;
-  readonly VITE_GEMMA_RISK_ACCEPTED?: string;
+  readonly VITE_GEMMA_OPT_IN?: string;
   readonly VITE_GEMMA_QUALIFIED?: string;
 }
 
