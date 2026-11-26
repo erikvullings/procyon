@@ -5,11 +5,24 @@ export const CHAT_IMAGE_MAX_EDGE = 1024;
 
 /** Most images sent with one message. */
 export const CHAT_IMAGE_MAX_COUNT = 4;
+export const CHAT_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
+
+/** Read file items synchronously while the clipboard data is available. */
+export function pastedImageFiles(
+  items: ArrayLike<Pick<DataTransferItem, 'kind' | 'type' | 'getAsFile'>>,
+): File[] {
+  return Array.from(items).flatMap((item) => {
+    if (item.kind !== 'file' || !item.type.startsWith('image/')) return [];
+    const file = item.getAsFile();
+    return file === null ? [] : [file];
+  });
+}
 
 /** An image ready to send: `data` is base64 JPEG without a prefix; `previewUrl` is its data URL. */
 export interface PastedImage {
   readonly id: string;
   readonly data: string;
+  readonly mediaType: 'image/jpeg';
   readonly previewUrl: string;
 }
 
@@ -30,6 +43,9 @@ export function fitWithin(
 
 /** Decodes a pasted image, shrinks it to fit the edge limit and encodes it as JPEG. Browser only. */
 export async function encodePastedImage(blob: Blob, id: string): Promise<PastedImage> {
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(blob.type)) {
+    throw new Error('unsupported image format');
+  }
   const bitmap = await createImageBitmap(blob);
   try {
     const size = fitWithin(bitmap.width, bitmap.height);
@@ -42,8 +58,11 @@ export async function encodePastedImage(blob: Blob, id: string): Promise<PastedI
     context.fillStyle = 'white';
     context.fillRect(0, 0, size.width, size.height);
     context.drawImage(bitmap, 0, 0, size.width, size.height);
-    const previewUrl = canvas.toDataURL('image/jpeg', 0.9);
-    return { id, data: previewUrl.slice(previewUrl.indexOf(',') + 1), previewUrl };
+    const mediaType = 'image/jpeg';
+    const previewUrl = canvas.toDataURL(mediaType, 0.9);
+    const prefix = `data:${mediaType};base64,`;
+    if (!previewUrl.startsWith(prefix)) throw new Error('canvas did not encode a JPEG');
+    return { id, data: previewUrl.slice(prefix.length), mediaType, previewUrl };
   } finally {
     bitmap.close();
   }

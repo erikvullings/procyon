@@ -4,9 +4,14 @@
  */
 
 /**
- * One image sent with a chat message. The format is detected from the bytes (PNG, JPEG or WebP).
+ * One PNG, JPEG or WebP image sent with a chat message.
  */
 export interface ChatImageDto {
   /** The encoded image, base64 without a data-URL prefix. */
   data: string;
+  /**
+     * The declared MIME type. Older clients may omit it and let the server detect it.
+     * @nullable
+     */
+  mediaType?: string | null;
 }

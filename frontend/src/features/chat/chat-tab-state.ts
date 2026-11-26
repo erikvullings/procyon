@@ -6,7 +6,7 @@ import type {
   TabId,
   ThinkingEffort,
 } from '../../models';
-import type { PastedImage } from './chat-image';
+import { CHAT_IMAGE_MAX_COUNT, type PastedImage } from './chat-image';
 
 /** Read-only material the person attached to the next message. `text` is exactly what is sent. */
 export interface ChatAttachment {
@@ -30,6 +30,7 @@ export interface ChatTabEntry {
   attachments: ChatAttachment[];
   /** Images pasted for the next message; sent with it, never saved in the conversation. */
   images: PastedImage[];
+  pendingImagePastes?: number | undefined;
   /**
    * Whether the model may look into the folder pane's folder, the notes and the skills with
    * read-only tools (task 0339). Off until the person turns it on: what it reads goes to the chat
@@ -113,6 +114,8 @@ export function expandPastes(draft: string, pastes: readonly PastedText[]): stri
 export function canSendMessage(entry: ChatTabEntry, draft: string): boolean {
   return (
     draft.trim() !== '' &&
+    !entry.pendingImagePastes &&
+    entry.images.length <= CHAT_IMAGE_MAX_COUNT &&
     entry.conversationId !== undefined &&
     entry.pendingRequestId === undefined
   );

@@ -126,10 +126,13 @@ pub struct ChatReplyRequestDto {
     pub thinking: Option<crate::ThinkingEffortDto>,
 }
 
-/// One image sent with a chat message. The format is detected from the bytes (PNG, JPEG or WebP).
+/// One PNG, JPEG or WebP image sent with a chat message.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatImageDto {
+    /// The declared MIME type. Older clients may omit it and let the server detect it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_type: Option<String>,
     /// The encoded image, base64 without a data-URL prefix.
     pub data: String,
 }

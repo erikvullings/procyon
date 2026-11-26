@@ -1,6 +1,6 @@
 # 0329 Paste images into the chat
 
-Status: implemented (uncommitted); browser check of the paste chip still open
+Status: implemented; verified in the browser with a mock endpoint
 Priority: low
 Subsystem: backend, frontend
 Depends on: 0324, 0325
@@ -24,14 +24,13 @@ for the viewer.
 
 ## Plan
 - **Backend DTO:** `ChatReplyRequestDto` gains `images: Vec<ChatImageDto>` (`media_type`, base64
-  `data`), serde default empty. Limits: at most 4 images, PNG/JPEG/WebP only, each at most 1024 px on
-  its long side after the client resize, total bytes bounded. Validate in `validate_message` beside the
-  text limits. Reject with a typed failure, never truncate silently.
+  `data`), serde default empty. Older clients may omit the media type. Limits: at most four PNG,
+  JPEG or WebP images, each at most 1024 px on its long side, with a 4 MiB decoded total. The chat
+  service validates attachments alongside the message and returns a typed failure on rejection.
 - **Capability exposure:** the profile or role response reports whether the chat endpoint accepts
-  images (Ollama `vision` after a model probe, or the person's switch), so the frontend knows before the
-  person pastes.
+  images through the profile's Vision setting. The composer starts reading it on focus.
 - **Service:** `chat.rs` passes the images into `LlmChatGeneration.images` on the user prompt; the
-  request and the saved message carry them only as decided in point 3.
+  images remain available throughout that reply, including tool calls. The saved transcript keeps text.
 - **OpenAPI:** regenerate with `pnpm api:export` and `pnpm api:generate`; `pnpm api:check` must pass.
 - **Frontend paste:** in the composer's `onpaste`, read `clipboardData.items` for `image/*` when the
   chat endpoint accepts images, resize on a canvas to 1024 px, encode as JPEG or PNG, and add a chip

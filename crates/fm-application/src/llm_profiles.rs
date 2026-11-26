@@ -2167,6 +2167,12 @@ impl LlmProfileService {
             model: resolved.model,
             ..resolved.profile
         };
+        if role == LlmRole::Chat
+            && !generation.images.is_empty()
+            && !profile.capabilities.contains(&LlmApiCapability::Vision)
+        {
+            return Err(LlmProfileError::InvalidConfiguration);
+        }
         let effort = generation.thinking.effort(resolved.thinking);
         self.generate_profile_streamed(profile, generation, effort, cancellation, on_delta)
             .await
@@ -2388,26 +2394,13 @@ impl LlmProfileService {
         let _ = self.persist(&document);
     }
 
-    /// Whether the role's resolved model reads images. Ollama reports vision per model, so it is
-    /// asked; other endpoints disclose nothing reliable, so the person's `Vision` switch decides.
-    pub(crate) async fn role_accepts_images(&self, role: LlmRole) -> Result<bool, LlmProfileError> {
+    /// Whether the profile assigned to the role has vision enabled in Settings.
+    pub(crate) fn role_accepts_images(&self, role: LlmRole) -> Result<bool, LlmProfileError> {
         let resolved = self.resolve_role(role)?;
-        let profile = LlmProfile {
-            model: resolved.model,
-            ..resolved.profile
-        };
-        let endpoint = normalize_endpoint(&profile.base_url)?;
-        self.enforce_policy(&endpoint, profile.advanced.tls_policy)?;
-        let request = self.probe_request(&profile).await?;
-        if request.ollama_generation_url.is_some() {
-            let cancellation = CancellationToken::new();
-            return Ok(self
-                .transport
-                .model_capabilities(&request, &cancellation)
-                .await?
-                .vision);
-        }
-        Ok(profile.capabilities.contains(&LlmApiCapability::Vision))
+        Ok(resolved
+            .profile
+            .capabilities
+            .contains(&LlmApiCapability::Vision))
     }
 
     /// Whether chat requests for `role` carry native tools: the probe found the model takes them.

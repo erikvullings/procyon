@@ -18,6 +18,7 @@ mod state;
 use std::sync::Arc;
 
 use axum::Router;
+use axum::extract::DefaultBodyLimit;
 use axum::http::{HeaderName, HeaderValue, Method};
 use fm_application::FileManagerService;
 use fm_events::EventBus;
@@ -434,7 +435,12 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(routes::chat::rename_chat_conversation))
         .routes(utoipa_axum::routes!(routes::chat::delete_chat_conversation))
         .routes(utoipa_axum::routes!(routes::chat::fork_chat_conversation))
-        .routes(utoipa_axum::routes!(routes::chat::stream_chat_reply))
+        .merge(
+            OpenApiRouter::new()
+                .routes(utoipa_axum::routes!(routes::chat::stream_chat_reply))
+                // The image budget is 4 MiB decoded. Allow its base64 and the text fields.
+                .layer(DefaultBodyLimit::max(6 * 1024 * 1024)),
+        )
         .routes(utoipa_axum::routes!(routes::chat::cancel_chat_reply))
         .routes(utoipa_axum::routes!(
             routes::image_prompts::list_image_prompts,

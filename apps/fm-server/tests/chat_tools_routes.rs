@@ -52,6 +52,10 @@ async fn reply_events(server: &TestServer, tools_folder: Option<String>) -> Vec<
         "content": "What is in a.txt?",
         "toolsFolder": tools_folder,
     });
+    stream_events(server, body).await
+}
+
+async fn stream_events(server: &TestServer, body: Value) -> Vec<Value> {
     let response = reqwest::Client::new()
         .post(format!("{}/api/v1/chat/reply/stream", server.base_url))
         .json(&body)
@@ -71,6 +75,24 @@ fn failure_of(events: &[Value]) -> Option<&str> {
         .iter()
         .find(|event| event["type"] == "failed")
         .and_then(|event| event["reason"].as_str())
+}
+
+#[tokio::test]
+async fn large_image_requests_reach_shared_validation() {
+    let server = spawn(vec![]).await;
+    let events = stream_events(
+        &server,
+        json!({
+            "requestId": Uuid::new_v4(),
+            "workspaceId": Uuid::new_v4(),
+            "conversationId": Uuid::new_v4(),
+            "content": "What is in this image?",
+            "images": [{ "mediaType": "image/png", "data": "A".repeat(3 * 1024 * 1024) }],
+        }),
+    )
+    .await;
+
+    assert_eq!(failure_of(&events), Some("invalidRequest"));
 }
 
 #[tokio::test]

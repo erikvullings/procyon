@@ -239,8 +239,8 @@ impl<G: ChatGenerator> TurnHost for ChatTurn<'_, G> {
                     tools: self.tools.clone(),
                     system_prompt: self.system_prompt.clone(),
                     user_prompt,
-                    // Images belong to the person's message, so they are sent once.
-                    images: std::mem::take(&mut self.images),
+                    // Each provider call sees the current message, including its images.
+                    images: self.images.clone(),
                     maximum_tokens: None,
                     context_window: None,
                     temperature: None,

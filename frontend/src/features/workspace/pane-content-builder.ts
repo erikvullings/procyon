@@ -243,6 +243,7 @@ export interface PaneContentContext {
     attachSelection(key: string): ChatAttachment | undefined;
     attachFileContents(key: string): void;
     detach(key: string, attachmentId: string): void;
+    prepareImagePaste(): void;
     /** Adds pasted image files to the next message when the chat endpoint accepts images. */
     pasteImages(key: string, files: Blob[]): void;
     removeImage(key: string, imageId: string): void;
@@ -1304,6 +1305,7 @@ export function createPaneContentBuilder(
                 onDetach: (attachmentId: string) =>
                   context.chatActions?.detach(chat.key, attachmentId),
                 images: chat.images,
+                onPrepareImagePaste: () => context.chatActions?.prepareImagePaste(),
                 onPasteImages: (files: Blob[]) => context.chatActions?.pasteImages(chat.key, files),
                 onRemoveImage: (imageId: string) =>
                   context.chatActions?.removeImage(chat.key, imageId),

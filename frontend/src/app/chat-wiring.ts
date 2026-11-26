@@ -10,6 +10,7 @@ import {
   selectionAttachment,
 } from '../features/chat/chat-context';
 import {
+  CHAT_IMAGE_MAX_BYTES,
   CHAT_IMAGE_MAX_COUNT,
   encodePastedImage,
   type PastedImage,
@@ -34,6 +35,16 @@ export interface ChatCore {
 
 /** Opens, drives and closes the chat tabs (task 0324). Replies never prompt for consent. */
 export function createChatWiring(shellState: ShellState, core: ChatCore) {
+  const preparedImageCapability = new WeakMap<FileManagerClient, Promise<boolean | undefined>>();
+
+  /** Start checking vision before the paste. Consume the result once so later pastes refresh it. */
+  function prepareImagePaste(client: FileManagerClient): void {
+    preparedImageCapability.set(
+      client,
+      chatAcceptsImages(client).catch(() => undefined),
+    );
+  }
+
   function entryOf(key: string): ChatTabEntry | undefined {
     return shellState.chatByTab.get(key);
   }
@@ -257,7 +268,12 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
   async function retry(client: FileManagerClient, key: string): Promise<void> {
     const entry = entryOf(key);
     if (entry === undefined || entry.pendingRequestId !== undefined) return;
-    if (entry.conversationId === undefined || !lastIsPersonsMessage(entry)) return;
+    if (
+      entry.conversationId === undefined ||
+      entry.pendingImagePastes ||
+      !lastIsPersonsMessage(entry)
+    )
+      return;
     await streamReply(client, key, { content: '', context: undefined, retry: true });
   }
 
@@ -304,7 +320,9 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
           ...(entry.thinking === undefined ? {} : { thinking: entry.thinking }),
           // Reading public pages is on unless the setting turns it off (task 0363).
           ...((shellState.currentSettings?.assistantWebAccess ?? true) ? { allowWeb: true } : {}),
-          ...(images.length > 0 ? { images: images.map(({ data }) => ({ data })) } : {}),
+          ...(images.length > 0
+            ? { images: images.map(({ data, mediaType }) => ({ data, mediaType })) }
+            : {}),
         },
         (event) => {
           if (!isCurrent()) return;
@@ -486,25 +504,46 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
   /** Adds pasted images to the next message, when the chat endpoint accepts them. */
   async function pasteImages(client: FileManagerClient, key: string, files: Blob[]): Promise<void> {
     const entry = entryOf(key);
-    if (entry === undefined || files.length === 0) return;
-    if (!(await chatAcceptsImages(client))) {
-      toast({ html: t('chat', 'imagesNotSupported') });
-      return;
-    }
-    if (entry.images.length + files.length > CHAT_IMAGE_MAX_COUNT) {
-      toast({ html: t('chat', 'imageLimit') });
-      return;
-    }
+    if (entry === undefined || files.length === 0 || entry.pendingRequestId !== undefined) return;
+    const conversationId = entry.conversationId;
     try {
+      entry.pendingImagePastes = (entry.pendingImagePastes ?? 0) + 1;
+      const prepared = preparedImageCapability.get(client);
+      preparedImageCapability.delete(client);
+      if (!((await prepared) ?? (await chatAcceptsImages(client)))) {
+        toast({ html: t('chat', 'imagesNotSupported') });
+        return;
+      }
+      if (entry.images.length + files.length > CHAT_IMAGE_MAX_COUNT) {
+        toast({ html: t('chat', 'imageLimit') });
+        return;
+      }
       const encoded: PastedImage[] = [];
       for (const file of files) {
         encoded.push(await encodePastedImage(file, crypto.randomUUID()));
       }
-      entry.images = [...entry.images, ...encoded];
+      if (entryOf(key) !== entry || entry.conversationId !== conversationId) return;
+      // Another paste may have finished decoding in the meantime.
+      const images = [...entry.images, ...encoded];
+      if (images.length > CHAT_IMAGE_MAX_COUNT) {
+        toast({ html: t('chat', 'imageLimit') });
+        return;
+      }
+      const bytes = images.reduce((total, { data }) => {
+        const padding = data.endsWith('==') ? 2 : Number(data.endsWith('='));
+        return total + (data.length * 3) / 4 - padding;
+      }, 0);
+      if (bytes > CHAT_IMAGE_MAX_BYTES) {
+        toast({ html: t('chat', 'contextTooLarge') });
+        return;
+      }
+      entry.images = images;
     } catch {
       toast({ html: t('chat', 'imageFailed') });
+    } finally {
+      entry.pendingImagePastes = (entry.pendingImagePastes ?? 1) - 1;
+      m.redraw();
     }
-    m.redraw();
   }
 
   function removeImage(key: string, imageId: string): void {
@@ -586,8 +625,8 @@ export function createChatWiring(shellState: ShellState, core: ChatCore) {
     attachFileContents: (client: FileManagerClient, key: string) =>
       void attachFileContents(client, key),
     detach,
-    pasteImages: (client: FileManagerClient, key: string, files: Blob[]) =>
-      void pasteImages(client, key, files),
+    prepareImagePaste,
+    pasteImages,
     removeImage,
     folderAvailable,
     folderSelection,

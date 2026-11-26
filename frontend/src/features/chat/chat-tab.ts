@@ -22,7 +22,7 @@ import type { ChatConversationSummary, ThinkingEffort } from '../../models';
 import { isThinkingEffort, THINKING_EFFORTS } from '../../models/llm-profile';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
 import { thinkingLabel } from '../settings/llm-role-management';
-import type { PastedImage } from './chat-image';
+import { CHAT_IMAGE_MAX_COUNT, type PastedImage, pastedImageFiles } from './chat-image';
 import {
   type ChatAttachment,
   type ChatTabEntry,
@@ -72,6 +72,7 @@ export interface ChatTabAttrs {
   readonly onDetach: (attachmentId: string) => void;
   /** Images pasted for the next message. */
   readonly images: readonly PastedImage[];
+  readonly onPrepareImagePaste: () => void;
   readonly onPasteImages: (files: Blob[]) => void;
   readonly onRemoveImage: (imageId: string) => void;
   /** Opens the AI settings, where consent and roles are set; absent when Settings is unavailable. */
@@ -433,7 +434,11 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
                   !pending && lastIsPersons(entry)
                     ? m(
                         'button.btn-flat.fm-chat-chrome.fm-chat-retry',
-                        { type: 'button', onclick: () => attrs.onRetry() },
+                        {
+                          type: 'button',
+                          disabled: !!entry.pendingImagePastes,
+                          onclick: () => attrs.onRetry(),
+                        },
                         [refreshIcon({ size: 14 }), m('span', t('chat', 'retry'))],
                       )
                     : undefined,
@@ -481,6 +486,13 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
                           ),
                         ]),
                       ),
+                      attrs.images.length === 0
+                        ? undefined
+                        : m(
+                            '.fm-chat-pill-label',
+                            { role: 'listitem' },
+                            `${attrs.images.length}/${CHAT_IMAGE_MAX_COUNT}`,
+                          ),
                       ...entry.attachments.map((attachment) =>
                         m('.fm-chat-pill', { role: 'listitem' }, [
                           m('span.fm-chat-pill-label', attachment.label),
@@ -508,6 +520,7 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
                       caretAfterRedraw = undefined;
                       (dom as HTMLTextAreaElement).setSelectionRange(caret, caret);
                     },
+                    onfocus: () => attrs.onPrepareImagePaste(),
                     oninput: (event: Event) => {
                       draft = (event.target as HTMLTextAreaElement).value;
                     },
@@ -521,11 +534,9 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
                     // in place of the placeholder. Pasted images and other data keep the default.
                     onpaste: (event: ClipboardEvent) => {
                       // Pasted images go to the next message, when the chat endpoint accepts them.
-                      const images = Array.from(event.clipboardData?.files ?? []).filter((file) =>
-                        file.type.startsWith('image/'),
-                      );
+                      const images = pastedImageFiles(event.clipboardData?.items ?? []);
                       if (images.length > 0) {
-                        event.preventDefault();
+                        // Leave native paste available, including for mixed text/image clipboards.
                         attrs.onPasteImages(images);
                         return;
                       }

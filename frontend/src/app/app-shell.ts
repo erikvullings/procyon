@@ -2736,6 +2736,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       attachSelection: (key) => chatWiring.attachSelection(key),
       attachFileContents: (key) => chatWiring.attachFileContents(shellState.client, key),
       detach: (key, id) => chatWiring.detach(key, id),
+      prepareImagePaste: () => chatWiring.prepareImagePaste(shellState.client),
       pasteImages: (key, files) => void chatWiring.pasteImages(shellState.client, key, files),
       removeImage: (key, id) => chatWiring.removeImage(key, id),
     },
