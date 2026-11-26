@@ -1313,6 +1313,8 @@ export const it = {
     attachSelection: 'Allega selezione',
     attachFileContents: 'Allega contenuto del file',
     lookInFolder: 'Lascia che l’assistente consulti',
+    lookThingsUpHint:
+      'Consente all’assistente di leggere questa cartella, le tue note e competenze, e pagine web',
     steps: 'Consultato',
     oneFileOnly: 'Seleziona un solo file per allegarne il contenuto.',
     fileTooLarge: 'Il file selezionato è troppo grande per essere allegato.',

@@ -298,6 +298,15 @@ impl ChatService {
                     transcript: prompts,
                     images,
                     allow_web: request.allow_web,
+                    // Only what the person typed, never attached context: a page or file could
+                    // name any host (task 0365).
+                    named_hosts: crate::agent_host::named_hosts(
+                        saved
+                            .messages
+                            .iter()
+                            .filter(|message| message.role == ChatRole::User)
+                            .map(|message| message.content.as_str()),
+                    ),
                     thinking,
                     cancellation: &cancellation,
                 };

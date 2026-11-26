@@ -1333,6 +1333,8 @@ export const de = {
     attachSelection: 'Auswahl anhängen',
     attachFileContents: 'Dateiinhalt anhängen',
     lookInFolder: 'Assistent darf nachschlagen',
+    lookThingsUpHint:
+      'Lässt den Assistenten diesen Ordner, deine Notizen und Skills sowie Webseiten lesen',
     steps: 'Nachgeschlagen',
     oneFileOnly: 'Wähle genau eine Datei, um ihren Inhalt anzuhängen.',
     fileTooLarge: 'Die ausgewählte Datei ist zu groß zum Anhängen.',

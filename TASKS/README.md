@@ -603,3 +603,4 @@ subtask block (0299–0303) and the earlier corpus-themes follow-ups.
 - [x] 0362 Learn a model's thinking controls from its served chat template *(backend, llm, frontend — minijinja analysis of oMLX templates, learned list per endpoint and model, origin in Settings; needs 0361)*
 - [x] 0363 Read-only web_fetch tool for the assistants *(backend, agent — no prompt per fetch: step lines, one setting, no private addresses, exfiltration guard; browsing stays with skills)*
 - [x] 0364 Command approvals that explain what the command does *(frontend, backend, agent — model's explanation plus Procyon's own effects summary of shell lines and scripts; read-only scripts run without asking)*
+- [x] 0365 "Look things up" toggle, and local pages the person names *(frontend, backend, agent — tooltip; local hosts read only when named in the person's own words, metadata never; needs 0363)*

@@ -1321,6 +1321,8 @@ export const fr = {
     attachSelection: 'Joindre la sélection',
     attachFileContents: 'Joindre le contenu du fichier',
     lookInFolder: 'Laisser l’assistant consulter',
+    lookThingsUpHint:
+      'Permet à l’assistant de lire ce dossier, vos notes et compétences, et des pages web',
     steps: 'Consulté',
     oneFileOnly: 'Sélectionnez un seul fichier pour joindre son contenu.',
     fileTooLarge: 'Le fichier sélectionné est trop volumineux pour être joint.',

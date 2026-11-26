@@ -1313,6 +1313,8 @@ export const pl = {
     attachSelection: 'Dołącz zaznaczenie',
     attachFileContents: 'Dołącz zawartość pliku',
     lookInFolder: 'Pozwól asystentowi sprawdzać',
+    lookThingsUpHint:
+      'Pozwala asystentowi czytać ten folder, twoje notatki i umiejętności oraz strony internetowe',
     steps: 'Sprawdzono',
     oneFileOnly: 'Zaznacz jeden plik, aby dołączyć jego zawartość.',
     fileTooLarge: 'Wybrany plik jest za duży, aby go dołączyć.',

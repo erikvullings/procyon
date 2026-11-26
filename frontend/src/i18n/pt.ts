@@ -1318,6 +1318,8 @@ export const pt = {
     attachSelection: 'Anexar seleção',
     attachFileContents: 'Anexar conteúdo do ficheiro',
     lookInFolder: 'Deixar o assistente consultar',
+    lookThingsUpHint:
+      'Permite ao assistente ler esta pasta, as suas notas e competências, e páginas web',
     steps: 'Consultado',
     oneFileOnly: 'Selecione um único ficheiro para anexar o conteúdo.',
     fileTooLarge: 'O ficheiro selecionado é demasiado grande para o anexar.',

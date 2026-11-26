@@ -1317,6 +1317,8 @@ export const es = {
     attachSelection: 'Adjuntar selección',
     attachFileContents: 'Adjuntar contenido del archivo',
     lookInFolder: 'Dejar que el asistente consulte',
+    lookThingsUpHint:
+      'Permite al asistente leer esta carpeta, tus notas y habilidades, y páginas web',
     steps: 'Consultado',
     oneFileOnly: 'Selecciona un solo archivo para adjuntar su contenido.',
     fileTooLarge: 'El archivo seleccionado es demasiado grande para adjuntarlo.',

@@ -1,7 +1,10 @@
 //! Reads web pages for `web_fetch` (task 0363). GET only, no cookies, no credentials, no proxy;
-//! every host is resolved first and refused unless all its addresses are public, and the
-//! connection goes to exactly the addresses that were checked, on every redirect. So a page can
-//! never steer the assistant into this machine, the local network or a cloud metadata endpoint.
+//! every host is resolved first, and the connection goes to exactly the addresses that were
+//! checked, on every redirect.
+//!
+//! Public hosts are read freely. A host on this machine or the local network is read only when
+//! the person named it in a message they typed (task 0365): a page or file the model read cannot
+//! steer it into a local service. Link-local addresses and cloud metadata hosts are never read.
 //!
 //! HTML becomes readable Markdown (`dom_smoothie`, hidden text left out); plain text, JSON and
 //! Markdown are read as they are; a PDF is read like a document in a folder.
@@ -29,15 +32,114 @@ const USER_AGENT: &str = "Procyon/web_fetch (reads one page for a person's assis
 /// Reads web pages; PDFs go through the folder tools' document reading.
 pub(crate) struct WebReader {
     providers: ProviderRegistry,
+    /// Local hosts the person named, which may be read.
+    named: Vec<NamedHost>,
 }
 
 impl WebReader {
     pub(crate) fn new(providers: &ProviderRegistry) -> Self {
         Self {
             providers: providers.clone(),
+            named: Vec::new(),
+        }
+    }
+
+    /// Also reads the local hosts the person named.
+    pub(crate) fn allowing(mut self, named: Vec<NamedHost>) -> Self {
+        self.named = named;
+        self
+    }
+
+    fn named(&self, url: &Url) -> bool {
+        let Some(host) = url.host_str() else {
+            return false;
+        };
+        let host = host.trim_matches(['[', ']']).to_ascii_lowercase();
+        let port = url.port_or_known_default();
+        self.named
+            .iter()
+            .any(|named| named.host == host && named.port.is_none_or(|wanted| Some(wanted) == port))
+    }
+}
+
+/// A host the person named in a message, with the port they gave (any port when they gave none).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct NamedHost {
+    host: String,
+    port: Option<u16>,
+}
+
+/// Host names that only make sense on a local network.
+const LOCAL_SUFFIXES: &[&str] = &[".local", ".lan", ".home.arpa", ".localhost"];
+
+/// The hosts named in `texts` (what the person typed): URLs, and bare `localhost`, IP addresses
+/// and local names, with a port when one follows. Only the person's own words should be passed:
+/// a page or file could name any host.
+pub(crate) fn named_hosts<'a>(texts: impl IntoIterator<Item = &'a str>) -> Vec<NamedHost> {
+    let mut hosts = Vec::new();
+    for text in texts {
+        for word in text.split_whitespace() {
+            let word = word.trim_matches(|c: char| {
+                matches!(
+                    c,
+                    '(' | ')' | '<' | '>' | '"' | '\'' | '`' | ',' | ';' | '!' | '?'
+                )
+            });
+            let word = word.trim_end_matches('.');
+            let url = if word.starts_with("http://") || word.starts_with("https://") {
+                Url::parse(word).ok()
+            } else {
+                Url::parse(&format!("http://{word}"))
+                    .ok()
+                    .filter(looks_local)
+            };
+            let Some(url) = url else {
+                continue;
+            };
+            let Some(host) = url.host_str() else {
+                continue;
+            };
+            let named = NamedHost {
+                host: host.trim_matches(['[', ']']).to_ascii_lowercase(),
+                port: url.port(),
+            };
+            if !hosts.contains(&named) {
+                hosts.push(named);
+            }
+        }
+    }
+    hosts
+}
+
+/// Whether a bare word (read as `http://word`) names a local host.
+fn looks_local(url: &Url) -> bool {
+    match url.host() {
+        Some(Host::Ipv4(ip)) => !is_public(IpAddr::V4(ip)),
+        Some(Host::Ipv6(ip)) => !is_public(IpAddr::V6(ip)),
+        Some(Host::Domain(name)) => {
+            let name = name.to_ascii_lowercase();
+            name == "localhost" || LOCAL_SUFFIXES.iter().any(|suffix| name.ends_with(suffix))
+        }
+        None => false,
+    }
+}
+
+/// Addresses that hold cloud instance metadata, or are link-local: never read, named or not.
+fn is_metadata(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => v4.is_link_local() || v4.octets() == [100, 100, 100, 200],
+        IpAddr::V6(v6) => {
+            (v6.segments()[0] & 0xffc0) == 0xfe80
+                || v6.segments() == [0xfd00, 0x0ec2, 0, 0, 0, 0, 0, 0x0254]
+                || v6
+                    .to_ipv4_mapped()
+                    .is_some_and(|v4| is_metadata(IpAddr::V4(v4)))
         }
     }
 }
+
+/// Host names of cloud metadata services.
+const METADATA_HOSTS: &[&str] = &["metadata.google.internal", "metadata", "instance-data"];
 
 /// Whether `ip` belongs to the public internet: not this machine, a private or shared network,
 /// link-local (cloud metadata lives there), multicast, documentation or reserved ranges.
@@ -73,15 +175,20 @@ pub(crate) fn is_public(ip: IpAddr) -> bool {
     }
 }
 
-/// The public addresses of `url`'s host, or why it is refused.
-async fn public_addresses(url: &Url) -> Result<Vec<SocketAddr>, WebError> {
+/// The addresses of `url`'s host, and whether they are public. A local host must have been named
+/// by the person; link-local and metadata hosts are refused whatever was named.
+async fn checked_addresses(
+    url: &Url,
+    named: impl Fn(&Url) -> bool,
+) -> Result<(Vec<SocketAddr>, bool), WebError> {
     let port = url.port_or_known_default().unwrap_or(443);
     let addresses: Vec<SocketAddr> = match url.host() {
         Some(Host::Ipv4(ip)) => vec![SocketAddr::new(IpAddr::V4(ip), port)],
         Some(Host::Ipv6(ip)) => vec![SocketAddr::new(IpAddr::V6(ip), port)],
         Some(Host::Domain(name)) => {
-            if name.eq_ignore_ascii_case("localhost") || name.ends_with(".localhost") {
-                return Err(refused_local());
+            let lower = name.to_ascii_lowercase();
+            if METADATA_HOSTS.contains(&lower.as_str()) {
+                return Err(refused_metadata());
             }
             tokio::net::lookup_host((name, port))
                 .await
@@ -90,16 +197,32 @@ async fn public_addresses(url: &Url) -> Result<Vec<SocketAddr>, WebError> {
         }
         None => return Err(WebError::Refused("the URL has no host.".to_owned())),
     };
-    // One private address is enough to refuse: a name may resolve to both.
-    if addresses.is_empty() || addresses.iter().any(|address| !is_public(address.ip())) {
-        return Err(refused_local());
+    if addresses.is_empty() {
+        return Err(WebError::Unreachable("the host has no address.".to_owned()));
     }
-    Ok(addresses)
+    if addresses.iter().any(|address| is_metadata(address.ip())) {
+        return Err(refused_metadata());
+    }
+    // One local address makes the host local: a name may resolve to both.
+    let public = addresses.iter().all(|address| is_public(address.ip()));
+    if !public && !named(url) {
+        let host = url.host_str().unwrap_or_default();
+        return Err(WebError::Refused(format!(
+            "{host} is on this machine or the local network. It is read only when the person \
+             names it in a message they type: ask whether you may read it, and to reply with the \
+             address (for example http://{host}{port}).",
+            port = url
+                .port()
+                .map(|port| format!(":{port}"))
+                .unwrap_or_default()
+        )));
+    }
+    Ok((addresses, public))
 }
 
-fn refused_local() -> WebError {
+fn refused_metadata() -> WebError {
     WebError::Refused(
-        "addresses on this machine or a private network are not read from the web tool.".to_owned(),
+        "link-local and cloud metadata addresses are never read by the web tool.".to_owned(),
     )
 }
 
@@ -124,12 +247,21 @@ fn upgraded(mut url: Url) -> Result<Url, WebError> {
 #[async_trait]
 impl WebAccess for WebReader {
     async fn fetch(&self, url: &str, max_text_bytes: usize) -> Result<WebPage, WebError> {
-        let mut url = upgraded(
-            Url::parse(url.trim())
-                .map_err(|_| WebError::Refused("the URL is not valid.".to_owned()))?,
-        )?;
+        let mut url = Url::parse(url.trim())
+            .map_err(|_| WebError::Refused("the URL is not valid.".to_owned()))?;
         for _ in 0..=MAX_REDIRECTS {
-            let addresses = public_addresses(&url).await?;
+            if !matches!(url.scheme(), "http" | "https") {
+                return Err(WebError::Refused(
+                    "only http:// and https:// web pages can be read.".to_owned(),
+                ));
+            }
+            let (addresses, public) = checked_addresses(&url, |url| self.named(url)).await?;
+            if public && url.scheme() == "http" {
+                // A public page over plain http is asked for over https; the addresses stay the
+                // same, but the port may not, so the host is checked again.
+                url = upgraded(url)?;
+                continue;
+            }
             let mut builder = reqwest::Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .no_proxy()
@@ -170,7 +302,7 @@ impl WebAccess for WebReader {
                 let next = url.join(location).map_err(|_| {
                     WebError::Refused("the page redirects to an invalid address.".to_owned())
                 })?;
-                url = upgraded(next)?;
+                url = next;
                 continue;
             }
             if !status.is_success() {
@@ -358,21 +490,103 @@ mod tests {
         ))));
     }
 
+    #[test]
+    fn hosts_are_taken_from_what_the_person_typed() {
+        let hosts = named_hosts([
+            "Can you look at http://localhost:5173/app and at 192.168.1.20:8080?",
+            "Also mynas.local, [::1]:3000, https://dev.example.lan/x, and localhost.",
+            "Not these: example.com, 8.8.8.8, version 1.2.3, or foo:bar.",
+        ]);
+        let pairs: Vec<(&str, Option<u16>)> = hosts
+            .iter()
+            .map(|host| (host.host.as_str(), host.port))
+            .collect();
+        assert_eq!(
+            pairs,
+            [
+                ("localhost", Some(5173)),
+                ("192.168.1.20", Some(8080)),
+                ("mynas.local", None),
+                ("::1", Some(3000)),
+                ("dev.example.lan", None),
+                ("localhost", None),
+            ]
+        );
+    }
+
     #[tokio::test]
-    async fn local_names_and_addresses_are_refused_before_connecting() {
+    async fn a_local_host_is_read_only_when_the_person_named_it() {
+        let named = named_hosts(["look at localhost:5173"]);
+        let reader = WebReader::new(&ProviderRegistry::new()).allowing(named);
+        let allowed = Url::parse("http://localhost:5173/").unwrap();
+        let (_, public) = checked_addresses(&allowed, |url| reader.named(url))
+            .await
+            .unwrap();
+        assert!(!public);
+        // Another port, another host, or nothing named: the model is told to ask.
         for url in [
-            "https://localhost:8000/",
+            "http://localhost:8000/",
+            "http://192.168.1.10/admin",
             "https://127.0.0.1/",
-            "https://[::1]/",
-            "https://192.168.1.10/admin",
-            "https://169.254.169.254/latest/meta-data/",
-            "https://app.localhost/",
         ] {
-            let error = public_addresses(&Url::parse(url).unwrap())
+            let error = checked_addresses(&Url::parse(url).unwrap(), |url| reader.named(url))
                 .await
                 .unwrap_err();
-            assert!(matches!(error, WebError::Refused(_)), "{url}: {error}");
+            assert!(
+                error.to_string().contains("names it in a message"),
+                "{url}: {error}"
+            );
         }
+    }
+
+    #[tokio::test]
+    async fn metadata_addresses_are_refused_even_when_named() {
+        let reader = WebReader::new(&ProviderRegistry::new()).allowing(named_hosts([
+            "http://169.254.169.254/latest http://metadata.google.internal/ http://[fe80::1]/",
+        ]));
+        for url in [
+            "http://169.254.169.254/latest/meta-data/",
+            "http://metadata.google.internal/computeMetadata/v1/",
+            "http://[fe80::1]/",
+            "http://100.100.100.200/",
+        ] {
+            let error = checked_addresses(&Url::parse(url).unwrap(), |url| reader.named(url))
+                .await
+                .unwrap_err();
+            assert!(error.to_string().contains("never read"), "{url}: {error}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_named_local_dev_server_is_read_over_plain_http() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let mut request = [0u8; 1024];
+                let _ = socket.read(&mut request).await;
+                let body = "hello from the dev server";
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(response.as_bytes()).await;
+            }
+        });
+        let url = format!("http://127.0.0.1:{port}/status");
+        let unnamed = WebReader::new(&ProviderRegistry::new());
+        assert!(matches!(
+            unnamed.fetch(&url, 1024).await,
+            Err(WebError::Refused(_))
+        ));
+        let named = WebReader::new(&ProviderRegistry::new())
+            .allowing(named_hosts([
+                format!("what does 127.0.0.1:{port} say?").as_str()
+            ]));
+        let page = named.fetch(&url, 1024).await.unwrap();
+        assert_eq!(page.text, "hello from the dev server");
+        assert!(page.url.starts_with("http://127.0.0.1"), "{}", page.url);
     }
 
     #[tokio::test]
@@ -386,6 +600,7 @@ mod tests {
         assert!(upgraded(Url::parse("ftp://example.com/").unwrap()).is_err());
         let reader = WebReader::new(&ProviderRegistry::new());
         let error = reader.fetch("file:///etc/passwd", 1024).await.unwrap_err();
+        assert!(error.to_string().contains("only http"), "{error}");
         assert!(matches!(error, WebError::Refused(_)));
     }
 

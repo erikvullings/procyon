@@ -26,7 +26,7 @@ pub(crate) use self::documents::{Documents, SkillFolderDocuments, is_document};
 use self::sandbox::continuation;
 pub(crate) use self::sandbox::{FileCall, ToolHost};
 use self::skill_store::ProviderStore;
-pub(crate) use self::web::WebReader;
+pub(crate) use self::web::{NamedHost, WebReader, named_hosts};
 use crate::chat::ChatGenerator;
 use crate::llm_profiles::{LlmChatGeneration, LlmProfileError, LlmRole, ReplyFormat};
 

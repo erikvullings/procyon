@@ -1696,6 +1696,7 @@ export const en = {
     attachSelection: 'Attach selection',
     attachFileContents: 'Attach file contents',
     lookInFolder: 'Let the assistant look things up',
+    lookThingsUpHint: 'Lets the assistant read this folder, your notes and skills, and web pages',
     steps: 'Looked up',
     oneFileOnly: 'Select one file to attach its contents.',
     fileTooLarge: 'The selected file is too large to attach.',

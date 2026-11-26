@@ -278,10 +278,14 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
         disabled: pending || selectedFiles !== 1 || fileTooLarge || fileAttached,
       }),
       // What the model looks up goes to the chat endpoint, so it is the person's choice per tab.
-      chromeButton(t('chat', 'lookInFolder'), () => attrs.onToggleTools(), {
-        disabled: pending || !attrs.folderAvailable,
-        pressed: attrs.entry.useTools === true,
-      }),
+      // What the toggle covers is not obvious from its label, so the tooltip names it (0365).
+      tooltip(
+        t('chat', 'lookThingsUpHint'),
+        chromeButton(t('chat', 'lookInFolder'), () => attrs.onToggleTools(), {
+          disabled: pending || !attrs.folderAvailable,
+          pressed: attrs.entry.useTools === true,
+        }),
+      ),
     ];
   };
 

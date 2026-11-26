@@ -1726,6 +1726,8 @@ export const nl = {
     attachSelection: 'Selectie toevoegen',
     attachFileContents: 'Bestandsinhoud toevoegen',
     lookInFolder: 'Assistent laten opzoeken',
+    lookThingsUpHint:
+      'Laat de assistent deze map, je notities en vaardigheden, en webpagina’s lezen',
     steps: 'Opgezocht',
     oneFileOnly: 'Selecteer één bestand om de inhoud toe te voegen.',
     fileTooLarge: 'Het geselecteerde bestand is te groot om toe te voegen.',

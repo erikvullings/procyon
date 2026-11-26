@@ -340,7 +340,6 @@ async fn ask_turn(
         registry.remove("web_fetch");
         prompt_registry.remove("web_fetch");
     }
-    let web = crate::agent_host::WebReader::new(providers);
     let mut steps = Vec::new();
     let mut question_text = String::new();
 
@@ -482,6 +481,10 @@ async fn ask_turn(
     let side_calls = ModelSideCalls::new(generator, CancellationToken::new())
         .await
         .stopped_when(|| sessions.is_cancelled(&id));
+    // Local pages are read only when the person named them in a question they typed (0365).
+    let web = crate::agent_host::WebReader::new(providers).allowing(
+        crate::agent_host::named_hosts(sessions.questions(&id).iter().map(String::as_str)),
+    );
     let ctx = ToolContext {
         notes,
         files: Some(&files),
