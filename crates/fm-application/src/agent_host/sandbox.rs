@@ -249,11 +249,14 @@ impl Sandbox {
             let Ok(text) = read_text_file(&real, 0) else {
                 continue;
             };
+            // Forward slashes on every platform, so the model sees one stable path form.
             let shown = real
                 .strip_prefix(&self.root)
                 .unwrap_or(&real)
-                .display()
-                .to_string();
+                .components()
+                .map(|part| part.as_os_str().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join("/");
             for (number, text_line) in text.lines().enumerate() {
                 if text_line.to_lowercase().contains(needle) {
                     matches.push(format!("{shown}:{}: {}", number + 1, text_line.trim()));
