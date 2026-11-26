@@ -1020,12 +1020,23 @@ mod tests {
         async move { reply_in(fake, &ProviderRegistry::new(), &sessions, None, request).await }
     }
 
+    /// A project folder as a `file:` location and as the native path it names. A bare `/projects`
+    /// has no drive letter, so on Windows it is not a local path (see CLAUDE.md).
+    #[cfg(not(windows))]
+    const PROJECT_URI: &str = "file:///projects/app";
+    #[cfg(not(windows))]
+    const PROJECT: &str = "/projects/app";
+    #[cfg(windows)]
+    const PROJECT_URI: &str = "file:///C:/projects/app";
+    #[cfg(windows)]
+    const PROJECT: &str = r"C:\projects\app";
+
     fn command(request: &str) -> TerminalAssistRequestDto {
         TerminalAssistRequestDto {
             kind: TerminalAssistKindDto::Command,
             transcript: String::new(),
             request: Some(request.to_owned()),
-            working_directory: "file:///projects/app".to_owned(),
+            working_directory: PROJECT_URI.to_owned(),
             root: None,
             skill: None,
             shell: Some("zsh".to_owned()),
@@ -1047,7 +1058,7 @@ mod tests {
             kind,
             transcript: transcript.to_owned(),
             request: None,
-            working_directory: "file:///projects/app".to_owned(),
+            working_directory: PROJECT_URI.to_owned(),
             root: None,
             skill: None,
             shell: None,
@@ -1084,7 +1095,7 @@ mod tests {
         assert!(
             generation
                 .user_prompt
-                .contains("Working directory: /projects/app")
+                .contains(&format!("Working directory: {PROJECT}"))
         );
         assert!(generation.user_prompt.ends_with("Request: list files"));
     }

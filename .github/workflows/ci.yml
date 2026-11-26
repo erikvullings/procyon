@@ -120,7 +120,9 @@ jobs:
       - name: Clippy (-D warnings)
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
-        run: cargo nextest run --workspace
+        # --no-fail-fast: every failure is listed in one run, so a platform-specific failure
+        # (Windows paths, for one) is not found one push at a time.
+        run: cargo nextest run --workspace --no-fail-fast
       - name: Doctests
         run: cargo test --doc --workspace
 
