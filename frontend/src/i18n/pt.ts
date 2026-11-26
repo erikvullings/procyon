@@ -2959,6 +2959,8 @@ export const pt = {
     composerQueued: 'Enviada após esta resposta · Esc mantém-na aqui',
     composerSteering: 'Enviado · o assistente lê depois do passo atual',
     composerSend: 'Enviar',
+    takeBack: 'Retirar',
+    pendingLabel: 'Enviado, ainda não lido',
     consentTitle: 'Blocos de comandos',
     consentText:
       'Ativar os blocos de comandos? O Procyon inicia o zsh e o bash com os seus hooks e continua a carregar os seus ficheiros de arranque. Os seus dotfiles não mudam. As perguntas com # funcionam em ambos os casos.',

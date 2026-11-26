@@ -3070,6 +3070,17 @@ pub(crate) fn terminal_assist_steer(
     state.service.terminal_assist_steer(&session_id, &text)
 }
 
+/// Takes back a message sent to a terminal tab's running assistant request, before it was read
+/// (task 0355).
+#[tauri::command]
+pub(crate) fn terminal_assist_withdraw(
+    state: State<'_, AppState>,
+    session_id: String,
+    text: String,
+) -> bool {
+    state.service.terminal_assist_withdraw(&session_id, &text)
+}
+
 /// Stops a terminal tab's running assistant request (task 0336).
 #[tauri::command]
 pub(crate) fn terminal_assist_cancel(state: State<'_, AppState>, session_id: String) {

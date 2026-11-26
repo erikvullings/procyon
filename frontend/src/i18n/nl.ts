@@ -2943,6 +2943,8 @@ export const nl = {
     composerQueued: 'Wordt na dit antwoord verstuurd · Esc houdt de vraag hier',
     composerSteering: 'Verstuurd · de assistent leest het na zijn huidige stap',
     composerSend: 'Versturen',
+    takeBack: 'Terugnemen',
+    pendingLabel: 'Verstuurd, nog niet gelezen',
     consentTitle: 'Opdrachtblokken',
     consentText:
       'Opdrachtblokken inschakelen? Procyon start zsh en bash met eigen hooks en laadt je eigen opstartbestanden zoals gebruikelijk. Je dotfiles blijven ongewijzigd. Vragen met # werken in beide gevallen.',

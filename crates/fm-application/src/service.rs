@@ -3690,6 +3690,12 @@ impl FileManagerService {
         crate::terminal_assist::steer(&self.terminal_sessions, session_id, text)
     }
 
+    /// Takes back a message given to a terminal tab's running request before the model read it
+    /// (task 0355). `false` when it was already read.
+    pub fn terminal_assist_withdraw(&self, session_id: &str, text: &str) -> bool {
+        crate::terminal_assist::withdraw(&self.terminal_sessions, session_id, text)
+    }
+
     /// Stops the request a terminal tab's assistant is running (its tool loop ends).
     pub fn terminal_assist_cancel(&self, session_id: &str) {
         self.terminal_sessions.cancel(session_id);

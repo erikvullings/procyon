@@ -2945,6 +2945,8 @@ export const pl = {
     composerQueued: 'Zostanie wysłane po tej odpowiedzi · Esc zatrzymuje je tutaj',
     composerSteering: 'Wysłano · asystent przeczyta to po bieżącym kroku',
     composerSend: 'Wyślij',
+    takeBack: 'Cofnij',
+    pendingLabel: 'Wysłane, jeszcze nieprzeczytane',
     consentTitle: 'Bloki poleceń',
     consentText:
       'Włączyć bloki poleceń? Procyon uruchamia zsh i bash z własnymi hookami i nadal wczytuje Twoje pliki startowe. Twoje pliki dotfiles się nie zmieniają. Pytania z # działają w obu przypadkach.',

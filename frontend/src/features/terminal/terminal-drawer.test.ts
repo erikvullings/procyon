@@ -1757,6 +1757,40 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     expect(sentAt(1)?.request).toBe('and the images');
   });
 
+  it('shows a message sent while the assistant works until it is read, and takes it back', async () => {
+    let answer: ((reply: { text: string }) => void) | undefined;
+    assist.mockImplementationOnce(
+      (_request, onEvent) =>
+        new Promise((resolve) => {
+          answer = resolve;
+          void onEvent;
+        }),
+    );
+    const assistSteer = vi.fn(async () => true);
+    const assistWithdraw = vi.fn(async () => true);
+    await mountWith({ assistSteer, assistWithdraw });
+    await markPrompt();
+    ask('# summarise the folder');
+    await vi.waitFor(() => expect(answer).toBeDefined());
+    ask('# skip the PDFs');
+
+    // Listed at once above the input, not only as a hint.
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-terminal-pending')?.textContent).toContain('skip the PDFs'),
+    );
+    button('Take back')?.click();
+    await vi.waitFor(() =>
+      expect(assistWithdraw).toHaveBeenCalledWith(expect.any(String), 'skip the PDFs'),
+    );
+    // Back in the input to edit; no longer listed as sent.
+    await vi.waitFor(() => expect(chatInput(root)?.value).toBe('skip the PDFs'));
+    expect(root.querySelector('.fm-terminal-pending')).toBeNull();
+    answer?.({ text: 'Done.' });
+    // Taken back, so it is not asked again as a question.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(assist).toHaveBeenCalledOnce();
+  });
+
   it('recalls earlier questions with Up and Down in the chat input', async () => {
     await mount();
     await markPrompt();

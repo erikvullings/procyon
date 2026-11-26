@@ -58,3 +58,13 @@ current tool calls finish, a follow-up waits until the turn ends.
     endpoint yet); the terminal is where long tool loops run.
   - Verified: drawer test "sends a message written while the assistant works to the running
     request"; terminal + i18n frontend tests 463 pass; tsc clean.
+- 2026-11-26 claude: pending messages and take-back (the gap above, closed).
+  - Sent-while-busy messages are listed above the chat input (`fm-terminal-pending`) until the
+    model reads them; each has "Take back", which puts the text back in the input. Queued
+    after-answer messages are listed too.
+  - `terminal_assist_withdraw` (Tauri command, both handler lists) → `Sessions::withdraw_steering`:
+    removes the message only while it is still queued; `false` once the model read it.
+  - Tests: terminal_assist `a_queued_steering_message_can_be_taken_back_until_it_is_read`;
+    drawer `shows a message sent while the assistant works until it is read, and takes it back`.
+  - Delivery is still between tool rounds: a running tool is never interrupted, so a long single
+    step (a large `summarize_file`, for example) delays the message until it finishes.

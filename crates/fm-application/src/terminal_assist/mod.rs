@@ -203,6 +203,12 @@ pub(crate) fn steer(sessions: &Sessions, id: &str, text: &str) -> bool {
     !text.is_empty() && text.chars().count() <= MAX_REQUEST_CHARS && sessions.steer(id, text)
 }
 
+/// Takes back a message queued for a session's running request before the model read it, so the
+/// person can edit it instead. `false` when it was already read or was never queued.
+pub(crate) fn withdraw(sessions: &Sessions, id: &str, text: &str) -> bool {
+    sessions.withdraw_steering(id, text.trim())
+}
+
 /// Replaces a session's conversation with a summary (`/compact`, task 0343).
 pub(crate) async fn compact(
     generator: &impl ChatGenerator,
@@ -1631,6 +1637,22 @@ mod tests {
         assert!(!steer(&sessions, "t", "one too many"));
         sessions.cancel("t");
         assert!(steer(&sessions, "t", "after the stop"));
+    }
+
+    #[test]
+    fn a_queued_steering_message_can_be_taken_back_until_it_is_read() {
+        let sessions = Sessions::default();
+        assert!(steer(&sessions, "t", "skip the PDFs"));
+        assert!(steer(&sessions, "t", "and the images"));
+        assert!(withdraw(&sessions, "t", "  skip the PDFs "));
+        // Gone once taken back, so a second take-back finds nothing.
+        assert!(!withdraw(&sessions, "t", "skip the PDFs"));
+        // The model reads only what is still queued.
+        assert_eq!(
+            sessions.take_steering("t"),
+            vec!["and the images".to_owned()]
+        );
+        assert!(!withdraw(&sessions, "t", "and the images"));
     }
 
     #[tokio::test]

@@ -606,6 +606,19 @@ impl Sessions {
         self.with(id, |session| session.steering.clear());
     }
 
+    /// Takes back one queued message before the model read it; `false` when it was already read
+    /// or never queued.
+    pub(super) fn withdraw_steering(&self, id: &str, text: &str) -> bool {
+        let mut withdrawn = false;
+        self.with(id, |session| {
+            if let Some(index) = session.steering.iter().position(|queued| queued == text) {
+                session.steering.remove(index);
+                withdrawn = true;
+            }
+        });
+        withdrawn
+    }
+
     /// Whether the person stopped the running request.
     pub(super) fn is_cancelled(&self, id: &str) -> bool {
         let mut cancelled = false;

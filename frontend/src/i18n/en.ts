@@ -2888,6 +2888,8 @@ export const en = {
     composerQueued: 'Sends after this answer · Esc keeps it here',
     composerSteering: 'Sent · the assistant reads it after its current step',
     composerSend: 'Send',
+    takeBack: 'Take back',
+    pendingLabel: 'Sent, not read yet',
     consentTitle: 'Command blocks',
     consentText:
       'Enable command blocks? Procyon starts zsh and bash with its hooks and still loads your own startup files. Your dotfiles stay unchanged. # questions work either way.',

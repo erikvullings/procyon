@@ -45,6 +45,8 @@ export interface TerminalClient {
    * (task 0355). `false` when it was not queued.
    */
   assistSteer?(sessionId: string, text: string): Promise<boolean>;
+  /** Takes back a steered message the model has not read yet; `false` when it was already read. */
+  assistWithdraw?(sessionId: string, text: string): Promise<boolean>;
   /** The saved assistant sessions, most recent first (`/resume`, task 0354). */
   assistSaved?(): Promise<readonly TerminalSavedSession[]>;
   /** Continues a saved session in this tab's session; `null` when it is gone. */
@@ -97,6 +99,8 @@ export const tauriTerminalClient: TerminalClient = {
   assistClose: (sessionId) => invoke<void>('terminal_assist_close', { sessionId }),
   assistCancel: (sessionId) => invoke<void>('terminal_assist_cancel', { sessionId }),
   assistSteer: (sessionId, text) => invoke<boolean>('terminal_assist_steer', { sessionId, text }),
+  assistWithdraw: (sessionId, text) =>
+    invoke<boolean>('terminal_assist_withdraw', { sessionId, text }),
   assistSaved: () => invoke<TerminalSavedSession[]>('terminal_assist_saved_sessions'),
   assistResume: (savedId, sessionId) =>
     invoke<TerminalSavedSession | null>('terminal_assist_resume', { savedId, sessionId }),

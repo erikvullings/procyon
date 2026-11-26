@@ -2973,6 +2973,8 @@ export const fr = {
     composerQueued: 'Envoyée après cette réponse · Échap la garde ici',
     composerSteering: "Envoyé · l'assistant le lit après son étape en cours",
     composerSend: 'Envoyer',
+    takeBack: 'Reprendre',
+    pendingLabel: 'Envoyé, pas encore lu',
     consentTitle: 'Blocs de commandes',
     consentText:
       'Activer les blocs de commandes ? Procyon lance zsh et bash avec ses crochets et charge toujours vos propres fichiers de démarrage. Vos fichiers de configuration restent inchangés. Les questions avec # fonctionnent dans les deux cas.',

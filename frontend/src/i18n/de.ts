@@ -2975,6 +2975,8 @@ export const de = {
     composerQueued: 'Wird nach dieser Antwort gesendet · Esc behält sie hier',
     composerSteering: 'Gesendet · der Assistent liest es nach seinem aktuellen Schritt',
     composerSend: 'Senden',
+    takeBack: 'Zurücknehmen',
+    pendingLabel: 'Gesendet, noch nicht gelesen',
     consentTitle: 'Befehlsblöcke',
     consentText:
       'Befehlsblöcke aktivieren? Procyon startet zsh und bash mit eigenen Hooks und lädt weiterhin Ihre eigenen Startdateien. Ihre Dotfiles bleiben unverändert. Fragen mit # funktionieren in beiden Fällen.',

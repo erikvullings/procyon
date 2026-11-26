@@ -1053,6 +1053,47 @@ main.fm-workspace {
   white-space: nowrap;
 }
 
+/* Sent while the assistant works, not read yet: listed above the chat input (task 0355). */
+.fm-terminal-composer-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fm-terminal-pending {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 8px;
+}
+
+.fm-terminal-pending-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fm-text-muted);
+  font-family: var(--fm-font-mono);
+  font-size: 12px;
+}
+
+.fm-terminal-pending-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.fm-terminal-pending-take-back {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: transparent;
+  color: var(--fm-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
 .fm-terminal-composer--busy .fm-terminal-composer-mark {
   animation: fm-terminal-composer-pulse 1.2s ease-in-out infinite;
 }

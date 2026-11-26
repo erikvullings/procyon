@@ -2304,43 +2304,106 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       input.focus();
       input.setSelectionRange(input.value.length, input.value.length);
     };
-    return m('.fm-terminal-composer', { class: busy ? 'fm-terminal-composer--busy' : undefined }, [
-      m('span.fm-terminal-composer-mark', { 'aria-hidden': 'true' }, sparklesIcon({ size: 14 })),
-      m('textarea.fm-terminal-composer-input', {
-        rows: Math.min(6, text.split('\n').length),
-        value: text,
-        spellcheck: false,
-        placeholder: t('terminal', 'composerPlaceholder'),
-        'aria-label': t('terminal', 'composerLabel'),
-        oncreate: focus,
-        onupdate: focus,
-        oninput: (event: InputEvent) => {
-          live.composer = (event.target as HTMLTextAreaElement).value;
-          live.recallIndex = undefined;
-          prefetchMentionFiles(live);
-        },
-        onkeydown: (event: KeyboardEvent) => composerKey(live, event),
-      }),
-      live.queued === undefined
-        ? live.steering.length === 0
-          ? undefined
-          : m('span.fm-terminal-composer-hint', t('terminal', 'composerSteering'))
-        : m('span.fm-terminal-composer-hint', t('terminal', 'composerQueued')),
-      m(
-        'button.fm-terminal-composer-send',
-        {
-          type: 'button',
-          disabled: text.trim() === '' || live.queued !== undefined,
-          'aria-label': t('terminal', 'composerSend'),
-          ...tooltipEvents(() => t('terminal', 'composerSend'), 'above-left'),
-          onclick: () => {
-            live.composerFocus = true;
-            submitComposer(live);
+    return m('.fm-terminal-composer-stack', [
+      pendingView(live),
+      m('.fm-terminal-composer', { class: busy ? 'fm-terminal-composer--busy' : undefined }, [
+        m('span.fm-terminal-composer-mark', { 'aria-hidden': 'true' }, sparklesIcon({ size: 14 })),
+        m('textarea.fm-terminal-composer-input', {
+          rows: Math.min(6, text.split('\n').length),
+          value: text,
+          spellcheck: false,
+          placeholder: t('terminal', 'composerPlaceholder'),
+          'aria-label': t('terminal', 'composerLabel'),
+          oncreate: focus,
+          onupdate: focus,
+          oninput: (event: InputEvent) => {
+            live.composer = (event.target as HTMLTextAreaElement).value;
+            live.recallIndex = undefined;
+            prefetchMentionFiles(live);
           },
-        },
-        cornerDownLeftIcon({ size: 14 }),
-      ),
+          onkeydown: (event: KeyboardEvent) => composerKey(live, event),
+        }),
+        live.queued === undefined
+          ? live.steering.length === 0
+            ? undefined
+            : m('span.fm-terminal-composer-hint', t('terminal', 'composerSteering'))
+          : m('span.fm-terminal-composer-hint', t('terminal', 'composerQueued')),
+        m(
+          'button.fm-terminal-composer-send',
+          {
+            type: 'button',
+            disabled: text.trim() === '' || live.queued !== undefined,
+            'aria-label': t('terminal', 'composerSend'),
+            ...tooltipEvents(() => t('terminal', 'composerSend'), 'above-left'),
+            onclick: () => {
+              live.composerFocus = true;
+              submitComposer(live);
+            },
+          },
+          cornerDownLeftIcon({ size: 14 }),
+        ),
+      ]),
     ]);
+  }
+
+  /**
+   * What was sent while the assistant works and is not read yet, above the chat input. Each can be
+   * taken back into the input to edit, until the model reads it (task 0355).
+   */
+  function pendingView(live: LiveTerminal): m.Children {
+    const rows = [
+      ...live.steering.map((text) => ({ text, steered: true })),
+      ...(live.queued === undefined ? [] : [{ text: live.queued, steered: false }]),
+    ];
+    if (rows.length === 0) return undefined;
+    const withdrawable = currentAttrs?.client.assistWithdraw !== undefined;
+    return m(
+      '.fm-terminal-pending',
+      { 'aria-label': t('terminal', 'pendingLabel') },
+      rows.map(({ text, steered }) =>
+        m('.fm-terminal-pending-row', { key: `${steered}:${text}` }, [
+          m('span.fm-terminal-pending-text', text),
+          steered && !withdrawable
+            ? undefined
+            : m(
+                'button.fm-terminal-pending-take-back',
+                {
+                  type: 'button',
+                  onclick: () => takeBack(live, text, steered),
+                },
+                t('terminal', 'takeBack'),
+              ),
+        ]),
+      ),
+    );
+  }
+
+  /** Moves a message that is not read yet back into the chat input, to edit and send again. */
+  function takeBack(live: LiveTerminal, text: string, steered: boolean): void {
+    if (!steered) {
+      live.queued = undefined;
+      putBackInInput(live, text);
+      return;
+    }
+    const withdraw = currentAttrs?.client.assistWithdraw;
+    if (withdraw === undefined) return;
+    void withdraw(live.assistSession, text).then(
+      (taken) => {
+        // Already read: the transcript shows it, so there is nothing to take back.
+        if (!taken) return;
+        const index = live.steering.indexOf(text);
+        if (index >= 0) live.steering.splice(index, 1);
+        putBackInInput(live, text);
+      },
+      () => undefined,
+    );
+  }
+
+  function putBackInInput(live: LiveTerminal, text: string): void {
+    live.composer = (live.composer ?? '').trim() === '' ? text : `${live.composer}\n${text}`;
+    live.recallIndex = undefined;
+    live.composerFocus = true;
+    m.redraw();
   }
 
   /** An action button with its keyboard shortcut shown beside the label. */
