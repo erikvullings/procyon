@@ -1,6 +1,6 @@
 # 0347 Picture metadata under thumbnails and in hover tooltips
 
-Status: in_progress
+Status: done
 Priority: medium
 Subsystem: backend, frontend, settings
 Depends on: 0134, 0273
@@ -44,3 +44,6 @@ Directory Opus offers (a) extra lines of picture metadata under each thumbnail i
   - Still open: units (`ISO`, `f/`, `mm`, `EV`, `s`, `kbps`, `kHz`, `fps`) are not localized; the
     larger tooltip preview is untested with a real thumbnail (needs the Tauri app); the
     "Pictures" settings name covers music and video too.
+- 2026-11-26 claude: closed. Camera parameter units (`ISO`, `f/`, `mm`, `EV`, `s`, `kbps`, `kHz`,
+  `fps`) stay unlocalized by decision: they are standard notation for the people who read them.
+  Not verified in the Tauri app: the larger tooltip preview with a real thumbnail.
