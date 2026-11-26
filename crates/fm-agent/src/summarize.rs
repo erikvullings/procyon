@@ -83,14 +83,14 @@ impl<I: Send + 'static> TypedTool<I> for SummarizeFile {
     async fn run_typed(&self, ctx: &ToolContext<'_>, args: SummarizeFileArgs) -> ToolOutcome<I> {
         let path = args.path.trim();
         let step = format!("Summarised {path}");
-        // A failure says so in the step line the person sees, not only in the model's result.
-        let failed = format!("Could not summarise {path}");
+        // A failure says so, and why, in the step line the person sees, not only in the model's result.
+        let failed = |reason: &str| format!("Could not summarise {path}: {reason}");
         if path.is_empty() {
             return ToolOutcome::error("Summarise a file", "path must not be empty.");
         }
         let (Some(files), Some(model)) = (ctx.files, ctx.side_model) else {
             return ToolOutcome::error(
-                failed,
+                failed("not available here"),
                 "summarize_file is not available here; use read_file.",
             );
         };
@@ -98,10 +98,13 @@ impl<I: Send + 'static> TypedTool<I> for SummarizeFile {
         ctx.report(format!("Reading {path}"));
         let whole = match files.read_whole(path, part_bytes * MAX_SUMMARY_PARTS).await {
             Ok(whole) => whole,
-            Err(message) => return ToolOutcome::error(failed, message),
+            Err(message) => return ToolOutcome::error(failed(&message), message),
         };
         if whole.text.trim().is_empty() {
-            return ToolOutcome::error(failed, format!("{path} has no text to summarise."));
+            return ToolOutcome::error(
+                failed("no text to summarise"),
+                format!("{path} has no text to summarise."),
+            );
         }
         let focus = args.focus.as_deref().map(str::trim).unwrap_or_default();
         let report = |text: String| ctx.report(text);
@@ -130,7 +133,7 @@ impl<I: Send + 'static> TypedTool<I> for SummarizeFile {
                 )
             }
             Err(error) => ToolOutcome::error(
-                failed,
+                failed(&error.to_string()),
                 format!("the model could not summarise {path}: {error}"),
             ),
         }

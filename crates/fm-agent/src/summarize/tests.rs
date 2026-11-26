@@ -261,8 +261,8 @@ async fn failures_reach_the_model_as_tool_errors() {
         failed.text,
         "Error: the model could not summarise a.md: timed out"
     );
-    // The person sees that it failed, not "Summarised a.md".
-    assert_eq!(failed.step, "Could not summarise a.md");
+    // The person sees that it failed and why, not "Summarised a.md".
+    assert_eq!(failed.step, "Could not summarise a.md: timed out");
 
     let skills = SkillCatalogue::default();
     let without = ToolContext {
