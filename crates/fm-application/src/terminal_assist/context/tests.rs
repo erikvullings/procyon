@@ -6,15 +6,23 @@ use super::{
     AttachedFile, path_from_location, render_activity, render_context, render_state, state_sections,
 };
 
-/// A local folder, as a `file:` location and as the native path it names.
+/// Local folders, each as a `file:` location and as the native path it names.
 #[cfg(not(windows))]
 const FOLDER_URI: &str = "file:///tmp/my%20dir";
 #[cfg(not(windows))]
 const FOLDER: &str = "/tmp/my dir";
+#[cfg(not(windows))]
+const OTHER_URI: &str = "file:///other";
+#[cfg(not(windows))]
+const OTHER: &str = "/other";
 #[cfg(windows)]
 const FOLDER_URI: &str = "file:///C:/tmp/my%20dir";
 #[cfg(windows)]
 const FOLDER: &str = r"C:\tmp\my dir";
+#[cfg(windows)]
+const OTHER_URI: &str = "file:///C:/other";
+#[cfg(windows)]
+const OTHER: &str = r"C:\other";
 
 fn request(context: TerminalContextDto) -> TerminalAssistRequestDto {
     TerminalAssistRequestDto {
@@ -184,7 +192,7 @@ fn the_state_comes_in_parts_that_change_independently() {
     let asked = request(TerminalContextDto {
         selected: vec!["a.txt".into()],
         listing: vec!["a.txt".into(), "b.txt".into()],
-        other_folder: Some("file:///other".into()),
+        other_folder: Some(OTHER_URI.into()),
         ..TerminalContextDto::default()
     });
     let sections = state_sections(&asked);
@@ -195,7 +203,7 @@ fn the_state_comes_in_parts_that_change_independently() {
             .1
             .contains(&format!("Working directory: {FOLDER}"))
     );
-    assert_eq!(sections[1].1, "Other pane folder: /other");
+    assert_eq!(sections[1].1, format!("Other pane folder: {OTHER}"));
     assert_eq!(sections[2].1, "Selected in the folder: a.txt");
     assert_eq!(sections[3].1, "Folder listing (2 names):\n- a.txt\n- b.txt");
 
