@@ -2968,8 +2968,19 @@ pub(crate) async fn terminal_assist(
 ) -> Result<fm_transport_dto::TerminalAssistReplyDto, fm_transport_dto::ChatFailureDto> {
     state
         .service
-        .terminal_assist(&desktop_semantic_access(), request)
+        .terminal_assist(&desktop_semantic_access(), with_local_shell(request))
         .await
+}
+
+/// A local folder's assistant request names the shell its terminal starts (task 0333), since the
+/// terminal knows it and the request does not carry it. A remote shell stays `unknown`.
+fn with_local_shell(
+    mut request: fm_transport_dto::TerminalAssistRequestDto,
+) -> fm_transport_dto::TerminalAssistRequestDto {
+    if request.shell.is_none() && request.working_directory.starts_with("file:") {
+        request.shell = Some(crate::terminal::default_shell_name());
+    }
+    request
 }
 
 /// Like `terminal_assist`, and the finished lines of the answer and the steps are sent on `events`
@@ -2982,11 +2993,22 @@ pub(crate) async fn terminal_assist_stream(
 ) -> Result<fm_transport_dto::TerminalAssistReplyDto, fm_transport_dto::ChatFailureDto> {
     state
         .service
-        .terminal_assist_streaming(&desktop_semantic_access(), request, &mut |event| {
-            // A closed channel means the window is gone; there is no one left to tell.
-            let _ = events.send(event);
-        })
+        .terminal_assist_streaming(
+            &desktop_semantic_access(),
+            with_local_shell(request),
+            &mut |event| {
+                // A closed channel means the window is gone; there is no one left to tell.
+                let _ = events.send(event);
+            },
+        )
         .await
+}
+
+/// The local shell's own command history, oldest first, for suggestions in a local terminal
+/// (task 0333). Read here and never sent anywhere.
+#[tauri::command]
+pub(crate) fn terminal_shell_history() -> Vec<String> {
+    crate::shell_history::read_history(&crate::terminal::default_shell_name())
 }
 
 /// Forgets a terminal tab's assistant session when the tab closes (task 0336).

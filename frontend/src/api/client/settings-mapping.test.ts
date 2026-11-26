@@ -85,6 +85,21 @@ it('preserves existing exact-concept predicates independently of similarity prov
   });
 });
 
+it('round-trips picture info settings and gives older settings the defaults (task 0347)', async () => {
+  const settings = await new MockFileManagerClient().getSettings();
+  const pictureInfo = {
+    ...settings.pictureInfo,
+    captionFields: ['size', 'dateTaken'] as typeof settings.pictureInfo.captionFields,
+    tooltipEnabled: false,
+    tooltipDelayMs: 900,
+  };
+  const dto = settingsToDto({ ...settings, pictureInfo });
+  expect(settingsFromDto(dto).pictureInfo).toEqual(pictureInfo);
+
+  const { pictureInfo: _omitted, ...older } = dto;
+  expect(settingsFromDto(older).pictureInfo).toEqual(settings.pictureInfo);
+});
+
 it('round-trips saved filter presets and tolerates older settings without them', async () => {
   const settings = await new MockFileManagerClient().getSettings();
   const presets = [

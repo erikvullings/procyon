@@ -47,6 +47,8 @@ export interface TerminalClient {
   assistSteer?(sessionId: string, text: string): Promise<boolean>;
   /** Takes back a steered message the model has not read yet; `false` when it was already read. */
   assistWithdraw?(sessionId: string, text: string): Promise<boolean>;
+  /** The local shell's own command history, oldest first, for suggestions (task 0333). Local only. */
+  shellHistory?(): Promise<string[]>;
   /** The saved assistant sessions, most recent first (`/resume`, task 0354). */
   assistSaved?(): Promise<readonly TerminalSavedSession[]>;
   /** Continues a saved session in this tab's session; `null` when it is gone. */
@@ -101,6 +103,7 @@ export const tauriTerminalClient: TerminalClient = {
   assistSteer: (sessionId, text) => invoke<boolean>('terminal_assist_steer', { sessionId, text }),
   assistWithdraw: (sessionId, text) =>
     invoke<boolean>('terminal_assist_withdraw', { sessionId, text }),
+  shellHistory: () => invoke<string[]>('terminal_shell_history'),
   assistSaved: () => invoke<TerminalSavedSession[]>('terminal_assist_saved_sessions'),
   assistResume: (savedId, sessionId) =>
     invoke<TerminalSavedSession | null>('terminal_assist_resume', { savedId, sessionId }),

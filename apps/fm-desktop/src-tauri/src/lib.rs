@@ -21,6 +21,7 @@ mod plugin_spa;
 #[cfg(debug_assertions)]
 mod semantic_developer;
 mod semantic_production;
+mod shell_history;
 mod shell_integration;
 mod terminal;
 mod tile_protocol;
@@ -762,6 +763,7 @@ pub fn run() {
             commands::terminal_assist_cancel,
             commands::terminal_assist_steer,
             commands::terminal_assist_withdraw,
+            commands::terminal_shell_history,
             commands::terminal_assist_saved_sessions,
             commands::terminal_assist_resume,
             commands::terminal_assist_delete_saved,
@@ -1237,6 +1239,7 @@ mod tests {
             commands::terminal_assist_cancel,
             commands::terminal_assist_steer,
             commands::terminal_assist_withdraw,
+            commands::terminal_shell_history,
             commands::terminal_assist_saved_sessions,
             commands::terminal_assist_resume,
             commands::terminal_assist_delete_saved,

@@ -352,6 +352,8 @@ type LiveTerminal = {
   folder: string | undefined;
   /** Commands run in this session, oldest first, for suggestions. */
   history: string[];
+  /** The local shell's own history, oldest first, behind this terminal's commands (task 0333). */
+  shellHistory: string[];
   /** The `#` questions asked in this tab, oldest first, for Up/Down recall. */
   questions: string[];
   /** The question shown by recall (an index into `questions`), `undefined` when not recalling. */
@@ -2027,7 +2029,9 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         live.history.splice(0, live.history.length - MAX_HISTORY);
     }
     const previous = live.suggestion;
-    live.suggestion = atPrompt ? suggestionRemainder(live.history, live.typed) : undefined;
+    live.suggestion = atPrompt
+      ? suggestionRemainder([...live.shellHistory, ...live.history], live.typed)
+      : undefined;
     writeToShell(live, data);
     if (previous !== live.suggestion) m.redraw();
   }
@@ -2094,6 +2098,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         typed: EMPTY_INPUT,
         folder: undefined,
         history: [],
+        shellHistory: [],
         questions: [],
         recallIndex: undefined,
         recallDraft: '',
@@ -2129,6 +2134,15 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       };
       terminals.set(key, live);
       const current = live;
+      // A local shell's own history feeds suggestions too; a remote one has none to read (0333).
+      if (host === 'local') {
+        void currentAttrs?.client
+          .shellHistory?.()
+          .then((commands) => {
+            current.shellHistory = commands;
+          })
+          .catch(() => undefined);
+      }
       terminal.parser.registerOscHandler(133, (payload) => {
         onShellMark(current, payload);
         return true;

@@ -2,9 +2,12 @@ import m from 'mithril';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { EntrySummary } from '../../models';
+import { DEFAULT_ENTRY_FORMAT_SETTINGS } from '../entry-formatting/entry-formatting';
 import { DirectoryGrid, type DirectoryGridAttrs } from './directory-grid';
 import { entryArraySource } from './directory-table';
+import { captionBlockHeight } from './image-caption';
 import type { NativeIconLoader } from './native-icon-loader';
+import type { GridPictureInfo } from './picture-info';
 import type { ThumbnailLoader } from './thumbnail-loader';
 
 let root: HTMLElement;
@@ -131,6 +134,40 @@ describe('DirectoryGrid', () => {
 
     m.mount(root, null);
     expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps every tile the same height whether or not it has caption lines (task 0347)', () => {
+    const entries = [entry({ name: 'a.jpg' }), entry({ name: 'b.txt', extension: 'txt' })];
+    const pictureInfo = {
+      summaryLoader: {
+        createViewport: () => ({
+          beginFrame: vi.fn(),
+          summaryFor: () => undefined,
+          endFrame: vi.fn(),
+          dispose: vi.fn(),
+        }),
+      },
+      captionFields: ['size', 'dimensions'],
+      tooltip: { enabled: false, delayMs: 0, fields: [] },
+      formatSettings: DEFAULT_ENTRY_FORMAT_SETTINGS,
+    } as unknown as GridPictureInfo;
+    const heights = (withCaptions: boolean): string[] => {
+      mount({
+        state: { type: 'loaded' },
+        source: entryArraySource(entries),
+        ...(withCaptions ? { pictureInfo } : {}),
+      });
+      return [...root.querySelectorAll<HTMLElement>('.fm-grid-tile')].map(
+        (tile) => tile.style.height,
+      );
+    };
+    const plain = heights(false);
+    const captioned = heights(true);
+    // Uniform within one grid: virtualised rows depend on it.
+    expect(new Set(captioned).size).toBe(1);
+    const extra = Number.parseFloat(captioned[0] ?? '') - Number.parseFloat(plain[0] ?? '');
+    expect(extra).toBe(captionBlockHeight(2));
+    expect(root.querySelectorAll('.fm-grid-tile-caption').length).toBeGreaterThan(0);
   });
 
   it('shows the filename below the tile', () => {

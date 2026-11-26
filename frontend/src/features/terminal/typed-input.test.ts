@@ -35,6 +35,16 @@ describe('suggestionRemainder', () => {
     expect(suggestionRemainder(history, { text: 'git s', known: true })).toBe('tash');
   });
 
+  it("prefers this session's commands over older shell history", () => {
+    // The drawer puts the shell's history first and this session's commands last.
+    const shellHistory = ['git stash list', 'git status --short'];
+    const session = ['git stash'];
+    expect(suggestionRemainder([...shellHistory, ...session], { text: 'git s', known: true })).toBe(
+      'tash',
+    );
+    expect(suggestionRemainder(shellHistory, { text: 'git s', known: true })).toBe('tatus --short');
+  });
+
   it('does not suggest for unknown text, an exact match, or a # question', () => {
     expect(suggestionRemainder(history, { text: 'git s', known: false })).toBeUndefined();
     expect(suggestionRemainder(history, { text: 'ls', known: true })).toBeUndefined();

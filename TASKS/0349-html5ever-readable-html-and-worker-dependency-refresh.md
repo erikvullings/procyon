@@ -1,6 +1,6 @@
 # 0349 html5ever readable HTML conversion and worker dependency refresh
 
-Status: in_progress
+Status: done
 Priority: high
 Subsystem: backend, semantic
 Depends on: none
@@ -176,3 +176,7 @@ qualification can carry a dependency refresh of that closure, so it is paid once
   - **Remaining.** Push to `main`; that starts the semantic-components qualification. When it
     is green, run `pnpm run release:preflight`, then the `resign-gemma-candidate.mjs` command
     it prints.
+- 2026-11-26 claude: closed. Docling `2.86.14` was taken in the same qualification (the maintainer
+  accepted it without a separate task; PDF output changes are watched in the pre-release).
+  Shipped in the `semantic-v0.7.10-auto.108` candidate used by `v0.8.0-2`. Still unmeasured: release
+  timing of the largest HTML fixture, and real-page fixtures (kept out of the repo for copyright).

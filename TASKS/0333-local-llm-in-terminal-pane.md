@@ -125,3 +125,17 @@ Cross-cutting:
   Last command block: Ctrl+Shift+E explain, Ctrl+Shift+F fix (failed only), Ctrl+Shift+C copy
   output, Ctrl+Shift+R run again. Suggestion: → accepts (unchanged). Buttons show their shortcut.
   Uncommitted; not verified in the Tauri app.
+- 2026-11-26 claude: closed the gaps the review found, except block collapse.
+  - Shell name: the Tauri command fills `shell` from `$SHELL` (`ComSpec` on Windows) for local
+    folders when the request has none; remote shells stay `unknown`. Test `shell_name_tests`.
+  - Suggestions from the shell's own history file (zsh `$ZDOTDIR`/`~`, bash `~/.bash_history`,
+    fish `$XDG_DATA_HOME/fish/fish_history`): read locally by `terminal_shell_history`, bounded to
+    the newest 512 KiB, deduplicated, never sent. Session commands take precedence. `HISTFILE` is
+    not read: the app does not inherit the shell's environment. Tests in `shell_history` (parsers,
+    dedupe) and `typed-input` (precedence). Local terminals only.
+  - Browser mode: the terminal drawer, and so the assistant, is mounted only when `runtimeKind` is
+    `tauri`; the browser build has no assistant.
+  - Still open: block **collapse**. xterm.js cannot fold rows, so a collapsed block would need the
+    scrollback rewritten; not built. Decision needed: drop it from the spec, or accept a different
+    form (for example a per-block "show last lines" toggle).
+  - Not verified in the Tauri app: history suggestions with a real history file, shell name.

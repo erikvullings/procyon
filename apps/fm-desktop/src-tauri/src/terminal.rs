@@ -22,6 +22,26 @@ use uuid::Uuid;
 /// How long a remote shell must be silent after its first output before the hook line is typed.
 const REMOTE_HOOK_QUIET: std::time::Duration = std::time::Duration::from_millis(400);
 
+/// The shell a local terminal starts, by name, for the assistant's context (task 0333): the
+/// basename of `$SHELL` (`ComSpec` on Windows), or `unknown`.
+pub(crate) fn default_shell_name() -> String {
+    let program = if cfg!(windows) {
+        std::env::var("ComSpec").ok()
+    } else {
+        std::env::var("SHELL").ok()
+    };
+    shell_name_from(program.as_deref())
+}
+
+/// The basename of a shell program path; `unknown` for none or an empty one.
+pub(crate) fn shell_name_from(program: Option<&str>) -> String {
+    program
+        .and_then(|path| Path::new(path).file_name())
+        .map(|name| name.to_string_lossy().into_owned())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| "unknown".to_owned())
+}
+
 fn local_shell_command(cwd: &Path) -> CommandBuilder {
     with_terminal_env(CommandBuilder::new_default_prog(), cwd)
 }
@@ -612,5 +632,18 @@ mod tests {
             command.get_env("COLORTERM"),
             Some(std::ffi::OsStr::new("truecolor"))
         );
+    }
+}
+
+#[cfg(test)]
+mod shell_name_tests {
+    use super::shell_name_from;
+
+    #[test]
+    fn the_shell_is_named_by_its_program_basename() {
+        assert_eq!(shell_name_from(Some("/bin/zsh")), "zsh");
+        assert_eq!(shell_name_from(Some("/opt/homebrew/bin/fish")), "fish");
+        assert_eq!(shell_name_from(Some("")), "unknown");
+        assert_eq!(shell_name_from(None), "unknown");
     }
 }
