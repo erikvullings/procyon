@@ -106,5 +106,30 @@ pub async fn compact(
     }))
 }
 
+/// A summary of a whole conversation, for a record of it (task 0358): the same instructions as a
+/// compaction, so it keeps goals, decisions, files, commands and open questions; a long
+/// conversation is summarised in parts and combined.
+pub async fn summarize_conversation(
+    messages: &[Message],
+    model: &dyn SideModel,
+    report: &(dyn Fn(String) + Sync),
+) -> Result<String, SideModelError> {
+    let text = render_text(messages);
+    let task = SummaryTask {
+        system: COMPACT_SYSTEM,
+        name: "the conversation",
+        focus: "",
+        report,
+    };
+    let (summary, _) = summarize(&task, model, &text, model.input_bytes().max(4096)).await?;
+    let summary = summary.trim();
+    if summary.is_empty() {
+        return Err(SideModelError(
+            "the model wrote an empty summary".to_owned(),
+        ));
+    }
+    Ok(summary.to_owned())
+}
+
 #[cfg(test)]
 mod tests;

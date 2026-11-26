@@ -129,3 +129,30 @@ fn only_one_long_question_leaves_nothing_to_summarise() {
     let messages = vec![Message::User("x".repeat(10_000))];
     assert_eq!(compaction_cut(&messages, 100), 0);
 }
+
+#[tokio::test]
+async fn a_whole_conversation_is_summarised_for_a_record() {
+    let model = Recorder::new();
+    let messages = vec![
+        Message::User("Person: where are the decoys?".into()),
+        Message::Assistant {
+            text: "In ./decoys.".into(),
+            calls: Vec::new(),
+        },
+    ];
+    let summary = summarize_conversation(&messages, &model, &|_| {})
+        .await
+        .unwrap();
+    assert_eq!(summary, "summary 1");
+    assert!(model.prompts.lock().unwrap()[0].contains("where are the decoys?"));
+
+    let failing = Recorder {
+        fail: true,
+        ..Recorder::new()
+    };
+    assert!(
+        summarize_conversation(&messages, &failing, &|_| {})
+            .await
+            .is_err()
+    );
+}

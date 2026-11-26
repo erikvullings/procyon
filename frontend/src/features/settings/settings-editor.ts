@@ -760,6 +760,16 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                         onchange: (checked: boolean) =>
                           update(current, { assistantWebAccess: checked }),
                       }),
+                      // Session summaries become notes in sessions/ of the notes folder (0358).
+                      m(Switch, {
+                        className: 'col s12 m6',
+                        label: t('settings', 'assistantSessionMemory'),
+                        checked: activeDraft.assistantSessionMemory,
+                        left: t('settings', 'off'),
+                        right: t('settings', 'on'),
+                        onchange: (checked: boolean) =>
+                          update(current, { assistantSessionMemory: checked }),
+                      }),
                       m(Switch, {
                         className: 'col s12 m6',
                         label: t('settings', 'terminalHideFunctionKeys'),

@@ -517,6 +517,9 @@ pub struct SettingsDto {
     /// Whether the assistants may read public web pages (task 0363).
     #[serde(default = "assistant_web_access_default")]
     pub assistant_web_access: bool,
+    /// Whether summaries of assistant sessions are kept in the notes folder (task 0358).
+    #[serde(default)]
+    pub assistant_session_memory: bool,
     /// Whether the function-key bar is hidden while the terminal is open.
     #[serde(default = "terminal_hide_function_keys_default")]
     pub terminal_hide_function_keys: bool,

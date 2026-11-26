@@ -2991,8 +2991,14 @@ pub(crate) async fn terminal_assist_stream(
 
 /// Forgets a terminal tab's assistant session when the tab closes (task 0336).
 #[tauri::command]
-pub(crate) fn terminal_assist_close(state: State<'_, AppState>, session_id: String) {
+pub(crate) async fn terminal_assist_close(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<(), ApplicationErrorDto> {
+    // Async so the background summary of a session record (task 0358) has a runtime to run on;
+    // the session itself is closed at once.
     state.service.terminal_assist_close(&session_id);
+    Ok(())
 }
 
 /// What a command the assistant asks to run does, described without the conversation (0364).

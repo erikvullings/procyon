@@ -208,3 +208,38 @@ async fn an_unavailable_or_empty_index_falls_back_to_the_text_search() {
         search_notes(&store, Some(&stray), "nginx", 10, &CancellationToken::new()).await;
     assert_eq!(strategy, SearchStrategy::Text);
 }
+
+#[tokio::test]
+async fn session_records_and_notes_can_be_searched_apart() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("nginx.md"),
+        "# Renew nginx certificate\n\nRun certbot.\n",
+    )
+    .unwrap();
+    fs::create_dir(dir.path().join("sessions")).unwrap();
+    fs::write(
+        dir.path().join("sessions/2026-11-20-certs-ab12cd34.md"),
+        "---\ntitle: certs\nkind: session\n---\n# certs\n\nWe renewed the nginx certificate.\n",
+    )
+    .unwrap();
+    let store = store_for(&dir).await;
+    let search = |kind| {
+        let store = store.clone();
+        async move {
+            let (_, hits) =
+                search_notes_of_kind(&store, None, "nginx", 10, kind, &CancellationToken::new())
+                    .await;
+            hits.into_iter().map(|hit| hit.path).collect::<Vec<_>>()
+        }
+    };
+    assert_eq!(
+        search(Some(NoteKind::Session)).await,
+        ["sessions/2026-11-20-certs-ab12cd34.md"]
+    );
+    assert_eq!(search(Some(NoteKind::Note)).await, ["nginx.md"]);
+    assert_eq!(search(None).await.len(), 2);
+    assert!(is_session_record("sessions/x.md"));
+    assert!(!is_session_record("sessions.md"));
+    assert!(!is_session_record("old-sessions/x.md"));
+}

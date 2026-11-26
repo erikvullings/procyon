@@ -420,6 +420,7 @@ export const pt = {
     terminalAutoRunReadOnly: 'Executar sem perguntar os comandos só de leitura',
     terminalAllowFileWrites: 'Permitir que o assistente crie arquivos (após aprovação)',
     assistantWebAccess: 'Permitir que os assistentes leiam páginas web públicas',
+    assistantSessionMemory: 'Lembrar as sessões do assistente na minha pasta de notas',
     terminalHideFunctionKeys: 'Ocultar a barra de teclas de função enquanto o terminal está aberto',
     toolCalling: 'Chamada nativa de ferramentas',
     toolCalling_pending: 'ainda não verificado',

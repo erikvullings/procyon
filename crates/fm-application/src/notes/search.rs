@@ -4,6 +4,7 @@
 //! over every provider and in both hosts.
 
 use async_trait::async_trait;
+use fm_agent::NoteKind;
 use fm_domain::Location;
 use tokio_util::sync::CancellationToken;
 
@@ -203,16 +204,46 @@ pub(crate) async fn search_notes(
     limit: usize,
     cancellation: &CancellationToken,
 ) -> (SearchStrategy, Vec<NoteHit>) {
+    search_notes_of_kind(store, semantic, query, limit, None, cancellation).await
+}
+
+/// The folder that holds the records of assistant sessions (task 0358).
+pub(crate) const SESSIONS_FOLDER: &str = "sessions";
+
+/// Whether the note at `path` is the record of an assistant session.
+pub(crate) fn is_session_record(path: &str) -> bool {
+    path.strip_prefix(SESSIONS_FOLDER)
+        .is_some_and(|rest| rest.starts_with('/'))
+}
+
+fn of_kind(path: &str, kind: Option<NoteKind>) -> bool {
+    match kind {
+        None => true,
+        Some(NoteKind::Session) => is_session_record(path),
+        Some(NoteKind::Note) => !is_session_record(path),
+    }
+}
+
+/// Like [`search_notes`], keeping only notes or only session records when `kind` says so; the
+/// filter applies before the limit, so a narrow search still fills its hits.
+pub(crate) async fn search_notes_of_kind(
+    store: &NotesStore,
+    semantic: Option<&dyn SemanticNotes>,
+    query: &str,
+    limit: usize,
+    kind: Option<NoteKind>,
+    cancellation: &CancellationToken,
+) -> (SearchStrategy, Vec<NoteHit>) {
     let limit = limit.clamp(1, MAX_HITS);
     if let Some(index) = semantic {
-        let hits = semantic_hits(store, index, query, limit).await;
+        let hits = semantic_hits(store, index, query, limit, kind).await;
         if !hits.is_empty() {
             return (SearchStrategy::Semantic, hits);
         }
     }
     (
         SearchStrategy::Text,
-        text_hits(store, query, limit, cancellation).await,
+        text_hits(store, query, limit, kind, cancellation).await,
     )
 }
 
@@ -222,6 +253,7 @@ async fn semantic_hits(
     index: &dyn SemanticNotes,
     query: &str,
     limit: usize,
+    kind: Option<NoteKind>,
 ) -> Vec<NoteHit> {
     // Several passages may come from one note, so ask for more passages than notes are wanted.
     let Ok(passages) = index.search(query, MAX_HITS.max(limit * 3)).await else {
@@ -235,7 +267,7 @@ async fn semantic_hits(
         let Some(path) = store.path_of(&passage.location).await else {
             continue;
         };
-        if hits.iter().any(|hit| hit.path == path) {
+        if !of_kind(&path, kind) || hits.iter().any(|hit| hit.path == path) {
             continue;
         }
         let (title, tags) = describe(store, &passage.location, &path).await;
@@ -278,6 +310,7 @@ async fn text_hits(
     store: &NotesStore,
     query: &str,
     limit: usize,
+    kind: Option<NoteKind>,
     cancellation: &CancellationToken,
 ) -> Vec<NoteHit> {
     let terms = query_terms(query);
@@ -289,7 +322,7 @@ async fn text_hits(
         if cancellation.is_cancelled() {
             break;
         }
-        if file.size > MAX_SEARCHED_NOTE_BYTES {
+        if file.size > MAX_SEARCHED_NOTE_BYTES || !of_kind(&file.path, kind) {
             continue;
         }
         let Ok(text) = store

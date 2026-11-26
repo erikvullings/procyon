@@ -35,6 +35,7 @@ function fixtureSettings(overrides: Partial<Settings> = {}): Settings {
     terminalAutoRunReadOnly: true,
     terminalAllowFileWrites: true,
     assistantWebAccess: true,
+    assistantSessionMemory: false,
     terminalHideFunctionKeys: true,
     schemaVersion: 2,
     theme: 'auto',

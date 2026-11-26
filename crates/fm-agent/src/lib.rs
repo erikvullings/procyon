@@ -67,7 +67,7 @@ mod web;
 
 pub use self::compact::{
     COMPACT_AT_PERCENT, COMPACTED_INTRO, Compaction, KEEP_AFTER_COMPACTING_PERCENT, compact,
-    compaction_cut, needs_compaction,
+    compaction_cut, needs_compaction, summarize_conversation,
 };
 pub use self::edit::{
     EditError, EditFile, EditMatch, EditRequest, MAX_EDIT_TEXT_BYTES, MAX_EDITED_FILE_BYTES,
@@ -80,7 +80,7 @@ pub use self::instructions::{
 pub use self::message::{
     Message, NOT_RUN_RESULT, OMITTED_NOTE, ToolCallRecord, fit_messages, render_text,
 };
-pub use self::notes::{NoteProposal, NoteToolCall, NotesAccess};
+pub use self::notes::{NoteKind, NoteProposal, NoteToolCall, NotesAccess};
 pub use self::paths::{is_credential_folder, is_secret_name};
 pub use self::protocol::{repair_tool_arguments, tool_call_line};
 pub use self::redact::redact_secrets;

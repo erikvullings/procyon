@@ -263,6 +263,7 @@ export class MockContext {
     terminalAutoRunReadOnly: true,
     terminalAllowFileWrites: true,
     assistantWebAccess: true,
+    assistantSessionMemory: false,
     terminalHideFunctionKeys: true,
     semanticMaxSourceMib: 64,
     semanticThemeRootIds: [],

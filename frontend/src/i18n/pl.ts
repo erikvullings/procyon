@@ -418,6 +418,7 @@ export const pl = {
     terminalAutoRunReadOnly: 'Uruchamiaj polecenia tylko do odczytu bez pytania',
     terminalAllowFileWrites: 'Pozwól asystentowi tworzyć pliki (po zatwierdzeniu)',
     assistantWebAccess: 'Pozwól asystentom czytać publiczne strony internetowe',
+    assistantSessionMemory: 'Zapamiętuj sesje asystenta w moim folderze notatek',
     terminalHideFunctionKeys: 'Ukryj pasek klawiszy funkcyjnych, gdy terminal jest otwarty',
     toolCalling: 'Natywne wywołania narzędzi',
     toolCalling_pending: 'jeszcze nie sprawdzono',

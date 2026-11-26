@@ -16,6 +16,8 @@ pub enum NoteToolCall {
         query: String,
         /// Most hits wanted.
         limit: Option<u32>,
+        /// Notes only, past assistant sessions only, or both (`None`).
+        kind: Option<NoteKind>,
     },
     /// Reads one note.
     Read {
@@ -31,6 +33,16 @@ pub enum NoteToolCall {
         /// The proposed Markdown.
         content: String,
     },
+}
+
+/// What a hit in the notes folder is (task 0358).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum NoteKind {
+    /// A note the person wrote or saved.
+    Note,
+    /// The record of an earlier assistant session (its summary, questions and files).
+    Session,
 }
 
 /// A note waiting for the person's review.

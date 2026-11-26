@@ -3,12 +3,14 @@
 //! assistant sessions into draft notes, searches notes (semantically when the folder is indexed,
 //! by text otherwise) and reads them inside the folder only. It never writes a note: new notes
 //! are created through the operation engine and changes saved through the editor, both after the
-//! person reviews them.
+//! person reviews them. The one exception is `SessionRecords` (task 0358): when the person turns
+//! session records on, it writes summaries of assistant sessions to `sessions/*.md`, nothing else.
 
 mod capture;
 mod format;
 mod search;
 mod semantic;
+mod sessions;
 mod store;
 mod tools;
 
@@ -32,6 +34,10 @@ use self::capture::{CaptureInput, draft_note};
 pub(crate) use self::search::SemanticNotes;
 use self::search::{DEFAULT_HITS, SearchStrategy, search_notes};
 pub(crate) use self::semantic::KnowledgeNotesIndex;
+pub(crate) use self::sessions::{SessionHost, SessionRecord, SessionRecords, touched_paths};
+/// Test helpers for other modules: the local provider and a canonical folder location.
+#[cfg(test)]
+pub(crate) use self::store::tests::{location_of as test_location, registry as test_registry};
 pub(crate) use self::store::{NotesError, NotesStore};
 pub(crate) use self::tools::AssistantNotes;
 

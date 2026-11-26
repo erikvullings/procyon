@@ -30,6 +30,22 @@ pub(super) fn conversation_budget(window: Option<u32>) -> usize {
             .clamp(MAX_RENDERED_BYTES / 3, MAX_CONVERSATION_BYTES)
     })
 }
+/// Most questions and file paths remembered for a session's record.
+const MAX_REMEMBERED: usize = 50;
+
+/// What a record of a session is made from (task 0358).
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct SessionInfo {
+    pub(crate) title: String,
+    pub(crate) questions: Vec<String>,
+    pub(crate) files: Vec<String>,
+    pub(crate) folder: Option<String>,
+    pub(crate) started: Option<String>,
+    /// Whether the model answered at least once; a session without an answer is not recorded.
+    pub(crate) answered: bool,
+    pub(crate) messages: Vec<Message>,
+}
+
 /// Most messages queued for a running request.
 pub(crate) const MAX_STEERING: usize = 8;
 /// Most turns stored per session; older ones are dropped.
@@ -86,6 +102,15 @@ struct WriteGrant {
 
 #[derive(Debug, Default)]
 struct Session {
+    /// For the record of the session (task 0358): when it started, its folder, every question
+    /// asked and the files the tools touched, kept as they happen because compaction and the turn
+    /// limit drop old turns.
+    started: Option<String>,
+    folder: Option<String>,
+    asked: Vec<String>,
+    touched: Vec<String>,
+    /// Whether the model answered at least once.
+    answered: bool,
     /// The file waiting for approval.
     pending_write: Option<PendingWrite>,
     /// The edit waiting for approval (task 0352).
@@ -110,6 +135,49 @@ struct Session {
     state_sent: bool,
     /// Fingerprints of the command blocks already sent, oldest first.
     sent_blocks: Vec<u64>,
+}
+
+impl Session {
+    /// A session continuing `turns` (a resumed or forked conversation), with its record's
+    /// bookkeeping rebuilt from them, so its record lists what was asked before (task 0358).
+    fn from_turns(turns: Vec<Turn>, folder: Option<String>) -> Self {
+        let mut session = Self {
+            folder,
+            ..Self::default()
+        };
+        for turn in &turns {
+            match turn {
+                Turn::Person { question, .. } => session.note_question(question),
+                Turn::Agent(Message::Assistant { text, calls }) => session.note_reply(text, calls),
+                Turn::Agent(_) => {}
+            }
+        }
+        session.turns = turns;
+        session
+    }
+
+    fn note_question(&mut self, question: &str) {
+        if self.started.is_none() {
+            self.started =
+                Some(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
+        }
+        if !question.trim().is_empty() && self.asked.len() < MAX_REMEMBERED {
+            self.asked.push(question.to_owned());
+        }
+    }
+
+    fn note_reply(&mut self, text: &str, calls: &[ToolCallRecord]) {
+        if calls.is_empty() && !text.trim().is_empty() {
+            self.answered = true;
+        }
+        for path in crate::notes::touched_paths(calls) {
+            if !self.touched.iter().any(|known| known == path)
+                && self.touched.len() < MAX_REMEMBERED
+            {
+                self.touched.push(path.to_owned());
+            }
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -141,6 +209,7 @@ impl Sessions {
         let Some(store) = &self.store else {
             return;
         };
+        self.with(id, |session| session.folder = Some(folder.to_owned()));
         let (title, turns) = {
             let state = self.lock();
             let Some(session) = state.sessions.get(id) else {
@@ -157,6 +226,21 @@ impl Sessions {
             (title, session.turns.clone())
         };
         store.save(id, folder, &title, &turns);
+    }
+
+    /// What a record of the session needs (task 0358); `None` for an unknown session.
+    pub(crate) fn record_info(&self, id: &str) -> Option<SessionInfo> {
+        let state = self.lock();
+        let session = state.sessions.get(id)?;
+        Some(SessionInfo {
+            title: session.asked.first().cloned().unwrap_or_default(),
+            questions: session.asked.clone(),
+            files: session.touched.clone(),
+            folder: session.folder.clone(),
+            started: session.started.clone(),
+            answered: session.answered,
+            messages: session.turns.iter().map(Turn::message).collect(),
+        })
     }
 
     /// The saved sessions, most recent first; empty without a store.
@@ -178,13 +262,8 @@ impl Sessions {
             updated_at: record.updated_at.clone(),
             questions: record.questions,
         };
-        let turns = record.turns;
-        self.with(into, |session| {
-            *session = Session {
-                turns,
-                ..Session::default()
-            };
-        });
+        let restored = Session::from_turns(record.turns, Some(record.folder));
+        self.with(into, |session| *session = restored);
         Some(summary)
     }
 
@@ -219,13 +298,13 @@ impl Sessions {
                 Turn::Agent(_) => None,
             })
             .nth(question.checked_sub(1)?)?;
-        let kept = turns[..index].to_vec();
-        self.with(into, |session| {
-            *session = Session {
-                turns: kept,
-                ..Session::default()
-            };
-        });
+        let folder = self
+            .lock()
+            .sessions
+            .get(from)
+            .and_then(|session| session.folder.clone());
+        let restored = Session::from_turns(turns[..index].to_vec(), folder);
+        self.with(into, |session| *session = restored);
         Some(asked)
     }
 
@@ -356,6 +435,7 @@ impl Sessions {
                 question: question.to_owned(),
                 context: context.to_owned(),
             });
+            session.note_question(question);
         });
     }
 
@@ -439,6 +519,7 @@ impl Sessions {
     /// Records the assistant's reply and the calls run from it.
     pub(super) fn push_assistant(&self, id: &str, text: &str, calls: &[ToolCallRecord]) {
         self.with(id, |session| {
+            session.note_reply(text, calls);
             session.turns.push(Turn::Agent(Message::Assistant {
                 text: truncate_to_bytes(text, MAX_TURN_BYTES).to_owned(),
                 calls: calls.to_vec(),

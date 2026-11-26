@@ -413,6 +413,7 @@ export const en = {
     terminalAutoRunReadOnly: 'Run read-only commands without asking',
     terminalAllowFileWrites: 'Let the assistant create files (after approval)',
     assistantWebAccess: 'Let the assistants read public web pages',
+    assistantSessionMemory: 'Remember assistant sessions in my notes folder',
     terminalHideFunctionKeys: 'Hide the function-key bar while the terminal is open',
     toolCalling: 'Native tool calling',
     toolCalling_pending: 'not checked yet',

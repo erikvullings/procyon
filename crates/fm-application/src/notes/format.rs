@@ -16,6 +16,14 @@ pub(crate) struct NoteMeta {
     pub(crate) hosts: Vec<String>,
     pub(crate) shell: Option<String>,
     pub(crate) source: Option<String>,
+    /// `session` for the record of an assistant session (task 0358).
+    pub(crate) kind: Option<String>,
+    /// Which assistant a session record comes from: `terminal` or `chat`.
+    pub(crate) host: Option<String>,
+    /// The folder a session worked in.
+    pub(crate) folder: Option<String>,
+    /// When a session started (session records).
+    pub(crate) started: Option<String>,
 }
 
 /// Longest slug, in bytes.
@@ -84,6 +92,10 @@ fn parse_front_matter(front: &str) -> NoteMeta {
             "updated" => meta.updated = Some(value),
             "shell" => meta.shell = Some(value),
             "source" => meta.source = Some(value),
+            "kind" => meta.kind = Some(value),
+            "host" => meta.host = Some(value),
+            "folder" => meta.folder = Some(value),
+            "started" => meta.started = Some(value),
             "tags" | "hosts" => push_list_value(&mut meta, &key, value),
             _ => {}
         }
@@ -150,6 +162,7 @@ pub(crate) fn render_note(meta: &NoteMeta, body: &str) -> String {
         ("name", &meta.name),
         ("description", &meta.description),
         ("created", &meta.created),
+        ("started", &meta.started),
         ("updated", &meta.updated),
     ];
     for (key, value) in scalars {
@@ -163,7 +176,13 @@ pub(crate) fn render_note(meta: &NoteMeta, body: &str) -> String {
             out.push_str(&format!("{key}: [{}]\n", items.join(", ")));
         }
     }
-    for (key, value) in [("shell", &meta.shell), ("source", &meta.source)] {
+    for (key, value) in [
+        ("shell", &meta.shell),
+        ("source", &meta.source),
+        ("kind", &meta.kind),
+        ("host", &meta.host),
+        ("folder", &meta.folder),
+    ] {
         if let Some(value) = value {
             out.push_str(&format!("{key}: {}\n", quote(value)));
         }
@@ -314,6 +333,7 @@ mod tests {
             hosts: vec![],
             shell: Some("zsh".into()),
             source: Some("terminal-session".into()),
+            ..NoteMeta::default()
         };
         let text = render_note(&meta, "# CSR\n\nSteps\n");
         assert!(text.starts_with("---\ntitle: \"CSR: create with openssl #1\"\n"));

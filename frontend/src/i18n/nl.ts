@@ -415,6 +415,7 @@ export const nl = {
     terminalAutoRunReadOnly: 'Alleen-lezen opdrachten uitvoeren zonder te vragen',
     terminalAllowFileWrites: 'Assistent mag bestanden maken (na goedkeuring)',
     assistantWebAccess: 'Assistenten mogen openbare webpagina’s lezen',
+    assistantSessionMemory: 'Assistentsessies onthouden in mijn notitiemap',
     terminalHideFunctionKeys: 'Functietoetsenbalk verbergen zolang de terminal open is',
     toolCalling: 'Native tool-aanroepen',
     toolCalling_pending: 'nog niet gecontroleerd',

@@ -425,6 +425,7 @@ export const de = {
     terminalAutoRunReadOnly: 'Schreibgeschützte Befehle ohne Nachfrage ausführen',
     terminalAllowFileWrites: 'Assistent darf Dateien erstellen (nach Freigabe)',
     assistantWebAccess: 'Assistenten dürfen öffentliche Webseiten lesen',
+    assistantSessionMemory: 'Assistenten-Sitzungen in meinem Notizordner merken',
     terminalHideFunctionKeys: 'Funktionstastenleiste ausblenden, solange das Terminal offen ist',
     toolCalling: 'Native Werkzeugaufrufe',
     toolCalling_pending: 'noch nicht geprüft',

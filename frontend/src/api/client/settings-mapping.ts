@@ -62,6 +62,7 @@ export function settingsFromDto(settings: SettingsDto): Settings {
     terminalAutoRunReadOnly: settings.terminalAutoRunReadOnly ?? true,
     terminalAllowFileWrites: settings.terminalAllowFileWrites ?? true,
     assistantWebAccess: settings.assistantWebAccess ?? true,
+    assistantSessionMemory: settings.assistantSessionMemory ?? false,
     terminalHideFunctionKeys: settings.terminalHideFunctionKeys ?? true,
     pictureInfo: settings.pictureInfo ?? DEFAULT_PICTURE_INFO_SETTINGS,
     documentHub: settings.documentHub ?? DEFAULT_DOCUMENT_HUB_SETTINGS,

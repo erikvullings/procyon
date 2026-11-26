@@ -8,6 +8,7 @@ mod command_details;
 mod commands;
 mod context;
 mod edit;
+mod records;
 mod saved;
 mod session;
 mod write;
@@ -149,6 +150,8 @@ pub(crate) struct TerminalHost<'a> {
     pub(crate) notes: Option<&'a dyn NotesAccess>,
     /// The skill headers remembered between requests.
     pub(crate) skills: &'a Arc<SkillIndex>,
+    /// Where session records go, when the person turned that on and a notes folder is set (0358).
+    pub(crate) records: Option<&'a crate::notes::SessionRecords>,
 }
 
 /// The folder an `ask` works in: the session's root when the working folder lies inside it
@@ -205,9 +208,16 @@ pub(crate) async fn compact(
     generator: &impl ChatGenerator,
     sessions: &Sessions,
     id: &str,
+    records: Option<&crate::notes::SessionRecords>,
 ) -> Result<(), ChatFailureDto> {
-    commands::compact(generator, sessions, id).await
+    let summary = commands::compact(generator, sessions, id).await?;
+    if let (Some(records), Some(summary)) = (records, summary) {
+        records::record_session(records, sessions, id, &summary).await;
+    }
+    Ok(())
 }
+
+pub(crate) use self::records::close;
 
 /// Like [`reply`], and for an `ask` also reports each finished line of the answer, and each step,
 /// to `on_event` while the model is still writing.
@@ -331,6 +341,8 @@ async fn ask_turn(
     // The session's root, when the shell is still inside it, is the folder the tools may read.
     let folder = tools_folder(&request);
     let files = FolderTools::open(providers, folder);
+    // Session records (task 0358).
+    let records = terminal.records;
     let (host, documents) = (files.host(), files.documents());
     // Calls are understood for every tool; the prompt describes `write_file` only when allowed.
     let mut registry = agent_tools::registry(true);
@@ -497,6 +509,7 @@ async fn ask_turn(
     };
     compact_if_needed(
         sessions,
+        records,
         &id,
         turn.budget,
         &side_calls,
@@ -707,6 +720,7 @@ async fn create_file(
 /// summary fails, the oldest exchanges are left out of the prompt as before.
 async fn compact_if_needed(
     sessions: &Sessions,
+    records: Option<&crate::notes::SessionRecords>,
     id: &str,
     budget: usize,
     model: &dyn fm_agent::SideModel,
@@ -723,6 +737,9 @@ async fn compact_if_needed(
     let step = match fm_agent::compact(&messages, budget, model, &|_| {}).await {
         Ok(Some(compaction)) => {
             sessions.replace_prefix(id, compaction.covered, messages.len(), compaction.message());
+            if let Some(records) = records {
+                records::record_session(records, sessions, id, &compaction.summary).await;
+            }
             format!("Summarised {} earlier messages", compaction.covered)
         }
         Ok(None) => return,
@@ -883,6 +900,7 @@ mod tests {
             sessions,
             notes,
             skills: skill_index(),
+            records: None,
         }
     }
 
@@ -1351,6 +1369,97 @@ mod tests {
         let seen = fake.seen.lock().unwrap();
         let prompt = &seen[1].1.user_prompt;
         assert!(prompt.contains("Exit status 0. Output:\nok. 3 passed\nAPI_KEY=[redacted]"));
+    }
+
+    fn notes_records(dir: &std::path::Path) -> crate::notes::SessionRecords {
+        crate::notes::SessionRecords::new(
+            crate::notes::test_registry(),
+            crate::notes::test_location(dir),
+        )
+    }
+
+    fn session_files(dir: &std::path::Path) -> Vec<String> {
+        std::fs::read_dir(dir.join("sessions"))
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .map(|entry| std::fs::read_to_string(entry.path()).unwrap())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    #[tokio::test]
+    async fn a_closed_session_with_an_answer_is_kept_as_a_record_and_one_without_is_not() {
+        let notes = tempfile::tempdir().unwrap();
+        let records = notes_records(notes.path());
+        let sessions = Sessions::default();
+        sessions.push_person("t", "where are the decoys?", "");
+        sessions.push_assistant(
+            "t",
+            "",
+            &[ToolCallRecord {
+                id: "c1".into(),
+                name: "read_file".into(),
+                arguments: serde_json::json!({"path": "decoys/list.txt"}),
+            }],
+        );
+        sessions.push_assistant("t", "In ./decoys.", &[]);
+        sessions.save("t", "file:///work");
+        let fake = Arc::new(scripted(&[
+            "The person looked for decoy files; they are in ./decoys.",
+        ]));
+        close(
+            fake.clone(),
+            &sessions,
+            "t",
+            Some(notes_records(notes.path())),
+        )
+        .expect("summarised in the background")
+        .await
+        .unwrap();
+        let files = session_files(notes.path());
+        assert_eq!(files.len(), 1);
+        let record = &files[0];
+        assert!(
+            record.contains("kind: session") && record.contains("host: terminal"),
+            "{record}"
+        );
+        assert!(record.contains("they are in ./decoys."), "{record}");
+        assert!(record.contains("- where are the decoys?\n"), "{record}");
+        assert!(record.contains("`decoys/list.txt`"), "{record}");
+        // The session is gone from memory.
+        assert!(sessions.record_info("t").is_none());
+
+        // No answer yet: nothing to remember, and no model call.
+        sessions.push_person("u", "hello?", "");
+        let silent = Arc::new(scripted(&[]));
+        assert!(close(silent.clone(), &sessions, "u", Some(records)).is_none());
+        assert_eq!(session_files(notes.path()).len(), 1);
+        assert!(silent.seen.lock().unwrap().is_empty());
+        assert!(sessions.record_info("u").is_none(), "closed at once");
+    }
+
+    #[tokio::test]
+    async fn compacting_a_session_updates_its_record() {
+        let notes = tempfile::tempdir().unwrap();
+        let records = notes_records(notes.path());
+        let sessions = Sessions::default();
+        sessions.push_person("t", "what is this project?", "");
+        sessions.push_assistant("t", "A Rust project.", &[]);
+        let fake = scripted(&["SUMMARY: a Rust project.", "SUMMARY: a Rust file manager."]);
+        compact(&fake, &sessions, "t", Some(&records))
+            .await
+            .unwrap();
+        sessions.push_person("t", "and its name?", "");
+        sessions.push_assistant("t", "Procyon.", &[]);
+        compact(&fake, &sessions, "t", Some(&records))
+            .await
+            .unwrap();
+        let files = session_files(notes.path());
+        assert_eq!(files.len(), 1, "updated in place, not duplicated");
+        assert!(files[0].contains("a Rust file manager"), "{}", files[0]);
+        assert!(files[0].contains("- and its name?"), "{}", files[0]);
     }
 
     #[tokio::test]
@@ -1970,7 +2079,8 @@ mod tests {
             [
                 NoteToolCall::Search {
                     query: "nginx certificate".into(),
-                    limit: None
+                    limit: None,
+                    kind: None,
                 },
                 NoteToolCall::Read {
                     path: "ops/nginx.md".into()
@@ -2164,12 +2274,12 @@ mod tests {
             ask_request("t", "what is this?", dir.path()),
         )
         .await;
-        compact(&fake, &sessions, "t").await.unwrap();
+        compact(&fake, &sessions, "t", None).await.unwrap();
         let rendered = sessions.render("t");
         assert!(rendered.contains("SUMMARY: a Rust project."), "{rendered}");
         assert!(!rendered.contains("what is this?"), "{rendered}");
         // Nothing to compact is not an error.
-        compact(&fake, &sessions, "unknown").await.unwrap();
+        compact(&fake, &sessions, "unknown", None).await.unwrap();
     }
 
     const WRITE_A: &str = r##"TOOL {"tool":"write_file","path":"a.md","content":"# A"}"##;

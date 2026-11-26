@@ -418,6 +418,7 @@ export const it = {
     terminalAutoRunReadOnly: 'Esegui senza chiedere i comandi di sola lettura',
     terminalAllowFileWrites: 'Consenti all’assistente di creare file (dopo approvazione)',
     assistantWebAccess: 'Consenti agli assistenti di leggere pagine web pubbliche',
+    assistantSessionMemory: 'Ricorda le sessioni dell’assistente nella mia cartella di note',
     terminalHideFunctionKeys: 'Nascondi la barra dei tasti funzione quando il terminale è aperto',
     toolCalling: 'Chiamata nativa degli strumenti',
     toolCalling_pending: 'non ancora verificato',

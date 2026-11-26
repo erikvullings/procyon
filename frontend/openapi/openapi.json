@@ -28264,6 +28264,10 @@
           "viewerInSeparateWindow"
         ],
         "properties": {
+          "assistantSessionMemory": {
+            "type": "boolean",
+            "description": "Whether summaries of assistant sessions are kept in the notes folder (task 0358)."
+          },
           "assistantWebAccess": {
             "type": "boolean",
             "description": "Whether the assistants may read public web pages (task 0363)."

@@ -277,6 +277,8 @@ export interface Settings {
   readonly terminalAllowFileWrites: boolean;
   /** Whether the assistants may read public web pages (task 0363). */
   readonly assistantWebAccess: boolean;
+  /** Whether summaries of assistant sessions are kept in the notes folder (task 0358). */
+  readonly assistantSessionMemory: boolean;
   /** Whether the function-key bar is hidden while the terminal is open. */
   readonly terminalHideFunctionKeys: boolean;
   /** Remembers and restores the view (sort, columns, mode) chosen for each folder (task 0270). */

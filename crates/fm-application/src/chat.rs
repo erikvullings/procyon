@@ -29,6 +29,7 @@ use crate::llm_profiles::{
     LlmChatGeneration, LlmImageAttachment, LlmProfileError, LlmProfileService, LlmRole,
     ReplyFormat, ThinkingRequest,
 };
+use crate::notes::{SessionHost, SessionRecord, SessionRecords, touched_paths};
 
 /// Longest message the person sends, in characters.
 const MAX_MESSAGE_CHARS: usize = 16 * 1024;
@@ -197,6 +198,7 @@ pub(crate) struct ChatService {
 
 impl ChatService {
     /// Runs one reply, reporting fragments as they arrive and then exactly one final event.
+    #[cfg(test)]
     pub(crate) async fn stream(
         &self,
         generator: &impl ChatGenerator,
@@ -205,8 +207,30 @@ impl ChatService {
         request: ChatReplyRequestDto,
         on_event: &mut (dyn FnMut(ChatReplyEventDto) + Send),
     ) {
+        self.stream_with_records(generator, conversations, tooling, None, request, on_event)
+            .await;
+    }
+
+    /// Like [`stream`](Self::stream); with `records`, a compacted conversation's summary is also
+    /// kept in the notes folder (task 0358).
+    pub(crate) async fn stream_with_records(
+        &self,
+        generator: &impl ChatGenerator,
+        conversations: &ChatConversationService,
+        tooling: Option<&ChatTooling<'_>>,
+        records: Option<&SessionRecords>,
+        request: ChatReplyRequestDto,
+        on_event: &mut (dyn FnMut(ChatReplyEventDto) + Send),
+    ) {
         let outcome = self
-            .reply(generator, conversations, tooling, request, on_event)
+            .reply(
+                generator,
+                conversations,
+                tooling,
+                records,
+                request,
+                on_event,
+            )
             .await;
         on_event(match outcome {
             Ok(text) => ChatReplyEventDto::Done { text },
@@ -221,6 +245,7 @@ impl ChatService {
         generator: &impl ChatGenerator,
         conversations: &ChatConversationService,
         tooling: Option<&ChatTooling<'_>>,
+        records: Option<&SessionRecords>,
         request: ChatReplyRequestDto,
         on_event: &mut (dyn FnMut(ChatReplyEventDto) + Send),
     ) -> Result<String, ChatReplyError> {
@@ -268,6 +293,7 @@ impl ChatService {
         };
         let cancellation = CancellationToken::new();
         self.lock().insert(request.request_id, cancellation.clone());
+        let summary_before = saved.compaction.clone();
         let saved = compact_if_needed(
             generator,
             conversations,
@@ -277,6 +303,12 @@ impl ChatService {
             on_event,
         )
         .await;
+        // A new summary is kept in the notes folder (task 0358).
+        if let Some(records) = records
+            && saved.compaction != summary_before
+        {
+            record_chat(records, &saved, request.tools_folder.as_deref()).await;
+        }
         let prompts = build_prompts(&saved);
         let chosen = request.thinking.map(crate::llm_profiles::thinking_from_dto);
         // The effort is kept with the conversation, so it is chosen again when it is reopened.
@@ -477,6 +509,53 @@ fn validate_message(
 /// summary in the conversation so a later reply does not summarise again. Returns the conversation
 /// as it is to be sent. A failed summary is reported as a step; the oldest messages then drop out
 /// in [`build_prompts`], as before.
+/// Keeps the conversation's latest summary in the notes folder (task 0358).
+async fn record_chat(
+    records: &SessionRecords,
+    conversation: &ChatConversation,
+    folder: Option<&str>,
+) {
+    let Some(compaction) = &conversation.compaction else {
+        return;
+    };
+    let questions = conversation
+        .messages
+        .iter()
+        .filter(|message| message.role == ChatRole::User)
+        .map(|message| message.content.clone())
+        .collect();
+    // The files the tools read for earlier replies: their paths only, as the terminal records.
+    let mut files: Vec<String> = Vec::new();
+    let calls = conversation
+        .messages
+        .iter()
+        .flat_map(|message| &message.exchanges)
+        .filter_map(|exchange| match exchange {
+            Message::Assistant { calls, .. } => Some(calls.as_slice()),
+            _ => None,
+        });
+    for calls in calls {
+        for path in touched_paths(calls) {
+            if !files.iter().any(|known| known == path) {
+                files.push(path.to_owned());
+            }
+        }
+    }
+    let record = SessionRecord {
+        id: conversation.id.to_string(),
+        host: SessionHost::Chat,
+        title: conversation.title.clone(),
+        folder: folder.map(str::to_owned),
+        started: None,
+        summary: compaction.summary.clone(),
+        questions,
+        files,
+    };
+    if let Err(error) = records.write(&record, chrono::Utc::now()).await {
+        tracing::warn!(error = %error, "the chat's session record could not be written");
+    }
+}
+
 async fn compact_if_needed(
     generator: &impl ChatGenerator,
     conversations: &ChatConversationService,
@@ -1375,6 +1454,60 @@ mod tests {
         assert!(prompt.contains("(looked up with read_file"), "{prompt}");
         // Earlier calls read as history, never as a call line to copy.
         assert!(!prompt.contains("TOOL {"), "{prompt}");
+    }
+
+    #[tokio::test]
+    async fn a_compacted_chat_is_kept_as_a_session_record() {
+        let (_directory, conversations) = store();
+        let notes = tempdir().unwrap();
+        let records = SessionRecords::new(
+            crate::notes::test_registry(),
+            crate::notes::test_location(notes.path()),
+        );
+        let workspace = Uuid::new_v4();
+        let id = conversations.create(workspace).unwrap().id;
+        for index in 0..12 {
+            for role in [ChatRole::User, ChatRole::Assistant] {
+                conversations
+                    .append(
+                        workspace,
+                        id,
+                        ChatMessage {
+                            role,
+                            content: format!("{index}:{}", "w".repeat(4 * 1024)),
+                            context: None,
+                            steps: Vec::new(),
+                            exchanges: Vec::new(),
+                        },
+                    )
+                    .unwrap();
+            }
+        }
+        let generator = fake(Outcome::Text("They compared twelve files.".into()));
+        let mut seen = Vec::new();
+        ChatService::default()
+            .stream_with_records(
+                &generator,
+                &conversations,
+                None,
+                Some(&records),
+                request(workspace, id, "And the last one?", None),
+                &mut |event| seen.push(event),
+            )
+            .await;
+        let files: Vec<String> = std::fs::read_dir(notes.path().join("sessions"))
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|entry| std::fs::read_to_string(entry.path()).unwrap())
+            .collect();
+        assert_eq!(files.len(), 1);
+        assert!(files[0].contains("host: chat"), "{}", files[0]);
+        assert!(
+            files[0].contains("They compared twelve files."),
+            "{}",
+            files[0]
+        );
+        assert!(files[0].contains("- And the last one?"), "{}", files[0]);
     }
 
     #[tokio::test]

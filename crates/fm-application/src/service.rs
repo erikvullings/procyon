@@ -3527,8 +3527,13 @@ impl FileManagerService {
         request: fm_transport_dto::TerminalAssistRequestDto,
     ) -> Result<fm_transport_dto::TerminalAssistReplyDto, fm_transport_dto::ChatFailureDto> {
         let notes = self.assistant_notes(access, request.workspace_id).await;
-        crate::terminal_assist::reply(&self.llm_profiles, &self.terminal_host(&notes), request)
-            .await
+        let records = self.session_records();
+        crate::terminal_assist::reply(
+            &self.llm_profiles,
+            &self.terminal_host(&notes, records.as_ref()),
+            request,
+        )
+        .await
     }
 
     /// Like [`terminal_assist`](Self::terminal_assist), and for an `ask` reports each finished line
@@ -3540,9 +3545,10 @@ impl FileManagerService {
         on_event: &mut (dyn FnMut(fm_transport_dto::TerminalAssistEventDto) + Send),
     ) -> Result<fm_transport_dto::TerminalAssistReplyDto, fm_transport_dto::ChatFailureDto> {
         let notes = self.assistant_notes(access, request.workspace_id).await;
+        let records = self.session_records();
         crate::terminal_assist::reply_streaming(
             &self.llm_profiles,
-            &self.terminal_host(&notes),
+            &self.terminal_host(&notes, records.as_ref()),
             request,
             on_event,
         )
@@ -3552,13 +3558,25 @@ impl FileManagerService {
     fn terminal_host<'a>(
         &'a self,
         notes: &'a crate::notes::AssistantNotes<'_>,
+        records: Option<&'a crate::notes::SessionRecords>,
     ) -> crate::terminal_assist::TerminalHost<'a> {
         crate::terminal_assist::TerminalHost {
             providers: &self.providers,
             sessions: &self.terminal_sessions,
             notes: Some(notes),
             skills: &self.skill_index,
+            records,
         }
+    }
+
+    /// The writer of session records, when the person turned them on and a notes folder is set
+    /// (task 0358).
+    fn session_records(&self) -> Option<crate::notes::SessionRecords> {
+        let settings = self
+            .settings
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        crate::notes::SessionRecords::for_settings(&settings, &self.providers)
     }
 
     /// The files under a terminal session's root, for `@` completion (task 0343).
@@ -3576,7 +3594,7 @@ impl FileManagerService {
         working_directory: &str,
     ) -> Vec<fm_transport_dto::TerminalAssistSkillDto> {
         let notes = self.assistant_notes(access, None).await;
-        crate::terminal_assist::skills(&self.terminal_host(&notes), working_directory).await
+        crate::terminal_assist::skills(&self.terminal_host(&notes, None), working_directory).await
     }
 
     /// Replaces a terminal session's conversation with a model-written summary (`/compact`,
@@ -3585,13 +3603,26 @@ impl FileManagerService {
         &self,
         session_id: &str,
     ) -> Result<(), fm_transport_dto::ChatFailureDto> {
-        crate::terminal_assist::compact(&self.llm_profiles, &self.terminal_sessions, session_id)
-            .await
+        let records = self.session_records();
+        crate::terminal_assist::compact(
+            &self.llm_profiles,
+            &self.terminal_sessions,
+            session_id,
+            records.as_ref(),
+        )
+        .await
     }
 
     /// Forgets one terminal tab's assistant session, when the tab closes.
+    /// With session records on, the session's summary is written in the background (task
+    /// 0358), so this returns at once; it must run inside the async runtime.
     pub fn terminal_assist_close(&self, session_id: &str) {
-        self.terminal_sessions.close(session_id);
+        let _ = crate::terminal_assist::close(
+            std::sync::Arc::new(self.llm_profiles.clone()),
+            &self.terminal_sessions,
+            session_id,
+            self.session_records(),
+        );
     }
 
     /// The saved terminal assistant sessions, most recent first (`/resume`, task 0354).
@@ -3814,11 +3845,13 @@ impl FileManagerService {
             },
             skills: &self.skill_index,
         });
+        let records = self.session_records();
         self.chat
-            .stream(
+            .stream_with_records(
                 &self.llm_profiles,
                 &self.chat_conversations,
                 tooling.as_ref(),
+                records.as_ref(),
                 request,
                 on_event,
             )

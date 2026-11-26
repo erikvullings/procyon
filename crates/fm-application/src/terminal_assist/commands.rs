@@ -180,10 +180,10 @@ pub(crate) async fn compact(
     generator: &impl ChatGenerator,
     sessions: &Sessions,
     id: &str,
-) -> Result<(), ChatFailureDto> {
+) -> Result<Option<String>, ChatFailureDto> {
     let conversation = sessions.render_within(id, MAX_COMPACTED_BYTES);
     if conversation.trim().is_empty() {
-        return Ok(());
+        return Ok(None);
     }
     let summary = generator
         .generate_for_role(
@@ -210,7 +210,7 @@ pub(crate) async fn compact(
         return Err(ChatFailureDto::Empty);
     }
     sessions.replace_with_summary(id, summary);
-    Ok(())
+    Ok(Some(summary.to_owned()))
 }
 
 #[cfg(test)]

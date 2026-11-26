@@ -8,12 +8,14 @@ use fm_transport_dto::NoteDraftDto;
 use tokio_util::sync::CancellationToken;
 
 use super::format::{NoteMeta, note_title, render_note, slugify, split_note};
-use super::search::{DEFAULT_HITS, SearchStrategy, SemanticNotes, search_notes};
+use super::search::{
+    DEFAULT_HITS, SearchStrategy, SemanticNotes, is_session_record, search_notes_of_kind,
+};
 use super::store::NotesStore;
 use crate::agent_host::note_proposal;
 use crate::file_assistant::truncate_to_bytes;
 use fm_agent::NoteSkill;
-use fm_agent::{NoteProposal, NoteToolCall, NotesAccess, ToolOutcome, redact_secrets};
+use fm_agent::{NoteKind, NoteProposal, NoteToolCall, NotesAccess, ToolOutcome, redact_secrets};
 
 /// Most bytes of one note shown to the model.
 const MAX_NOTE_TEXT_BYTES: usize = 16 * 1024;
@@ -85,7 +87,9 @@ impl NotesAccess for AssistantNotes<'_> {
             );
         };
         match call {
-            NoteToolCall::Search { query, limit } => self.search(store, &query, limit).await,
+            NoteToolCall::Search { query, limit, kind } => {
+                self.search(store, &query, limit, kind).await
+            }
             NoteToolCall::Read { path } => match store.read(&path).await {
                 Ok(note) => output(
                     &format!("Read note {}", note.path),
@@ -128,11 +132,13 @@ impl AssistantNotes<'_> {
         if query.trim().is_empty() {
             return Vec::new();
         }
-        let (_, hits) = search_notes(
+        // Session records are history, not instructions: they are never offered as skills.
+        let (_, hits) = search_notes_of_kind(
             store,
             self.semantic.as_deref(),
             query,
             NOTE_SKILLS,
+            Some(NoteKind::Note),
             &CancellationToken::new(),
         )
         .await;
@@ -165,13 +171,15 @@ impl AssistantNotes<'_> {
         store: &NotesStore,
         query: &str,
         limit: Option<u32>,
+        kind: Option<NoteKind>,
     ) -> ToolOutcome<NoteProposal> {
         let limit = limit.map_or(DEFAULT_HITS, |limit| limit as usize);
-        let (strategy, hits) = search_notes(
+        let (strategy, hits) = search_notes_of_kind(
             store,
             self.semantic.as_deref(),
             query,
             limit,
+            kind,
             &CancellationToken::new(),
         )
         .await;
@@ -190,8 +198,14 @@ impl AssistantNotes<'_> {
             } else {
                 format!(" [{}]", hit.tags.join(", "))
             };
+            // Whether the hit is a note or the record of an earlier assistant session (0358).
+            let what = if is_session_record(&hit.path) {
+                "session"
+            } else {
+                "note"
+            };
             text.push_str(&format!(
-                "\n{}. {} — {}{tags}\n   {}",
+                "\n{}. [{what}] {} — {}{tags}\n   {}",
                 number + 1,
                 hit.path,
                 hit.title,

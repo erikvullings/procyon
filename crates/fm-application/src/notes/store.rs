@@ -115,6 +115,42 @@ impl NotesStore {
         }
     }
 
+    /// A folder directly inside the notes folder, when it exists and is a folder (not a link).
+    pub(crate) async fn folder(&self, name: &str) -> Option<Location> {
+        let location = self.root.join(name).ok()?;
+        match self.inspect(&location).await {
+            Some(summary) if summary.kind == EntryKind::Directory => Some(location),
+            _ => None,
+        }
+    }
+
+    /// The notes directly inside the subfolder `name` (not its subfolders), without walking the
+    /// rest of the notes folder; empty when the subfolder does not exist.
+    pub(crate) async fn notes_in(&self, name: &str) -> Vec<NoteFile> {
+        let Some(folder) = self.folder(name).await else {
+            return Vec::new();
+        };
+        let mut notes: Vec<NoteFile> = self
+            .list_all(&folder, &CancellationToken::new())
+            .await
+            .into_iter()
+            .filter(|entry| {
+                entry.kind == EntryKind::File
+                    && is_note_name(&entry.name)
+                    && !is_secret_name(&entry.name)
+            })
+            .filter_map(|entry| {
+                Some(NoteFile {
+                    location: folder.join(&entry.name).ok()?,
+                    path: format!("{name}/{}", entry.name),
+                    size: entry.size.unwrap_or(0),
+                })
+            })
+            .collect();
+        notes.sort_by(|left, right| left.path.cmp(&right.path));
+        notes
+    }
+
     /// Reads one note, at most [`MAX_NOTE_BYTES`].
     pub(crate) async fn read(&self, path: &str) -> Result<StoredNote, NotesError> {
         let location = self.locate(path).await?;

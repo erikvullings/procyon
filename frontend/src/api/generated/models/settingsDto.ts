@@ -29,6 +29,8 @@ import type { ThemeDto } from './themeDto.ts';
  * Versioned global settings. Live workspace content is deliberately absent.
  */
 export interface SettingsDto {
+  /** Whether summaries of assistant sessions are kept in the notes folder (task 0358). */
+  assistantSessionMemory?: boolean;
   /** Whether the assistants may read public web pages (task 0363). */
   assistantWebAccess?: boolean;
   /** Whether update checks also offer beta releases (not yet approved for the stable channel). */

@@ -116,7 +116,8 @@ deep capability module under `crates/fm-application/src/`. Existing seams includ
 (core/plugin/platform action dispatch), `ChecksumCoordinator`, `FileEditorService`,
 `DocxPreviewService` (bounded semantic conversion and retained package resources),
 `PptxPreviewService` (bounded conversion to retained PDF), `NotesService` (notes folder setting,
-session-to-runbook drafts, semantic-or-text note search; it never writes notes), the `fm-agent` crate (the agent harness, layer 0 with no workspace
+session-to-runbook drafts, semantic-or-text note search; it never writes notes — only the opt-in
+`SessionRecords` writes assistant-session summaries to `sessions/*.md`, task 0358), the `fm-agent` crate (the agent harness, layer 0 with no workspace
 dependencies so it stays reusable: typed tools whose schemas are derived with `schemars`, a
 `ToolRegistry<I>` that generates the text-protocol prompt or native tool specs, `run_turn` with
 `TurnOptions` (bounded, concurrent read-only calls), host-defined interrupts `I` and host errors,

@@ -46,6 +46,7 @@ async fn without_a_notes_folder_every_tool_explains_how_to_set_it_up() {
             .run(NoteToolCall::Search {
                 query: "x".into(),
                 limit: None,
+                kind: None,
             })
             .await,
     );
@@ -60,12 +61,13 @@ async fn search_lists_ranked_notes_and_names_the_strategy() {
             .run(NoteToolCall::Search {
                 query: "nginx".into(),
                 limit: Some(3),
+                kind: None,
             })
             .await,
     );
     assert_eq!(step, "Searched notes for nginx");
     assert!(text.starts_with(
-        "Notes found by text search:\n1. ops/nginx.md — Replace nginx certificate [nginx]"
+        "Notes found by text search:\n1. [note] ops/nginx.md — Replace nginx certificate [nginx]"
     ));
     assert!(!text.contains("abc123"));
     let (_, none) = text_of(
@@ -73,6 +75,7 @@ async fn search_lists_ranked_notes_and_names_the_strategy() {
             .run(NoteToolCall::Search {
                 query: "kubernetes".into(),
                 limit: None,
+                kind: None,
             })
             .await,
     );

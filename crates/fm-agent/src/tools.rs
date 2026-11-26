@@ -232,6 +232,9 @@ pub(crate) struct SearchNotesArgs {
     query: String,
     /// Most notes wanted.
     limit: Option<u32>,
+    /// `session` for records of earlier assistant sessions only, `note` for notes only; both
+    /// when left out.
+    kind: Option<crate::notes::NoteKind>,
 }
 
 pub(crate) struct SearchNotes;
@@ -246,7 +249,9 @@ impl<I: From<NoteProposal> + Send + 'static> TypedTool<I> for SearchNotes {
 
     fn description(&self) -> &'static str {
         "Searches the person's notes (runbooks for tasks they do rarely). Search them before \
-         answering a how-to question."
+         answering a how-to question. When the person turned it on, earlier assistant sessions \
+         are kept there too, as summaries: when they refer to earlier work (\"what did we do \
+         last week\", \"like before\"), search with kind \"session\"."
     }
 
     fn effect(&self) -> ToolEffect {
@@ -261,6 +266,7 @@ impl<I: From<NoteProposal> + Send + 'static> TypedTool<I> for SearchNotes {
         let call = NoteToolCall::Search {
             query: args.query,
             limit: args.limit,
+            kind: args.kind,
         };
         notes(ctx, STEP, call).await
     }

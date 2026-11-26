@@ -218,6 +218,7 @@ fn assemble(input: &CaptureInput, raw: &str) -> NoteDraftDto {
             .collect(),
         shell: input.shell.clone().filter(|shell| !shell.is_empty()),
         source: Some("terminal-session".to_owned()),
+        ..NoteMeta::default()
     };
     let content = redact_secrets(&render_note(&meta, &body));
     let redactions = u32::try_from(content.matches(REDACTION_MARK).count()).unwrap_or(u32::MAX);

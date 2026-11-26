@@ -865,6 +865,9 @@ pub struct Settings {
     /// Whether the assistants may read public web pages (`web_fetch`, task 0363). No prompt per
     /// page: each read shows as a step line.
     pub assistant_web_access: bool,
+    /// Whether summaries of assistant sessions are kept as notes in `sessions/` of the notes
+    /// folder, where `search_notes` finds them (task 0358). Off by default.
+    pub assistant_session_memory: bool,
     /// Whether the function-key bar is hidden while the terminal is open.
     pub terminal_hide_function_keys: bool,
     /// Picture captions under grid tiles and hover tooltips (task 0347).
@@ -973,6 +976,7 @@ impl Default for Settings {
             terminal_auto_run_read_only: true,
             terminal_allow_file_writes: true,
             assistant_web_access: true,
+            assistant_session_memory: false,
             terminal_hide_function_keys: true,
             picture_info: PictureInfoSettings::default(),
             document_hub: DocumentHubSettings::default(),
