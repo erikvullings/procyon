@@ -46,6 +46,11 @@ export interface AvailableAction {
   readonly action: ActionDescriptor;
   readonly available: boolean;
   readonly reason?: string;
+  /**
+   * Unavailable because the selection can never be what the action works on (a folder for
+   * Play, a text file for Compare): the menu leaves it out rather than showing it greyed out.
+   */
+  readonly hidden?: boolean;
 }
 
 const LOCATION_ACTION_IDS = new Set([
@@ -153,6 +158,39 @@ function unavailable(action: ActionDescriptor, reason: string): AvailableAction 
   return { action, available: false, reason };
 }
 
+/** Unavailable for a type the selection does not have: left out of the menu (task 0312 follow-up). */
+function notForThisSelection(action: ActionDescriptor, reason: string): AvailableAction {
+  return { action, available: false, reason, hidden: true };
+}
+
+/**
+ * The submenu a context-menu action lives in, or `undefined` for the top level. The everyday
+ * actions (open, copy path, rename, copy, move, trash, delete) stay at the top level.
+ */
+export function contextSubmenuFor(actionId: string): ContextSubmenuId | undefined {
+  return CONTEXT_SUBMENU_BY_ACTION.get(actionId);
+}
+
+export type ContextSubmenuId = 'media' | 'archive' | 'tools';
+
+const CONTEXT_SUBMENU_BY_ACTION: ReadonlyMap<string, ContextSubmenuId> = new Map([
+  ['client.play', 'media'],
+  ['client.playNext', 'media'],
+  ['client.addToQueue', 'media'],
+  [SAVE_PLAYLIST_ACTION_ID, 'media'],
+  [SHOW_ON_MAP_ACTION_ID, 'media'],
+  [EDIT_IMAGE_METADATA_ACTION_ID, 'media'],
+  ['core.pack', 'archive'],
+  ['core.moveToArchive', 'archive'],
+  ['core.extract', 'archive'],
+  ['core.documentSummary', 'tools'],
+  [COMPARE_FILES_ACTION_ID, 'tools'],
+  [SPLIT_FILE_ACTION_ID, 'tools'],
+  [COMBINE_FILES_ACTION_ID, 'tools'],
+  [CONVERT_GEO_ACTION_ID, 'tools'],
+  [MINIFY_GEO_ACTION_ID, 'tools'],
+]);
+
 export function svgoRequiresLocalFile(pluginId: string, entry: EntrySummary | undefined): boolean {
   return (
     pluginId === 'procyon.svgo' &&
@@ -203,7 +241,7 @@ export function evaluateActionAvailability(
     (soleSelectedEntry.location.providerId !== 'local' ||
       archiveRootForEntry(soleSelectedEntry) === undefined)
   ) {
-    return unavailable(action, t('availability', 'selectArchive'));
+    return notForThisSelection(action, t('availability', 'selectArchive'));
   }
   if (
     (action.id === 'core.openTerminal' || action.id === 'core.openTerminalWith') &&
@@ -215,7 +253,7 @@ export function evaluateActionAvailability(
     action.id === 'core.uninstallApplication' &&
     (soleSelectedEntry === undefined || !soleSelectedEntry.name.toLowerCase().endsWith('.app'))
   ) {
-    return unavailable(action, t('availability', 'selectApplication'));
+    return notForThisSelection(action, t('availability', 'selectApplication'));
   }
   if (
     action.id === 'core.quickLook' &&
@@ -240,54 +278,54 @@ export function evaluateActionAvailability(
     return unavailable(action, t('availability', 'selectFiles'));
   }
   if (action.id === 'core.documentSummary' && soleSelectedEntry?.kind !== 'file') {
-    return unavailable(action, t('availability', 'selectFiles'));
+    return notForThisSelection(action, t('availability', 'selectFiles'));
   }
   if (
     (MEDIA_QUEUE_ACTION_IDS.has(action.id) ||
       (action.id === SAVE_PLAYLIST_ACTION_ID && context.selectedEntries.length > 0)) &&
     !hasPlayableSelection(context.selectedEntries)
   ) {
-    return unavailable(action, t('availability', 'selectFiles'));
+    return notForThisSelection(action, t('availability', 'selectFiles'));
   }
   if (
     action.id === SHOW_ON_MAP_ACTION_ID &&
     context.selectedEntries.length > 0 &&
     !context.selectedEntries.some((entry) => entry.kind === 'directory' || isGeoCandidate(entry))
   ) {
-    return unavailable(action, t('availability', 'selectFiles'));
+    return notForThisSelection(action, t('availability', 'selectFiles'));
   }
   if (
     (action.id === CONVERT_GEO_ACTION_ID || action.id === MINIFY_GEO_ACTION_ID) &&
     !context.selectedEntries.some(isConvertibleGeoFile)
   ) {
-    return unavailable(action, t('availability', 'selectFiles'));
+    return notForThisSelection(action, t('availability', 'selectFiles'));
   }
   if (
     action.id === COMPARE_FILES_ACTION_ID &&
     context.selectedEntries.length > 0 &&
     (context.selectedEntries.length > 2 || !context.selectedEntries.every(isSplittable))
   ) {
-    return unavailable(action, t('fileDiff', 'selectTwoFiles'));
+    return notForThisSelection(action, t('fileDiff', 'selectTwoFiles'));
   }
   if (
     action.id === SPLIT_FILE_ACTION_ID &&
     context.selectedEntries.length > 0 &&
     !context.selectedEntries.some(isSplittable)
   ) {
-    return unavailable(action, t('availability', 'selectFiles'));
+    return notForThisSelection(action, t('availability', 'selectFiles'));
   }
   if (
     action.id === COMBINE_FILES_ACTION_ID &&
     context.selectedEntries.length > 0 &&
     !context.selectedEntries.some(isCombinablePart)
   ) {
-    return unavailable(action, t('splitCombine', 'noParts'));
+    return notForThisSelection(action, t('splitCombine', 'noParts'));
   }
   if (
     action.id === EDIT_IMAGE_METADATA_ACTION_ID &&
     !context.selectedEntries.some(isMetadataEditable)
   ) {
-    return unavailable(action, t('imageEdit', 'noEditableImages'));
+    return notForThisSelection(action, t('imageEdit', 'noEditableImages'));
   }
   if (action.id === 'core.findDuplicates' && context.hasActiveLocation === false) {
     return unavailable(action, t('availability', 'openDirectoryFirst'));

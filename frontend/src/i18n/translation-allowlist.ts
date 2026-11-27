@@ -108,6 +108,8 @@ export const ENGLISH_IDENTICAL_ALLOWLIST: Readonly<Record<string, Allowlisted>> 
   'connections.server': ['nl', 'de', 'it'],
   'connections.share': ['nl'],
   'contextMenu.services': ['fr'],
+  'contextMenu.submenuMedia': ['it', 'nl'],
+  'contextMenu.submenuArchive': ['fr'],
   'diagnostics.no': ['es', 'it'],
   'diagnostics.platform': ['nl'],
   'diagnostics.plugins': ['de'],

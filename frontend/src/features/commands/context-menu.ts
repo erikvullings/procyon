@@ -5,7 +5,9 @@ import { t } from '../../i18n';
 import type { SelectionPlatform } from '../selection/keybindings';
 import {
   type AvailableAction,
+  type ContextSubmenuId,
   contextMenuGroup,
+  contextSubmenuFor,
   DESTRUCTIVE_CONTEXT_ACTION_IDS,
 } from './availability';
 import { formatShortcut } from './shortcut-label';
@@ -56,24 +58,54 @@ const NEW_SUBMENU_ACTION_IDS: ReadonlySet<string> = new Set([
   'core.newFromTemplate',
 ]);
 
+/** Titles of the grouped submenus (task 0312 follow-up). */
+const SUBMENU_TITLE_KEY: Record<
+  ContextSubmenuId,
+  'submenuMedia' | 'submenuArchive' | 'submenuTools'
+> = {
+  media: 'submenuMedia',
+  archive: 'submenuArchive',
+  tools: 'submenuTools',
+};
+
 /** One row of the menu, in the order it is shown and navigated. */
 type MenuRow =
   | { readonly kind: 'action'; readonly index: number }
   | { readonly kind: 'new' }
+  | { readonly kind: 'group'; readonly id: ContextSubmenuId; readonly indexes: readonly number[] }
   | { readonly kind: 'platform' };
 
 function menuRows(attrs: ContextMenuAttrs): MenuRow[] {
+  // Actions the selection can never match are left out; the others of one submenu share a row.
+  const visible = attrs.actions.flatMap((item, index) => (item.hidden ? [] : [{ item, index }]));
+  const groups = new Map<ContextSubmenuId, number[]>();
+  for (const { item, index } of visible) {
+    const id = contextSubmenuFor(item.action.id);
+    if (id !== undefined) groups.set(id, [...(groups.get(id) ?? []), index]);
+  }
   const rows: MenuRow[] = [];
-  attrs.actions.forEach((item, index) => {
+  for (const { item, index } of visible) {
     if (attrs.newSubmenu !== undefined && NEW_SUBMENU_ACTION_IDS.has(item.action.id)) {
       // The first of them stands for the whole submenu.
       if (!rows.some((row) => row.kind === 'new')) rows.push({ kind: 'new' });
-      return;
+      continue;
     }
-    rows.push({ kind: 'action', index });
-  });
+    const id = contextSubmenuFor(item.action.id);
+    if (id === undefined) {
+      rows.push({ kind: 'action', index });
+    } else if (!rows.some((row) => row.kind === 'group' && row.id === id)) {
+      rows.push({ kind: 'group', id, indexes: groups.get(id) ?? [] });
+    }
+  }
   if (attrs.platformSubmenu !== undefined) rows.push({ kind: 'platform' });
   return rows;
+}
+
+/** The indexes of the visible actions of one grouped submenu, in menu order. */
+function groupMembers(attrs: ContextMenuAttrs, id: ContextSubmenuId): number[] {
+  return attrs.actions.flatMap((item, index) =>
+    !item.hidden && contextSubmenuFor(item.action.id) === id ? [index] : [],
+  );
 }
 
 function newSubmenuReason(attrs: ContextMenuAttrs): string | undefined {
@@ -112,6 +144,10 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
   let openWithItem: HTMLElement | undefined;
   let focusApplication = false;
   let newFlyout: 'closed' | 'loading' | 'ready' | 'error' = 'closed';
+  let openGroup: ContextSubmenuId | undefined;
+  let groupItem: HTMLElement | undefined;
+  let groupElement: HTMLElement | undefined;
+  let focusGroup = false;
   let newChoices: readonly NewMenuChoice[] = [];
   let newGeneration = 0;
   let newItem: HTMLElement | undefined;
@@ -126,7 +162,8 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
       event.target instanceof Node &&
       (menuElement?.contains(event.target) ||
         submenuElement?.contains(event.target) ||
-        newElement?.contains(event.target))
+        newElement?.contains(event.target) ||
+        groupElement?.contains(event.target))
     )
       return;
     close(currentAttrs);
@@ -142,6 +179,7 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
     positionMenu(menuElement, currentAttrs);
     if (submenuElement !== undefined) positionSubmenu(submenuElement, openWithItem, currentAttrs);
     if (newElement !== undefined) positionSubmenu(newElement, newItem, currentAttrs);
+    if (groupElement !== undefined) positionSubmenu(groupElement, groupItem, currentAttrs);
   }
 
   function iconDataUri(bytes: Uint8Array): string {
@@ -197,6 +235,7 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
   /** Opens the "New" flyout and loads the templates (task 0312). */
   function showNew(attrs: ContextMenuAttrs, fromKeyboard = false): void {
     if (attrs.newSubmenu === undefined || !newSubmenuAvailable(attrs)) return;
+    dismissGroup();
     if (newFlyout !== 'closed') {
       if (fromKeyboard) newElement?.querySelector<HTMLElement>('button')?.focus();
       return;
@@ -228,6 +267,26 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
     newElement = undefined;
   }
 
+  /** Opens a grouped submenu's flyout (Media, Archive, Tools). */
+  function showGroup(attrs: ContextMenuAttrs, id: ContextSubmenuId, fromKeyboard = false): void {
+    if (openGroup === id) {
+      if (fromKeyboard) groupElement?.querySelector<HTMLElement>('button:not(:disabled)')?.focus();
+      return;
+    }
+    dismissSubmenu();
+    dismissNew();
+    focusGroup = fromKeyboard;
+    openGroup = id;
+    m.redraw();
+    void attrs;
+  }
+
+  function dismissGroup(): void {
+    openGroup = undefined;
+    focusGroup = false;
+    groupElement = undefined;
+  }
+
   function dismissSubmenu(): void {
     ++loadGeneration;
     applications = [];
@@ -240,6 +299,7 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
   function close(attrs: ContextMenuAttrs): void {
     dismissSubmenu();
     dismissNew();
+    dismissGroup();
     attrs.onClose();
     previousFocus?.focus();
     previousFocus = undefined;
@@ -253,6 +313,10 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
     }
     if (row.kind === 'new') {
       showNew(attrs, true);
+      return;
+    }
+    if (row.kind === 'group') {
+      showGroup(attrs, row.id, true);
       return;
     }
     if (row.kind !== 'action') return;
@@ -276,6 +340,7 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
       if (!attrs.open) {
         dismissSubmenu();
         dismissNew();
+        dismissGroup();
         return undefined;
       }
       const rows = menuRows(attrs);
@@ -304,7 +369,11 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
           return;
         }
         const groupId =
-          row.kind === 'new' ? 'core.createDirectory' : (attrs.actions[row.index]?.action.id ?? '');
+          row.kind === 'new'
+            ? 'core.createDirectory'
+            : row.kind === 'group'
+              ? (attrs.actions[row.indexes[0] ?? -1]?.action.id ?? '')
+              : (attrs.actions[row.index]?.action.id ?? '');
         const group = contextMenuGroup(groupId);
         if (previousGroup !== undefined && previousGroup !== group) {
           menuItems.push(
@@ -315,6 +384,35 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
           );
         }
         previousGroup = group;
+        if (row.kind === 'group') {
+          const available = row.indexes.some((index) => attrs.actions[index]?.available === true);
+          menuItems.push(
+            m(
+              'button.fm-context-menu-item.fm-context-menu-submenu',
+              {
+                key: `group-${row.id}`,
+                type: 'button',
+                role: 'menuitem',
+                class: rowIndex === activeIndex ? 'fm-context-menu-item-active' : undefined,
+                disabled: !available,
+                tabindex: rowIndex === activeIndex ? 0 : -1,
+                'aria-haspopup': 'menu',
+                'aria-expanded': openGroup === row.id ? 'true' : 'false',
+                'aria-controls': 'fm-group-submenu',
+                oncreate: ({ dom }: m.VnodeDOM) => {
+                  if (row.id === openGroup) groupItem = dom as HTMLElement;
+                },
+                onmouseenter: (event: MouseEvent) => {
+                  groupItem = event.currentTarget as HTMLElement;
+                  if (available) showGroup(attrs, row.id);
+                },
+                onclick: () => invoke(attrs, row),
+              },
+              [m('span.fm-context-menu-label', t('contextMenu', SUBMENU_TITLE_KEY[row.id]))],
+            ),
+          );
+          return;
+        }
         if (row.kind === 'new') {
           const available = newSubmenuAvailable(attrs);
           menuItems.push(
@@ -386,6 +484,7 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
                     onmouseenter: () => {
                       if (submenu !== 'closed') dismissSubmenu();
                       if (newFlyout !== 'closed') dismissNew();
+                      if (openGroup !== undefined) dismissGroup();
                     },
                   }),
               onclick: () => invoke(attrs, row),
@@ -428,7 +527,8 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
                 focused !== null &&
                 !dom.contains(focused) &&
                 !submenuElement?.contains(focused) &&
-                !newElement?.contains(focused)
+                !newElement?.contains(focused) &&
+                !groupElement?.contains(focused)
               )
                 (dom as HTMLElement).focus();
             },
@@ -460,6 +560,9 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
               } else if (event.key === 'ArrowRight' && row?.kind === 'new') {
                 event.preventDefault();
                 showNew(attrs, true);
+              } else if (event.key === 'ArrowRight' && row?.kind === 'group') {
+                event.preventDefault();
+                showGroup(attrs, row.id, true);
               } else if (
                 event.key === 'ArrowRight' &&
                 row?.kind === 'action' &&
@@ -561,6 +664,84 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
                   t('contextMenu', 'otherApplications'),
                 ),
               ],
+            ),
+        openGroup === undefined
+          ? undefined
+          : m(
+              '.fm-context-menu.fm-context-menu-open-with',
+              {
+                id: 'fm-group-submenu',
+                role: 'menu',
+                style: { pointerEvents: 'auto' },
+                'aria-label': t('contextMenu', SUBMENU_TITLE_KEY[openGroup]),
+                oncreate: ({ dom }) => {
+                  groupElement = dom as HTMLElement;
+                  positionSubmenu(dom as HTMLElement, groupItem, attrs);
+                },
+                onupdate: ({ dom }) => {
+                  positionSubmenu(dom as HTMLElement, groupItem, attrs);
+                  if (focusGroup) {
+                    (dom as HTMLElement)
+                      .querySelector<HTMLButtonElement>('button:not(:disabled)')
+                      ?.focus();
+                    focusGroup = false;
+                  }
+                },
+                onremove: () => {
+                  groupElement = undefined;
+                },
+                onclick: (event: MouseEvent) => event.stopPropagation(),
+                onkeydown: (event: KeyboardEvent) => {
+                  if (event.key === 'ArrowLeft') {
+                    event.preventDefault();
+                    dismissGroup();
+                    groupItem?.focus();
+                  } else if (event.key === 'Escape') {
+                    event.preventDefault();
+                    close(attrs);
+                  } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    const items = [
+                      ...(event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>(
+                        'button:not(:disabled)',
+                      ),
+                    ];
+                    const index = items.indexOf(document.activeElement as HTMLButtonElement);
+                    items[
+                      (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+                    ]?.focus();
+                  }
+                },
+              },
+              groupMembers(attrs, openGroup).map((index) => {
+                const item = attrs.actions[index];
+                const shortcut = item?.action.defaultShortcuts[0];
+                return m(
+                  'button.fm-context-menu-item',
+                  {
+                    key: item?.action.id,
+                    type: 'button',
+                    role: 'menuitem',
+                    disabled: item?.available !== true,
+                    title: item?.reason,
+                    onclick: () => {
+                      if (item === undefined || !item.available) return;
+                      attrs.onInvoke(item.action.id);
+                      close(attrs);
+                    },
+                  },
+                  [
+                    m('span.fm-context-menu-label', item?.action.title),
+                    shortcut === undefined
+                      ? undefined
+                      : m(
+                          'kbd.fm-context-menu-shortcut',
+                          { 'aria-hidden': 'true' },
+                          formatShortcut(shortcut, attrs.platform),
+                        ),
+                  ],
+                );
+              }),
             ),
         newFlyout === 'closed' || attrs.newSubmenu === undefined
           ? undefined

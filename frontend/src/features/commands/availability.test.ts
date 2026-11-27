@@ -338,7 +338,7 @@ describe('command availability', () => {
       { action: actions[0], available: true },
     ]);
     expect(availableActions(actions, context({ selectedEntries: [entry('file')] }))).toEqual([
-      { action: actions[0], available: false, reason: 'Select an archive file' },
+      { action: actions[0], available: false, reason: 'Select an archive file', hidden: true },
     ]);
     expect(
       availableActions(actions, context({ selectedEntries: [archiveEntry(), entry('file')] })),
@@ -385,7 +385,12 @@ describe('command availability', () => {
 
       expect(
         evaluateActionAvailability(descriptor, context({ selectedEntries: [entry('file')] })),
-      ).toEqual({ action: descriptor, available: false, reason: 'Select an application' });
+      ).toEqual({
+        action: descriptor,
+        available: false,
+        reason: 'Select an application',
+        hidden: true,
+      });
     });
 
     it('is unavailable with two or more selected entries even if one is a .app bundle', () => {

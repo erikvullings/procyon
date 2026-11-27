@@ -389,6 +389,63 @@ describe('ContextMenu', () => {
     expect(onInvoke).toHaveBeenCalledWith('core.createDirectory');
   });
 
+  it('keeps everyday actions at the top level, groups type-specific ones, and leaves out the hidden', async () => {
+    const act = (id: string, title: string, available = true, hidden = false): AvailableAction => ({
+      action: {
+        id,
+        title,
+        category: 'fileOperations',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' },
+      },
+      available,
+      ...(hidden ? { hidden: true, reason: 'not for this selection' } : {}),
+    });
+    const onInvoke = vi.fn();
+    const onClose = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(ContextMenu, {
+          open: true,
+          x: 10,
+          y: 20,
+          actions: [
+            act('core.copyPath', 'Copy Full Path'),
+            act('client.play', 'Play'),
+            act('client.addToQueue', 'Add to queue', false),
+            act('core.pack', 'Pack to Archive'),
+            act('core.extract', 'Extract Archive', false),
+            act('core.compare', 'Compare files', true, true),
+          ],
+          onClose,
+          onInvoke,
+        }),
+    });
+
+    const top = [...root.querySelectorAll<HTMLButtonElement>('.fm-context-menu [role="menuitem"]')];
+    expect(top.map((button) => button.textContent)).toEqual(['Copy Full Path', 'Media', 'Archive']);
+    // The hidden entry is not rendered at all, not even greyed out.
+    expect(root.textContent).not.toContain('Compare files');
+    // The group rows disable only when nothing in them is available.
+    expect(top[2]?.disabled).toBe(false);
+
+    top[1]?.click();
+    await vi.waitFor(() => expect(root.querySelector('#fm-group-submenu')).not.toBeNull());
+    const flyout = root.querySelector('#fm-group-submenu');
+    expect(
+      [...(flyout?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])].map(
+        (button) => [button.textContent, button.disabled],
+      ),
+    ).toEqual([
+      ['Play', false],
+      ['Add to queue', true],
+    ]);
+    root.querySelector<HTMLButtonElement>('#fm-group-submenu [role="menuitem"]')?.click();
+    expect(onInvoke).toHaveBeenCalledWith('client.play');
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it('moves keyboard focus into a submenu already opened by hover', async () => {
     const openWith: AvailableAction = {
       action: {
