@@ -285,6 +285,110 @@ describe('ContextMenu', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it('groups new folder and the templates into one New submenu in the empty-area menu (task 0312)', async () => {
+    const createDirectory: AvailableAction = {
+      action: {
+        id: 'core.createDirectory',
+        title: 'New folder',
+        category: 'fileOperations',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' },
+      },
+      available: true,
+    };
+    const newFromTemplate: AvailableAction = {
+      action: {
+        id: 'core.newFromTemplate',
+        title: 'New File from Template…',
+        category: 'fileOperations',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' },
+      },
+      available: true,
+    };
+    const load = vi.fn().mockResolvedValue([
+      { id: 'to-do', label: 'To-do list' },
+      { id: 'folder:meeting.md', label: 'Meeting note', detail: 'Folder: Notes' },
+    ]);
+    const onChoose = vi.fn();
+    const onInvoke = vi.fn();
+    const onClose = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(ContextMenu, {
+          open: true,
+          x: 10,
+          y: 20,
+          actions: [createDirectory, newFromTemplate],
+          newSubmenu: { title: 'New', load, onChoose },
+          onClose,
+          onInvoke,
+        }),
+    });
+
+    // Only the submenu shows at the top level; its two actions live in the flyout.
+    const top = [...root.querySelectorAll<HTMLButtonElement>('.fm-context-menu [role="menuitem"]')];
+    expect(top.map((button) => button.textContent)).toEqual(['New']);
+
+    top[0]?.click();
+    await vi.waitFor(() => expect(root.textContent).toContain('Meeting note'));
+    expect(load).toHaveBeenCalledOnce();
+    expect(root.textContent).toContain('Folder: Notes');
+    // The folder action is first in the flyout, then the templates.
+    const flyout = root.querySelector('#fm-new-submenu');
+    expect(
+      [...(flyout?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])].map(
+        (button) => button.textContent,
+      ),
+    ).toEqual(['New folder', 'To-do list', 'Meeting noteFolder: Notes']);
+
+    [...(flyout?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])]
+      .find((button) => button.textContent?.startsWith('Meeting note'))
+      ?.click();
+    expect(onChoose).toHaveBeenCalledWith('folder:meeting.md');
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onInvoke).not.toHaveBeenCalled();
+  });
+
+  it('opens the New submenu from the keyboard and offers the folder action first', async () => {
+    const createDirectory: AvailableAction = {
+      action: {
+        id: 'core.createDirectory',
+        title: 'New folder',
+        category: 'fileOperations',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' },
+      },
+      available: true,
+    };
+    const onInvoke = vi.fn();
+    m.mount(root, {
+      view: () =>
+        m(ContextMenu, {
+          open: true,
+          x: 10,
+          y: 20,
+          actions: [createDirectory],
+          newSubmenu: {
+            title: 'New',
+            load: vi.fn().mockResolvedValue([]),
+            onChoose: vi.fn(),
+          },
+          onClose: vi.fn(),
+          onInvoke,
+        }),
+    });
+
+    const menu = root.querySelector<HTMLElement>('.fm-context-menu');
+    menu?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await vi.waitFor(() => expect(root.querySelector('#fm-new-submenu')).not.toBeNull());
+    root.querySelector<HTMLButtonElement>('#fm-new-submenu [role="menuitem"]')?.click();
+    expect(onInvoke).toHaveBeenCalledWith('core.createDirectory');
+  });
+
   it('moves keyboard focus into a submenu already opened by hover', async () => {
     const openWith: AvailableAction = {
       action: {

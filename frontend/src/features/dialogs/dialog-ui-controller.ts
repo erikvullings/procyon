@@ -62,6 +62,8 @@ export interface DialogUIState {
   createFileOpen: boolean;
   newFromTemplateOpen: boolean;
   newFromTemplateLocation: Location | undefined;
+  /** The template to select when the picker opens, from the New submenu (task 0312). */
+  newFromTemplatePreselect: string | undefined;
   /** The catalogue loaded for the open picker (task 0312); `undefined` until it arrives. */
   newFromTemplateEntries: readonly FileTemplateEntry[] | undefined;
   createFileLocation: Location | undefined;
@@ -101,7 +103,7 @@ export interface DialogUIController {
   openCreateFile(location?: Location): void;
   cancelCreateFile(): void;
   /** Opens the "New file from template" picker for `location` (default: the active directory). */
-  openNewFromTemplate(location?: Location): void;
+  openNewFromTemplate(location?: Location, templateId?: string): void;
   cancelNewFromTemplate(): void;
   setNewFromTemplateEntries(entries: readonly FileTemplateEntry[]): void;
   confirmCreateFile(
@@ -145,6 +147,7 @@ export function createDialogUIController(): DialogUIController {
     createFileOpen: false,
     newFromTemplateOpen: false,
     newFromTemplateLocation: undefined,
+    newFromTemplatePreselect: undefined,
     newFromTemplateEntries: undefined,
     createFileLocation: undefined,
     createLinkRequest: undefined,
@@ -207,8 +210,9 @@ export function createDialogUIController(): DialogUIController {
       state.createFileLocation = undefined;
     },
 
-    openNewFromTemplate(location?: Location): void {
+    openNewFromTemplate(location?: Location, templateId?: string): void {
       state.newFromTemplateLocation = location;
+      state.newFromTemplatePreselect = templateId;
       state.newFromTemplateEntries = undefined;
       state.newFromTemplateOpen = true;
     },
@@ -220,6 +224,7 @@ export function createDialogUIController(): DialogUIController {
     cancelNewFromTemplate(): void {
       state.newFromTemplateOpen = false;
       state.newFromTemplateLocation = undefined;
+      state.newFromTemplatePreselect = undefined;
     },
 
     confirmCreateFile(name, activeLocation, createFile): void {

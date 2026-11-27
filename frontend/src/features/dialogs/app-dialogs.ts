@@ -306,6 +306,7 @@ export function renderAppDialogs(
     }),
     m(NewFromTemplateDialog, {
       open: ds.newFromTemplateOpen,
+      preselectId: ds.newFromTemplatePreselect,
       templates:
         ds.newFromTemplateEntries ?? appTemplateEntries(ctx.getSettings()?.fileTemplates ?? []),
       onCancel: () => dialogs.cancelNewFromTemplate(),

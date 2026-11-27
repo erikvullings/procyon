@@ -2553,6 +2553,22 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     );
     m.redraw();
   };
+  /** Opens the template picker, optionally with one template selected, and loads the catalogue (task 0312). */
+  const openNewFromTemplate = (location: Location | undefined, templateId?: string): void => {
+    shellState.dialogs.openNewFromTemplate(location, templateId);
+    // The picker lists app, folder and plugin templates; the backend answers with all three.
+    // On failure the picker keeps offering the app templates from settings, and says so.
+    void shellState.client.listFileTemplates().then(
+      (entries) => {
+        shellState.dialogs.setNewFromTemplateEntries(entries);
+        m.redraw();
+      },
+      (error: unknown) => {
+        console.warn('Loading file templates failed', error);
+        toast({ html: t('newFromTemplate', 'loadFailed') });
+      },
+    );
+  };
   const actionCommandControllerContext: ActionCommandControllerContext = {
     getCommandPaletteOpen: () => shellState.commandPaletteOpen,
     setCommandPaletteOpen: (open) => {
@@ -2592,21 +2608,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     toast: (options) => toast(options),
     getOpenTerminalSupported: () => shellState.openTerminalSupported,
     openCreateDirectory: (location) => shellState.dialogs.openCreateDirectory(location),
-    openNewFromTemplate: (location) => {
-      shellState.dialogs.openNewFromTemplate(location);
-      // The picker lists app, folder and plugin templates; the backend answers with all three.
-      // On failure the picker keeps offering the app templates from settings, and says so.
-      void shellState.client.listFileTemplates().then(
-        (entries) => {
-          shellState.dialogs.setNewFromTemplateEntries(entries);
-          m.redraw();
-        },
-        (error: unknown) => {
-          console.warn('Loading file templates failed', error);
-          toast({ html: t('newFromTemplate', 'loadFailed') });
-        },
-      );
-    },
+    openNewFromTemplate: (location) => openNewFromTemplate(location),
     openFinderTagsDialog: (request) => shellState.dialogs.openFinderTagsDialog(request),
     openSpotlightCommentDialog: (request) => shellState.dialogs.openSpotlightCommentDialog(request),
     openTerminalPickerDialog: (request) => shellState.dialogs.openTerminalPickerDialog(request),
@@ -5144,6 +5146,29 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
               : {}),
             onInvoke: shellState.actionCommandController.invokeContextMenuAction,
             platform: shellState.platform,
+            ...(shellState.contextMenu !== undefined && shellState.contextMenu.entries.length === 0
+              ? {
+                  newSubmenu: {
+                    title: t('contextMenu', 'newSubmenu'),
+                    load: () =>
+                      shellState.client.listFileTemplates().then((entries) =>
+                        entries.map((entry) => ({
+                          id: entry.id,
+                          label: entry.label,
+                          ...(entry.source === 'app'
+                            ? {}
+                            : {
+                                detail:
+                                  entry.source === 'folder'
+                                    ? `${t('newFromTemplate', 'folderSource')}: ${entry.sourceName ?? ''}`
+                                    : `${t('newFromTemplate', 'pluginSource')}: ${entry.sourceName ?? ''}`,
+                              }),
+                        })),
+                      ),
+                    onChoose: (id: string) => openNewFromTemplate(undefined, id),
+                  },
+                }
+              : {}),
             ...(shellState.platform === 'macos' &&
             shellState.runtimeKind === 'tauri' &&
             shellState.contextMenu?.entries.length === 1 &&

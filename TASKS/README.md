@@ -550,7 +550,7 @@ subtask block (0299–0303) and the earlier corpus-themes follow-ups.
 - [x] 0310 Fuzzy quick-filter (and type-to-select) *(frontend, medium — fzf-style subsequence matching
   shared by the quick filter and keyboard type-to-select; opt-in recursive scope; done — see Agent Notes)*
 - [ ] 0311 Gallery lightbox *(frontend, low — full-screen flip-through over the grid + F3 viewer; needs 0134)*
-- [ ] 0312 New-file-from-template *(frontend + backend, low — context-menu "New ▸" templates, built-in
+- [x] 0312 New-file-from-template *(frontend + backend, low — context-menu "New ▸" templates, built-in
   + plugin-contributed, over the create-file operation)*
 - [ ] 0313 More compelling timeline / date view *(frontend, medium — enhance 0134's photo-mode day
   grouping into a real, virtualized timeline: day/week/month/year granularity, a chosen date axis

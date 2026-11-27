@@ -8,6 +8,8 @@ import { focusAndSelect } from '../operations/focus-select';
 export interface NewFromTemplateDialogAttrs {
   readonly open: boolean;
   readonly templates: readonly FileTemplateEntry[];
+  /** The template to select when the picker opens (the New submenu's choice, task 0312). */
+  readonly preselectId?: string | undefined;
   readonly onCreate: (template: FileTemplateEntry, fileName: string) => void;
   /** Creates an empty file under `fileName` and opens the assistant chat for it (task 0321). */
   readonly onDraft: (fileName: string) => void;
@@ -40,6 +42,8 @@ export const NewFromTemplateDialog: FactoryComponent<NewFromTemplateDialogAttrs>
   let fileName = '';
   let wasOpen = false;
   let focusPending = false;
+  /** A preselected template not yet in the list (the catalogue may still be loading). */
+  let pendingPreselect: string | undefined;
 
   function select(template: FileTemplateEntry): void {
     selectedId = template.id;
@@ -79,6 +83,16 @@ export const NewFromTemplateDialog: FactoryComponent<NewFromTemplateDialogAttrs>
         selectedId = first?.id;
         fileName = first?.fileName ?? '';
         focusPending = first !== undefined;
+        pendingPreselect = attrs.preselectId;
+      }
+      if (attrs.open && pendingPreselect !== undefined) {
+        const chosen = attrs.templates.find((candidate) => candidate.id === pendingPreselect);
+        if (chosen !== undefined) {
+          pendingPreselect = undefined;
+          selectedId = chosen.id;
+          fileName = chosen.fileName;
+          focusPending = true;
+        }
       }
       wasOpen = attrs.open;
       const error = fileName === '' ? undefined : validateEntryName(fileName);

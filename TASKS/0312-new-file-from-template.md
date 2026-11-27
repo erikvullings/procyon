@@ -1,6 +1,6 @@
 # 0312 New-file-from-template
 
-Status: in_progress
+Status: done
 Priority: low
 Subsystem: frontend, backend
 Depends on: none
@@ -64,3 +64,10 @@ small, delightful addition.
   check is `fm_domain::location::validate_name` in both settings and plugin manifests; a failed
   catalogue load shows a toast (`newFromTemplate.loadFailed`) and falls back to app templates.
   Accepted: folder file bodies are readable by any authenticated API client in server mode.
+- 2026-11-27 claude: closed. The empty-area context menu now has one "New ▸" submenu: "New folder"
+  first, then the app, folder and plugin templates (the folder action and the picker are the same as
+  before). Picking a template opens the picker with that template selected (`preselectId`). The
+  submenu is shown only in the empty-area menu, where the folder and template actions live; it is
+  unavailable on read-only locations. Choosing a template from the submenu uses the active folder of
+  the pane. Tests: context-menu (grouping, keyboard), typed flow unchanged. Not verified in the Tauri
+  app; the mock action fixture still omits the action, like other recent client-flow actions.

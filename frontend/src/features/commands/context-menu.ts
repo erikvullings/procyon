@@ -10,6 +10,14 @@ import {
 } from './availability';
 import { formatShortcut } from './shortcut-label';
 
+/** One template offered by the "New" submenu (task 0312). */
+export interface NewMenuChoice {
+  readonly id: string;
+  readonly label: string;
+  /** Where it comes from, for people with several template sources; absent for app templates. */
+  readonly detail?: string;
+}
+
 export interface ContextMenuAttrs {
   readonly open: boolean;
   readonly x: number;
@@ -26,12 +34,55 @@ export interface ContextMenuAttrs {
     readonly onChoose: (path: string) => void;
     readonly onOther: () => void;
   };
+  /**
+   * The "New" submenu of the empty-area menu (task 0312): a new folder, then the templates. It
+   * stands in for the create-directory and new-from-template entries of `actions`.
+   */
+  readonly newSubmenu?: {
+    readonly title: string;
+    readonly load: () => Promise<readonly NewMenuChoice[]>;
+    readonly onChoose: (id: string) => void;
+  };
   readonly onClose: () => void;
   readonly onInvoke: (actionId: string) => void;
   readonly placementBounds?: () => DOMRect | undefined;
 }
 
 const CONTEXT_MENU_VIEWPORT_MARGIN = 8;
+
+/** Actions the "New" submenu replaces in the menu (task 0312). */
+const NEW_SUBMENU_ACTION_IDS: ReadonlySet<string> = new Set([
+  'core.createDirectory',
+  'core.newFromTemplate',
+]);
+
+/** One row of the menu, in the order it is shown and navigated. */
+type MenuRow =
+  | { readonly kind: 'action'; readonly index: number }
+  | { readonly kind: 'new' }
+  | { readonly kind: 'platform' };
+
+function menuRows(attrs: ContextMenuAttrs): MenuRow[] {
+  const rows: MenuRow[] = [];
+  attrs.actions.forEach((item, index) => {
+    if (attrs.newSubmenu !== undefined && NEW_SUBMENU_ACTION_IDS.has(item.action.id)) {
+      // The first of them stands for the whole submenu.
+      if (!rows.some((row) => row.kind === 'new')) rows.push({ kind: 'new' });
+      return;
+    }
+    rows.push({ kind: 'action', index });
+  });
+  if (attrs.platformSubmenu !== undefined) rows.push({ kind: 'platform' });
+  return rows;
+}
+
+function newSubmenuReason(attrs: ContextMenuAttrs): string | undefined {
+  return attrs.actions.find((item) => NEW_SUBMENU_ACTION_IDS.has(item.action.id))?.reason;
+}
+
+function newSubmenuAvailable(attrs: ContextMenuAttrs): boolean {
+  return attrs.actions.some((item) => NEW_SUBMENU_ACTION_IDS.has(item.action.id) && item.available);
+}
 
 export function clampContextMenuPosition(
   x: number,
@@ -60,6 +111,12 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
   let loadGeneration = 0;
   let openWithItem: HTMLElement | undefined;
   let focusApplication = false;
+  let newFlyout: 'closed' | 'loading' | 'ready' | 'error' = 'closed';
+  let newChoices: readonly NewMenuChoice[] = [];
+  let newGeneration = 0;
+  let newItem: HTMLElement | undefined;
+  let newElement: HTMLElement | undefined;
+  let focusNew = false;
   let menuElement: HTMLElement | undefined;
   let submenuElement: HTMLElement | undefined;
   let currentAttrs: ContextMenuAttrs;
@@ -67,7 +124,9 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
   function closeOnOutsideClick(event: MouseEvent): void {
     if (
       event.target instanceof Node &&
-      (menuElement?.contains(event.target) || submenuElement?.contains(event.target))
+      (menuElement?.contains(event.target) ||
+        submenuElement?.contains(event.target) ||
+        newElement?.contains(event.target))
     )
       return;
     close(currentAttrs);
@@ -82,6 +141,7 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
     if (menuElement === undefined) return;
     positionMenu(menuElement, currentAttrs);
     if (submenuElement !== undefined) positionSubmenu(submenuElement, openWithItem, currentAttrs);
+    if (newElement !== undefined) positionSubmenu(newElement, newItem, currentAttrs);
   }
 
   function iconDataUri(bytes: Uint8Array): string {
@@ -134,6 +194,40 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
       });
   }
 
+  /** Opens the "New" flyout and loads the templates (task 0312). */
+  function showNew(attrs: ContextMenuAttrs, fromKeyboard = false): void {
+    if (attrs.newSubmenu === undefined || !newSubmenuAvailable(attrs)) return;
+    if (newFlyout !== 'closed') {
+      if (fromKeyboard) newElement?.querySelector<HTMLElement>('button')?.focus();
+      return;
+    }
+    focusNew = fromKeyboard;
+    newFlyout = 'loading';
+    const generation = ++newGeneration;
+    void attrs.newSubmenu
+      .load()
+      .then((choices) => {
+        if (generation !== newGeneration) return;
+        newChoices = choices;
+        newFlyout = 'ready';
+        m.redraw();
+      })
+      .catch((error: unknown) => {
+        if (generation !== newGeneration) return;
+        console.error('Failed to load file templates for the New submenu', error);
+        newFlyout = 'error';
+        m.redraw();
+      });
+  }
+
+  function dismissNew(): void {
+    ++newGeneration;
+    newChoices = [];
+    newFlyout = 'closed';
+    focusNew = false;
+    newElement = undefined;
+  }
+
   function dismissSubmenu(): void {
     ++loadGeneration;
     applications = [];
@@ -145,18 +239,24 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
 
   function close(attrs: ContextMenuAttrs): void {
     dismissSubmenu();
+    dismissNew();
     attrs.onClose();
     previousFocus?.focus();
     previousFocus = undefined;
   }
 
-  function invoke(attrs: ContextMenuAttrs, index: number): void {
-    if (index === attrs.actions.length && attrs.platformSubmenu !== undefined) {
+  function invoke(attrs: ContextMenuAttrs, row: MenuRow): void {
+    if (row.kind === 'platform' && attrs.platformSubmenu !== undefined) {
       attrs.platformSubmenu.onOpen();
       close(attrs);
       return;
     }
-    const item = attrs.actions[index];
+    if (row.kind === 'new') {
+      showNew(attrs, true);
+      return;
+    }
+    if (row.kind !== 'action') return;
+    const item = attrs.actions[row.index];
     if (item === undefined || !item.available) return;
     if (item.action.id === 'core.openWith' && attrs.openWithSubmenu !== undefined) {
       showOpenWith(attrs, true);
@@ -175,24 +275,78 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
       currentAttrs = attrs;
       if (!attrs.open) {
         dismissSubmenu();
+        dismissNew();
         return undefined;
       }
-      const itemCount = attrs.actions.length + (attrs.platformSubmenu === undefined ? 0 : 1);
+      const rows = menuRows(attrs);
+      const itemCount = rows.length;
       activeIndex = Math.min(activeIndex, Math.max(0, itemCount - 1));
       const menuItems: m.Vnode[] = [];
-      attrs.actions.forEach((item, index) => {
-        const previous = attrs.actions[index - 1];
-        if (
-          previous !== undefined &&
-          contextMenuGroup(previous.action.id) !== contextMenuGroup(item.action.id)
-        ) {
+      let previousGroup: number | undefined;
+      rows.forEach((row, rowIndex) => {
+        if (row.kind === 'platform') {
+          menuItems.push(
+            m('.fm-context-menu-separator', { key: 'separator-platform', role: 'separator' }),
+            m(
+              'button.fm-context-menu-item.fm-context-menu-submenu',
+              {
+                class: rowIndex === activeIndex ? 'fm-context-menu-item-active' : undefined,
+                key: 'platform-submenu',
+                type: 'button',
+                role: 'menuitem',
+                'aria-haspopup': 'menu',
+                tabindex: rowIndex === activeIndex ? 0 : -1,
+                onclick: () => invoke(attrs, row),
+              },
+              attrs.platformSubmenu?.title,
+            ),
+          );
+          return;
+        }
+        const groupId =
+          row.kind === 'new' ? 'core.createDirectory' : (attrs.actions[row.index]?.action.id ?? '');
+        const group = contextMenuGroup(groupId);
+        if (previousGroup !== undefined && previousGroup !== group) {
           menuItems.push(
             m('.fm-context-menu-separator', {
-              key: `separator-${item.action.id}`,
+              key: `separator-${groupId}-${rowIndex}`,
               role: 'separator',
             }),
           );
         }
+        previousGroup = group;
+        if (row.kind === 'new') {
+          const available = newSubmenuAvailable(attrs);
+          menuItems.push(
+            m(
+              'button.fm-context-menu-item.fm-context-menu-submenu',
+              {
+                key: 'new-submenu',
+                type: 'button',
+                role: 'menuitem',
+                class: rowIndex === activeIndex ? 'fm-context-menu-item-active' : undefined,
+                disabled: !available,
+                tabindex: rowIndex === activeIndex ? 0 : -1,
+                'aria-haspopup': 'menu',
+                'aria-expanded': newFlyout === 'closed' ? 'false' : 'true',
+                'aria-controls': 'fm-new-submenu',
+                title: available ? undefined : newSubmenuReason(attrs),
+                oncreate: ({ dom }: m.VnodeDOM) => {
+                  newItem = dom as HTMLElement;
+                },
+                onmouseenter: (event: MouseEvent) => {
+                  newItem = event.currentTarget as HTMLElement;
+                  if (available) showNew(attrs);
+                },
+                onclick: () => invoke(attrs, row),
+              },
+              [m('span.fm-context-menu-label', attrs.newSubmenu?.title)],
+            ),
+          );
+          return;
+        }
+        const item = attrs.actions[row.index];
+        if (item === undefined) return;
         const shortcut = item.action.defaultShortcuts[0];
         menuItems.push(
           m(
@@ -208,12 +362,12 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
                 item.action.id === 'core.openWith' && attrs.openWithSubmenu !== undefined
                   ? 'fm-context-menu-submenu'
                   : '',
-                index === activeIndex ? 'fm-context-menu-item-active' : '',
+                rowIndex === activeIndex ? 'fm-context-menu-item-active' : '',
               ]
                 .filter(Boolean)
                 .join(' '),
               disabled: !item.available,
-              tabindex: index === activeIndex ? 0 : -1,
+              tabindex: rowIndex === activeIndex ? 0 : -1,
               title: item.reason,
               ...(item.action.id === 'core.openWith' && attrs.openWithSubmenu !== undefined
                 ? {
@@ -231,9 +385,10 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
                 : {
                     onmouseenter: () => {
                       if (submenu !== 'closed') dismissSubmenu();
+                      if (newFlyout !== 'closed') dismissNew();
                     },
                   }),
-              onclick: () => invoke(attrs, index),
+              onclick: () => invoke(attrs, row),
             },
             [
               m('span.fm-context-menu-label', item.action.title),
@@ -248,25 +403,6 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
           ),
         );
       });
-      if (attrs.platformSubmenu !== undefined) {
-        menuItems.push(
-          m('.fm-context-menu-separator', { key: 'separator-platform', role: 'separator' }),
-          m(
-            'button.fm-context-menu-item.fm-context-menu-submenu',
-            {
-              class:
-                attrs.actions.length === activeIndex ? 'fm-context-menu-item-active' : undefined,
-              key: 'platform-submenu',
-              type: 'button',
-              role: 'menuitem',
-              'aria-haspopup': 'menu',
-              tabindex: attrs.actions.length === activeIndex ? 0 : -1,
-              onclick: () => invoke(attrs, attrs.actions.length),
-            },
-            attrs.platformSubmenu.title,
-          ),
-        );
-      }
       return m('.fm-context-menu-backdrop', { style: { pointerEvents: 'none' } }, [
         m(
           '.fm-context-menu',
@@ -288,7 +424,12 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
             onupdate: ({ dom }) => {
               positionMenu(dom as HTMLElement, attrs);
               const focused = document.activeElement;
-              if (focused !== null && !dom.contains(focused) && !submenuElement?.contains(focused))
+              if (
+                focused !== null &&
+                !dom.contains(focused) &&
+                !submenuElement?.contains(focused) &&
+                !newElement?.contains(focused)
+              )
                 (dom as HTMLElement).focus();
             },
             onremove: () => {
@@ -297,9 +438,11 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
               document.removeEventListener('contextmenu', preventNativeContextMenu, true);
               menuElement = undefined;
               submenuElement = undefined;
+              newElement = undefined;
             },
             onclick: (event: MouseEvent) => event.stopPropagation(),
             onkeydown: (event: KeyboardEvent) => {
+              const row = rows[activeIndex];
               if (event.key === 'Escape') {
                 event.preventDefault();
                 close(attrs);
@@ -313,10 +456,14 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
                 m.redraw();
               } else if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
-                invoke(attrs, activeIndex);
+                if (row !== undefined) invoke(attrs, row);
+              } else if (event.key === 'ArrowRight' && row?.kind === 'new') {
+                event.preventDefault();
+                showNew(attrs, true);
               } else if (
                 event.key === 'ArrowRight' &&
-                attrs.actions[activeIndex]?.action.id === 'core.openWith'
+                row?.kind === 'action' &&
+                attrs.actions[row.index]?.action.id === 'core.openWith'
               ) {
                 event.preventDefault();
                 showOpenWith(attrs, true);
@@ -412,6 +559,101 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
                     },
                   },
                   t('contextMenu', 'otherApplications'),
+                ),
+              ],
+            ),
+        newFlyout === 'closed' || attrs.newSubmenu === undefined
+          ? undefined
+          : m(
+              '.fm-context-menu.fm-context-menu-open-with',
+              {
+                id: 'fm-new-submenu',
+                role: 'menu',
+                style: { pointerEvents: 'auto' },
+                'aria-label': attrs.newSubmenu.title,
+                oncreate: ({ dom }) => {
+                  newElement = dom as HTMLElement;
+                  positionSubmenu(dom as HTMLElement, newItem, attrs);
+                },
+                onupdate: ({ dom }) => {
+                  positionSubmenu(dom as HTMLElement, newItem, attrs);
+                  if (focusNew && newFlyout !== 'loading') {
+                    (dom as HTMLElement).querySelector<HTMLButtonElement>('button')?.focus();
+                    focusNew = false;
+                  }
+                },
+                onremove: () => {
+                  newElement = undefined;
+                },
+                onclick: (event: MouseEvent) => event.stopPropagation(),
+                onkeydown: (event: KeyboardEvent) => {
+                  if (event.key === 'ArrowLeft') {
+                    event.preventDefault();
+                    dismissNew();
+                    newItem?.focus();
+                  } else if (event.key === 'Escape') {
+                    event.preventDefault();
+                    close(attrs);
+                  } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    const items = [
+                      ...(event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>(
+                        'button',
+                      ),
+                    ];
+                    const index = items.indexOf(document.activeElement as HTMLButtonElement);
+                    items[
+                      (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+                    ]?.focus();
+                  }
+                },
+              },
+              [
+                newFlyout === 'loading'
+                  ? m('.fm-context-menu-message', t('contextMenu', 'loadingTemplates'))
+                  : newFlyout === 'error'
+                    ? m('.fm-context-menu-message', t('newFromTemplate', 'loadFailed'))
+                    : undefined,
+                m(
+                  'button.fm-context-menu-item',
+                  {
+                    type: 'button',
+                    role: 'menuitem',
+                    onclick: () => {
+                      attrs.onInvoke('core.createDirectory');
+                      close(attrs);
+                    },
+                  },
+                  [
+                    m(
+                      'span.fm-context-menu-label',
+                      attrs.actions.find((item) => item.action.id === 'core.createDirectory')
+                        ?.action.title,
+                    ),
+                  ],
+                ),
+                newFlyout === 'ready' && newChoices.length > 0
+                  ? m('.fm-context-menu-separator', { role: 'separator' })
+                  : undefined,
+                newChoices.map((choice) =>
+                  m(
+                    'button.fm-context-menu-item',
+                    {
+                      key: choice.id,
+                      type: 'button',
+                      role: 'menuitem',
+                      onclick: () => {
+                        attrs.newSubmenu?.onChoose(choice.id);
+                        close(attrs);
+                      },
+                    },
+                    [
+                      m('span.fm-context-menu-label', choice.label),
+                      choice.detail === undefined
+                        ? undefined
+                        : m('span.fm-context-menu-shortcut', choice.detail),
+                    ],
+                  ),
                 ),
               ],
             ),
