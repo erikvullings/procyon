@@ -258,6 +258,11 @@ import type {
   WorkspaceProjection,
   WorkspaceSummary,
 } from '../../models';
+import type {
+  OrganizerRequest,
+  OrganizerResponse,
+  WatchedFolder,
+} from '../../models/watched-folders';
 import type { FileManagerClient, NativeFileDrop } from './file-manager-client';
 import { MockConnectionClient } from './mock-connection-client';
 import { MockContext } from './mock-context';
@@ -265,7 +270,7 @@ import { MockNotesClient } from './mock-notes-client';
 import { MockOperationClient } from './mock-operation-client';
 import { MockPluginClient } from './mock-plugin-client';
 import { MockSemanticClient } from './mock-semantic-client';
-import type { MockFileManagerClientOptions } from './mock-shared';
+import { directories, type MockFileManagerClientOptions } from './mock-shared';
 import { MockWorkspaceClient } from './mock-workspace-client';
 
 export type {
@@ -591,6 +596,52 @@ export class MockFileManagerClient implements FileManagerClient {
   listFileTemplates(signal?: AbortSignal): Promise<FileTemplateEntry[]> {
     return this.connectionClient.listFileTemplates(signal);
   }
+  private readonly watchedFolders = new Map<string, WatchedFolder>();
+  private readonly filingPreviews = new Map<string, OrganizerResponse['preview']>();
+  private filingPreviewSequence = 0;
+
+  async manageWatchedFolders(request: OrganizerRequest): Promise<OrganizerResponse> {
+    if (request.action === 'save') {
+      const existing = this.watchedFolders.get(request.root.uri);
+      this.watchedFolders.set(request.root.uri, {
+        root: request.root,
+        delayHours: request.delayHours,
+        paused: request.paused,
+        rules: request.rules,
+        pending: [
+          ...(existing?.pending ?? []),
+          ...request.approved.map((assignment) => ({
+            assignment,
+            dueAt: new Date(Date.now() + request.delayHours * 3_600_000).toISOString(),
+          })),
+        ],
+      });
+    }
+    if (request.action === 'remove') this.watchedFolders.delete(request.root.uri);
+    const folders = [...this.watchedFolders.values()];
+    if (request.action === 'preview') {
+      const jobId = `mock-cleanup-${++this.filingPreviewSequence}`;
+      const moves = (directories[request.root.uri] ?? [])
+        .filter((entry) => entry.kind === 'file' && !entry.hidden)
+        .map((entry) => ({
+          folder: entry.name.endsWith('.pdf') ? 'PDFs' : 'Other files',
+          source: {
+            providerId: request.root.providerId,
+            uri: `${request.root.uri.replace(/\/$/, '')}/${encodeURIComponent(entry.name)}`,
+          },
+        }));
+      this.filingPreviews.set(jobId, { moves, unmatched: [], unprocessed: [] });
+      return { folders, jobId };
+    }
+    if (request.action === 'collect') {
+      const preview = this.filingPreviews.get(request.jobId) ?? null;
+      this.filingPreviews.delete(request.jobId);
+      return { folders, preview };
+    }
+    if (request.action === 'cancel') this.filingPreviews.delete(request.jobId);
+    return { folders };
+  }
+
   getNotesSetup(signal?: AbortSignal): Promise<NotesSetup> {
     return this.notesClient.getNotesSetup(signal);
   }

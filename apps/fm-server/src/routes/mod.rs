@@ -65,3 +65,5 @@ struct ApiDoc;
 pub(crate) fn api_doc() -> utoipa::openapi::OpenApi {
     ApiDoc::openapi()
 }
+
+pub(crate) mod watched_folders;

@@ -426,6 +426,15 @@ impl FileSystemProvider for OneDriveFileSystemProvider {
         })
     }
 
+    async fn rename_exclusive(
+        &self,
+        source: &EntryRef,
+        destination: &Location,
+        cancellation: CancellationToken,
+    ) -> Result<EntryRef, VfsError> {
+        self.rename(source, destination, cancellation).await
+    }
+
     /// Microsoft Graph's `DELETE` recycles a folder's entire subtree in one
     /// call - there is no separate recursive flag to honour, unlike a plain
     /// filesystem.

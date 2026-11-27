@@ -272,6 +272,7 @@ import type {
 import { syncPlanItemToDto } from '../../models/comparison';
 import { entryMetadataFromDto, entrySummaryFromDto } from '../../models/entry';
 import { directorySnapshotFromDto } from '../../models/snapshot';
+import type { OrganizerRequest, OrganizerResponse } from '../../models/watched-folders';
 import { workspaceProjectionFromDto } from '../../models/workspace';
 import { perfEnd, perfStart, setPerfSink } from '../../utilities/perf';
 import { TauriEventStream } from '../events/tauri-event-stream';
@@ -890,6 +891,10 @@ export class TauriFileManagerClient implements FileManagerClient {
       uri: locationUri,
       request: comment,
     });
+  }
+
+  manageWatchedFolders(request: OrganizerRequest): Promise<OrganizerResponse> {
+    return invoke<OrganizerResponse>('manage_watched_folders', { request });
   }
 
   getNotesSetup(_signal?: AbortSignal): Promise<NotesSetup> {

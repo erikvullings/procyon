@@ -9880,6 +9880,53 @@
         }
       }
     },
+    "/api/v1/watched-folders": {
+      "post": {
+        "operationId": "manageWatchedFolders",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizerResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationErrorDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/workspaces": {
       "get": {
         "summary": "Lists every stored workspace as a lightweight summary.",
@@ -10847,6 +10894,35 @@
               "format": "uuid"
             },
             "description": "One operation id per applied (non-`skip`) row, in the same order as\nthe request's `items`."
+          }
+        }
+      },
+      "ApprovedMove": {
+        "type": "object",
+        "description": "A reviewed assignment.",
+        "required": [
+          "source",
+          "folder"
+        ],
+        "properties": {
+          "folder": {
+            "type": "string",
+            "description": "Immediate destination folder name."
+          },
+          "source": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Original file."
+          },
+          "version": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FileVersion",
+                "description": "File version captured during preview."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -15392,6 +15468,107 @@
           "folder",
           "plugin"
         ]
+      },
+      "FileVersion": {
+        "type": "object",
+        "description": "Listing evidence used to detect changes between scan and approval.",
+        "required": [
+          "entryId"
+        ],
+        "properties": {
+          "entryId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Provider entry identifier."
+          },
+          "modifiedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Modification timestamp seen during scan."
+          },
+          "size": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Size seen during scan.",
+            "minimum": 0
+          }
+        }
+      },
+      "FilingRule": {
+        "type": "object",
+        "description": "One ordered rule. Every supplied criterion must match.",
+        "required": [
+          "folder"
+        ],
+        "properties": {
+          "contentType": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Exact MIME type."
+          },
+          "extension": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Extension without the leading dot."
+          },
+          "folder": {
+            "type": "string",
+            "description": "Immediate destination folder name."
+          },
+          "minimumBytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Minimum file size.",
+            "minimum": 0
+          }
+        }
+      },
+      "FilingStatus": {
+        "type": "object",
+        "description": "A pending or failed assignment.",
+        "required": [
+          "assignment",
+          "dueAt"
+        ],
+        "properties": {
+          "assignment": {
+            "$ref": "#/components/schemas/ApprovedMove",
+            "description": "Original file and destination."
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Earliest eligible filing time."
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filing failure, when applicable."
+          },
+          "operationId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Operation identifier while the assignment is being filed."
+          }
+        }
       },
       "FilterCriteriaDto": {
         "type": "object",
@@ -22332,6 +22509,208 @@
             "format": "int64",
             "description": "Files confirmed identical to their source.",
             "minimum": 0
+          }
+        }
+      },
+      "OrganizerPreview": {
+        "type": "object",
+        "description": "The result of a read-only model scan.",
+        "required": [
+          "moves",
+          "unmatched",
+          "unprocessed"
+        ],
+        "properties": {
+          "moves": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovedMove"
+            },
+            "description": "Proposed assignments."
+          },
+          "unmatched": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocationDto"
+            },
+            "description": "Files that received no assignment."
+          },
+          "unprocessed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocationDto"
+            },
+            "description": "Eligible files beyond the current model budget."
+          }
+        }
+      },
+      "OrganizerRequest": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "list"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "root",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "preview"
+                ]
+              },
+              "root": {
+                "$ref": "#/components/schemas/LocationDto"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "jobId",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "collect"
+                ]
+              },
+              "jobId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "jobId",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "cancel"
+                ]
+              },
+              "jobId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "root",
+              "delayHours",
+              "paused",
+              "rules",
+              "approved",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "save"
+                ]
+              },
+              "approved": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ApprovedMove"
+                }
+              },
+              "delayHours": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              },
+              "paused": {
+                "type": "boolean"
+              },
+              "root": {
+                "$ref": "#/components/schemas/LocationDto"
+              },
+              "rules": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FilingRule"
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "root",
+              "action"
+            ],
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "remove"
+                ]
+              },
+              "root": {
+                "$ref": "#/components/schemas/LocationDto"
+              }
+            }
+          }
+        ],
+        "description": "Requests handled by the watched-folder capability."
+      },
+      "OrganizerResponse": {
+        "type": "object",
+        "description": "Result of an organizer command. A collect response with no preview is still running.",
+        "required": [
+          "folders"
+        ],
+        "properties": {
+          "folders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WatchedFolder"
+            },
+            "description": "The current watched-folder state."
+          },
+          "jobId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Newly started preview."
+          },
+          "preview": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/OrganizerPreview",
+                "description": "Finished preview."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -31567,6 +31946,54 @@
           "name": {
             "type": "string",
             "description": "Human-readable volume/drive name."
+          }
+        }
+      },
+      "WatchedFolder": {
+        "type": "object",
+        "description": "A persisted watched folder and its pending work.",
+        "required": [
+          "root",
+          "delayHours",
+          "paused",
+          "rules",
+          "pending"
+        ],
+        "properties": {
+          "delayHours": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Grace period before moving files.",
+            "minimum": 0
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Current source or listing error, if any."
+          },
+          "paused": {
+            "type": "boolean",
+            "description": "Whether automatic submissions are suspended."
+          },
+          "pending": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilingStatus"
+            },
+            "description": "Pending and failed assignments."
+          },
+          "root": {
+            "$ref": "#/components/schemas/LocationDto",
+            "description": "Watched directory."
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilingRule"
+            },
+            "description": "Ordered rules for new arrivals."
           }
         }
       },

@@ -22,6 +22,8 @@ pub struct CleanupMove {
     pub source: Location,
     /// Proposed destination directory.
     pub destination: Location,
+    /// Source version at the time of the scan.
+    pub version: fm_transport_dto::watched_folders::FileVersion,
 }
 
 /// A read-only proposal for the files seen during one cleanup scan.
@@ -260,7 +262,7 @@ where
     })
 }
 
-async fn check_local_root(root: &Location) -> Result<(), ApplicationError> {
+pub(crate) async fn check_local_root(root: &Location) -> Result<(), ApplicationError> {
     let path = root
         .to_native_path()
         .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))?;
@@ -280,7 +282,15 @@ async fn check_local_root(root: &Location) -> Result<(), ApplicationError> {
     Ok(())
 }
 
-fn is_candidate(entry: &EntrySummary) -> bool {
+pub(crate) fn file_version(entry: &EntrySummary) -> fm_transport_dto::watched_folders::FileVersion {
+    fm_transport_dto::watched_folders::FileVersion {
+        entry_id: entry.id.into(),
+        size: entry.size,
+        modified_at: entry.modified_at,
+    }
+}
+
+pub(crate) fn is_candidate(entry: &EntrySummary) -> bool {
     entry.kind == EntryKind::File
         && !entry.hidden
         && !entry.name.starts_with('.')
@@ -347,6 +357,7 @@ fn validate_assignments(
         moves.push(CleanupMove {
             source: source.location.clone(),
             destination,
+            version: file_version(source),
         });
     }
     let unmatched = files

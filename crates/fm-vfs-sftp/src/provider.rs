@@ -527,6 +527,15 @@ impl FileSystemProvider for SftpFileSystemProvider {
         })
     }
 
+    async fn rename_exclusive(
+        &self,
+        source: &EntryRef,
+        destination: &Location,
+        cancellation: CancellationToken,
+    ) -> Result<EntryRef, VfsError> {
+        self.rename(source, destination, cancellation).await
+    }
+
     async fn remove(
         &self,
         entry: &EntryRef,

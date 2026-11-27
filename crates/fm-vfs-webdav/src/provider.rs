@@ -139,7 +139,7 @@ impl WebDavFileSystemProvider {
             &digest_cache,
             propfind_method(),
             url,
-            Some(("Depth", "0")),
+            &[("Depth", "0")],
             Some(PROPFIND_BODY.as_bytes().to_vec()),
         )
         .await?;
@@ -185,7 +185,7 @@ impl WebDavFileSystemProvider {
             &self.digest_cache,
             method,
             url,
-            extra_header,
+            extra_header.as_slice(),
             body,
         )
         .await
@@ -251,14 +251,14 @@ async fn execute(
     digest_cache: &RwLock<HashMap<String, Arc<CachedDigest>>>,
     method: Method,
     url: url::Url,
-    extra_header: Option<(&str, &str)>,
+    extra_headers: &[(&str, &str)],
     body: Option<Vec<u8>>,
 ) -> Result<reqwest::Response, VfsError> {
     let path = url.path().to_owned();
     let build = |body: Option<Vec<u8>>| {
         let mut builder = client.request(method.clone(), url.clone());
-        if let Some((name, value)) = extra_header {
-            builder = builder.header(name, value);
+        for (name, value) in extra_headers {
+            builder = builder.header(*name, *value);
         }
         if let Some(body) = body {
             builder = builder.body(body);
@@ -655,6 +655,42 @@ impl FileSystemProvider for WebDavFileSystemProvider {
                 None,
             )
             .await?;
+        if response.status().is_success() {
+            Ok(entry(destination.clone()))
+        } else {
+            Err(map_status(response.status(), &destination.uri))
+        }
+    }
+
+    async fn rename_exclusive(
+        &self,
+        source: &EntryRef,
+        destination: &Location,
+        cancellation: CancellationToken,
+    ) -> Result<EntryRef, VfsError> {
+        cancelled(&cancellation)?;
+        let source_parsed = Parsed::parse(&source.location)?;
+        let destination_parsed = Parsed::parse(destination)?;
+        if source_parsed.connection_id != destination_parsed.connection_id {
+            return Err(invalid(&destination.uri));
+        }
+        let parameters = self.resolve(&source_parsed).await?;
+        let source_url = self.url_for(&source_parsed, &parameters)?;
+        let destination_url = self.url_for(&destination_parsed, &parameters)?;
+        let response = execute(
+            &self.client,
+            &parameters.base_url,
+            &parameters,
+            &self.digest_cache,
+            move_method(),
+            source_url,
+            &[
+                ("Destination", destination_url.as_str()),
+                ("Overwrite", "F"),
+            ],
+            None,
+        )
+        .await?;
         if response.status().is_success() {
             Ok(entry(destination.clone()))
         } else {

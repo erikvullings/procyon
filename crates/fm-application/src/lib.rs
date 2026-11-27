@@ -68,6 +68,7 @@ pub use fm_metadata::thumbnail_content_type;
 pub use map_tiles::MapTile;
 #[cfg(test)]
 mod appendable_test_provider;
+mod folder_filing;
 mod metadata_tokens;
 mod music_duplicates;
 mod notes;

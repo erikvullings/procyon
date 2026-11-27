@@ -166,6 +166,8 @@ import type {
   OpenStructuredViewResponseDto,
   OperationDto,
   OperationPageDto,
+  OrganizerRequest,
+  OrganizerResponse,
   ParseGeoTextRequestDto,
   ParseKnowledgeQueryRequestDto,
   PlanKnowledgeSearchRequestDto,
@@ -10537,6 +10539,51 @@ export const getVolumes = async ( options?: Parameters<typeof fetchMutator>[1]):
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type manageWatchedFoldersResponse200 = {
+  data: OrganizerResponse
+  status: 200
+}
+
+export type manageWatchedFoldersResponse400 = {
+  data: ApplicationErrorDto
+  status: 400
+}
+
+export type manageWatchedFoldersResponse403 = {
+  data: ApplicationErrorDto
+  status: 403
+}
+
+export type manageWatchedFoldersResponseSuccess = (manageWatchedFoldersResponse200) & {
+  headers: Headers;
+};
+export type manageWatchedFoldersResponseError = (manageWatchedFoldersResponse400 | manageWatchedFoldersResponse403) & {
+  headers: Headers;
+};
+
+export type manageWatchedFoldersResponse = (manageWatchedFoldersResponseSuccess | manageWatchedFoldersResponseError)
+
+export const getManageWatchedFoldersUrl = () => {
+
+
+
+
+  return `/api/v1/watched-folders`
+}
+
+export const manageWatchedFolders = async (organizerRequest: OrganizerRequest, options?: Parameters<typeof fetchMutator>[1]): Promise<manageWatchedFoldersResponse> => {
+
+  return fetchMutator<manageWatchedFoldersResponse>(getManageWatchedFoldersUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(organizerRequest)
   }
 );}
 

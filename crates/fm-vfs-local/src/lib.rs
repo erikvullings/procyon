@@ -10,9 +10,13 @@
 mod attributes;
 #[cfg(target_os = "macos")]
 pub mod bulk_listing;
+#[cfg(any(target_os = "linux", target_vendor = "apple", windows))]
+mod filing;
 #[cfg(windows)]
 mod junction;
 mod remove_tree;
+#[cfg(any(target_os = "linux", target_vendor = "apple", windows))]
+pub use filing::rename_for_filing;
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 mod settle;
 

@@ -149,6 +149,18 @@ pub trait FileSystemProvider: Send + Sync {
         cancellation: CancellationToken,
     ) -> Result<EntryRef, VfsError>;
 
+    /// Moves an entry only if the provider can refuse a concurrent destination collision.
+    async fn rename_exclusive(
+        &self,
+        _source: &EntryRef,
+        _destination: &Location,
+        _cancellation: CancellationToken,
+    ) -> Result<EntryRef, VfsError> {
+        Err(VfsError::UnsupportedCapability {
+            capability: ProviderCapabilities::RENAME,
+        })
+    }
+
     /// Removes an entry according to the supplied safety options.
     async fn remove(
         &self,

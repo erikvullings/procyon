@@ -17,7 +17,7 @@ use fm_vfs::EntryRef;
 
 use crate::error::ApplicationError;
 use crate::operation_history::{OperationHistory, operation_dto};
-use crate::operation_planner::OperationPlanner;
+use crate::operation_planner::{FilingGuard, OperationPlanner};
 use fm_domain::ActionId;
 use fm_transport_dto::OperationKindDto;
 
@@ -61,6 +61,33 @@ impl OperationsCoordinator {
         idempotency_key: Option<String>,
         resume: Vec<(Location, Location)>,
     ) -> Result<OperationDto, ApplicationError> {
+        self.start_transfer(request, idempotency_key, resume, None, None)
+    }
+
+    pub(crate) fn start_filing(
+        &self,
+        request: StartOperationRequestDto,
+        idempotency_key: String,
+        guard: FilingGuard,
+        operation_id: Option<OperationId>,
+    ) -> Result<OperationDto, ApplicationError> {
+        self.start_transfer(
+            request,
+            Some(idempotency_key),
+            Vec::new(),
+            Some(guard),
+            operation_id,
+        )
+    }
+
+    fn start_transfer(
+        &self,
+        request: StartOperationRequestDto,
+        idempotency_key: Option<String>,
+        resume: Vec<(Location, Location)>,
+        filing: Option<FilingGuard>,
+        operation_id: Option<OperationId>,
+    ) -> Result<OperationDto, ApplicationError> {
         if request.conflict_policy == OperationConflictPolicyDto::KeepNewer {
             return Err(ApplicationError::from(Rejection::new(
                 reason::KEEP_NEWER_UNSUPPORTED,
@@ -82,6 +109,7 @@ impl OperationsCoordinator {
             request.operation_type,
             &request,
             Arc::new(resume.into_iter().collect()),
+            filing,
         )?;
         let sources: Vec<EntryRef> = request
             .sources
@@ -111,7 +139,8 @@ impl OperationsCoordinator {
                 }) {
                     continue;
                 }
-                if active.kind == kind
+                if operation_id.is_none()
+                    && active.kind == kind
                     && active.destination == destination
                     && sources.len() == active.sources.len()
                     && sources.iter().all(|source| {
@@ -129,7 +158,7 @@ impl OperationsCoordinator {
                 )));
             }
         }
-        let operation = Operation::new(
+        let mut operation = Operation::new(
             kind,
             sources,
             destination,
@@ -140,6 +169,9 @@ impl OperationsCoordinator {
             request.verify_transfer
                 && matches!(kind, OperationKind::Copy | OperationKind::Duplicate),
         );
+        if let Some(id) = operation_id {
+            operation.id = id;
+        }
         let id = self
             .scheduler
             .submit(operation, executor)

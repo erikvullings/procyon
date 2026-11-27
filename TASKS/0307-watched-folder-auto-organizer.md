@@ -1,6 +1,6 @@
 # 0307 Watched-folder auto-organizer
 
-Status: open
+Status: in_progress
 Priority: high
 Subsystem: backend, frontend
 Depends on: none
@@ -43,3 +43,16 @@ new arrivals automatically.
 - The application layer can run a cancellable, read-only initial preview through the configured
   chat model. The preview uses filenames and MIME types, and reports files outside the model
   input budget. Host exposure, approval, durable scheduling, and Settings are still open.
+
+- The agreed Downloads workflow is implemented in **Settings → Files & operations → Watched
+  folders**. Navigate to a source folder first, select **Use active folder**, preview the proposed
+  structure, edit or exclude moves, then approve and save. Where the preview shows an unambiguous
+  extension-to-folder mapping, it can also seed an ordered standing rule. Filenames and MIME
+  types are the model inputs. Reviewed moves and future rule matches keep the original file in
+  place for the configured grace period (default 48 hours). Filing is paused per watched folder,
+  survives restarts, and appears in ordinary operation history with undo when available.
+- The queue uses a versioned settings sidecar and the shared directory watch. It verifies the
+  listed file version again before scheduling and uses no-replace moves. Destinations are
+  immediate child folders on the same filesystem. Local, SFTP, WebDAV, and OneDrive are eligible
+  for standing rules. Other providers, additional actions, additional rule predicates, and a
+  separate dry run of deterministic rules remain open under the original ticket scope.

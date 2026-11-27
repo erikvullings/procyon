@@ -270,6 +270,7 @@ import { syncPlanItemToDto } from '../../models/comparison';
 import { entryMetadataFromDto, entrySummaryFromDto } from '../../models/entry';
 import { comparisonPageFromDto, syncPlanFromDto } from '../../models/requests';
 import { directorySnapshotFromDto } from '../../models/snapshot';
+import type { OrganizerRequest, OrganizerResponse } from '../../models/watched-folders';
 import { workspaceProjectionFromDto } from '../../models/workspace';
 import { SseEventStream } from '../events/sse-event-stream';
 import {
@@ -502,6 +503,7 @@ import {
   getSystemLocations as requestSystemLocations,
   getThumbnail as requestThumbnail,
   getVolumes as requestVolumes,
+  manageWatchedFolders as requestWatchedFolders,
   getWorkspace as requestWorkspace,
   applyWorkspaceCommand as requestWorkspaceCommand,
   createWorkspace as requestWorkspaceCreation,
@@ -1308,6 +1310,13 @@ export class HttpFileManagerClient implements FileManagerClient {
     return settingsFromDto(
       (await requestSettings(signal === undefined ? undefined : { signal })).data,
     );
+  }
+
+  async manageWatchedFolders(request: OrganizerRequest): Promise<OrganizerResponse> {
+    const response = await requestWatchedFolders(request);
+    if (response.status !== 200)
+      throw unexpectedResponseError('manageWatchedFolders', response.status);
+    return response.data;
   }
 
   async getNotesSetup(signal?: AbortSignal): Promise<NotesSetup> {

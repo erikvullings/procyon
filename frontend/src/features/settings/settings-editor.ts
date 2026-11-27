@@ -64,6 +64,7 @@ import {
   validateSettingsDraft,
 } from './settings-model';
 import { ToolCallingStatus } from './tool-calling-status';
+import { WatchedFoldersSettings } from './watched-folders-settings';
 
 /** Every column the directory table can show, in the fixed order the table renders them. */
 const AVAILABLE_DEFAULT_COLUMNS = [
@@ -79,6 +80,7 @@ export type FilesPart =
   | 'behavior'
   | 'pictures'
   | 'documentHub'
+  | 'watchedFolders'
   | 'operations'
   | 'workspaceDefaults'
   | 'terminal'
@@ -349,6 +351,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
       const filesParts: ReadonlyArray<{ id: FilesPart; label: string }> = [
         { id: 'behavior', label: t('settings', 'fileBehavior') },
         { id: 'pictures', label: t('settings', 'pictureInfoSection') },
+        { id: 'watchedFolders', label: 'Watched folders' },
         { id: 'documentHub', label: t('settings', 'documentHubSection') },
         { id: 'operations', label: t('settings', 'operations') },
         { id: 'workspaceDefaults', label: t('settings', 'newWorkspaceDefaults') },
@@ -629,6 +632,12 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                             TOOLTIP_FIELD_CHOICES,
                           ),
                         ]
+                      : undefined,
+                    activeFilesPart === 'watchedFolders'
+                      ? m(WatchedFoldersSettings, {
+                          client: current.client,
+                          activeLocation: current.activeLocation,
+                        })
                       : undefined,
                     activeFilesPart === 'documentHub'
                       ? [

@@ -3596,6 +3596,7 @@ dependencies = [
  "fs2",
  "futures",
  "notify",
+ "rustix",
  "tempfile",
  "tokio",
  "tokio-util",

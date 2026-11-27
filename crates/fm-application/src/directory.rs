@@ -572,6 +572,33 @@ impl DirectoryService {
             .await
     }
 
+    /// Subscribes to the same provider watch used by open panes for a standing filing rule.
+    pub(crate) async fn watch_for_filing(
+        &self,
+        root: fm_domain::Location,
+        changed: Arc<AtomicBool>,
+        stop: CancellationToken,
+    ) -> Result<(), VfsError> {
+        let mut receiver = self
+            .watches
+            .acquire(self.providers.resolve(&root)?, root.clone())
+            .await?;
+        let watches = self.watches.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    () = stop.cancelled() => break,
+                    result = receiver.recv() => {
+                        changed.store(true, AtomicOrdering::Release);
+                        if matches!(result, Err(broadcast::error::RecvError::Closed)) { break; }
+                    }
+                }
+            }
+            watches.release(&root).await;
+        });
+        Ok(())
+    }
+
     /// Marks whether a pane is currently in the foreground, so a
     /// poll-tracked watch on its directory (SFTP, FTP, ...) can poll less
     /// often while backgrounded (task 0109).

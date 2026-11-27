@@ -265,7 +265,8 @@ pub struct FileManagerService {
     settings_store: SettingsStore,
     settings: Arc<Mutex<Settings>>,
     plugin_manager: PluginManager,
-    operations: OperationsCoordinator,
+    operations: Arc<OperationsCoordinator>,
+    folder_filing: Arc<crate::folder_filing::FolderFiling>,
     transfer_recovery: crate::transfer_recovery::TransferRecoveryCoordinator,
     action_invoker: ActionInvoker,
     search_comparison: SearchComparisonCoordinator,
@@ -648,6 +649,18 @@ impl FileManagerService {
             transfer_journal.clone(),
             interrupted_transfers,
         );
+        let operations = Arc::new(OperationsCoordinator::new(
+            with_transfer_journal(
+                Scheduler::new(operation_concurrency, events.clone())
+                    .with_observer(operation_observer),
+                transfer_journal,
+            ),
+            operation_history,
+            planner,
+            force_cross_volume_moves,
+        ));
+        let filing_providers = providers.clone();
+        let filing_directories = directories.clone();
         Self {
             runtime,
             fresh_install,
@@ -710,15 +723,14 @@ impl FileManagerService {
             settings: settings_mutex.clone(),
             plugin_manager,
             transfer_recovery,
-            operations: OperationsCoordinator::new(
-                with_transfer_journal(
-                    Scheduler::new(operation_concurrency, events).with_observer(operation_observer),
-                    transfer_journal,
-                ),
-                operation_history,
-                planner,
-                force_cross_volume_moves,
-            ),
+            operations: operations.clone(),
+            folder_filing: Arc::new(crate::folder_filing::FolderFiling::new(
+                settings_store.clone(),
+                filing_providers,
+                filing_directories,
+                operations,
+                events.clone(),
+            )),
             action_invoker,
             search_comparison,
             checksums,
@@ -4167,6 +4179,31 @@ impl FileManagerService {
         self.cleanup_jobs.cancel(id)
     }
 
+    /// Resumes watched-folder work on the host's Tokio runtime.
+    pub fn start_watched_folder_worker(&self) {
+        if tokio::runtime::Handle::try_current().is_ok() {
+            self.folder_filing.start();
+        }
+    }
+
+    /// Installs the host's filesystem access policy for background filing.
+    pub fn set_watched_folder_access(
+        &self,
+        access: impl Fn(&fm_transport_dto::LocationDto) -> bool + Send + Sync + 'static,
+    ) {
+        self.folder_filing.set_access(access);
+    }
+
+    /// Manages watched folders and their read-only preview jobs.
+    pub async fn watched_folder(
+        &self,
+        request: fm_transport_dto::watched_folders::OrganizerRequest,
+    ) -> Result<fm_transport_dto::watched_folders::OrganizerResponse, ApplicationError> {
+        self.folder_filing
+            .manage(request, &self.cleanup_jobs, &self.llm_profiles)
+            .await
+    }
+
     /// Returns the current application-wide settings.
     pub fn get_settings(&self) -> SettingsDto {
         let settings = self
@@ -5200,6 +5237,7 @@ impl FileManagerService {
         &self,
         requested_workspace_id: Option<Uuid>,
     ) -> Result<WorkspaceDto, ApplicationError> {
+        self.folder_filing.start();
         let workspace = self
             .workspaces
             .start(requested_workspace_id.map(Into::into))

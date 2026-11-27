@@ -1,3 +1,4 @@
+import type { OrganizerRequest, OrganizerResponse } from '../../models/watched-folders';
 import type { ConnectionClient } from './connection-client';
 import type { NotesClient } from './notes-client';
 import type { OperationClient } from './operation-client';
@@ -36,4 +37,6 @@ export interface FileManagerClient
     OperationClient,
     SemanticClient,
     PluginClient,
-    NotesClient {}
+    NotesClient {
+  manageWatchedFolders(request: OrganizerRequest): Promise<OrganizerResponse>;
+}

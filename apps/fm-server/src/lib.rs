@@ -268,6 +268,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(
             routes::folder_views::forget_folder_view
         ))
+        .routes(utoipa_axum::routes!(routes::watched_folders::manage))
         .routes(utoipa_axum::routes!(routes::snapshots::start_snapshot_job))
         .routes(utoipa_axum::routes!(routes::snapshots::get_snapshot_job))
         .routes(utoipa_axum::routes!(routes::snapshots::cancel_snapshot_job))
@@ -629,6 +630,11 @@ pub fn build_router_with_service_and_session(
     service: Arc<FileManagerService>,
     session: DevelopmentSession,
 ) -> Router {
+    let roots = config.roots.clone();
+    service.set_watched_folder_access(move |location| {
+        accessible_roots::validate_location(location, &roots).is_ok()
+    });
+    service.start_watched_folder_worker();
     let state = AppState {
         service,
         cors_allowed_origins: Arc::from(config.cors_allowed_origins.clone()),

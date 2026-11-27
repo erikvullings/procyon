@@ -53,6 +53,7 @@ pub mod sqlite;
 pub mod system_location;
 pub mod terminal_assist;
 pub mod transfer_recovery;
+pub mod watched_folders;
 pub mod workspace;
 pub mod workspace_command;
 

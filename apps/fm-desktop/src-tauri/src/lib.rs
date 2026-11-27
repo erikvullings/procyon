@@ -362,6 +362,10 @@ pub fn run() {
             }
             stamp("semantic-and-plugin-config-done");
             let service = Arc::new(service);
+            let filing_service = service.clone();
+            tauri::async_runtime::spawn(async move {
+                filing_service.start_watched_folder_worker();
+            });
             let semantic_ocr_shutdown = CancellationToken::new();
             app.manage(AppState {
                 service: Arc::clone(&service),
@@ -822,6 +826,7 @@ pub fn run() {
             commands::cancel_link_doctor_scan,
             commands::find_link_replacements,
             commands::forget_folder_view,
+            commands::manage_watched_folders,
             commands::start_snapshot_job,
             commands::get_snapshot_job,
             commands::cancel_snapshot_job,
@@ -1296,6 +1301,7 @@ mod tests {
                 commands::cancel_link_doctor_scan,
                 commands::find_link_replacements,
                 commands::forget_folder_view,
+                commands::manage_watched_folders,
                 commands::start_snapshot_job,
                 commands::get_snapshot_job,
                 commands::cancel_snapshot_job,

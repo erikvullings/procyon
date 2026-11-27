@@ -3869,6 +3869,19 @@ pub(crate) fn forget_folder_view(
         .map_err(|error| error.into_dto(Uuid::new_v4()))
 }
 
+/// Runs a watched-folder settings command or starts a preview job.
+#[tauri::command]
+pub(crate) async fn manage_watched_folders(
+    state: State<'_, AppState>,
+    request: fm_transport_dto::watched_folders::OrganizerRequest,
+) -> Result<fm_transport_dto::watched_folders::OrganizerResponse, ApplicationErrorDto> {
+    state
+        .service
+        .watched_folder(request)
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Starts a cancellable snapshot create or compare job through the shared service (task 0268).
 ///
 /// Must be `async` so the job task is spawned on the Tokio runtime.

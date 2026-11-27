@@ -65,7 +65,7 @@ impl OperationPlanner {
         kind: OperationKindDto,
         request: &StartOperationRequestDto,
     ) -> Result<Arc<dyn OperationExecutor>, ApplicationError> {
-        self.plan_with_resume(kind, request, Arc::new(HashMap::new()))
+        self.plan_with_resume(kind, request, Arc::new(HashMap::new()), None)
     }
 
     /// Plans like [`Self::plan`], but lets copies continue from interrupted private partials
@@ -76,6 +76,7 @@ impl OperationPlanner {
         kind: OperationKindDto,
         request: &StartOperationRequestDto,
         resume_hints: Arc<HashMap<Location, Location>>,
+        filing: Option<FilingGuard>,
     ) -> Result<Arc<dyn OperationExecutor>, ApplicationError> {
         let destination = request.destination.clone().map(Into::into);
         // Shared by every copy executor of this request: where the "space check skipped"
@@ -156,6 +157,7 @@ impl OperationPlanner {
                     .require(ProviderCapabilities::CREATE_DIRECTORY)
                     .map_err(ApplicationError::from)?;
                 Arc::new(CreateDirectoryExecutor {
+                    organizer: matches!(filing, Some(FilingGuard::CreateDirectory)),
                     provider,
                     parent,
                     name,
@@ -397,6 +399,7 @@ impl OperationPlanner {
                         resume_hints: Arc::clone(&resume_hints),
                     };
                     moves.push(MoveExecutor {
+                        filing: filing.clone(),
                         source,
                         source_provider,
                         destination_provider: Arc::clone(&destination_provider),
@@ -709,6 +712,7 @@ impl TransferPlan {
 /* -------------------------------------------------------------------------- */
 
 struct CreateDirectoryExecutor {
+    organizer: bool,
     provider: Arc<dyn FileSystemProvider>,
     parent: Location,
     name: String,
@@ -810,7 +814,20 @@ struct TrashExecutor {
     restored_entries: Mutex<Vec<(Location, Location)>>,
 }
 
+/// The file version and destination identity approved for a standing move.
+#[derive(Clone)]
+pub(crate) enum FilingGuard {
+    CreateDirectory,
+    Move {
+        source_id: EntryId,
+        size: Option<u64>,
+        modified: Option<chrono::DateTime<chrono::Utc>>,
+        destination_id: EntryId,
+    },
+}
+
 struct MoveExecutor {
+    filing: Option<FilingGuard>,
     source: Location,
     source_provider: Arc<dyn FileSystemProvider>,
     destination_provider: Arc<dyn FileSystemProvider>,
@@ -2150,6 +2167,107 @@ impl OperationExecutor for DuplicateExecutor {
     }
 }
 
+impl MoveExecutor {
+    async fn rename_item(
+        &self,
+        source: &EntryRef,
+        destination: &Location,
+        cancellation: &CancellationToken,
+    ) -> Result<EntryRef, ExecutionError> {
+        #[cfg(any(target_os = "linux", target_vendor = "apple", windows))]
+        if let Some(FilingGuard::Move {
+            source_id,
+            size,
+            modified,
+            destination_id,
+        }) = &self.filing
+            && source.location.provider_id.as_str() == "local"
+        {
+            if cancellation.is_cancelled() {
+                return Err(fm_vfs::VfsError::Cancelled.into());
+            }
+            let source = EntryRef {
+                id: *source_id,
+                location: source.location.clone(),
+            };
+            let (destination, directory_id, size, modified) =
+                (destination.clone(), *destination_id, *size, *modified);
+            return tokio::task::spawn_blocking(move || {
+                fm_vfs_local::rename_for_filing(&source, &destination, directory_id, size, modified)
+            })
+            .await
+            .map_err(|error| ExecutionError::Failed(error.to_string()))?
+            .map_err(Into::into);
+        }
+        if self.filing.is_some() {
+            return Ok(self
+                .source_provider
+                .rename_exclusive(source, destination, cancellation.clone())
+                .await?);
+        }
+        Ok(self
+            .source_provider
+            .rename(source, destination, cancellation.clone())
+            .await?)
+    }
+
+    async fn verify_filing(&self, cancellation: &CancellationToken) -> Result<(), ExecutionError> {
+        let Some(FilingGuard::Move {
+            source_id,
+            size,
+            modified,
+            destination_id,
+        }) = &self.filing
+        else {
+            return Ok(());
+        };
+        if self.source.provider_id.as_str() == "local" {
+            let parent = self
+                .source
+                .parent()
+                .map_err(|error| ExecutionError::Failed(error.to_string()))?
+                .ok_or_else(|| ExecutionError::Failed("The filing source has no parent.".into()))?;
+            for directory in [&parent, &self.destination_directory] {
+                crate::watched_folders::check_local_root(directory)
+                    .await
+                    .map_err(|error| ExecutionError::Failed(error.to_string()))?;
+            }
+        }
+        let source = self
+            .source_provider
+            .inspect(
+                &EntryRef {
+                    location: self.source.clone(),
+                    id: *source_id,
+                },
+                cancellation.clone(),
+            )
+            .await?;
+        let destination = self
+            .destination_provider
+            .inspect(
+                &EntryRef {
+                    location: self.destination_directory.clone(),
+                    id: *destination_id,
+                },
+                cancellation.clone(),
+            )
+            .await?;
+        if source.kind != EntryKind::File
+            || source.id != *source_id
+            || source.size != *size
+            || source.modified_at != *modified
+            || destination.kind != EntryKind::Directory
+            || destination.id != *destination_id
+        {
+            return Err(ExecutionError::Failed(
+                "The file or filing destination changed.".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[async_trait]
 impl OperationExecutor for MoveExecutor {
     async fn plan(
@@ -2157,6 +2275,7 @@ impl OperationExecutor for MoveExecutor {
         operation: &Operation,
         cancellation: &CancellationToken,
     ) -> Result<OperationPlan, ExecutionError> {
+        self.verify_filing(cancellation).await?;
         let source = EntryRef {
             id: EntryId::new(),
             location: self.source.clone(),
@@ -2193,6 +2312,11 @@ impl OperationExecutor for MoveExecutor {
                 .source_provider
                 .same_filesystem(&source, &self.destination_directory, cancellation.clone())
                 .await?;
+        if self.filing.is_some() && !same_filesystem {
+            return Err(ExecutionError::Failed(
+                "Automatic filing requires a destination on the same filesystem.".into(),
+            ));
+        }
         *self.fallback.lock().unwrap_or_else(|e| e.into_inner()) = !same_filesystem;
         if same_filesystem {
             Ok(OperationPlan::new(vec![PlanItem::new(source, 0)]))
@@ -2210,6 +2334,7 @@ impl OperationExecutor for MoveExecutor {
         pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
+        self.verify_filing(cancellation).await?;
         if *self.fallback.lock().unwrap_or_else(|e| e.into_inner()) {
             return self
                 .copy
@@ -2234,6 +2359,11 @@ impl OperationExecutor for MoveExecutor {
             .inspect(&destination_entry, cancellation.clone())
             .await
         {
+            if self.filing.is_some() {
+                return Err(ExecutionError::Failed(
+                    "A file with this name already exists at the filing destination.".into(),
+                ));
+            }
             let source = self
                 .source_provider
                 .inspect(&item.entry, cancellation.clone())
@@ -2269,8 +2399,7 @@ impl OperationExecutor for MoveExecutor {
             }
         }
         let moved = self
-            .source_provider
-            .rename(&item.entry, &destination, cancellation.clone())
+            .rename_item(&item.entry, &destination, cancellation)
             .await?;
         *self
             .destination_fingerprint
@@ -3806,6 +3935,11 @@ impl OperationExecutor for CreateDirectoryExecutor {
         _pause: &PauseToken,
         cancellation: &CancellationToken,
     ) -> Result<ExecutionOutcome, ExecutionError> {
+        if self.organizer && self.parent.provider_id.as_str() == "local" {
+            crate::watched_folders::check_local_root(&self.parent)
+                .await
+                .map_err(|error| ExecutionError::Failed(error.to_string()))?;
+        }
         if !self.create_intermediates {
             self.provider
                 .create_directory(&self.parent, &self.name, cancellation.clone())
