@@ -122,6 +122,9 @@ jobs:
       - name: Test
         # --no-fail-fast: every failure is listed in one run, so a platform-specific failure
         # (Windows paths, for one) is not found one push at a time.
+        # 8 MiB test threads: a debug build of the deep server router overflows Windows' 2 MiB default.
+        env:
+          RUST_MIN_STACK: 8388608
         run: cargo nextest run --workspace --no-fail-fast
       - name: Doctests
         run: cargo test --doc --workspace
