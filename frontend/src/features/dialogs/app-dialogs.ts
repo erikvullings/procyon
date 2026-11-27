@@ -133,6 +133,8 @@ export interface AppDialogsContext {
    * `undefined` when there is no active pane.
    */
   openEditorForCreatedFile(location: Location, name: string): PaneId | undefined;
+  /** Opens the new file in an editor, then the assistant beside it once that editor exists (task 0312). */
+  openAssistantForCreatedFile(location: Location, name: string): void;
   /** Opens the file-assistant chat for the editor in `paneId` (task 0321). */
   openAssistant(paneId: PaneId): void;
   cancelAutoDismiss(operationId: OperationId): void;
@@ -334,8 +336,7 @@ export function renderAppDialogs(
             .getOpsController()
             .createTextFile(loc, n, '')
             .then(() => {
-              const paneId = ctx.openEditorForCreatedFile(loc, n);
-              if (paneId !== undefined) ctx.openAssistant(paneId);
+              ctx.openAssistantForCreatedFile(loc, n);
             }),
         );
       },

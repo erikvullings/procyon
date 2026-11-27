@@ -47,6 +47,35 @@ describe('NewFromTemplateDialog', () => {
     expect(markdown?.getAttribute('aria-checked')).toBe('true');
   });
 
+  it('asks only for the file name when a template was chosen in the New submenu (task 0312)', () => {
+    const onCreate = vi.fn();
+    const templates = appTemplateEntries(DEFAULT_FILE_TEMPLATES);
+    m.mount(root, {
+      view: () =>
+        m(NewFromTemplateDialog, {
+          open: true,
+          templates,
+          preselectId: templates[1]?.id,
+          onCreate,
+          onCancel: vi.fn(),
+          onDraft: vi.fn(),
+        }),
+    });
+    m.redraw.sync();
+    // No list of other templates; the chosen one is named, and its file name is pre-filled.
+    expect(root.querySelectorAll('[role=radio]')).toHaveLength(0);
+    expect(root.querySelector('.fm-new-from-template-chosen')?.textContent).toContain(
+      'Markdown note',
+    );
+    expect(root.querySelector<HTMLInputElement>('#new-from-template-name')?.value).toBe('Note.md');
+    root.querySelector<HTMLButtonElement>('#new-from-template-name')?.focus();
+    const create = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Create',
+    );
+    create?.click();
+    expect(onCreate).toHaveBeenCalledWith(templates[1], 'Note.md');
+  });
+
   it('names the folder and the plugin behind non-app entries', () => {
     const entries: FileTemplateEntry[] = [
       {

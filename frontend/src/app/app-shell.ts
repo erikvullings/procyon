@@ -3070,6 +3070,31 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     });
   }
 
+  /** Opens the new file in an editor in the active pane; returns that pane (task 0312). */
+  function openEditorForCreatedFileInPane(location: Location, name: string): PaneId | undefined {
+    const active = activeDirectory();
+    if (active === undefined) return undefined;
+    refetchAffectedPanes(active.paneId);
+    // The editor loads `entry.location`, so it must be the new file's own
+    // location (the directory under the cursor joined with its name), not the
+    // directory location the create flow passes in - otherwise the load
+    // inspects the folder and fails with "Unable to load file".
+    const fileLocation: Location = {
+      providerId: location.providerId,
+      uri: `${location.uri.replace(/\/$/u, '')}/${encodeURIComponent(name)}`,
+    };
+    previewWiring.openEditor(shellState.client, active.paneId, {
+      id: crypto.randomUUID(),
+      location: fileLocation,
+      name,
+      kind: 'file',
+      hidden: false,
+      readOnly: false,
+      metadataRevision: 0,
+    });
+    return active.paneId;
+  }
+
   const appDialogsContext: AppDialogsContext = {
     reloadViewersOf,
     resolveArchiveEditPrompt: (choice) => void resolveArchiveEditPrompt(choice),
@@ -3149,28 +3174,21 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       shellState.semanticEnrolmentReturnToAsk = true;
       m.redraw();
     },
-    openEditorForCreatedFile: (location, name) => {
-      const active = activeDirectory();
-      if (active === undefined) return undefined;
-      refetchAffectedPanes(active.paneId);
-      // The editor loads `entry.location`, so it must be the new file's own
-      // location (the directory under the cursor joined with its name), not the
-      // directory location the create flow passes in - otherwise the load
-      // inspects the folder and fails with "Unable to load file".
-      const fileLocation: Location = {
-        providerId: location.providerId,
-        uri: `${location.uri.replace(/\/$/u, '')}/${encodeURIComponent(name)}`,
-      };
-      previewWiring.openEditor(shellState.client, active.paneId, {
-        id: crypto.randomUUID(),
-        location: fileLocation,
-        name,
-        kind: 'file',
-        hidden: false,
-        readOnly: false,
-        metadataRevision: 0,
-      });
-      return active.paneId;
+    openEditorForCreatedFile: (location, name) => openEditorForCreatedFileInPane(location, name),
+    openAssistantForCreatedFile: (location, name) => {
+      const paneId = openEditorForCreatedFileInPane(location, name);
+      if (paneId === undefined) return;
+      // The editor tab is registered once the workspace update lands, after `openEditor` returns; the
+      // assistant needs that tab as its source, so wait for it (up to 5 s) before asking.
+      void (async () => {
+        for (let attempt = 0; attempt < 100; attempt += 1) {
+          if ([...shellState.editorByTab.values()].some((editor) => editor.paneId === paneId)) {
+            assistantWiring.openAssistant(paneId);
+            return;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      })();
     },
     openAssistant: (paneId) => void assistantWiring.openAssistant(paneId),
     getFinderTagsLoader: () => shellState.finderTagsLoader,

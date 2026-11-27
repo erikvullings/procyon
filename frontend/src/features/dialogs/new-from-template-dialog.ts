@@ -95,6 +95,11 @@ export const NewFromTemplateDialog: FactoryComponent<NewFromTemplateDialogAttrs>
         }
       }
       wasOpen = attrs.open;
+      // Opened from the New submenu with a template already chosen: only the file name is asked (task 0312).
+      const chosen =
+        attrs.preselectId === undefined
+          ? undefined
+          : attrs.templates.find((candidate) => candidate.id === attrs.preselectId);
       const error = fileName === '' ? undefined : validateEntryName(fileName);
       const canCreate = selectedId !== undefined && fileName !== '' && error === undefined;
       return m(ModalPanel, {
@@ -104,28 +109,30 @@ export const NewFromTemplateDialog: FactoryComponent<NewFromTemplateDialogAttrs>
           attrs.templates.length === 0
             ? m('p', t('newFromTemplate', 'empty'))
             : m('.fm-new-from-template', [
-                m(
-                  'ul.fm-terminal-picker',
-                  { role: 'radiogroup', 'aria-label': t('newFromTemplate', 'templates') },
-                  attrs.templates.map((template) =>
-                    m(
-                      'li',
-                      { key: template.id },
-                      m(
-                        'button.fm-terminal-picker__item',
-                        {
-                          type: 'button',
-                          role: 'radio',
-                          'aria-checked': template.id === selectedId ? 'true' : 'false',
-                          title: template.fileName,
-                          onclick: () => select(template),
-                        },
-                        template.label,
-                        sourceTag(template),
+                chosen === undefined
+                  ? m(
+                      'ul.fm-terminal-picker',
+                      { role: 'radiogroup', 'aria-label': t('newFromTemplate', 'templates') },
+                      attrs.templates.map((template) =>
+                        m(
+                          'li',
+                          { key: template.id },
+                          m(
+                            'button.fm-terminal-picker__item',
+                            {
+                              type: 'button',
+                              role: 'radio',
+                              'aria-checked': template.id === selectedId ? 'true' : 'false',
+                              title: template.fileName,
+                              onclick: () => select(template),
+                            },
+                            template.label,
+                            sourceTag(template),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ),
+                    )
+                  : m('p.fm-new-from-template-chosen', [chosen.label, sourceTag(chosen)]),
                 m('label.fm-create-directory-field', [
                   m('span', t('newFromTemplate', 'fileName')),
                   m('input#new-from-template-name', {
