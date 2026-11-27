@@ -22,6 +22,7 @@ import type {
   DeleteLlmProfileRequest,
   DeleteRagConversationRequest,
   DeleteSemanticVocabularyImpact,
+  DetectedLlmServer,
   DocumentSummary,
   DocumentSummaryPreview,
   ExecuteKnowledgeSearchRequest,
@@ -52,6 +53,8 @@ import type {
   KnowledgeSearchResult,
   KnowledgeSourceLocation,
   ListKnowledgeRootsRequest,
+  LlmDiscoveryChoice,
+  LlmDiscoveryStatus,
   LlmEndpointLocality,
   LlmModelLimits,
   LlmProfile,
@@ -336,6 +339,9 @@ export interface SemanticClient {
     signal?: AbortSignal,
   ): Promise<KnowledgeRoot[]>;
 
+  getLlmDiscoveryStatus(signal?: AbortSignal): Promise<LlmDiscoveryStatus>;
+  detectLocalLlmServers(signal?: AbortSignal): Promise<DetectedLlmServer[]>;
+  chooseLlmDiscovery(choice: LlmDiscoveryChoice, signal?: AbortSignal): Promise<void>;
   listLlmProfilePresets(signal?: AbortSignal): Promise<LlmProfilePreset[]>;
 
   listLlmProfiles(signal?: AbortSignal): Promise<LlmProfile[]>;

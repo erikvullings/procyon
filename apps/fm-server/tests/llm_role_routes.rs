@@ -159,3 +159,66 @@ async fn roles_bind_gate_cloud_embeddings_and_clear_with_their_profile() {
         json!({ "chat": null, "embeddings": null, "image": null })
     );
 }
+
+#[tokio::test]
+async fn first_run_discovery_is_available_through_the_browser_host() {
+    let server = TestServer::spawn().await;
+    let client = reqwest::Client::new();
+    let route = format!("{}/api/v1/llm-discovery", server.base_url);
+    let status = || async {
+        client
+            .get(&route)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap()
+    };
+    let initial = status().await;
+    let loopback_available = initial["loopbackAvailable"].as_bool().unwrap();
+    assert_eq!(initial["firstRunPending"], true);
+    assert_eq!(initial["showBanner"], false);
+
+    let servers: Value = client
+        .post(format!("{route}/probe"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(servers.is_array());
+    if !loopback_available {
+        assert_eq!(servers, json!([]));
+    }
+
+    for (kind, mut expected) in [
+        (
+            "later",
+            json!({"firstRunPending": false, "showBanner": true}),
+        ),
+        (
+            "complete",
+            json!({"firstRunPending": false, "showBanner": false}),
+        ),
+        (
+            "reset",
+            json!({"firstRunPending": true, "showBanner": false}),
+        ),
+    ] {
+        let response = client
+            .put(&route)
+            .json(&json!({ "kind": kind }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::NO_CONTENT);
+        expected["loopbackAvailable"] = json!(loopback_available);
+        assert_eq!(status().await, expected);
+    }
+}

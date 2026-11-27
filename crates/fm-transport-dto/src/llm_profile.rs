@@ -419,3 +419,40 @@ mod tests {
         assert_eq!(value["maximumAnswerTokensCap"], 1_048_576);
     }
 }
+
+/// A loopback endpoint that returned a model list.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DetectedLlmServerDto {
+    /// Kind accepted when configuring the endpoint.
+    pub preset: LlmPresetDto,
+    /// Preset display name.
+    pub name: String,
+    /// Loopback URL on the host running Procyon.
+    pub base_url: String,
+    /// Available model IDs.
+    pub models: Vec<String>,
+}
+
+/// First-run setup and reminder state for the current installation.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmDiscoveryStatusDto {
+    /// Whether this host permits local model discovery.
+    pub loopback_available: bool,
+    /// Offer setup automatically when there is no saved endpoint.
+    pub first_run_pending: bool,
+    /// Remind the user in AI settings after choosing Later.
+    pub show_banner: bool,
+}
+
+/// User decisions made in local endpoint setup.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum LlmDiscoveryChoiceDto {
+    Later,
+    Complete,
+    Reset,
+    Use { preset: LlmPresetDto, model: String },
+}

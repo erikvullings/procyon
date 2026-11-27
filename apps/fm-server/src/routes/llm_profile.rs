@@ -29,6 +29,60 @@ pub(crate) async fn list_llm_profile_presets(
 
 #[utoipa::path(
     get,
+    path = "/api/v1/llm-discovery",
+    operation_id = "getLlmDiscoveryStatus",
+    responses((status = 200, description = "First-run AI setup status", body = fm_transport_dto::LlmDiscoveryStatusDto))
+)]
+pub(crate) async fn llm_discovery_status(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+) -> Result<Json<fm_transport_dto::LlmDiscoveryStatusDto>, ApiError> {
+    state
+        .service
+        .llm_discovery_status()
+        .map(Json)
+        .map_err(|error| ApiError::new(error, extract_request_id(&request_id)))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/llm-discovery/probe",
+    operation_id = "detectLocalLlmServers",
+    responses((status = 200, description = "Local endpoints that returned a model list", body = Vec<fm_transport_dto::DetectedLlmServerDto>))
+)]
+pub(crate) async fn detect_local_llm_servers(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+) -> Result<Json<Vec<fm_transport_dto::DetectedLlmServerDto>>, ApiError> {
+    state
+        .service
+        .detect_local_llm_servers()
+        .await
+        .map(Json)
+        .map_err(|error| ApiError::new(error, extract_request_id(&request_id)))
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/v1/llm-discovery",
+    operation_id = "chooseLlmDiscovery",
+    request_body = fm_transport_dto::LlmDiscoveryChoiceDto,
+    responses((status = 204, description = "AI setup decision saved"))
+)]
+pub(crate) async fn choose_llm_discovery(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    Json(choice): Json<fm_transport_dto::LlmDiscoveryChoiceDto>,
+) -> Result<StatusCode, ApiError> {
+    state
+        .service
+        .choose_llm_discovery(choice)
+        .map_err(|error| ApiError::new(error, extract_request_id(&request_id)))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+    get,
     path = "/api/v1/llm-profiles",
     operation_id = "listLlmProfiles",
     responses(

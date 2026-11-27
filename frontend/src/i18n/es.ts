@@ -2114,6 +2114,23 @@ export const es = {
       'La mayoría de los modelos no pueden dibujar. Nombra el modelo que sí puede; el modelo de chat de un endpoint normalmente no puede.',
   },
 
+  llmDiscovery: {
+    loopbackDisabled:
+      'La detección de IA local está desactivada en este servidor. Habilita PROCYON_LLM_ALLOW_LOOPBACK para usarla.',
+    title: 'Configurar IA',
+    checking: 'Buscando servidores locales de IA…',
+    none: 'No se encontraron servidores locales de IA.',
+    model: 'Modelo',
+    use: 'Usar para el chat y la búsqueda',
+    noModels: 'Este servidor no tiene modelos disponibles.',
+    cloud: 'Conectar un proveedor en la nube',
+    later: 'Más tarde',
+    reminder: 'Se omitió la configuración de IA. Puedes buscar servidores locales aquí.',
+    dismiss: 'Descartar',
+    detect: 'Detectar servidores locales',
+    reset: 'Restablecer la configuración inicial de IA',
+    failed: 'No se pudo completar la configuración de IA. Inténtalo de nuevo.',
+  },
   llmProfiles: {
     deleteConnection: 'Eliminar conexión',
     deleteConnectionQuestion: '¿Eliminar la conexión «{name}»?',

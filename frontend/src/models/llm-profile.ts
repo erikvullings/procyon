@@ -1,8 +1,11 @@
 export type {
   ActivateLlmProfileRequestDto as ActivateLlmProfileRequest,
   DeleteLlmProfileRequestDto as DeleteLlmProfileRequest,
+  DetectedLlmServerDto as DetectedLlmServer,
   LlmAdvancedSettingsDto as LlmAdvancedSettings,
   LlmApiCapabilityDto as LlmApiCapability,
+  LlmDiscoveryChoiceDto as LlmDiscoveryChoice,
+  LlmDiscoveryStatusDto as LlmDiscoveryStatus,
   LlmEndpointLocalityDto as LlmEndpointLocality,
   LlmModelLimitsDto as LlmModelLimits,
   LlmPresetDto as LlmPreset,

@@ -2519,6 +2519,23 @@ export const nl = {
       'De meeste modellen kunnen niet tekenen. Noem het model dat het kan; het chatmodel van een endpoint kan dat meestal niet.',
   },
 
+  llmDiscovery: {
+    loopbackDisabled:
+      'Detectie van lokale AI is uitgeschakeld op deze server. Schakel PROCYON_LLM_ALLOW_LOOPBACK in om dit te gebruiken.',
+    title: 'AI instellen',
+    checking: 'Zoeken naar lokale AI-servers…',
+    none: 'Geen lokale AI-servers gevonden.',
+    model: 'AI-model',
+    use: 'Gebruiken voor chat en zoeken',
+    noModels: 'Deze server heeft geen modellen beschikbaar.',
+    cloud: 'Een cloudprovider verbinden',
+    later: 'Niet nu',
+    reminder: 'AI-instellingen zijn overgeslagen. Je kunt hier lokale servers zoeken.',
+    dismiss: 'Sluiten',
+    detect: 'Lokale servers zoeken',
+    reset: 'Eerste AI-configuratie opnieuw instellen',
+    failed: 'AI kon niet worden ingesteld. Probeer het opnieuw.',
+  },
   llmProfiles: {
     deleteConnection: 'Verbinding verwijderen',
     deleteConnectionQuestion: 'Verbinding “{name}” verwijderen?',

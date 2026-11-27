@@ -5353,6 +5353,28 @@ impl FileManagerService {
             .collect()
     }
 
+    /// Reads the installation's first-run AI setup state.
+    pub fn llm_discovery_status(
+        &self,
+    ) -> Result<fm_transport_dto::LlmDiscoveryStatusDto, ApplicationError> {
+        Ok(self.llm_profiles.discovery_status()?)
+    }
+
+    /// Lists local servers that responded to a predefined model-list request.
+    pub async fn detect_local_llm_servers(
+        &self,
+    ) -> Result<Vec<fm_transport_dto::DetectedLlmServerDto>, ApplicationError> {
+        Ok(self.llm_profiles.detect_local_servers().await?)
+    }
+
+    /// Saves an explicit first-run AI setup decision.
+    pub fn choose_llm_discovery(
+        &self,
+        choice: fm_transport_dto::LlmDiscoveryChoiceDto,
+    ) -> Result<(), ApplicationError> {
+        Ok(self.llm_profiles.choose_discovery(choice)?)
+    }
+
     /// Lists saved generation profiles without exposing credential IDs.
     pub fn list_llm_profiles(&self) -> Result<Vec<LlmProfileDto>, ApplicationError> {
         self.llm_profiles

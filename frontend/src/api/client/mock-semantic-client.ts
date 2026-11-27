@@ -22,6 +22,7 @@ import type {
   DeleteLlmProfileRequest,
   DeleteRagConversationRequest,
   DeleteSemanticVocabularyImpact,
+  DetectedLlmServer,
   DocumentSummary,
   DocumentSummaryPreview,
   ExecuteKnowledgeSearchRequest,
@@ -52,6 +53,8 @@ import type {
   KnowledgeSearchResult,
   KnowledgeSourceLocation,
   ListKnowledgeRootsRequest,
+  LlmDiscoveryChoice,
+  LlmDiscoveryStatus,
   LlmEndpointLocality,
   LlmModelLimits,
   LlmProfile,
@@ -202,6 +205,19 @@ const MOCK_IMAGE_STEPS = 20;
 
 /** How long the mock spends on one step, so a progress bar has time to be seen moving. */
 const MOCK_IMAGE_STEP_MS = 300;
+
+const llmPresetDefaults: Pick<LlmProfilePreset, 'model' | 'advanced' | 'capabilities'> = {
+  model: '',
+  advanced: {
+    contextWindow: 8192,
+    maximumAnswerTokens: null,
+    temperature: 0.2,
+    timeoutSeconds: 30,
+    tlsPolicy: 'requireValidCertificate' as const,
+    customHeaders: {},
+  },
+  capabilities: ['chatCompletions', 'modelDiscovery'],
+};
 
 export class MockSemanticClient implements SemanticClient {
   /** How far each generation the mock is drawing has got, counted from when it started. */
@@ -1170,72 +1186,110 @@ export class MockSemanticClient implements SemanticClient {
     });
   }
 
+  getLlmDiscoveryStatus(signal?: AbortSignal): Promise<LlmDiscoveryStatus> {
+    return this.ctx.perform('getLlmDiscoveryStatus', signal, () => ({
+      loopbackAvailable: true,
+      firstRunPending: this.ctx.llmProfiles.size === 0 && this.ctx.llmDiscovery === 'pending',
+      showBanner: this.ctx.llmProfiles.size === 0 && this.ctx.llmDiscovery === 'skipped',
+    }));
+  }
+
+  detectLocalLlmServers(signal?: AbortSignal): Promise<DetectedLlmServer[]> {
+    return this.ctx.perform('detectLocalLlmServers', signal, () =>
+      structuredClone([...this.ctx.detectedLlmServers]),
+    );
+  }
+
+  chooseLlmDiscovery(choice: LlmDiscoveryChoice, signal?: AbortSignal): Promise<void> {
+    return this.ctx.perform('chooseLlmDiscovery', signal, () => {
+      if (choice.kind === 'use') {
+        const server = this.ctx.detectedLlmServers.find(({ preset }) => preset === choice.preset);
+        if (server === undefined || !server.models.includes(choice.model)) {
+          throw new MockClientError('invalidRequest', 'Unknown local server or model');
+        }
+        const saved =
+          [...this.ctx.llmProfiles.values()].find(
+            (profile) =>
+              profile.preset === server.preset &&
+              profile.baseUrl === server.baseUrl &&
+              profile.model === choice.model &&
+              !profile.hasCredential &&
+              profile.capabilities.includes('chatCompletions'),
+          ) ??
+          this.addLlmProfile({
+            ...llmPresetDefaults,
+            name: server.name,
+            preset: server.preset,
+            baseUrl: server.baseUrl,
+            model: choice.model,
+            redactFilenames: false,
+          });
+        const assignment = { profileId: saved.id, model: choice.model, allowCloud: false };
+        this.ctx.llmRoles = {
+          ...this.ctx.llmRoles,
+          chat: { ...assignment, thinking: this.ctx.llmRoles.chat?.thinking ?? 'auto' },
+          embeddings: { ...assignment, thinking: this.ctx.llmRoles.embeddings?.thinking ?? 'auto' },
+        };
+      }
+      this.ctx.llmDiscovery =
+        choice.kind === 'later' ? 'skipped' : choice.kind === 'reset' ? 'pending' : 'complete';
+    });
+  }
+
   listLlmProfilePresets(signal?: AbortSignal): Promise<LlmProfilePreset[]> {
     return this.ctx.perform('listLlmProfilePresets', signal, () => {
-      const defaults: Pick<LlmProfilePreset, 'model' | 'advanced' | 'capabilities'> = {
-        model: '',
-        advanced: {
-          contextWindow: 8192,
-          maximumAnswerTokens: null,
-          temperature: 0.2,
-          timeoutSeconds: 30,
-          tlsPolicy: 'requireValidCertificate' as const,
-          customHeaders: {},
-        },
-        capabilities: ['chatCompletions', 'modelDiscovery'],
-      };
       return [
         {
-          ...defaults,
+          ...llmPresetDefaults,
           name: 'Ollama',
           preset: 'ollama',
           baseUrl: 'http://127.0.0.1:11434',
           redactFilenames: false,
         },
         {
-          ...defaults,
+          ...llmPresetDefaults,
           name: 'LM Studio',
           preset: 'lmStudio',
           baseUrl: 'http://127.0.0.1:1234',
           redactFilenames: false,
         },
         {
-          ...defaults,
+          ...llmPresetDefaults,
           name: 'vLLM',
           preset: 'vllm',
           baseUrl: 'http://127.0.0.1:8000',
           redactFilenames: false,
         },
         {
-          ...defaults,
+          ...llmPresetDefaults,
           name: 'SGLang',
           preset: 'sglang',
           baseUrl: 'http://127.0.0.1:30000',
           redactFilenames: false,
         },
         {
-          ...defaults,
+          ...llmPresetDefaults,
           name: 'OMLX',
           preset: 'omlx',
           baseUrl: 'http://127.0.0.1:8000',
           redactFilenames: false,
         },
         {
-          ...defaults,
+          ...llmPresetDefaults,
           name: 'mlx-serve',
           preset: 'mlxServe',
           baseUrl: 'http://127.0.0.1:11234',
           redactFilenames: false,
         },
         {
-          ...defaults,
+          ...llmPresetDefaults,
           name: 'OpenAI-compatible',
           preset: 'openAiCompatible',
           baseUrl: 'https://api.openai.com',
           redactFilenames: true,
         },
         {
-          ...defaults,
+          ...llmPresetDefaults,
           name: 'Azure OpenAI',
           preset: 'azureOpenAi',
           baseUrl: 'https://example.openai.azure.com',
@@ -1243,7 +1297,7 @@ export class MockSemanticClient implements SemanticClient {
           redactFilenames: true,
         },
         {
-          ...defaults,
+          ...llmPresetDefaults,
           name: 'Alibaba Cloud Model Studio',
           preset: 'modelStudio',
           baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
@@ -1252,7 +1306,7 @@ export class MockSemanticClient implements SemanticClient {
           redactFilenames: true,
         },
         {
-          ...defaults,
+          ...llmPresetDefaults,
           name: 'Qwen Image (Alibaba Cloud)',
           preset: 'qwenImage',
           baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
@@ -1620,22 +1674,26 @@ export class MockSemanticClient implements SemanticClient {
   }
 
   createLlmProfile(request: SaveLlmProfileRequest, signal?: AbortSignal): Promise<LlmProfile> {
-    return this.ctx.perform('createLlmProfile', signal, () => {
-      requireProfileModel(request);
-      this.ctx.llmProfileSequence += 1;
-      const host = new URL(request.baseUrl).hostname.toLowerCase();
-      const profile: LlmProfile = {
-        ...structuredClone(request),
-        id: `00000000-0000-4000-8000-${String(this.ctx.llmProfileSequence).padStart(12, '0')}`,
-        hasCredential: request.credential != null,
-        locality:
-          host === 'localhost' || host === '127.0.0.1' || host === '::1' ? 'loopback' : 'cloud',
-        consentedHost: null,
-      };
-      this.ctx.llmProfiles.set(profile.id, profile);
-      this.ctx.activeLlmProfileId ??= profile.id;
-      return structuredClone(profile);
-    });
+    return this.ctx.perform('createLlmProfile', signal, () =>
+      structuredClone(this.addLlmProfile(request)),
+    );
+  }
+
+  private addLlmProfile(request: SaveLlmProfileRequest): LlmProfile {
+    requireProfileModel(request);
+    this.ctx.llmProfileSequence += 1;
+    const host = new URL(request.baseUrl).hostname.toLowerCase();
+    const profile: LlmProfile = {
+      ...structuredClone(request),
+      id: `00000000-0000-4000-8000-${String(this.ctx.llmProfileSequence).padStart(12, '0')}`,
+      hasCredential: request.credential != null,
+      locality:
+        host === 'localhost' || host === '127.0.0.1' || host === '::1' ? 'loopback' : 'cloud',
+      consentedHost: null,
+    };
+    this.ctx.llmProfiles.set(profile.id, profile);
+    this.ctx.activeLlmProfileId ??= profile.id;
+    return profile;
   }
 
   updateLlmProfile(

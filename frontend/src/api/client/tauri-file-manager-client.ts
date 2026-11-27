@@ -4,7 +4,6 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { relaunch } from '@tauri-apps/plugin-process';
-
 import type {
   AcceptSemanticInstallationOfferRequest,
   ActionDescriptor,
@@ -55,6 +54,7 @@ import type {
   DeleteLlmProfileRequest,
   DeleteRagConversationRequest,
   DeleteSemanticVocabularyImpact,
+  DetectedLlmServer,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
@@ -129,6 +129,8 @@ import type {
   LinkOptionsRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequest,
+  LlmDiscoveryChoice,
+  LlmDiscoveryStatus,
   LlmEndpointLocality,
   LlmModelLimits,
   LlmProfile,
@@ -1769,6 +1771,18 @@ export class TauriFileManagerClient implements FileManagerClient {
 
   disconnect(): void {
     this.eventStream.close();
+  }
+
+  getLlmDiscoveryStatus(): Promise<LlmDiscoveryStatus> {
+    return invoke('llm_discovery_status');
+  }
+
+  detectLocalLlmServers(): Promise<DetectedLlmServer[]> {
+    return invoke('detect_local_llm_servers');
+  }
+
+  chooseLlmDiscovery(choice: LlmDiscoveryChoice): Promise<void> {
+    return invoke('choose_llm_discovery', { choice });
   }
 
   listLlmProfilePresets(_signal?: AbortSignal): Promise<LlmProfilePreset[]> {

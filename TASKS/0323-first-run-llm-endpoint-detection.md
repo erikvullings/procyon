@@ -1,6 +1,6 @@
 # 0323 First-run LLM endpoint detection
 
-Status: open
+Status: done
 Priority: medium
 Subsystem: backend, frontend, settings
 Depends on: 0322
@@ -42,3 +42,10 @@ new default later needs no new detection code.
 
 ## Agent Notes
 - 2026-11-12 claude: Created from design discussion. Not started.
+- 2026-11-27: implemented the first-run panel, persisted decisions, repeatable Settings detection
+  and atomic chat and embeddings assignment. HTTP and Tauri share the loopback-only Rust probe.
+  Browser-server discovery respects the existing `PROCYON_LLM_ALLOW_LOOPBACK` setting. Mock uses
+  injected server fixtures. Verified default model-list endpoints in the
+  [Ollama API](https://docs.ollama.com/api/tags),
+  [LM Studio API](https://lmstudio.ai/docs/developer/openai-compat/models), and
+  [oMLX docs](https://github.com/jundot/omlx#features).

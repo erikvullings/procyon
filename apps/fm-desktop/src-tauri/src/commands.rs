@@ -3967,6 +3967,41 @@ pub(crate) fn list_llm_profile_presets(state: State<'_, AppState>) -> Vec<LlmPro
     state.service.list_llm_profile_presets()
 }
 
+/// Reads the installation's first-run AI setup state.
+#[tauri::command]
+pub(crate) fn llm_discovery_status(
+    state: State<'_, AppState>,
+) -> Result<fm_transport_dto::LlmDiscoveryStatusDto, ApplicationErrorDto> {
+    state
+        .service
+        .llm_discovery_status()
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Lists local servers that responded to a predefined model-list request.
+#[tauri::command]
+pub(crate) async fn detect_local_llm_servers(
+    state: State<'_, AppState>,
+) -> Result<Vec<fm_transport_dto::DetectedLlmServerDto>, ApplicationErrorDto> {
+    state
+        .service
+        .detect_local_llm_servers()
+        .await
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
+/// Saves an explicit first-run AI setup decision.
+#[tauri::command]
+pub(crate) fn choose_llm_discovery(
+    state: State<'_, AppState>,
+    choice: fm_transport_dto::LlmDiscoveryChoiceDto,
+) -> Result<(), ApplicationErrorDto> {
+    state
+        .service
+        .choose_llm_discovery(choice)
+        .map_err(|error| error.into_dto(Uuid::new_v4()))
+}
+
 /// Lists saved generation profiles without credential identifiers.
 #[tauri::command]
 pub(crate) fn list_llm_profiles(

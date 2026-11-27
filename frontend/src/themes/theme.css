@@ -2687,6 +2687,35 @@ main.fm-workspace {
   font-weight: 600;
 }
 
+.fm-first-run-llm {
+  position: fixed;
+  inset-block-start: 5rem;
+  inset-inline-end: var(--fm-space-4);
+  z-index: 30;
+  box-sizing: border-box;
+  width: min(26rem, calc(100vw - 2rem));
+  max-height: 50vh;
+  padding: var(--fm-space-4);
+  overflow: auto;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+  background: var(--fm-surface-elevated);
+  box-shadow: var(--fm-shadow);
+}
+
+.fm-llm-discovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fm-space-2);
+}
+
+.fm-llm-discovery-server {
+  display: grid;
+  justify-items: start;
+  gap: var(--fm-space-2);
+  padding-block: var(--fm-space-3);
+}
+
 .fm-llm-settings[hidden] {
   display: none;
 }

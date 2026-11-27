@@ -181,6 +181,10 @@ export class MockContext {
 
   readonly connections = new Map<ConnectionId, Connection>();
 
+  readonly detectedLlmServers: readonly import('../../models').DetectedLlmServer[];
+
+  llmDiscovery: 'pending' | 'skipped' | 'complete' = 'pending';
+
   readonly llmProfiles = new Map<string, LlmProfile>();
 
   readonly documentSummaries = new Map<string, DocumentSummary>();
@@ -373,6 +377,7 @@ export class MockContext {
   pluginClient!: MockPluginClient;
 
   constructor(options: MockFileManagerClientOptions = {}) {
+    this.detectedLlmServers = structuredClone(options.detectedLlmServers ?? []);
     this.pageSize = options.pageSize ?? 100;
     this.seed = options.seed ?? 13;
     this.loadingLocations = new Set(options.loadingLocations);

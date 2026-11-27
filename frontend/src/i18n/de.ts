@@ -2135,6 +2135,23 @@ export const de = {
       'Die meisten Modelle können nicht zeichnen. Nennen Sie das Modell, das es kann; das Chatmodell eines Endpunkts kann das meist nicht.',
   },
 
+  llmDiscovery: {
+    loopbackDisabled:
+      'Die lokale KI-Erkennung ist auf diesem Server deaktiviert. Aktivieren Sie dazu PROCYON_LLM_ALLOW_LOOPBACK.',
+    title: 'KI einrichten',
+    checking: 'Lokale KI-Server werden gesucht…',
+    none: 'Keine lokalen KI-Server gefunden.',
+    model: 'Modell',
+    use: 'Für Chat und Suche verwenden',
+    noModels: 'Dieser Server bietet keine Modelle an.',
+    cloud: 'Cloud-Anbieter verbinden',
+    later: 'Später',
+    reminder: 'Die KI-Einrichtung wurde übersprungen. Hier können Sie lokale Server suchen.',
+    dismiss: 'Schließen',
+    detect: 'Lokale Server suchen',
+    reset: 'Ersteinrichtung der KI zurücksetzen',
+    failed: 'Die KI-Einrichtung konnte nicht abgeschlossen werden. Versuchen Sie es erneut.',
+  },
   llmProfiles: {
     deleteConnection: 'Verbindung löschen',
     deleteConnectionQuestion: 'Verbindung „{name}“ löschen?',

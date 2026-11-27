@@ -285,6 +285,31 @@ async function clickFindByConcept(): Promise<void> {
 }
 
 describe('AppShell', () => {
+  it('opens the first-run cloud choice in the existing consent editor', async () => {
+    const client = new MockFileManagerClient();
+    const discoverDraftModels = vi.spyOn(client, 'discoverLlmProfileDraftModels');
+    m.mount(root, { view: () => m(AppShell, { runtime: 'mock', client }) });
+    const cloudChoice = () =>
+      [...root.querySelectorAll<HTMLButtonElement>('.fm-first-run-llm button')].find(
+        (button) => button.textContent === 'Connect a cloud provider',
+      );
+    await vi.waitFor(() => expect(cloudChoice()).toBeDefined());
+    cloudChoice()?.click();
+    await vi.waitFor(() => {
+      const settings = root.querySelector('.fm-llm-settings:not([hidden])');
+      expect(settings?.textContent).toContain(
+        'I consent to sending this content to this endpoint.',
+      );
+      expect(
+        [...(settings?.querySelectorAll<HTMLInputElement>('input') ?? [])].some(
+          (input) => input.value === 'https://api.openai.com',
+        ),
+      ).toBe(true);
+    });
+    expect(discoverDraftModels).not.toHaveBeenCalled();
+    expect(await client.listLlmProfiles()).toEqual([]);
+  });
+
   it('keeps only navigation, search, workspaces and the palette in the compact toolbar', async () => {
     const client = new MockFileManagerClient();
     const settings = await client.getSettings();

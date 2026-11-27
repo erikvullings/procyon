@@ -43,7 +43,8 @@ import type { SelectionPlatform } from '../selection/keybindings';
 import { AppUpdateSettings } from './app-update-settings';
 import { FileTemplatesEditor } from './file-templates-editor';
 import { keybindingGroups } from './keybinding-list';
-import { LlmProfileManagement } from './llm-profile-management';
+import { type LlmDiscoveredEndpoint, LlmDiscovery } from './llm-discovery';
+import { LlmProfileManagement, type LlmProfileManagementAttrs } from './llm-profile-management';
 import { LlmRoleManagement } from './llm-role-management';
 import {
   SemanticComponentManagement,
@@ -107,6 +108,7 @@ export interface SettingsEditorAttrs {
   readonly client: FileManagerClient;
   readonly settings: Settings;
   readonly initialSection?: SettingsSection;
+  readonly openCloudEndpoint?: (() => boolean) | undefined;
   readonly actions: readonly ActionDescriptor[];
   readonly platform: SelectionPlatform;
   readonly runtime: KeybindingRuntime;
@@ -161,10 +163,18 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
     llmRevision += 1;
   };
   // A provider chosen in the roles section opens the endpoint editor above with that preset (0325).
-  let llmPresetRequest: { presetId: string; revision: number } | undefined;
+  let llmPresetRequest: LlmProfileManagementAttrs['openPreset'];
   let llmPresetRevision = 0;
+  let discoveredEndpoint: LlmDiscoveredEndpoint | undefined;
   let llmConnectionsOpen = true;
   let focusLlmConnection = false;
+
+  function openLlmPreset(presetId: string, deferModelDiscovery = false): void {
+    llmConnectionsOpen = true;
+    focusLlmConnection = true;
+    llmPresetRevision += 1;
+    llmPresetRequest = { presetId, revision: llmPresetRevision, deferModelDiscovery };
+  }
 
   function resetDraft(current: SettingsEditorAttrs): void {
     draft = cloneSettings(current.settings);
@@ -275,6 +285,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
 
   return {
     view: ({ attrs: current }) => {
+      if (current.openCloudEndpoint?.()) openLlmPreset('openAiCompatible', true);
       if (draft === undefined) {
         resetDraft(current);
       }
@@ -1043,6 +1054,17 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                 '.fm-settings-section-content.fm-llm-settings',
                 { hidden: activeSection !== 'llm' },
                 [
+                  activeSection === 'llm'
+                    ? m(LlmDiscovery, {
+                        client: current.client,
+                        onConnectCloud: () => openLlmPreset('openAiCompatible', true),
+                        endpointRevision: llmRevision,
+                        onConfigured: (endpoint) => {
+                          discoveredEndpoint = endpoint;
+                          notifyLlmChanged();
+                        },
+                      })
+                    : null,
                   m(
                     'details.fm-llm-connections',
                     {
@@ -1066,6 +1088,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                         },
                         onChanged: notifyLlmChanged,
                         openPreset: llmPresetRequest,
+                        discoveredEndpoint,
                       }),
                     ],
                   ),
@@ -1077,12 +1100,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                     onManageSemantic: () => {
                       activeSection = 'semantic';
                     },
-                    onCreateEndpoint: (presetId: string) => {
-                      llmConnectionsOpen = true;
-                      focusLlmConnection = true;
-                      llmPresetRevision += 1;
-                      llmPresetRequest = { presetId, revision: llmPresetRevision };
-                    },
+                    onCreateEndpoint: openLlmPreset,
                   }),
                 ],
               ),

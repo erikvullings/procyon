@@ -2124,6 +2124,24 @@ export const fr = {
       'La plupart des modèles ne savent pas dessiner. Nommez celui qui le sait ; le modèle de discussion d’un point de terminaison ne le sait généralement pas.',
   },
 
+  llmDiscovery: {
+    loopbackDisabled:
+      'La détection de l’IA locale est désactivée sur ce serveur. Activez PROCYON_LLM_ALLOW_LOOPBACK pour l’utiliser.',
+    title: 'Configurer l’IA',
+    checking: 'Recherche de serveurs d’IA locaux…',
+    none: 'Aucun serveur d’IA local trouvé.',
+    model: 'Modèle',
+    use: 'Utiliser pour le chat et la recherche',
+    noModels: 'Aucun modèle disponible sur ce serveur.',
+    cloud: 'Connecter un fournisseur cloud',
+    later: 'Plus tard',
+    reminder:
+      'La configuration de l’IA a été ignorée. Vous pouvez rechercher des serveurs locaux ici.',
+    dismiss: 'Ignorer',
+    detect: 'Détecter les serveurs locaux',
+    reset: 'Réinitialiser la configuration initiale de l’IA',
+    failed: 'La configuration de l’IA a échoué. Réessayez.',
+  },
   llmProfiles: {
     deleteConnection: 'Supprimer la connexion',
     deleteConnectionQuestion: 'Supprimer la connexion « {name} » ?',

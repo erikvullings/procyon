@@ -45,6 +45,7 @@ import type {
   DeleteLlmProfileRequest,
   DeleteRagConversationRequest,
   DeleteSemanticVocabularyImpact,
+  DetectedLlmServer,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
@@ -119,6 +120,8 @@ import type {
   LinkOptionsRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequest,
+  LlmDiscoveryChoice,
+  LlmDiscoveryStatus,
   LlmEndpointLocality,
   LlmModelLimits,
   LlmProfile,
@@ -375,6 +378,8 @@ import {
   startLinkDoctorScan as requestLinkDoctorScanStart,
   getLinkOptions as requestLinkOptions,
   findLinkReplacements as requestLinkReplacementsFind,
+  chooseLlmDiscovery as requestLlmDiscoveryChoice,
+  getLlmDiscoveryStatus as requestLlmDiscoveryStatus,
   classifyLlmEndpoint as requestLlmEndpointClassification,
   activateLlmProfile as requestLlmProfileActivation,
   cloneLlmProfile as requestLlmProfileClone,
@@ -393,6 +398,7 @@ import {
   setLlmRole as requestLlmRoleSet,
   listLlmRoles as requestLlmRoles,
   loadEditableFile as requestLoadEditableFile,
+  detectLocalLlmServers as requestLocalLlmServers,
   resolveMetadataTokens as requestMetadataTokens,
   cancelMusicDuplicateScan as requestMusicDuplicateScanCancel,
   getMusicDuplicateScan as requestMusicDuplicateScanGet,
@@ -2807,6 +2813,29 @@ export class HttpFileManagerClient implements FileManagerClient {
 
   disconnect(): void {
     this.eventStream.close();
+  }
+
+  async getLlmDiscoveryStatus(signal?: AbortSignal): Promise<LlmDiscoveryStatus> {
+    const response = await requestLlmDiscoveryStatus(signal === undefined ? undefined : { signal });
+    if (response.status !== 200)
+      throw unexpectedResponseError('getLlmDiscoveryStatus', response.status);
+    return response.data;
+  }
+
+  async detectLocalLlmServers(signal?: AbortSignal): Promise<DetectedLlmServer[]> {
+    const response = await requestLocalLlmServers(signal === undefined ? undefined : { signal });
+    if (response.status !== 200)
+      throw unexpectedResponseError('detectLocalLlmServers', response.status);
+    return response.data;
+  }
+
+  async chooseLlmDiscovery(choice: LlmDiscoveryChoice, signal?: AbortSignal): Promise<void> {
+    const response = await requestLlmDiscoveryChoice(
+      choice,
+      signal === undefined ? undefined : { signal },
+    );
+    if (response.status !== 204)
+      throw unexpectedResponseError('chooseLlmDiscovery', response.status);
   }
 
   async listLlmProfilePresets(signal?: AbortSignal): Promise<LlmProfilePreset[]> {

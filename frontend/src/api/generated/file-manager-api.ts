@@ -54,6 +54,7 @@ import type {
   DeleteSemanticVocabularyImpactDto,
   DeleteSemanticVocabularyRequestDto,
   DeleteWorkspaceParams,
+  DetectedLlmServerDto,
   DiagnosticErrorDto,
   DiagnosticsDto,
   DiffFilesRequestDto,
@@ -137,6 +138,8 @@ import type {
   ListKnowledgeRootsRequestDto,
   ListOperationsParams,
   ListSavedRagConversationsRequestDto,
+  LlmDiscoveryChoiceDto,
+  LlmDiscoveryStatusDto,
   LlmEndpointLocalityDto,
   LlmModelLimitsDto,
   LlmProfileDto,
@@ -4982,6 +4985,105 @@ export const resolveLinkTarget = async (resolveLinkTargetRequestDto: ResolveLink
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
     body: JSON.stringify(resolveLinkTargetRequestDto)
+  }
+);}
+
+
+
+export type getLlmDiscoveryStatusResponse200 = {
+  data: LlmDiscoveryStatusDto
+  status: 200
+}
+
+export type getLlmDiscoveryStatusResponseSuccess = (getLlmDiscoveryStatusResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getLlmDiscoveryStatusResponse = (getLlmDiscoveryStatusResponseSuccess)
+
+export const getGetLlmDiscoveryStatusUrl = () => {
+
+
+
+
+  return `/api/v1/llm-discovery`
+}
+
+export const getLlmDiscoveryStatus = async ( options?: Parameters<typeof fetchMutator>[1]): Promise<getLlmDiscoveryStatusResponse> => {
+
+  return fetchMutator<getLlmDiscoveryStatusResponse>(getGetLlmDiscoveryStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type chooseLlmDiscoveryResponse204 = {
+  data: void
+  status: 204
+}
+
+export type chooseLlmDiscoveryResponseSuccess = (chooseLlmDiscoveryResponse204) & {
+  headers: Headers;
+};
+;
+
+export type chooseLlmDiscoveryResponse = (chooseLlmDiscoveryResponseSuccess)
+
+export const getChooseLlmDiscoveryUrl = () => {
+
+
+
+
+  return `/api/v1/llm-discovery`
+}
+
+export const chooseLlmDiscovery = async (llmDiscoveryChoiceDto: LlmDiscoveryChoiceDto, options?: Parameters<typeof fetchMutator>[1]): Promise<chooseLlmDiscoveryResponse> => {
+
+  return fetchMutator<chooseLlmDiscoveryResponse>(getChooseLlmDiscoveryUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(llmDiscoveryChoiceDto)
+  }
+);}
+
+
+
+export type detectLocalLlmServersResponse200 = {
+  data: DetectedLlmServerDto[]
+  status: 200
+}
+
+export type detectLocalLlmServersResponseSuccess = (detectLocalLlmServersResponse200) & {
+  headers: Headers;
+};
+;
+
+export type detectLocalLlmServersResponse = (detectLocalLlmServersResponseSuccess)
+
+export const getDetectLocalLlmServersUrl = () => {
+
+
+
+
+  return `/api/v1/llm-discovery/probe`
+}
+
+export const detectLocalLlmServers = async ( options?: Parameters<typeof fetchMutator>[1]): Promise<detectLocalLlmServersResponse> => {
+
+  return fetchMutator<detectLocalLlmServersResponse>(getDetectLocalLlmServersUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
   }
 );}
 

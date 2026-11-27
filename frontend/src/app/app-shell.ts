@@ -149,6 +149,7 @@ import {
   pdfPageRenderProvenance,
 } from '../features/semantic/evidence-provenance';
 import { AppUpdateDialog } from '../features/settings/app-update-dialog';
+import { LlmDiscovery } from '../features/settings/llm-discovery';
 import { SemanticFolderEnrolmentPrompt } from '../features/settings/semantic-library-management';
 import {
   createSettingsController,
@@ -279,6 +280,7 @@ export interface AppShellAttrs {
 }
 
 export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
+  let openFirstRunCloudEndpoint = false;
   const shellState = createShellState(vnode.attrs.client);
   /** Unlocks encrypted archive entries before they are streamed (task 0269). */
   const prepareMedia: PrepareMedia = (location, signal) =>
@@ -4528,6 +4530,11 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                               client: attrs.client,
                               settings: shellState.currentSettings,
                               initialSection: shellState.settingsInitialSection,
+                              openCloudEndpoint: () => {
+                                const requested = openFirstRunCloudEndpoint;
+                                openFirstRunCloudEndpoint = false;
+                                return requested;
+                              },
                               ...(shellState.workspace === undefined
                                 ? {}
                                 : { activeWorkspaceId: shellState.workspace.id }),
@@ -4623,6 +4630,18 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
               ],
             ),
           ]),
+          m(LlmDiscovery, {
+            client: attrs.client,
+            firstRun: true,
+            settingsOpen: shellState.settingsDialogOpen,
+            onConnectCloud: () => {
+              openFirstRunCloudEndpoint = true;
+              settingsWiring.openSettingsDialog('llm');
+            },
+            onConfigured: () => {
+              void knowledgeWiring.refreshSemanticAssistantAvailability();
+            },
+          }),
           shellState.walkthroughsOpen
             ? m(WalkthroughPanel, {
                 selected: shellState.selectedWalkthrough,

@@ -2474,6 +2474,23 @@ export const en = {
       'Most models cannot draw. Name the model that can; the chat model of an endpoint usually cannot.',
   },
 
+  llmDiscovery: {
+    loopbackDisabled:
+      'Local AI detection is disabled on this server. Enable PROCYON_LLM_ALLOW_LOOPBACK to use it.',
+    title: 'Set up AI',
+    checking: 'Checking for local AI servers…',
+    none: 'No local AI servers found.',
+    model: 'Model',
+    use: 'Use for chat and search',
+    noModels: 'This server has no models available.',
+    cloud: 'Connect a cloud provider',
+    later: 'Later',
+    reminder: 'AI setup was skipped. You can detect local servers here.',
+    dismiss: 'Dismiss',
+    detect: 'Detect local servers',
+    reset: 'Reset first-run AI setup',
+    failed: 'Could not complete AI setup. Try again.',
+  },
   llmProfiles: {
     deleteConnection: 'Delete connection',
     deleteConnectionQuestion: 'Delete connection “{name}”?',

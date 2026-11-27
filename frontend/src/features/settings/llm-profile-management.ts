@@ -13,8 +13,11 @@ import type {
   SaveLlmProfileRequest,
 } from '../../models';
 
+import type { LlmDiscoveredEndpoint } from './llm-discovery';
+
 export interface LlmProfileManagementAttrs {
   readonly client: SemanticClient;
+  readonly discoveredEndpoint?: LlmDiscoveredEndpoint | undefined;
   readonly onSaveHandlerChange?: (handler: (() => Promise<boolean>) | undefined) => void;
   /** Called after an endpoint, its consent, or the active endpoint changes (0322). */
   readonly onChanged?: () => void;
@@ -22,7 +25,9 @@ export interface LlmProfileManagementAttrs {
    * Set by the roles section to open this editor with one provider's preset (0325): the picture model
    * is chosen there, and the provider behind it may not have an endpoint yet.
    */
-  readonly openPreset?: { presetId: string; revision: number } | undefined;
+  readonly openPreset?:
+    | { presetId: string; revision: number; deferModelDiscovery?: boolean }
+    | undefined;
 }
 
 interface EditorState {
@@ -191,6 +196,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
   /** The provider choice the roles section asked for, and whether it has been applied yet. */
   let pendingPreset: LlmProfileManagementAttrs['openPreset'];
   let openedPresetRevision: number | undefined;
+  let userEdited = false;
 
   /**
    * Opens the editor with a provider's preset. The presets have to be loaded first, so a request that
@@ -207,7 +213,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     }
     openedPresetRevision = request.revision;
     pendingPreset = undefined;
-    choosePreset(client, request.presetId);
+    choosePreset(client, request.presetId, request.deferModelDiscovery);
     m.redraw();
   }
 
@@ -217,7 +223,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     modelLimits = undefined;
   }
 
-  async function load(client: SemanticClient): Promise<void> {
+  async function load(client: SemanticClient, discovered?: LlmDiscoveredEndpoint): Promise<void> {
     loading = true;
     error = undefined;
     try {
@@ -225,6 +231,17 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
         client.listLlmProfilePresets(),
         client.listLlmProfiles(),
       ]);
+      if (pendingPreset !== undefined) applyOpenPreset(client, pendingPreset);
+      if (discovered !== undefined && !userEdited) {
+        const saved = profiles.find(
+          (profile) =>
+            profile.preset === discovered.preset &&
+            profile.baseUrl === discovered.baseUrl &&
+            profile.model === discovered.model &&
+            !profile.hasCredential,
+        );
+        if (saved !== undefined) selectProfile(saved);
+      }
       if (editor === undefined) {
         const saved = profiles[0];
         const preset = presets[0];
@@ -236,7 +253,6 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
           discoverDraftModels(client);
         }
       }
-      if (pendingPreset !== undefined) applyOpenPreset(client, pendingPreset);
     } catch (reason) {
       error = errorMessage(reason);
     } finally {
@@ -251,6 +267,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     selectedId = profile.id;
     editor = { profileId: profile.id, request: requestFromProfile(profile), apiKey: '' };
     dirty = false;
+    userEdited = false;
     customContext = false;
     customOutput = false;
     contextEdited = false;
@@ -363,19 +380,24 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     );
   }
 
-  function choosePreset(client: SemanticClient, presetId: string): void {
+  function choosePreset(
+    client: SemanticClient,
+    presetId: string,
+    deferModelDiscovery = false,
+  ): void {
     const preset = presets.find((candidate) => candidate.preset === presetId);
     if (preset === undefined) return;
     selectedId = undefined;
     editor = { request: requestFromPreset(preset), apiKey: '' };
     dirty = true;
+    userEdited = true;
     customContext = false;
     customOutput = false;
     contextEdited = false;
     clearAvailableModels();
     consent = false;
     message = undefined;
-    discoverDraftModels(client);
+    if (!deferModelDiscovery) discoverDraftModels(client);
   }
 
   async function run(
@@ -518,6 +540,7 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     if (patch.baseUrl !== undefined && patch.baseUrl !== editor.request.baseUrl) consent = false;
     editor = { ...editor, request: { ...editor.request, ...patch } };
     dirty = true;
+    userEdited = true;
   }
 
   function updateApiKey(apiKey: string): void {
@@ -525,12 +548,19 @@ export const LlmProfileManagement: FactoryComponent<LlmProfileManagementAttrs> =
     modelTestRevision += 1;
     editor = { ...editor, apiKey };
     dirty = true;
+    userEdited = true;
   }
 
   return {
     oninit: ({ attrs }) => {
       attrs.onSaveHandlerChange?.(() => save(attrs));
+      pendingPreset = attrs.openPreset;
       void load(attrs.client);
+    },
+    onbeforeupdate: ({ attrs }, { attrs: previous }) => {
+      if (attrs.discoveredEndpoint !== previous.discoveredEndpoint) {
+        void load(attrs.client, attrs.discoveredEndpoint);
+      }
     },
     onupdate: ({ attrs }) => applyOpenPreset(attrs.client, attrs.openPreset),
     onremove: ({ attrs }) => attrs.onSaveHandlerChange?.(undefined),

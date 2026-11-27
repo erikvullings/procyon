@@ -44,6 +44,7 @@ import type {
   DeleteLlmProfileRequest,
   DeleteRagConversationRequest,
   DeleteSemanticVocabularyImpact,
+  DetectedLlmServer,
   DiagnosticsResult,
   DirectorySnapshot,
   DiscoverApplicationUninstallCandidatesRequest,
@@ -117,6 +118,8 @@ import type {
   LinkOptionsRequest,
   ListDirectoryRequest,
   ListKnowledgeRootsRequest,
+  LlmDiscoveryChoice,
+  LlmDiscoveryStatus,
   LlmEndpointLocality,
   LlmModelLimits,
   LlmProfile,
@@ -1164,6 +1167,18 @@ export class MockFileManagerClient implements FileManagerClient {
   onResynchronise(listener: () => void): Unsubscribe {
     return this.connectionClient.onResynchronise(listener);
   }
+  getLlmDiscoveryStatus(signal?: AbortSignal): Promise<LlmDiscoveryStatus> {
+    return this.semanticClient.getLlmDiscoveryStatus(signal);
+  }
+
+  detectLocalLlmServers(signal?: AbortSignal): Promise<DetectedLlmServer[]> {
+    return this.semanticClient.detectLocalLlmServers(signal);
+  }
+
+  chooseLlmDiscovery(choice: LlmDiscoveryChoice, signal?: AbortSignal): Promise<void> {
+    return this.semanticClient.chooseLlmDiscovery(choice, signal);
+  }
+
   listLlmProfilePresets(signal?: AbortSignal): Promise<LlmProfilePreset[]> {
     return this.semanticClient.listLlmProfilePresets(signal);
   }

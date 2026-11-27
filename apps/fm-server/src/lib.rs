@@ -340,6 +340,15 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(
             routes::llm_profile::list_llm_profile_presets
         ))
+        .routes(utoipa_axum::routes!(
+            routes::llm_profile::llm_discovery_status
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::llm_profile::detect_local_llm_servers
+        ))
+        .routes(utoipa_axum::routes!(
+            routes::llm_profile::choose_llm_discovery
+        ))
         .routes(utoipa_axum::routes!(routes::llm_profile::list_llm_profiles))
         .routes(utoipa_axum::routes!(
             routes::llm_profile::create_llm_profile

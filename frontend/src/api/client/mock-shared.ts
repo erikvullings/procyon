@@ -221,6 +221,9 @@ export type MockClientMethod =
   | 'getLinkDoctorScan'
   | 'cancelLinkDoctorScan'
   | 'findLinkReplacements'
+  | 'getLlmDiscoveryStatus'
+  | 'detectLocalLlmServers'
+  | 'chooseLlmDiscovery'
   | 'listLlmProfilePresets'
   | 'listLlmProfiles'
   | 'streamFileAssistantReply'
@@ -314,6 +317,7 @@ export interface MockFileManagerClientOptions {
   failures?: Partial<Record<MockClientMethod, Error>>;
   nativeIconExtensions?: readonly string[];
   semanticLifecycle?: MockSemanticLifecycle;
+  detectedLlmServers?: readonly import('../../models').DetectedLlmServer[];
   semanticOcrStatus?: SemanticOcrStatus;
 }
 

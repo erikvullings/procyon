@@ -4414,6 +4414,61 @@
         }
       }
     },
+    "/api/v1/llm-discovery": {
+      "get": {
+        "operationId": "getLlmDiscoveryStatus",
+        "responses": {
+          "200": {
+            "description": "First-run AI setup status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmDiscoveryStatusDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "chooseLlmDiscovery",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LlmDiscoveryChoiceDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "AI setup decision saved"
+          }
+        }
+      }
+    },
+    "/api/v1/llm-discovery/probe": {
+      "post": {
+        "operationId": "detectLocalLlmServers",
+        "responses": {
+          "200": {
+            "description": "Local endpoints that returned a model list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DetectedLlmServerDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/llm-endpoints/classify": {
       "post": {
         "operationId": "classifyLlmEndpoint",
@@ -13294,6 +13349,37 @@
           }
         }
       },
+      "DetectedLlmServerDto": {
+        "type": "object",
+        "description": "A loopback endpoint that returned a model list.",
+        "required": [
+          "preset",
+          "name",
+          "baseUrl",
+          "models"
+        ],
+        "properties": {
+          "baseUrl": {
+            "type": "string",
+            "description": "Loopback URL on the host running Procyon."
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Available model IDs."
+          },
+          "name": {
+            "type": "string",
+            "description": "Preset display name."
+          },
+          "preset": {
+            "$ref": "#/components/schemas/LlmPresetDto",
+            "description": "Kind accepted when configuring the endpoint."
+          }
+        }
+      },
       "DiagnosticErrorDto": {
         "type": "object",
         "description": "A single error entry from the recent errors buffer.",
@@ -19879,6 +19965,98 @@
           "apiKey": {
             "type": "string",
             "description": "API key or token to place in protected credential storage."
+          }
+        }
+      },
+      "LlmDiscoveryChoiceDto": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "later"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "complete"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "reset"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "preset",
+              "model",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "use"
+                ]
+              },
+              "model": {
+                "type": "string"
+              },
+              "preset": {
+                "$ref": "#/components/schemas/LlmPresetDto"
+              }
+            }
+          }
+        ],
+        "description": "User decisions made in local endpoint setup."
+      },
+      "LlmDiscoveryStatusDto": {
+        "type": "object",
+        "description": "First-run setup and reminder state for the current installation.",
+        "required": [
+          "loopbackAvailable",
+          "firstRunPending",
+          "showBanner"
+        ],
+        "properties": {
+          "firstRunPending": {
+            "type": "boolean",
+            "description": "Offer setup automatically when there is no saved endpoint."
+          },
+          "loopbackAvailable": {
+            "type": "boolean",
+            "description": "Whether this host permits local model discovery."
+          },
+          "showBanner": {
+            "type": "boolean",
+            "description": "Remind the user in AI settings after choosing Later."
           }
         }
       },

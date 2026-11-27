@@ -244,6 +244,11 @@ counts as local for **consent** (no cloud prompt), while the **host policy** cou
 When the policy refuses, no request leaves the process. Settings → **Test endpoint** reports
 `policyDenied`, and the image generation pane says the server is not allowed to reach that endpoint.
 
+On first launch with no AI endpoint configured, Procyon looks for Ollama, LM Studio and, on
+macOS, oMLX. **Settings → LLM (AI) → Detect local servers** repeats the check. Each check requests
+the model list from a preset loopback address. In the browser, the addresses belong to the computer
+running `fm-server`. Enable loopback access there for discovery and local model use.
+
 A single-user server may legitimately run its models on the same machine. Opt into that explicitly:
 
 ```bash

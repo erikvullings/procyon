@@ -2106,6 +2106,23 @@ export const pl = {
       'Większość modeli nie umie rysować. Podaj model, który umie; model czatu punktu końcowego zwykle nie umie.',
   },
 
+  llmDiscovery: {
+    loopbackDisabled:
+      'Wykrywanie lokalnej AI na tym serwerze jest wyłączone. Włącz PROCYON_LLM_ALLOW_LOOPBACK, aby z niego korzystać.',
+    title: 'Skonfiguruj AI',
+    checking: 'Wyszukiwanie lokalnych serwerów AI…',
+    none: 'Nie znaleziono lokalnych serwerów AI.',
+    model: 'Model AI',
+    use: 'Użyj do czatu i wyszukiwania',
+    noModels: 'Ten serwer nie udostępnia żadnych modeli.',
+    cloud: 'Połącz z dostawcą usług w chmurze',
+    later: 'Później',
+    reminder: 'Konfiguracja AI została pominięta. Tutaj możesz wyszukać lokalne serwery.',
+    dismiss: 'Zamknij',
+    detect: 'Wykryj lokalne serwery',
+    reset: 'Zresetuj pierwszą konfigurację AI',
+    failed: 'Nie udało się ukończyć konfiguracji AI. Spróbuj ponownie.',
+  },
   llmProfiles: {
     deleteConnection: 'Usuń połączenie',
     deleteConnectionQuestion: 'Usunąć połączenie „{name}”?',

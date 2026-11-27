@@ -200,12 +200,12 @@ pub use link_doctor::{
 };
 pub use llm_profile::{
     ActivateLlmProfileRequestDto, ClassifyLlmEndpointRequestDto, DeleteLlmProfileRequestDto,
-    LlmAdvancedSettingsDto, LlmApiCapabilityDto, LlmCredentialInputDto, LlmEndpointLocalityDto,
-    LlmModelLimitsDto, LlmPresetDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto,
-    LlmProfileTestResultDto, LlmRoleAssignmentDto, LlmRoleDto, LlmRolesDto,
-    LlmTestErrorCategoryDto, LlmTlsPolicyDto, OrphanLlmCredentialDispositionDto,
-    SaveLlmProfileRequestDto, SaveLlmRoleRequestDto, ThinkingEffortDto, ThinkingOriginDto,
-    ThinkingSupportDto, ToolCallingProbeDto,
+    DetectedLlmServerDto, LlmAdvancedSettingsDto, LlmApiCapabilityDto, LlmCredentialInputDto,
+    LlmDiscoveryChoiceDto, LlmDiscoveryStatusDto, LlmEndpointLocalityDto, LlmModelLimitsDto,
+    LlmPresetDto, LlmProfileDto, LlmProfileExportDto, LlmProfilePresetDto, LlmProfileTestResultDto,
+    LlmRoleAssignmentDto, LlmRoleDto, LlmRolesDto, LlmTestErrorCategoryDto, LlmTlsPolicyDto,
+    OrphanLlmCredentialDispositionDto, SaveLlmProfileRequestDto, SaveLlmRoleRequestDto,
+    ThinkingEffortDto, ThinkingOriginDto, ThinkingSupportDto, ToolCallingProbeDto,
 };
 pub use location::LocationDto;
 pub use metadata_tokens::{

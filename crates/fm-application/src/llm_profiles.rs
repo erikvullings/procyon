@@ -6,6 +6,8 @@
 
 #![allow(missing_docs)]
 
+mod discovery;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error as _;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -1318,12 +1320,15 @@ struct LlmProfilesDocument {
     profiles: Vec<LlmProfile>,
     #[serde(default)]
     roles: LlmRoles,
+    #[serde(default)]
+    discovery: discovery::DiscoveryState,
 }
 
 impl Default for LlmProfilesDocument {
     fn default() -> Self {
         Self {
             schema_version: PROFILE_SCHEMA_VERSION,
+            discovery: discovery::DiscoveryState::default(),
             active_profile_id: None,
             profiles: Vec::new(),
             roles: LlmRoles::default(),
@@ -1545,11 +1550,11 @@ impl LlmProfileService {
     #[must_use]
     pub fn presets() -> Vec<LlmProfileDraft> {
         [
-            (LlmPreset::Ollama, "Ollama", "http://127.0.0.1:11434"),
-            (LlmPreset::LmStudio, "LM Studio", "http://127.0.0.1:1234"),
+            discovery::preset_defaults(LlmPreset::Ollama).expect("built-in discovery preset"),
+            discovery::preset_defaults(LlmPreset::LmStudio).expect("built-in discovery preset"),
             (LlmPreset::Vllm, "vLLM", "http://127.0.0.1:8000"),
             (LlmPreset::Sglang, "SGLang", "http://127.0.0.1:30000"),
-            (LlmPreset::Omlx, "OMLX", "http://127.0.0.1:8000"),
+            discovery::preset_defaults(LlmPreset::Omlx).expect("built-in discovery preset"),
             (LlmPreset::MlxServe, "mlx-serve", "http://127.0.0.1:11234"),
             (
                 LlmPreset::Unsloth,
@@ -4679,6 +4684,7 @@ mod tests {
         );
         let mut value = serde_json::to_value(LlmProfilesDocument {
             schema_version: 1,
+            discovery: discovery::DiscoveryState::default(),
             active_profile_id: None,
             profiles: vec![profile],
             roles: LlmRoles::default(),
@@ -4715,6 +4721,7 @@ mod tests {
         second.name = "Second".to_owned();
         let mut value = serde_json::to_value(LlmProfilesDocument {
             schema_version: 2,
+            discovery: discovery::DiscoveryState::default(),
             active_profile_id: None,
             profiles: vec![first.clone(), second.clone()],
             roles: LlmRoles::default(),
@@ -4875,6 +4882,7 @@ mod tests {
         );
         let mut value = serde_json::to_value(LlmProfilesDocument {
             schema_version: 4,
+            discovery: discovery::DiscoveryState::default(),
             active_profile_id: Some(profile.id),
             profiles: vec![profile.clone()],
             roles: LlmRoles::default(),
@@ -4909,6 +4917,7 @@ mod tests {
         chosen.advanced.maximum_answer_tokens = Some(4_000);
         let value = serde_json::to_value(LlmProfilesDocument {
             schema_version: 5,
+            discovery: discovery::DiscoveryState::default(),
             active_profile_id: None,
             profiles: vec![default_capped, chosen],
             roles: LlmRoles::default(),
@@ -5006,6 +5015,7 @@ mod tests {
         );
         let mut value = serde_json::to_value(LlmProfilesDocument {
             schema_version: 4,
+            discovery: discovery::DiscoveryState::default(),
             active_profile_id: None,
             profiles: vec![profile],
             roles: LlmRoles::default(),
@@ -6147,6 +6157,7 @@ mod tests {
         );
         let mut document = LlmProfilesDocument {
             schema_version: PROFILE_SCHEMA_VERSION,
+            discovery: discovery::DiscoveryState::default(),
             active_profile_id: Some(profile.id),
             profiles: vec![profile.clone()],
             roles: LlmRoles {
@@ -6291,6 +6302,7 @@ mod tests {
         profile.consented_host = Some("one.example".into());
         let value = serde_json::to_value(LlmProfilesDocument {
             schema_version: 3,
+            discovery: discovery::DiscoveryState::default(),
             active_profile_id: Some(profile.id),
             profiles: vec![profile],
             roles: LlmRoles::default(),
