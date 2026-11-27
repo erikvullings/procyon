@@ -5,6 +5,7 @@ import { t } from '../../i18n';
 import type { SelectionPlatform } from '../selection/keybindings';
 import {
   type AvailableAction,
+  CONTEXT_NEW_ACTION_IDS,
   type ContextSubmenuId,
   contextMenuGroup,
   contextSubmenuFor,
@@ -53,10 +54,7 @@ export interface ContextMenuAttrs {
 const CONTEXT_MENU_VIEWPORT_MARGIN = 8;
 
 /** Actions the "New" submenu replaces in the menu (task 0312). */
-const NEW_SUBMENU_ACTION_IDS: ReadonlySet<string> = new Set([
-  'core.createDirectory',
-  'core.newFromTemplate',
-]);
+const NEW_SUBMENU_ACTION_IDS: ReadonlySet<string> = CONTEXT_NEW_ACTION_IDS;
 
 /** Titles of the grouped submenus (task 0312 follow-up). */
 const SUBMENU_TITLE_KEY: Record<

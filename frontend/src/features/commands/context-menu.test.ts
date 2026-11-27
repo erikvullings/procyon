@@ -352,6 +352,45 @@ describe('ContextMenu', () => {
     expect(onInvoke).not.toHaveBeenCalled();
   });
 
+  it('offers the New submenu beside a selection, after the open group (task 0312)', () => {
+    const open: AvailableAction = {
+      action: {
+        id: 'core.open',
+        title: 'Open',
+        category: 'navigation',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' },
+      },
+      available: true,
+    };
+    const createDirectory: AvailableAction = {
+      action: {
+        id: 'core.createDirectory',
+        title: 'New folder',
+        category: 'fileOperations',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' },
+      },
+      available: true,
+    };
+    m.mount(root, {
+      view: () =>
+        m(ContextMenu, {
+          open: true,
+          x: 10,
+          y: 20,
+          actions: [open, createDirectory],
+          newSubmenu: { title: 'New', load: vi.fn().mockResolvedValue([]), onChoose: vi.fn() },
+          onClose: vi.fn(),
+          onInvoke: vi.fn(),
+        }),
+    });
+    const top = [...root.querySelectorAll<HTMLButtonElement>('.fm-context-menu [role="menuitem"]')];
+    expect(top.map((button) => button.textContent)).toEqual(['Open', 'New']);
+  });
+
   it('opens the New submenu from the keyboard and offers the folder action first', async () => {
     const createDirectory: AvailableAction = {
       action: {

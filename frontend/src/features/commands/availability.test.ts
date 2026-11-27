@@ -220,13 +220,16 @@ describe('command availability', () => {
 
     const menu = menuActionsForContext(actions, context({ selectedEntries: [entry('file')] }));
 
+    // New folder is offered beside a selection too (task 0312), after the open group.
     expect(menu.map((item) => item.action.id)).toEqual([
       'core.open',
       'core.revealInSystemFileManager',
+      'core.createDirectory',
     ]);
     expect(menu).toEqual([
       { action: actions[0], available: true },
       { action: actions[1], available: true },
+      { action: actions[2], available: true },
     ]);
   });
 
@@ -240,11 +243,17 @@ describe('command availability', () => {
 
     const menu = menuActionsForContext(actions, context({ selectedEntries: [entry('file')] }));
 
-    expect(menu.map((item) => item.action.id)).toEqual(['core.open', 'core.view', 'core.edit']);
+    expect(menu.map((item) => item.action.id)).toEqual([
+      'core.open',
+      'core.view',
+      'core.edit',
+      'core.createDirectory',
+    ]);
     expect(menu).toEqual([
       { action: actions[0], available: true },
       { action: actions[1], available: true },
       { action: actions[2], available: true },
+      { action: actions[3], available: true },
     ]);
   });
 

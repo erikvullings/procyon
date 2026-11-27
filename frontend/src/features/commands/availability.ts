@@ -100,6 +100,15 @@ const SELECTION_ACTION_IDS = new Set([
  * Context-menu sections for a selection: open/inspect, clipboard, organise, archive, then the
  * removal actions last so destructive items are never sandwiched between routine ones.
  */
+/**
+ * The actions of the context menu's "New" submenu (task 0312). They are offered beside a selection
+ * too, so the menu can create something in the pane's folder when the pane is full of files.
+ */
+export const CONTEXT_NEW_ACTION_IDS: ReadonlySet<string> = new Set([
+  'core.createDirectory',
+  'core.newFromTemplate',
+]);
+
 const CONTEXT_MENU_SELECTION_GROUPS: readonly (readonly string[])[] = [
   [
     'core.open',
@@ -109,6 +118,7 @@ const CONTEXT_MENU_SELECTION_GROUPS: readonly (readonly string[])[] = [
     'core.quickLook',
     'core.revealInSystemFileManager',
   ],
+  ['core.createDirectory', 'core.newFromTemplate'],
   ['client.play', 'client.playNext', 'client.addToQueue', SAVE_PLAYLIST_ACTION_ID],
   ['core.copyName', 'core.copyPath', 'core.copyRelativePath'],
   [
@@ -371,7 +381,9 @@ export function menuActionsForContext(
   }
   const selected = context.selectedEntries.length > 0;
   const matchingActions = actions.filter((action) =>
-    selected ? SELECTION_ACTION_IDS.has(action.id) : LOCATION_ACTION_IDS.has(action.id),
+    selected
+      ? SELECTION_ACTION_IDS.has(action.id) || CONTEXT_NEW_ACTION_IDS.has(action.id)
+      : LOCATION_ACTION_IDS.has(action.id),
   );
   if (selected) {
     matchingActions.sort(

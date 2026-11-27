@@ -5146,7 +5146,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
               : {}),
             onInvoke: shellState.actionCommandController.invokeContextMenuAction,
             platform: shellState.platform,
-            ...(shellState.contextMenu !== undefined && shellState.contextMenu.entries.length === 0
+            ...(shellState.contextMenu !== undefined
               ? {
                   newSubmenu: {
                     title: t('contextMenu', 'newSubmenu'),
