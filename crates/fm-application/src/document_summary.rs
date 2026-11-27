@@ -35,8 +35,6 @@ use fm_transport_dto::{
 };
 
 const SUMMARY_PROMPT_VERSION: &str = "document-summary/2";
-const MAX_BRIEF_BYTES: usize = 2_000;
-const MAX_FULL_BYTES: usize = 32 * 1024;
 const MAX_SUMMARY_PROMPT_BYTES: usize = 1024 * 1024;
 const MAX_SUMMARY_SOURCE_PASSES: usize = 256;
 const MAX_SUMMARY_REDUCTION_ROUNDS: usize = 16;
@@ -1004,11 +1002,7 @@ fn validated_attribution(
 fn parse_generation(value: &str) -> Result<GeneratedSummaryResponse, DocumentSummaryError> {
     let parsed: GeneratedSummaryResponse =
         serde_json::from_str(value).map_err(|_| DocumentSummaryError::InvalidGeneration)?;
-    if parsed.brief.trim().is_empty()
-        || parsed.full.trim().is_empty()
-        || parsed.brief.len() > MAX_BRIEF_BYTES
-        || parsed.full.len() > MAX_FULL_BYTES
-    {
+    if parsed.brief.trim().is_empty() || parsed.full.trim().is_empty() {
         return Err(DocumentSummaryError::InvalidGeneration);
     }
     Ok(parsed)
@@ -1786,7 +1780,7 @@ mod tests {
     }
 
     #[test]
-    fn generated_summary_parser_requires_exact_bounded_json_strings() {
+    fn generated_summary_parser_requires_exact_json_strings_and_preserves_long_text() {
         let parsed = parse_generation(r#"{"brief":"Brief.","full":"Full."}"#).unwrap();
         assert_eq!(parsed.brief, "Brief.");
         assert_eq!(parsed.full, "Full.");
@@ -1798,14 +1792,8 @@ mod tests {
             parse_generation(r#"{"brief":"x","full":"y","source":"/secret/path"}"#),
             Err(DocumentSummaryError::InvalidGeneration)
         ));
-        let too_long = serde_json::json!({
-            "brief": "b",
-            "full": "x".repeat(MAX_FULL_BYTES + 1),
-        })
-        .to_string();
-        assert!(matches!(
-            parse_generation(&too_long),
-            Err(DocumentSummaryError::InvalidGeneration)
-        ));
+        let long = "x".repeat(64 * 1024);
+        let generated = serde_json::json!({ "brief": "b", "full": long }).to_string();
+        assert_eq!(parse_generation(&generated).unwrap().full, long);
     }
 }

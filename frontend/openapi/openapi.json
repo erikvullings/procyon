@@ -11492,7 +11492,8 @@
           "empty",
           "cancelled",
           "imagesNotSupported",
-          "timeout"
+          "timeout",
+          "replyCutOff"
         ]
       },
       "ChatImageDto": {

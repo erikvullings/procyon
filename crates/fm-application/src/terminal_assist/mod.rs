@@ -35,7 +35,7 @@ use fm_transport_dto::{
 use fm_vfs::ProviderRegistry;
 use tokio_util::sync::CancellationToken;
 
-use fm_agent::{newest_bytes, truncate_to_bytes};
+use fm_agent::newest_bytes;
 
 use crate::agent_host::{
     Documents, FolderTools, ModelSideCalls, ProjectContext, SkillFolderDocuments, SkillScope,
@@ -50,8 +50,6 @@ use self::context::{AttachedFile, render_activity, render_context, state_section
 use self::session::PendingWrite;
 use self::write::{FileWriter, MAX_BYTES_PER_QUESTION, MAX_FILES_PER_QUESTION, WriteError};
 
-/// Longest one-shot answer (explain, fix) and longest `ask` answer kept, in bytes.
-const MAX_REPLY_BYTES: usize = 8 * 1024;
 /// Longest natural-language request, in characters.
 const MAX_REQUEST_CHARS: usize = 2 * 1024;
 /// Most transcript bytes sent; the newest output is kept.
@@ -109,10 +107,9 @@ fn ask_prompt(
     compose_system_prompt(&intro, registry, calling, &project.skills, request)
 }
 
-/// How an `ask` turn runs: the answer cap, and secret redaction of every tool result.
+/// How an `ask` turn runs, with secret redaction of every tool result.
 fn turn_options() -> TurnOptions {
     TurnOptions {
-        max_answer_bytes: Some(MAX_REPLY_BYTES),
         filter_result: Some(redact_secrets),
         ..TurnOptions::default()
     }
@@ -248,7 +245,7 @@ pub(crate) async fn reply_streaming(
         TerminalAssistKindDto::Command => first_command_line(&raw),
         _ => {
             let trimmed = raw.trim();
-            (!trimmed.is_empty()).then(|| truncate_to_bytes(trimmed, MAX_REPLY_BYTES).to_owned())
+            (!trimmed.is_empty()).then(|| trimmed.to_owned())
         }
     }
     .ok_or(ChatFailureDto::Empty)?;
@@ -892,7 +889,6 @@ fn first_command_line(raw: &str) -> Option<String> {
             line.trim().trim_matches('`').trim().to_owned()
         })
         .find(|line| !line.is_empty())
-        .map(|line| truncate_to_bytes(&line, MAX_REPLY_BYTES).to_owned())
 }
 
 #[cfg(test)]
@@ -1710,6 +1706,24 @@ mod tests {
             sessions
                 .render("t1")
                 .contains("declined to run `rm -rf build`")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_long_answer_keeps_the_complete_command_in_the_reply_and_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let command = format!("python3 -c \"print('{}')\"", "x".repeat(16 * 1024));
+        let answer = format!("Here is the command.\n\nCommand: {command}");
+        let fake = scripted(&[&answer]);
+        let sessions = Sessions::default();
+        let reply = ask_in(&fake, &sessions, ask_request("t", "show it", dir.path()))
+            .await
+            .unwrap();
+        assert_eq!(reply.text, answer);
+        assert!(sessions.render("t").contains(&answer));
+        assert_eq!(
+            first_command_line(&command).as_deref(),
+            Some(command.as_str())
         );
     }
 

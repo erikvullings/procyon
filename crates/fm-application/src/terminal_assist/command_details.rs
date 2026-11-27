@@ -23,8 +23,6 @@ const SCRIPT_EXTENSIONS: &[&str] = &[
 const CODE_OPTIONS: &[&str] = &["-c", "-e", "--eval", "-p", "--print"];
 /// Most scripts read for one command.
 const MAX_SCRIPTS: usize = 3;
-/// Longest description kept, in characters.
-const MAX_DESCRIPTION_CHARS: usize = 500;
 /// The note `read_file` puts at the end of a page that does not reach the end of the file.
 const TRUNCATED_NOTE: &str = "\n[truncated at byte ";
 
@@ -99,7 +97,7 @@ pub(super) async fn describe_command(
     let prompt = crate::file_assistant::truncate_to_bytes(&prompt, limit);
     let answer = side_model.complete(DESCRIBE_SYSTEM, prompt).await.ok()?;
     let answer = answer.trim();
-    (!answer.is_empty()).then(|| answer.chars().take(MAX_DESCRIPTION_CHARS).collect())
+    (!answer.is_empty()).then(|| answer.to_owned())
 }
 
 /// Shell words, with quotes removed; `;`, `|` and `&` are words of their own, so each command of

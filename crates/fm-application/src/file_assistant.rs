@@ -24,8 +24,6 @@ const MAX_MESSAGES: usize = 40;
 const MAX_MESSAGE_CHARS: usize = 16 * 1024;
 /// Longest whole conversation sent to the model, in characters.
 const MAX_CONVERSATION_CHARS: usize = 64 * 1024;
-/// Longest reply returned, in bytes; the template body limit, so a draft fits a new file.
-const MAX_REPLY_BYTES: usize = 64 * 1024;
 /// Low randomness: the reply is file contents, not prose.
 const REPLY_TEMPERATURE: f32 = 0.2;
 
@@ -159,12 +157,11 @@ impl FileAssistantService {
             }
             Err(_) => return Err(FileAssistantError::Unavailable),
         };
-        let text = unwrap_single_fence(text.trim());
+        let mut text = unwrap_single_fence(text.trim());
         if text.is_empty() {
             return Err(FileAssistantError::Empty);
         }
         // A text file ends with exactly one newline.
-        let mut text = truncate_to_bytes(&text, MAX_REPLY_BYTES).to_owned();
         text.push('\n');
         Ok(text)
     }

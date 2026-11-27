@@ -1177,6 +1177,20 @@ main.fm-workspace {
   color: var(--fm-text-muted);
 }
 
+.fm-terminal-assist-folded:not([open]) .fm-terminal-command-hide,
+.fm-terminal-assist-folded[open] .fm-terminal-command-show {
+  display: none;
+}
+
+.fm-terminal-assist-source {
+  max-block-size: min(9rem, 25vh);
+  min-width: 0;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
 /* Shell syntax colours (task 0333), from the app's semantic tokens so both themes stay legible. */
 .fm-shell-command {
   color: var(--fm-accent);

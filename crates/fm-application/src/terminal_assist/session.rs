@@ -52,7 +52,7 @@ pub(crate) const MAX_STEERING: usize = 8;
 const MAX_TURNS: usize = 40;
 /// Most command blocks remembered as already sent, per session.
 const MAX_SENT_BLOCKS: usize = 200;
-/// Longest stored turn, in bytes.
+/// Longest stored tool result or agent note, in bytes.
 const MAX_TURN_BYTES: usize = 12 * 1024;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -529,7 +529,7 @@ impl Sessions {
         self.with(id, |session| {
             session.note_reply(text, calls);
             session.turns.push(Turn::Agent(Message::Assistant {
-                text: truncate_to_bytes(text, MAX_TURN_BYTES).to_owned(),
+                text: text.to_owned(),
                 calls: calls.to_vec(),
             }));
         });
@@ -709,8 +709,7 @@ impl Sessions {
             session.pending_write = None;
             session.pending_edit = None;
             session.turns = vec![Turn::Agent(Message::Note(format!(
-                "Summary of the conversation so far:\n{}",
-                truncate_to_bytes(summary, MAX_TURN_BYTES)
+                "Summary of the conversation so far:\n{summary}"
             )))];
         });
     }

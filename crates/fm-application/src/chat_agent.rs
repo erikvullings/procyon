@@ -143,7 +143,6 @@ pub(crate) async fn run(
     let options = TurnOptions {
         profile,
         // The chat bounds the saved answer itself.
-        max_answer_bytes: None,
         filter_result: Some(redact_secrets),
         ..TurnOptions::default()
     };

@@ -649,6 +649,7 @@ type ChatFailureKey =
   | 'notFound'
   | 'imagesNotSupported'
   | 'timeout'
+  | 'replyCutOff'
   | 'noText'
   | 'failed';
 
@@ -667,6 +668,8 @@ function failureKey(reason: ChatFailure): ChatFailureKey {
       return 'imagesNotSupported';
     case 'timeout':
       return 'timeout';
+    case 'replyCutOff':
+      return 'replyCutOff';
     case 'empty':
       return 'noText';
     default:

@@ -488,22 +488,10 @@ async fn an_empty_reply_and_a_host_error_end_the_turn() {
 }
 
 #[tokio::test]
-async fn a_long_answer_is_kept_whole_unless_the_host_caps_it() {
+async fn a_long_answer_is_kept_whole() {
     let long = "a".repeat(64 * 1024);
     let run = turn(&mut ScriptedModel::new(&[long.as_str()])).await;
-    assert_eq!(run.end, Ok(TurnEnd::Answer(long.clone())));
-
-    let options = TurnOptions {
-        max_answer_bytes: Some(1024),
-        ..TurnOptions::default()
-    };
-    let run = turn_with(
-        &mut ScriptedModel::new(&[long.as_str()]),
-        &harness(),
-        &options,
-    )
-    .await;
-    assert_eq!(run.end, Ok(TurnEnd::Answer("a".repeat(1024))));
+    assert_eq!(run.end, Ok(TurnEnd::Answer(long)));
 }
 
 #[test]

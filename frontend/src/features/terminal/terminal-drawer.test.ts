@@ -1351,13 +1351,59 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
       );
     });
     // The command itself is folded below what it does.
-    expect(root.querySelector('details.fm-terminal-assist-folded summary')?.textContent).toBe(
-      'Show command',
-    );
+    expect(
+      root.querySelector('details.fm-terminal-assist-folded .fm-terminal-command-show')
+        ?.textContent,
+    ).toBe('Show command');
     expect(write).not.toHaveBeenCalledWith(
       'session-1',
       new TextEncoder().encode('\x15 python3 clean.py\r'),
     );
+  });
+
+  it('describes a suggested command and keeps the summary visible when inspecting its full text', async () => {
+    const command = `python3 -c "print('${'x'.repeat(240)}')"`;
+    const assistDescribe = vi.fn(async () => 'Prints a long string.');
+    assist.mockResolvedValueOnce({ text: `Command: ${command}` });
+    await mountWith({ assistDescribe });
+    await markPrompt();
+    ask('# suggest a command');
+
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-terminal-assist-description')?.textContent).toContain(
+        'Prints a long string.',
+      ),
+    );
+    expect(assistDescribe).toHaveBeenCalledWith(command, 'file:///home/repo');
+    for (const label of ['Insert', 'Edit', 'Dismiss']) {
+      expect(button(label)).toBeDefined();
+    }
+    const disclosure = root.querySelector<HTMLDetailsElement>('.fm-terminal-assist-folded');
+    expect(disclosure?.open).toBe(false);
+    expect(disclosure?.querySelector('pre')?.textContent).toBe(command);
+    disclosure?.querySelector('summary')?.click();
+    expect(disclosure?.open).toBe(true);
+    expect(disclosure?.querySelector('.fm-terminal-command-hide')?.textContent).toBe(
+      'Hide command',
+    );
+    expect(root.querySelector('.fm-terminal-assist-description')?.textContent).toContain(
+      'Prints a long string.',
+    );
+    disclosure?.querySelector('summary')?.click();
+    expect(disclosure?.open).toBe(false);
+  });
+
+  it('shows an unavailable summary when describing an approval fails', async () => {
+    assist.mockResolvedValueOnce({ text: '', runCommand: 'python3 generate.py' });
+    await mountWith({ assistDescribe: vi.fn().mockRejectedValue(new Error('timed out')) });
+    await markPrompt();
+    ask('# generate a report');
+    await vi.waitFor(() =>
+      expect(root.querySelector('.fm-terminal-assist-description')?.textContent).toBe(
+        'Command summary unavailable.',
+      ),
+    );
+    expect(button('Run')).toBeDefined();
   });
 
   it('in auto-approve mode runs a command at once, but still asks for a dangerous one', async () => {

@@ -159,6 +159,8 @@ pub enum ChatFailureDto {
     ImagesNotSupported,
     /// The model did not answer in time; a long conversation makes a local model slow to start.
     Timeout,
+    /// The model stopped at its output limit before finishing its response.
+    ReplyCutOff,
 }
 
 /// One event of a streamed chat reply: fragments as they arrive, then exactly one final event.

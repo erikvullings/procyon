@@ -623,9 +623,16 @@ function assistFailureText(reason: string): string {
       return t('terminal', 'assistNoOutput');
     case 'timeout':
       return t('terminal', 'assistTimeout');
+    case 'replyCutOff':
+      return t('chat', 'replyCutOff');
     default:
       return t('terminal', 'assistFailed');
   }
+}
+
+interface CommandSummary {
+  readonly description?: string;
+  readonly describing?: boolean;
 }
 
 /**
@@ -640,8 +647,12 @@ type AssistPanel =
       /** What a long tool call is doing now, shown in place of "Thinking". */
       readonly progress?: string | undefined;
     }
-  | { readonly status: 'suggest'; readonly tabKey: string; readonly command: string }
-  | {
+  | (CommandSummary & {
+      readonly status: 'suggest';
+      readonly tabKey: string;
+      readonly command: string;
+    })
+  | (CommandSummary & {
       readonly status: 'approve';
       readonly tabKey: string;
       readonly command: string;
@@ -651,11 +662,7 @@ type AssistPanel =
       readonly details?: TerminalCommandDetails;
       /** What Procyon found the command does. */
       readonly effects?: CommandEffects;
-      /** What it does, from a model call that saw only the command; absent until it answers. */
-      readonly description?: string;
-      /** Whether that call is still running. */
-      readonly describing?: boolean;
-    }
+    })
   | { readonly status: 'running'; readonly tabKey: string; readonly command: string }
   | {
       readonly status: 'write';
@@ -967,9 +974,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
           ...(danger === undefined ? {} : { danger }),
           ...(reply.runDetails === undefined ? {} : { details: reply.runDetails }),
           effects: effectsOf(command, site, scripts),
-          ...(currentAttrs?.client.assistDescribe === undefined ? {} : { describing: true }),
         };
-        describeCommand(live, command);
       }
     } else {
       if (!streamed) text += renderAnswerAnsi(reply.text, live.terminal.cols);
@@ -978,7 +983,13 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         next = { status: 'suggest', tabKey: live.key, command: cleanCommand(command) };
       }
     }
+    if (next?.status === 'suggest' || next?.status === 'approve') {
+      next = { ...next, describing: currentAttrs?.client.assistDescribe !== undefined };
+    }
     present(live, token, text, next, autoRun, startBelowPrompt);
+    if (next === panel && (next?.status === 'suggest' || next?.status === 'approve')) {
+      describeCommand(live, next);
+    }
   }
 
   /** The working and home folders of a tab's shell, as native paths when they are known. */
@@ -1052,24 +1063,24 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     m.redraw();
   }
 
-  /**
-   * Asks a separate model call, which sees only the command and its scripts, what the command
-   * waiting for approval does, and shows the answer when it comes (task 0364).
-   */
-  function describeCommand(live: LiveTerminal, command: string): void {
+  /** Describes the displayed command in a separate model call (task 0364). */
+  function describeCommand(
+    live: LiveTerminal,
+    shown: Extract<AssistPanel, { status: 'suggest' | 'approve' }>,
+  ): void {
     const describe = currentAttrs?.client.assistDescribe;
-    const folder = currentAttrs?.location?.uri;
+    const folder = live.shellDirectory ?? currentAttrs?.location?.uri;
     if (describe === undefined || folder === undefined) return;
     const update = (description: string | null) => {
-      const shown = panel;
-      if (shown?.status !== 'approve' || shown.tabKey !== live.key || shown.command !== command) {
-        return;
-      }
-      const { describing: _done, ...rest } = shown;
-      panel = description === null ? rest : { ...rest, description };
+      if (panel !== shown) return;
+      panel = {
+        ...shown,
+        describing: false,
+        ...(description?.trim() ? { description } : {}),
+      };
       m.redraw();
     };
-    describe(command, folder).then(update, () => update(null));
+    describe(shown.command, folder).then(update, () => update(null));
   }
 
   /** Runs the approved command in the terminal; its block goes back to the assistant. */
@@ -2653,6 +2664,28 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     ]);
   }
 
+  function commandSummary(shown: CommandSummary): m.Children {
+    const text =
+      shown.description !== undefined
+        ? t('terminal', 'commandDescribed', { text: shown.description })
+        : shown.describing
+          ? t('terminal', 'commandDescribing')
+          : t('terminal', 'commandDescriptionUnavailable');
+    return m('p.fm-terminal-assist-description', { role: 'status' }, text);
+  }
+
+  function foldedCommand(text: string): m.Children {
+    return m('details.fm-terminal-assist-folded', [
+      m('summary', [
+        m('span.fm-terminal-command-show', t('terminal', 'commandShow')),
+        m('span.fm-terminal-command-hide', t('terminal', 'commandHide')),
+      ]),
+      m('pre.fm-terminal-assist-source', { tabindex: 0 }, [
+        m('code.fm-terminal-assist-command', highlightedShell(text)),
+      ]),
+    ]);
+  }
+
   /** What the assistant waits on: the answer, a command to insert, approve, or its progress. */
   function statusRow(shown: AssistPanel, live: LiveTerminal): m.Children {
     const command = (text: string) => m('code.fm-terminal-assist-command', highlightedShell(text));
@@ -2660,56 +2693,53 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       case 'busy':
         // Shown in the controls row instead, so the strip does not grow while the model thinks.
         return undefined;
-      case 'suggest':
-        return m('.fm-terminal-assist-row', [
-          editing === undefined ? command(shown.command) : editField(live, editing),
-          m('.fm-terminal-assist-buttons', [
-            shortcutButton(t('terminal', 'assistInsert'), 'Enter', () =>
-              insertCommand(live, shown.command),
-            ),
-            shortcutButton(t('terminal', 'assistEdit'), 'Ctrl+E', () => {
-              editing = shown.command;
-              m.redraw();
-            }),
-            shortcutButton(t('terminal', 'assistDismiss'), 'Esc', () => rejectAnswer()),
+      case 'suggest': {
+        const folded = editing === undefined && shown.command.length > LONG_COMMAND_CHARS;
+        return m('.fm-terminal-assist-approval', [
+          commandSummary(shown),
+          folded ? foldedCommand(shown.command) : undefined,
+          m('.fm-terminal-assist-row', [
+            editing !== undefined
+              ? editField(live, editing)
+              : folded
+                ? undefined
+                : command(shown.command),
+            m('.fm-terminal-assist-buttons', [
+              shortcutButton(t('terminal', 'assistInsert'), 'Enter', () =>
+                insertCommand(live, shown.command),
+              ),
+              shortcutButton(t('terminal', 'assistEdit'), 'Ctrl+E', () => {
+                editing = shown.command;
+                m.redraw();
+              }),
+              shortcutButton(t('terminal', 'assistDismiss'), 'Esc', () => rejectAnswer()),
+            ]),
           ]),
         ]);
+      }
       case 'approve': {
         const canRun = live.markSeen;
         // A long command, or one that runs scripts, is folded below what it does.
         const folded =
-          shown.details !== undefined &&
-          (shown.command.length > LONG_COMMAND_CHARS || (shown.effects?.scripts.length ?? 0) > 0);
+          shown.command.length > LONG_COMMAND_CHARS || (shown.effects?.scripts.length ?? 0) > 0;
         return m('.fm-terminal-assist-approval', [
-          shown.details === undefined
-            ? undefined
-            : m('.fm-terminal-assist-explanation', [
-                m(
+          m('.fm-terminal-assist-explanation', [
+            shown.details === undefined
+              ? undefined
+              : m(
                   'p.fm-terminal-assist-why',
                   t('terminal', 'commandReason', { text: shown.details.explanation }),
                 ),
-                shown.effects === undefined
-                  ? undefined
-                  : m(
-                      'ul.fm-terminal-assist-effects',
-                      { 'aria-label': t('terminal', 'effectsTitle') },
-                      effectLines(shown.effects).map((line) => m('li', line)),
-                    ),
-                shown.description === undefined
-                  ? shown.describing === true
-                    ? m('p.fm-terminal-assist-description', t('terminal', 'commandDescribing'))
-                    : undefined
-                  : m(
-                      'p.fm-terminal-assist-description',
-                      t('terminal', 'commandDescribed', { text: shown.description }),
-                    ),
-              ]),
-          folded
-            ? m('details.fm-terminal-assist-folded', [
-                m('summary', t('terminal', 'commandShow')),
-                command(shown.command),
-              ])
-            : undefined,
+            shown.effects === undefined
+              ? undefined
+              : m(
+                  'ul.fm-terminal-assist-effects',
+                  { 'aria-label': t('terminal', 'effectsTitle') },
+                  effectLines(shown.effects).map((line) => m('li', line)),
+                ),
+          ]),
+          commandSummary(shown),
+          folded ? foldedCommand(shown.command) : undefined,
           m('.fm-terminal-assist-row', [
             folded ? undefined : command(shown.command),
             // The command and its Run / Decline say what is asked; only the exception needs words.

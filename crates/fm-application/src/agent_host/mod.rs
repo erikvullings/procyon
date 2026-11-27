@@ -429,6 +429,7 @@ pub(crate) fn chat_failure(error: LlmProfileError) -> ChatFailureDto {
         LlmProfileError::RoleNotAssigned => ChatFailureDto::RoleNotAssigned,
         LlmProfileError::Cancelled => ChatFailureDto::Cancelled,
         LlmProfileError::Timeout => ChatFailureDto::Timeout,
+        LlmProfileError::ReplyCutOff => ChatFailureDto::ReplyCutOff,
         _ => ChatFailureDto::Unavailable,
     }
 }

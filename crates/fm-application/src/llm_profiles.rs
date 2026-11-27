@@ -42,8 +42,6 @@ const TEST_PROMPT: &str = "Reply with OK.";
 /// Most bytes of one raw response body (server-sent events carry far more JSON than text). Only a
 /// runaway generation reaches it; it replaces an answer-token cap as the guard against one.
 const MAX_STREAM_BODY_BYTES: usize = 64 * 1024 * 1024;
-/// Most bytes of one reply's text, and of one native call's arguments (about 250k tokens).
-const MAX_REPLY_BYTES: usize = 1024 * 1024;
 /// Hard application bound on the context window, independent of editable profile or provider
 /// metadata. An answer limit, when the person sets one, is bounded by the context window only.
 pub const MAX_GENERATION_CONTEXT_WINDOW: u32 = 1_048_576;
@@ -880,7 +878,7 @@ impl ReqwestLlmProbeTransport {
         let response = refused_generation(response).await?;
         let bytes = read_bounded_body(response, cancellation).await?;
         Ok(ChatOutcome::Generated {
-            text: finish_reply(parse_ollama_reply(&bytes)?, generation.reply)?,
+            text: finish_reply(parse_ollama_reply(&bytes)?)?,
             reasoning_seen: false,
         })
     }
@@ -1135,7 +1133,7 @@ impl LlmProbeTransport for ReqwestLlmProbeTransport {
         let reply = parse_streaming_chat_detailed(&bytes)?;
         let reasoning_seen = reply.reasoning_seen;
         Ok(ChatOutcome::Generated {
-            text: finish_reply(reply, generation.reply)?,
+            text: finish_reply(reply)?,
             reasoning_seen,
         })
     }
@@ -3381,23 +3379,12 @@ struct ParsedReply {
     cut_off: bool,
 }
 
-/// Note added to a prose reply that a token limit cut off.
-const CUT_OFF_NOTE: &str = "\n\n[The answer was cut off at the model's token limit.]";
-
-/// The reply text for a caller: a cut-off prose reply is kept with a note, since most of an answer
-/// is worth more than asking again; a cut-off JSON reply is an error, since half a value is useless.
-fn finish_reply(reply: ParsedReply, format: ReplyFormat) -> Result<String, LlmProfileError> {
-    match (reply.cut_off, format) {
-        (false, _) => Ok(reply.text),
-        (true, ReplyFormat::Json) => Err(LlmProfileError::ReplyCutOff),
-        (true, ReplyFormat::Text) if reply.text.trim().is_empty() => {
-            Err(LlmProfileError::ReplyCutOff)
-        }
-        (true, ReplyFormat::Text) => {
-            tracing::warn!("a reply was cut off at the model's token limit; kept with a note");
-            Ok(format!("{}{CUT_OFF_NOTE}", reply.text.trim_end()))
-        }
+/// Rejects an unfinished generation before its partial text can be parsed as a command.
+fn finish_reply(reply: ParsedReply) -> Result<String, LlmProfileError> {
+    if reply.cut_off {
+        return Err(LlmProfileError::ReplyCutOff);
     }
+    Ok(reply.text)
 }
 
 /// Parses a streamed completion: its content, whether the model also streamed reasoning, and
@@ -3441,9 +3428,6 @@ fn parse_streaming_chat_detailed(bytes: &[u8]) -> Result<ParsedReply, LlmProfile
                 .and_then(Value::as_str)
             {
                 content.push_str(delta);
-                if content.len() > MAX_REPLY_BYTES {
-                    return Err(LlmProfileError::MalformedResponse);
-                }
             }
         }
         for choice in choices {
@@ -3478,9 +3462,6 @@ fn parse_streaming_chat_detailed(bytes: &[u8]) -> Result<ParsedReply, LlmProfile
                     .and_then(Value::as_str)
                 {
                     tool_calls[index].arguments.push_str(arguments);
-                    if tool_calls[index].arguments.len() > MAX_REPLY_BYTES {
-                        return Err(LlmProfileError::MalformedResponse);
-                    }
                 }
             }
         }
@@ -4956,29 +4937,13 @@ mod tests {
     }
 
     #[test]
-    fn a_cut_off_prose_reply_is_kept_with_a_note_and_without_its_calls() {
+    fn a_cut_off_reply_is_rejected_without_its_calls() {
         let stream = b"data: {\"choices\":[{\"delta\":{\"content\":\"Most of the answer\",\"tool_calls\":[{\"index\":0,\"id\":\"c1\",\"function\":{\"name\":\"read_file\",\"arguments\":\"{\\\"pa\"}}]},\"finish_reason\":\"length\"}]}\n\n";
         let reply = parse_streaming_chat_detailed(stream).unwrap();
         assert!(reply.cut_off);
         assert_eq!(reply.text, "Most of the answer", "no half call is run");
 
-        let kept = finish_reply(reply.clone(), ReplyFormat::Text).unwrap();
-        assert!(kept.starts_with("Most of the answer"));
-        assert!(kept.ends_with("[The answer was cut off at the model's token limit.]"));
-        assert_eq!(
-            finish_reply(reply, ReplyFormat::Json),
-            Err(LlmProfileError::ReplyCutOff),
-            "half a JSON value is useless"
-        );
-        let empty = ParsedReply {
-            text: String::new(),
-            reasoning_seen: true,
-            cut_off: true,
-        };
-        assert_eq!(
-            finish_reply(empty, ReplyFormat::Text),
-            Err(LlmProfileError::ReplyCutOff)
-        );
+        assert_eq!(finish_reply(reply), Err(LlmProfileError::ReplyCutOff));
 
         let ollama = parse_ollama_reply(
             br#"{"message":{"role":"assistant","content":"Partial"},"done":true,"done_reason":"length"}"#,
@@ -4986,6 +4951,17 @@ mod tests {
         .unwrap();
         assert!(ollama.cut_off);
         assert_eq!(ollama.text, "Partial");
+        assert_eq!(finish_reply(ollama), Err(LlmProfileError::ReplyCutOff));
+    }
+
+    #[test]
+    fn a_complete_reply_can_exceed_the_old_decoded_byte_cap() {
+        let text = "a".repeat(1024 * 1024 + 1);
+        let event = json!({
+            "choices": [{"delta": {"content": text}, "finish_reason": "stop"}],
+        });
+        let stream = format!("data: {event}\n\n");
+        assert_eq!(parse_streaming_chat(stream.as_bytes()).unwrap(), text);
     }
 
     #[test]

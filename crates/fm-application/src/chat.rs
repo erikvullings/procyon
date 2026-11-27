@@ -24,7 +24,7 @@ use crate::chat_conversations::{
     ChatCompaction, ChatConversation, ChatConversationError, ChatConversationService, ChatMessage,
     ChatRole,
 };
-use crate::file_assistant::{VisibleText, truncate_to_bytes};
+use crate::file_assistant::VisibleText;
 use crate::llm_profiles::{
     LlmChatGeneration, LlmImageAttachment, LlmProfileError, LlmProfileService, LlmRole,
     ReplyFormat, ThinkingRequest,
@@ -37,8 +37,6 @@ const MAX_MESSAGE_CHARS: usize = 16 * 1024;
 const MAX_CONTEXT_CHARS: usize = 32 * 1024;
 /// Most transcript bytes sent with one request; the oldest messages drop out first.
 const MAX_PROMPT_BYTES: usize = 96 * 1024;
-/// Longest reply kept, in bytes.
-const MAX_REPLY_BYTES: usize = 64 * 1024;
 /// Most images sent with one message.
 const MAX_IMAGES: usize = 4;
 /// Longest side of an image, in pixels. The client shrinks pasted images to fit; larger ones are
@@ -84,6 +82,9 @@ pub(crate) enum ChatReplyError {
     /// The model did not answer in time.
     #[error("the chat model did not answer in time")]
     Timeout,
+    /// The model hit its output limit.
+    #[error("the model stopped at its output limit")]
+    ReplyCutOff,
 }
 
 impl From<ChatReplyError> for ChatFailureDto {
@@ -98,6 +99,7 @@ impl From<ChatReplyError> for ChatFailureDto {
             ChatReplyError::Cancelled => Self::Cancelled,
             ChatReplyError::ImagesNotSupported => Self::ImagesNotSupported,
             ChatReplyError::Timeout => Self::Timeout,
+            ChatReplyError::ReplyCutOff => Self::ReplyCutOff,
         }
     }
 }
@@ -114,6 +116,7 @@ impl From<ChatFailureDto> for ChatReplyError {
             ChatFailureDto::Cancelled => Self::Cancelled,
             ChatFailureDto::ImagesNotSupported => Self::ImagesNotSupported,
             ChatFailureDto::Timeout => Self::Timeout,
+            ChatFailureDto::ReplyCutOff => Self::ReplyCutOff,
         }
     }
 }
@@ -390,6 +393,7 @@ impl ChatService {
                     .await
                     .map_err(|error| match error {
                         LlmProfileError::Cancelled => ChatReplyError::Cancelled,
+                        LlmProfileError::ReplyCutOff => ChatReplyError::ReplyCutOff,
                         LlmProfileError::ConsentRequired(_) => ChatReplyError::ConsentRequired,
                         LlmProfileError::RoleNotAssigned => ChatReplyError::RoleNotAssigned,
                         _ => ChatReplyError::Unavailable,
@@ -398,7 +402,7 @@ impl ChatService {
         };
         self.lock().remove(&request.request_id);
         let text = outcome?;
-        let text = truncate_to_bytes(text.trim(), MAX_REPLY_BYTES).trim_end();
+        let text = text.trim();
         if text.is_empty() {
             return Err(ChatReplyError::Empty);
         }

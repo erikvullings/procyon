@@ -5,6 +5,12 @@ Priority: high
 Subsystem: backend, frontend, settings
 Depends on: 0345
 
+**Current behavior.** Completed replies are returned and stored without the former terminal,
+chat, file-assistant, document-summary, or decoded reply-size caps. An endpoint-reported cutoff ends the generation
+with an error, even for prose. Native calls from that unfinished generation are discarded. An
+explicit profile limit still applies when configured. The raw HTTP response-size bound remains
+a transport safeguard.
+
 ## Context
 Every LLM call was capped: profiles defaulted to 1024 answer tokens, the app clamped any cap to
 16,384, and features added their own (summaries 8192, file assistant 4096, RAG and knowledge
@@ -19,8 +25,7 @@ per token), so any streamed reply beyond roughly 1-2k tokens also failed as malf
 - The profile's answer limit is optional (default none), bounded only by the context window.
 - Saved profiles with the old default of 1024 migrate to no limit; other values stay.
 - Feature-level caps are gone; input budgets keep room for the answer without capping it.
-- A prose reply cut off at a token limit is kept with a note; a cut-off JSON reply fails; a
-  cut-off reply never runs its (possibly incomplete) native calls.
+- A reply cut off at a token limit fails and never runs tool calls from the unfinished response.
 - A runaway generation is still stopped, by response-size bounds instead of a token cap.
 
 ## Implementation Notes
@@ -31,9 +36,8 @@ per token), so any streamed reply beyond roughly 1-2k tokens also failed as malf
   - `LlmAdvancedSettings.maximum_answer_tokens: Option<u32>` (serde default);
   - `PROFILE_SCHEMA_VERSION` 6 migrates 1024 to null;
   - `MAX_GENERATION_ANSWER_TOKENS` is removed, and the DTO's answer cap reports the 1M context cap;
-  - `MAX_STREAM_BODY_BYTES` (64 MiB raw) and `MAX_REPLY_BYTES` (1 MiB of text or call arguments)
-    replace `MAX_STREAM_BYTES`;
-  - `ParsedReply`/`finish_reply` decide what a cut-off reply is worth by `ReplyFormat`;
+  - `MAX_STREAM_BODY_BYTES` (64 MiB raw) replaces `MAX_STREAM_BYTES`;
+  - `ParsedReply` records when the endpoint stopped at its limit and `finish_reply` returns an error;
   - the tool-calling probe sends no cap either (a cut-off probe recorded "no tools").
 - `document_summary.rs` and `agent_host` size inputs with an 8192-token answer room (at most
   half the window) when no limit is set.

@@ -163,8 +163,6 @@ pub struct TurnOptions {
     pub max_calls_per_reply: usize,
     /// Most read-only calls of one reply running at the same time.
     pub max_concurrent_calls: usize,
-    /// Longest answer kept, in bytes; `None` keeps it whole.
-    pub max_answer_bytes: Option<usize>,
     /// Longest tool result the model sees, in bytes; a longer one is cut with a note. `None`
     /// leaves the bound to the tools and the host.
     pub max_result_bytes: Option<usize>,
@@ -184,7 +182,6 @@ impl Default for TurnOptions {
             max_steps: 24,
             max_calls_per_reply: 8,
             max_concurrent_calls: 4,
-            max_answer_bytes: None,
             max_result_bytes: Some(64 * 1024),
             filter_result: None,
             nudge: Some(ContinueNudge::default()),
@@ -271,10 +268,6 @@ where
         if reply.is_empty() {
             return Ok(TurnEnd::EmptyReply);
         }
-        let kept = match options.max_answer_bytes {
-            Some(max) if calls.is_empty() => truncate_to_bytes(reply, max),
-            _ => reply,
-        };
         let records: Vec<ToolCallRecord> = calls
             .iter()
             .enumerate()
@@ -287,12 +280,12 @@ where
                 arguments: call.args.clone(),
             })
             .collect();
-        host.push_assistant(kept, &records);
+        host.push_assistant(reply, &records);
         if calls.is_empty() {
             if let Some(nudge) = &options.nudge
                 && worked
                 && nudges < nudge.max
-                && (nudge.promises_more)(kept)
+                && (nudge.promises_more)(reply)
             {
                 nudges += 1;
                 host.push_note(&nudge.message);
@@ -302,7 +295,7 @@ where
             if deliver_steering(host, on_event) {
                 continue;
             }
-            return Ok(TurnEnd::Answer(kept.to_owned()));
+            return Ok(TurnEnd::Answer(reply.to_owned()));
         }
         worked = true;
         if let Some(end) =
