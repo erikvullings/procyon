@@ -1829,6 +1829,26 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     );
   });
 
+  it('shows shell-reported commands in the context chip after history recall', async () => {
+    await mount();
+    for (const command of ['pwd', 'ls -la']) {
+      await markPrompt();
+      key('ArrowUp', 38);
+      key('Enter', 13);
+      echo?.({
+        type: 'output',
+        data: bytes(`\x1b]133;C;Command=${command}\x07\r\noutput\r\n\x1b]133;D;0\x07`),
+      });
+    }
+
+    await markPrompt();
+    ask('# what ran?');
+    await vi.waitFor(() =>
+      expect(button('Last 2 commands')?.getAttribute('aria-label')).toContain('pwd, ls -la'),
+    );
+    expect(sentAt(0)?.context?.blocks?.map((block) => block.command)).toEqual(['pwd', 'ls -la']);
+  });
+
   it('offers Explain after a command and Fix only after a failed one', async () => {
     await mount();
     await markPrompt();

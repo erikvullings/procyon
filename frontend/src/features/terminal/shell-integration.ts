@@ -7,7 +7,7 @@
 /** One shell mark, as the terminal parser receives it. */
 export type ShellMark =
   | { readonly kind: 'prompt' }
-  | { readonly kind: 'output' }
+  | { readonly kind: 'output'; readonly reportedCommand?: string }
   | { readonly kind: 'end'; readonly exitCode: number }
   /** The shell's working folder, reported at each prompt as `P;Cwd=<absolute path>`. */
   | { readonly kind: 'cwd'; readonly path: string };
@@ -16,6 +16,13 @@ export type ShellMark =
 export function parseShellMark(payload: string): ShellMark | undefined {
   if (payload === 'A') return { kind: 'prompt' };
   if (payload === 'C') return { kind: 'output' };
+  if (payload.startsWith('C;Command=')) {
+    const command = payload.slice('C;Command='.length);
+    if (command.length > 1024 || command.trim() === '' || /\p{Cc}/u.test(command)) {
+      return { kind: 'output' };
+    }
+    return { kind: 'output', reportedCommand: command };
+  }
   if (payload === 'D' || payload.startsWith('D;')) {
     const code = Number.parseInt(payload.slice(2), 10);
     return { kind: 'end', exitCode: Number.isFinite(code) ? code : 0 };

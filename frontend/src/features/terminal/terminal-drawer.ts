@@ -767,7 +767,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     const finished = live.blocks.blocks;
     const included = upTo === undefined ? finished : finished.slice(0, finished.indexOf(upTo) + 1);
     const blocks = included.map((block) => ({
-      command: block.command,
+      command: block.reportedCommand ?? block.command,
       exitCode: block.exitCode,
       output: blockOutput(live, block),
     }));
@@ -1255,13 +1255,17 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     }
     live.markSeen = true;
     markReady(live);
-    if (mark.kind === 'prompt') live.atPrompt = true;
+    if (mark.kind === 'prompt') {
+      live.atPrompt = true;
+      live.pendingCommand = '';
+    }
     if (mark.kind === 'output') live.atPrompt = false;
     const block = live.blocks.apply(
       mark,
       () => live.terminal.registerMarker(0),
       () => live.pendingCommand,
     );
+    if (mark.kind === 'output') live.pendingCommand = '';
     if (block === undefined) return;
     live.atPrompt = true;
     // The strip offers Explain and Fix according to the newest block.
@@ -2455,7 +2459,9 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   /** What a chip contains, and what clicking it does. The browser shows it after a short delay. */
   function chipTooltip(chip: ContextChip): string {
     const contents =
-      chip.id === 'environment' ? t('terminal', 'contextEnvironmentDetail') : (chip.detail ?? '');
+      chip.id === 'environment'
+        ? t('terminal', 'contextEnvironmentDetail')
+        : (chip.detail ?? (chip.id === 'blocks' ? t('terminal', 'contextCommandUnavailable') : ''));
     if (chip.id === 'file') return contents;
     const action = chip.removed ? t('terminal', 'contextRestore') : t('terminal', 'contextRemove');
     return contents === '' ? action : `${contents}\n\n${action}`;

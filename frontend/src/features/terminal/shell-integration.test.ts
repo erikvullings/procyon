@@ -9,6 +9,16 @@ describe('parseShellMark', () => {
     expect(parseShellMark('D')).toEqual({ kind: 'end', exitCode: 0 });
   });
 
+  it('reads shell-reported command text without losing the output mark on invalid metadata', () => {
+    expect(parseShellMark('C;Command=echo one; echo two')).toEqual({
+      kind: 'output',
+      reportedCommand: 'echo one; echo two',
+    });
+    for (const command of ['', '  ', 'one\ntwo', 'hello\x07', 'a'.repeat(1025)]) {
+      expect(parseShellMark(`C;Command=${command}`)).toEqual({ kind: 'output' });
+    }
+  });
+
   it('ignores marks the terminal does not use', () => {
     expect(parseShellMark('B')).toBeUndefined();
     expect(parseShellMark('nonsense')).toBeUndefined();

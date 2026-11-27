@@ -21,7 +21,11 @@ __procyon_precmd() {
   printf '\e]133;A\a'
 }
 __procyon_preexec() {
-  printf '\e]133;C\a'
+  if [[ -n $1 && ${#1} -le 1024 && $1 != *[^[:print:]]* ]]; then
+    printf '\e]133;C;Command=%s\a' "$1"
+  else
+    printf '\e]133;C\a'
+  fi
 }
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd __procyon_precmd
@@ -63,6 +67,7 @@ unset __procyon_profile __procyon_loaded_bashrc
 
 __procyon_begin() { __procyon_status=$?; }
 __procyon_end() {
+  __procyon_history_entry=$(HISTTIMEFORMAT= builtin history 1)
   printf '\e]133;D;%d\a' "$__procyon_status"
   printf '\e]133;P;Cwd=%s\a' "$PWD"
   printf '\e]133;A\a'
@@ -72,6 +77,18 @@ __procyon_at_prompt=1
 __procyon_preexec() {
   if [ "$__procyon_at_prompt" = 1 ]; then
     __procyon_at_prompt=0
+    # Bash's DEBUG trap sees only the first simple command. Use a fresh history entry
+    # for the whole line and fall back when history is disabled or ignored this line.
+    local entry command
+    entry=$(HISTTIMEFORMAT= builtin history 1)
+    command=${entry#"${entry%%[0-9]*}"}
+    if [[ $entry != "$__procyon_history_entry" && $command == *"  "* ]]; then
+      command=${command#*"  "}
+      if [[ -n $command && ${#command} -le 1024 && $command != *[^[:print:]]* ]]; then
+        printf '\e]133;C;Command=%s\a' "$command"
+        return
+      fi
+    fi
     printf '\e]133;C\a'
   fi
 }
@@ -92,7 +109,11 @@ function __procyon_prompt --on-event fish_prompt
     printf '\e]133;A\a'
 end
 function __procyon_preexec --on-event fish_preexec
-    printf '\e]133;C\a'
+    if string match -rq '^[^\p{Cc}]{1,1024}$' -- "$argv[1]"
+        printf '\e]133;C;Command=%s\a' "$argv[1]"
+    else
+        printf '\e]133;C\a'
+    end
 end
 "#;
 
@@ -372,7 +393,13 @@ mod tests {
         command.env("PS1", "$ ");
         let output = run_in_pty(
             command,
-            &["echo rc=$PROCYON_TEST_RC\n", "false\n", "exit\n"],
+            &[
+                "echo rc=$PROCYON_TEST_RC | cat\n",
+                "\x1b[A\n",
+                " echo skipped\n",
+                "false\n",
+                "exit\n",
+            ],
         );
 
         assert!(
@@ -380,8 +407,15 @@ mod tests {
             "bashrc not loaded: {output:?}"
         );
         assert!(
-            output.contains("\x1b]133;C\x07"),
-            "no command start: {output:?}"
+            output
+                .matches("\x1b]133;C;Command=echo rc=$PROCYON_TEST_RC | cat\x07")
+                .count()
+                == 2,
+            "no full command for the typed and recalled pipeline: {output:?}"
+        );
+        assert!(
+            output.contains("\x1b]133;C\x07skipped"),
+            "a history-ignored line should have an unlabelled start: {output:?}"
         );
         assert!(
             output.contains("\x1b]133;P;Cwd=/"),
@@ -497,8 +531,8 @@ mod tests {
 
         assert!(output.contains("rc=loaded"), "zshrc not loaded: {output:?}");
         assert!(
-            output.contains("\x1b]133;C\x07"),
-            "no command start: {output:?}"
+            output.contains("\x1b]133;C;Command=false\x07"),
+            "no reported command: {output:?}"
         );
         assert!(
             output.contains("\x1b]133;P;Cwd=/"),
@@ -549,8 +583,8 @@ mod tests {
             "config.fish not loaded: {output:?}"
         );
         assert!(
-            output.contains("\x1b]133;C\x07"),
-            "no command start: {output:?}"
+            output.contains("\x1b]133;C;Command=false\x07"),
+            "no reported command: {output:?}"
         );
         assert!(
             output.contains("\x1b]133;P;Cwd=/"),

@@ -6,7 +6,10 @@ import type { ShellMark } from './shell-integration';
  */
 export interface CommandBlock<Mark> {
   readonly id: number;
+  /** Command captured from trusted local input. Used for explicit rerun. */
   readonly command: string;
+  /** Text reported by the shell. Used only as assistant context. */
+  readonly reportedCommand?: string;
   readonly promptMark: Mark;
   readonly outputMark: Mark;
   readonly endMark: Mark;
@@ -32,6 +35,7 @@ interface OpenBlock<Mark> {
   readonly promptMark: Mark;
   outputMark?: Mark;
   command: string;
+  reportedCommand: string | undefined;
 }
 
 /**
@@ -47,13 +51,14 @@ export function createBlockTracker<Mark>(options: BlockTrackerOptions<Mark>): Bl
     apply(mark, handle, command) {
       switch (mark.kind) {
         case 'prompt':
-          open = { id: nextId, promptMark: handle(), command: '' };
+          open = { id: nextId, promptMark: handle(), command: '', reportedCommand: undefined };
           nextId += 1;
           return undefined;
         case 'output':
           if (open === undefined) return undefined;
           open.outputMark = handle();
           open.command = command();
+          open.reportedCommand = mark.reportedCommand;
           return undefined;
         case 'end': {
           const current = open;
@@ -62,6 +67,9 @@ export function createBlockTracker<Mark>(options: BlockTrackerOptions<Mark>): Bl
           const block: CommandBlock<Mark> = {
             id: current.id,
             command: current.command,
+            ...(current.reportedCommand === undefined
+              ? {}
+              : { reportedCommand: current.reportedCommand }),
             promptMark: current.promptMark,
             outputMark: current.outputMark,
             endMark: handle(),

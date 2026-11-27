@@ -384,6 +384,11 @@ export function contextChips(
     removed: removed.has(id),
     ...extra,
   });
+  const recentBlocks = source.blocks.slice(-MAX_CONTEXT_BLOCKS);
+  const commands = recentBlocks
+    .map((block) => block.command.trim())
+    .filter(Boolean)
+    .join(', ');
   return [
     chip('environment'),
     ...(source.listing.length > 0
@@ -393,14 +398,11 @@ export function contextChips(
       ? [chip('selection', { count: source.selected.length, detail: namesDetail(source.selected) })]
       : []),
     ...(source.otherFolder ? [chip('otherFolder', { detail: source.otherFolder })] : []),
-    ...(source.blocks.length > 0
+    ...(recentBlocks.length > 0
       ? [
           chip('blocks', {
-            count: Math.min(source.blocks.length, MAX_CONTEXT_BLOCKS),
-            detail: source.blocks
-              .slice(-MAX_CONTEXT_BLOCKS)
-              .map((block) => block.command)
-              .join(', '),
+            count: recentBlocks.length,
+            ...(commands === '' ? {} : { detail: commands }),
           }),
         ]
       : []),

@@ -179,6 +179,21 @@ describe('context chip details', () => {
     expect(detail('environment')).toBeUndefined();
   });
 
+  it('keeps the block count when the shell did not supply command text', () => {
+    const chips = contextChips(
+      source({
+        blocks: [
+          { command: '', exitCode: 0, output: 'output one' },
+          { command: '', exitCode: 0, output: 'output two' },
+        ],
+      }),
+      new Set(),
+    );
+    const blocks = chips.find((chip) => chip.id === 'blocks');
+    expect(blocks?.count).toBe(2);
+    expect(blocks?.detail).toBeUndefined();
+  });
+
   it('shortens a long listing', () => {
     const listing = Array.from({ length: 40 }, (_, index) => `f${index}`);
     const detail = contextChips(source({ listing }), new Set()).find(
