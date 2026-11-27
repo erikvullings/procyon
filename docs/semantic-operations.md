@@ -5,7 +5,7 @@ content search, and baseline document viewing available.
 
 ## Installation and enrolment
 
-- `pnpm dev:tauri` enables the deterministic semantic lifecycle simulator. It exercises consent,
+- `pnpm dev:tauri:mock` enables the deterministic semantic lifecycle simulator. It exercises consent,
   install, pause, migration, removal, and gating UI, but does not install a real worker, model, or
   index. The Settings screen labels this state as a development simulation.
 - `pnpm semantic:bundle:dev` builds a host-platform developer bundle under
@@ -20,7 +20,7 @@ content search, and baseline document viewing available.
 - The semantic disk-use panel reports physical storage categories. The developer worker keeps
   normalized chunk text beside its authoritative records in the model-specific Zvec directory, so
   **Separate extracted-content cache** can remain at 0 B after successful extraction and indexing.
-- `pnpm dev:tauri:semantic` rebuilds that bundle and starts the debug Tauri app with it. Open
+- `pnpm dev:tauri` (also `pnpm dev:tauri:semantic`) rebuilds that bundle and starts the debug Tauri app with it, beside the installed release. Open
   **Settings > Semantic**, review the development-only disclosure, and install the offered
   components. Enrolment and indexing still require explicit consent for each local root.
 - Local OCR automation is disabled even when OCRmyPDF is installed. Release desktop builds safely

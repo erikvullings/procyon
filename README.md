@@ -140,7 +140,8 @@ Run commands from the repository root.
 | `pnpm dev` | Start Vite with the mock client |
 | `pnpm dev:http` | Start Vite against the Axum backend |
 | `pnpm dev:server` | Start the Axum backend with automatic rebuilds |
-| `pnpm dev:tauri` | Launch the Tauri desktop app |
+| `pnpm dev:tauri` | Launch the dev desktop app with semantic enabled, beside the installed release (separate app data) |
+| `pnpm dev:tauri:mock` | Launch the dev desktop app with mock semantic, sharing the release's app data |
 | `pnpm dev:tauri:semantic:gemma` | Launch a local desktop with the optional Gemma development catalog |
 | `pnpm test` | Run Rust, frontend, and script tests |
 | `pnpm test:rust` | Run the Rust suite and doctests |

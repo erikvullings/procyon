@@ -24,7 +24,8 @@ Run from the repo root via `pnpm run <script>`:
 | `pnpm dev:mock` | Vite dev server against the in-process **mock** client (no Rust process needed) |
 | `pnpm dev:http` | Vite dev server against the **Axum backend** (`VITE_RUNTIME=http`) — pair with `pnpm dev:server` |
 | `pnpm dev:server` | `fm-server` on port 8787, auth disabled, auto-rebuild on change |
-| `pnpm dev:tauri` | Tauri desktop app in dev mode |
+| `pnpm dev:tauri` | Dev desktop app with semantic enabled, beside the installed release (own app data) |
+| `pnpm dev:tauri:mock` | Dev desktop app with mock semantic, sharing the release's app data |
 | `pnpm test` | Rust + frontend + script tests (see below to run a subset) |
 | `pnpm lint` | `cargo fmt --check` + `cargo clippy --workspace --all-targets -- -D warnings` + Biome |
 | `pnpm api:export` / `api:generate` | Regenerate `frontend/openapi/openapi.json` / the Orval client — never hand-edit either |
