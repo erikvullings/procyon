@@ -441,6 +441,7 @@ export const fr = {
     templateFolderHelp:
       'Les fichiers texte de ce dossier sont aussi proposés par « Nouveau fichier depuis un modèle ». Laisser vide pour désactiver.',
     templateEnabled: 'Activé',
+    templateOpenInEditor: "Ouvrir dans l'éditeur",
     templateLabel: 'Nom',
     templateFileName: 'Nom de fichier suggéré',
     templateBody: 'Contenu',
@@ -1296,6 +1297,7 @@ export const fr = {
     copy: 'Copier',
     waitingForModel:
       "En attente du modèle. La première réponse peut prendre une minute, le temps qu'il se charge.",
+    replyCutOff: 'Le modèle a atteint sa limite de sortie avant de terminer sa réponse.',
     imagesNotSupported:
       "Le point d'accès du chat n'accepte pas les images. Activez-le d'abord dans les réglages.",
     imageLimit: 'Quatre images au maximum par message.',

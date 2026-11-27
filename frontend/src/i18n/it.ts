@@ -437,6 +437,7 @@ export const it = {
     templateFolderHelp:
       'I file di testo in questa cartella sono proposti anche in «Nuovo file da modello». Lasciare vuoto per disattivare.',
     templateEnabled: 'Attivato',
+    templateOpenInEditor: "Apri nell'editor",
     templateLabel: 'Nome',
     templateFileName: 'Nome file suggerito',
     templateBody: 'Contenuto',
@@ -1288,6 +1289,7 @@ export const it = {
     copy: 'Copia',
     waitingForModel:
       'In attesa del modello. La prima risposta può richiedere un minuto mentre si carica.',
+    replyCutOff: 'Il modello ha raggiunto il limite di output prima di completare la risposta.',
     imagesNotSupported:
       "L'endpoint della chat non accetta immagini. Attivalo prima nelle Impostazioni.",
     imageLimit: 'Massimo 4 immagini per messaggio.',

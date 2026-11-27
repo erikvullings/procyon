@@ -1,7 +1,15 @@
 /* Notes dialogs and settings (task 0337). */
 
+/* ModalPanel's inline width and the dense modal's 24rem cap both need !important to yield. */
+/* biome-ignore-start lint/complexity/noImportantStyles: overrides the dense modal's cap */
+.modal.fm-dense-modal.fm-notes-modal {
+  max-width: min(40rem, calc(100vw - 2rem)) !important;
+  width: min(40rem, calc(100vw - 2rem)) !important;
+}
+/* biome-ignore-end lint/complexity/noImportantStyles: overrides the dense modal's cap */
+
 .fm-notes-modal .modal-content {
-  max-width: 52rem;
+  max-width: 40rem;
 }
 
 .fm-notes-setup,
@@ -59,6 +67,7 @@
   pointer-events: auto;
 }
 
+.fm-notes-check > span,
 .fm-notes-check > .fm-notes-help {
   grid-column: 2;
 }

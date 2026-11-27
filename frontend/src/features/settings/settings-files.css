@@ -1,0 +1,67 @@
+/* Files & operations: its inline submenu and the file templates editor (task 0312). */
+
+.fm-settings-editor .fm-settings-subsection-button {
+  padding-left: 1.5rem;
+  font-size: var(--fm-type-meta);
+}
+
+.fm-file-templates {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.fm-file-templates__picker {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.fm-file-templates__select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.fm-file-template {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--fm-border);
+  border-radius: var(--fm-radius);
+}
+
+.fm-file-template label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.fm-file-template__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.fm-file-template__name {
+  flex: 1 1 14rem;
+}
+
+.fm-file-template__flag {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.35rem !important;
+  white-space: nowrap;
+}
+
+.fm-file-template__body {
+  min-height: 12rem;
+  font-family: var(--fm-font-mono);
+}
+
+.fm-file-template__footer {
+  display: flex;
+  justify-content: flex-end;
+}

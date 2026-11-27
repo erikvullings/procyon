@@ -434,6 +434,7 @@ export const nl = {
     templateFolderHelp:
       'Tekstbestanden in deze map worden ook aangeboden bij «Nieuw bestand uit sjabloon». Leeg laten om dit uit te schakelen.',
     templateEnabled: 'Ingeschakeld',
+    templateOpenInEditor: 'Openen in editor',
     templateLabel: 'Naam',
     templateFileName: 'Voorgestelde bestandsnaam',
     templateBody: 'Inhoud',
@@ -1701,6 +1702,7 @@ export const nl = {
     copy: 'Kopiëren',
     waitingForModel:
       'Wachten op het model. Het eerste antwoord kan een minuut duren terwijl het laadt.',
+    replyCutOff: 'Het model bereikte zijn uitvoerlimiet voordat het antwoord af was.',
     imagesNotSupported:
       'Het chat-eindpunt accepteert geen afbeeldingen. Schakel dit eerst in de instellingen in.',
     imageLimit: 'Maximaal 4 afbeeldingen per bericht.',

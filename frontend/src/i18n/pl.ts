@@ -437,6 +437,7 @@ export const pl = {
     templateFolderHelp:
       'Pliki tekstowe z tego folderu są też oferowane w „Nowy plik z szablonu”. Pozostaw puste, aby wyłączyć.',
     templateEnabled: 'Włączony',
+    templateOpenInEditor: 'Otwórz w edytorze',
     templateLabel: 'Nazwa',
     templateFileName: 'Sugerowana nazwa pliku',
     templateBody: 'Treść',
@@ -1288,6 +1289,7 @@ export const pl = {
     copy: 'Kopiuj',
     waitingForModel:
       'Czekam na model. Pierwsza odpowiedź może potrwać minutę, gdy model się ładuje.',
+    replyCutOff: 'Model osiągnął limit odpowiedzi przed jej ukończeniem.',
     imagesNotSupported:
       'Punkt końcowy czatu nie przyjmuje obrazów. Włącz to najpierw w ustawieniach.',
     imageLimit: 'Najwyżej 4 obrazy w wiadomości.',

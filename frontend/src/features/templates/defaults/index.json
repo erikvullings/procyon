@@ -1,5 +1,5 @@
 [
-  { "id": "text", "label": "Text file", "fileName": "New file.txt" },
+  { "id": "text", "label": "Text file", "fileName": "new_file.txt" },
   { "id": "markdown", "label": "Markdown note", "fileName": "Note.md" },
   { "id": "meeting", "label": "Meeting note", "fileName": "Meeting.md" },
   { "id": "todo", "label": "To-do list", "fileName": "TODO.md" },
@@ -10,11 +10,11 @@
   { "id": "gitignore", "label": "Git ignore", "fileName": ".gitignore" },
   { "id": "html", "label": "HTML page", "fileName": "index.html" },
   { "id": "json", "label": "JSON document", "fileName": "data.json" },
-  { "id": "blank", "label": "Blank file (opens in editor)", "fileName": "New file" },
+  { "id": "blank", "label": "Blank file (opens in editor)", "fileName": "new_file" },
   {
     "id": "empty",
     "label": "Empty file (not opened)",
-    "fileName": "New file",
+    "fileName": "new_file",
     "openInEditor": false
   }
 ]

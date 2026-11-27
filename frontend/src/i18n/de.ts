@@ -444,6 +444,7 @@ export const de = {
     templateFolderHelp:
       'Textdateien in diesem Ordner werden ebenfalls unter „Neue Datei aus Vorlage“ angeboten. Leer lassen, um dies zu deaktivieren.',
     templateEnabled: 'Aktiviert',
+    templateOpenInEditor: 'Im Editor öffnen',
     templateLabel: 'Name',
     templateFileName: 'Vorgeschlagener Dateiname',
     templateBody: 'Inhalt',
@@ -1308,6 +1309,7 @@ export const de = {
     copy: 'Kopieren',
     waitingForModel:
       'Warten auf das Modell. Die erste Antwort kann eine Minute dauern, bis es geladen ist.',
+    replyCutOff: 'Das Modell hat sein Ausgabelimit erreicht, bevor die Antwort vollständig war.',
     imagesNotSupported:
       'Der Chat-Endpunkt akzeptiert keine Bilder. Aktivieren Sie dies zuerst in den Einstellungen.',
     imageLimit: 'Höchstens 4 Bilder pro Nachricht.',

@@ -2546,7 +2546,7 @@ describe('AppShell', () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
-    // The picker dialog opens with the first built-in template (Text file → "New file.txt").
+    // The picker dialog opens with the first built-in template (Text file → "new_file.txt").
     await vi.waitFor(() => expect(root.querySelector('.fm-new-from-template')).not.toBeNull());
     // Selecting a template names the file (mirrors the user picking/confirming a template).
     root.querySelector<HTMLButtonElement>('.fm-terminal-picker__item')?.click();
@@ -2559,7 +2559,7 @@ describe('AppShell', () => {
     await vi.waitFor(() => expect(loadEditableFile).toHaveBeenCalledOnce(), { timeout: 5000 });
     expect(startOperation).toHaveBeenCalledOnce();
     const request = loadEditableFile.mock.calls[0]?.[0];
-    expect(request?.location.uri).toContain('New%20file.txt');
+    expect(request?.location.uri).toContain('new_file.txt');
     expect(request?.location.uri).not.toBe('mock:///');
   });
 

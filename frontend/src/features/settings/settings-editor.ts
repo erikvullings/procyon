@@ -38,6 +38,7 @@ import {
 } from '../directory-table/image-caption';
 import { MapSettingsSection } from '../map/map-settings-section';
 import { NotesSettingsSection } from '../notes/notes-settings';
+import './settings-files.css';
 import { PluginManagement } from '../plugin-management/plugin-management';
 import type { SelectionPlatform } from '../selection/keybindings';
 import { AppUpdateSettings } from './app-update-settings';
@@ -72,6 +73,18 @@ const AVAILABLE_DEFAULT_COLUMNS = [
   { id: 'core.gitStatus', labelKey: 'gitStatus' },
   { id: 'core.modified', labelKey: 'modified' },
 ] as const satisfies readonly { readonly id: string; readonly labelKey: keyof typeof en.table }[];
+
+/** The parts of "Files & operations", each shown on its own from the inline submenu. */
+export type FilesPart =
+  | 'behavior'
+  | 'pictures'
+  | 'documentHub'
+  | 'operations'
+  | 'workspaceDefaults'
+  | 'terminal'
+  | 'notes'
+  | 'fileTemplates'
+  | 'editor';
 
 export type SettingsSection =
   | 'appearance'
@@ -152,6 +165,8 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
   let saving = false;
   let saveError: string | undefined;
   let activeSection: SettingsSection = 'appearance';
+  /** The part of "Files & operations" shown alone, chosen from its inline submenu. */
+  let activeFilesPart: FilesPart = 'behavior';
   let keybindingFilter = '';
   let lastInitialSection: SettingsSection | undefined;
   let semanticStatus: SemanticComponentStatus | undefined;
@@ -324,12 +339,24 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
         { id: 'diagnostics', label: t('shell', 'diagnostics') },
       ];
 
+      const filesParts: ReadonlyArray<{ id: FilesPart; label: string }> = [
+        { id: 'behavior', label: t('settings', 'fileBehavior') },
+        { id: 'pictures', label: t('settings', 'pictureInfoSection') },
+        { id: 'documentHub', label: t('settings', 'documentHubSection') },
+        { id: 'operations', label: t('settings', 'operations') },
+        { id: 'workspaceDefaults', label: t('settings', 'newWorkspaceDefaults') },
+        { id: 'terminal', label: t('settings', 'terminal') },
+        { id: 'notes', label: t('notes', 'settingsTitle') },
+        { id: 'fileTemplates', label: t('settings', 'fileTemplates') },
+        { id: 'editor', label: t('settings', 'editor') },
+      ];
+
       return [
         m('.fm-settings-editor-layout', [
           m(
             'nav.fm-settings-section-nav',
             { 'aria-label': t('settings', 'settingsSections') },
-            sections.map((section) =>
+            sections.flatMap((section) => [
               m(
                 'button.fm-settings-section-button',
                 {
@@ -343,7 +370,22 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                 },
                 section.label,
               ),
-            ),
+              section.id === 'files' && activeSection === 'files'
+                ? filesParts.map((part) =>
+                    m(
+                      'button.fm-settings-section-button.fm-settings-subsection-button',
+                      {
+                        type: 'button',
+                        'aria-current': activeFilesPart === part.id ? 'page' : undefined,
+                        onclick: () => {
+                          activeFilesPart = part.id;
+                        },
+                      },
+                      part.label,
+                    ),
+                  )
+                : [],
+            ]),
           ),
           m(
             '.fm-settings-editor-body',
@@ -465,392 +507,449 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
 
               activeSection === 'files'
                 ? [
-                    m(
-                      '.row',
-                      m('h4.fm-settings-section-heading.col.s12', t('settings', 'fileBehavior')),
-                    ),
-                    m('.row', [
-                      m(Switch, {
-                        className: 'col s12 m6',
-                        label: t('settings', 'showHiddenFiles'),
-                        checked: activeDraft.showHiddenFiles,
-                        left: t('settings', 'hiddenFilesHidden'),
-                        right: t('settings', 'hiddenFilesShown'),
-                        onchange: (checked: boolean) =>
-                          update(current, { showHiddenFiles: checked }),
-                      }),
-                      m(Switch, {
-                        className: 'col s12 m6',
-                        label: t('settings', 'confirmPermanentDelete'),
-                        checked: activeDraft.confirmPermanentDelete,
-                        left: t('settings', 'off'),
-                        right: t('settings', 'on'),
-                        onchange: (checked: boolean) =>
-                          update(current, { confirmPermanentDelete: checked }),
-                      }),
-                      m(Switch, {
-                        className: 'col s12 m6',
-                        label: t('settings', 'confirmFileOperations'),
-                        checked: activeDraft.confirmFileOperations,
-                        left: t('settings', 'off'),
-                        right: t('settings', 'on'),
-                        onchange: (checked: boolean) =>
-                          update(current, { confirmFileOperations: checked }),
-                      }),
-                      m(Switch, {
-                        className: 'col s12 m6',
-                        label: t('settings', 'viewerInSeparateWindow'),
-                        checked: activeDraft.viewerInSeparateWindow,
-                        left: t('settings', 'off'),
-                        right: t('settings', 'on'),
-                        onchange: (checked: boolean) =>
-                          update(current, { viewerInSeparateWindow: checked }),
-                      }),
-                      m(Switch, {
-                        className: 'col s12 m6',
-                        label: t('settings', 'rememberFolderViews'),
-                        checked: activeDraft.rememberFolderViews,
-                        left: t('settings', 'off'),
-                        right: t('settings', 'on'),
-                        onchange: (checked: boolean) =>
-                          update(current, { rememberFolderViews: checked }),
-                      }),
-                    ]),
-
-                    m(
-                      '.row',
-                      m(
-                        'h4.fm-settings-section-heading.col.s12',
-                        t('settings', 'pictureInfoSection'),
-                      ),
-                    ),
-                    m('.row', [
-                      m(Switch, {
-                        className: 'col s12 m6',
-                        label: t('settings', 'pictureTooltip'),
-                        checked: activeDraft.pictureInfo.tooltipEnabled,
-                        left: t('settings', 'off'),
-                        right: t('settings', 'on'),
-                        onchange: (checked: boolean) =>
-                          update(current, {
-                            pictureInfo: { ...activeDraft.pictureInfo, tooltipEnabled: checked },
-                          }),
-                      }),
-                      m(NumberInput, {
-                        className: 'col s12 m6',
-                        label: t('settings', 'pictureTooltipDelay'),
-                        value: activeDraft.pictureInfo.tooltipDelayMs,
-                        min: 0,
-                        max: 5000,
-                        oninput: (value: number) =>
-                          update(current, {
-                            pictureInfo: { ...activeDraft.pictureInfo, tooltipDelayMs: value },
-                          }),
-                        ...errorAttrs('tooltipDelayMs'),
-                      }),
-                    ]),
-                    pictureFieldChoices(
-                      current,
-                      activeDraft,
-                      'captionFields',
-                      t('settings', 'pictureCaptionFields'),
-                      CAPTION_FIELD_CHOICES,
-                    ),
-                    pictureFieldChoices(
-                      current,
-                      activeDraft,
-                      'tooltipFields',
-                      t('settings', 'pictureTooltipFields'),
-                      TOOLTIP_FIELD_CHOICES,
-                    ),
-
-                    m(
-                      '.row',
-                      m(
-                        'h4.fm-settings-section-heading.col.s12',
-                        t('settings', 'documentHubSection'),
-                      ),
-                    ),
-                    m('.row', [
-                      m(TextInput, {
-                        className: 'col s12 m6',
-                        label: t('settings', 'documentHubExtensions'),
-                        helperText: t('settings', 'documentHubExtensionsHint'),
-                        value: hubExtensionsText,
-                        oninput: (value: string) => {
-                          hubExtensionsText = value;
-                          update(current, {
-                            documentHub: {
-                              ...activeDraft.documentHub,
-                              extensions: value.split(/[\s,]+/u).filter((item) => item.length > 0),
-                            },
-                          });
-                        },
-                      }),
-                      m(TextInput, {
-                        className: 'col s12 m6',
-                        label: t('settings', 'documentHubBasePath'),
-                        helperText: t('settings', 'documentHubBasePathHint'),
-                        value: activeDraft.documentHub.basePath,
-                        oninput: (value: string) =>
-                          update(current, {
-                            documentHub: { ...activeDraft.documentHub, basePath: value },
-                          }),
-                      }),
-                    ]),
-                    m(
-                      '.row',
-                      m(
-                        '.col.s12',
-                        m(
-                          'button.btn-flat',
-                          {
-                            type: 'button',
-                            onclick: () => {
-                              hubExtensionsText =
-                                DEFAULT_DOCUMENT_HUB_SETTINGS.extensions.join(' ');
-                              update(current, { documentHub: DEFAULT_DOCUMENT_HUB_SETTINGS });
-                            },
-                          },
-                          t('settings', 'documentHubReset'),
-                        ),
-                      ),
-                    ),
-
-                    m(
-                      '.row',
-                      m('h4.fm-settings-section-heading.col.s12', t('settings', 'operations')),
-                    ),
-                    m('.row', [
-                      m(Select<Settings['defaultConflictPolicy']>, {
-                        className: 'col s6',
-                        label: t('settings', 'defaultConflictPolicy'),
-                        options: [
-                          { id: 'ask', label: t('settings', 'conflictAsk') },
-                          { id: 'overwrite', label: t('settings', 'conflictOverwrite') },
-                          { id: 'keepBoth', label: t('settings', 'conflictKeepBoth') },
-                          { id: 'skip', label: t('settings', 'conflictSkip') },
-                        ],
-                        checkedId: activeDraft.defaultConflictPolicy,
-                        onchange: ([value]) =>
-                          value !== undefined && update(current, { defaultConflictPolicy: value }),
-                      }),
-                      m(NumberInput, {
-                        className: 'col s6',
-                        label: t('settings', 'operationConcurrency'),
-                        value: activeDraft.operationConcurrency,
-                        min: 1,
-                        oninput: (value: number) =>
-                          update(current, { operationConcurrency: value }),
-                        ...errorAttrs('operationConcurrency'),
-                      }),
-                    ]),
-
-                    m(
-                      '.row',
-                      m(
-                        'h4.fm-settings-section-heading.col.s12',
-                        t('settings', 'newWorkspaceDefaults'),
-                      ),
-                    ),
-                    m('.row', [
-                      m(Select<Settings['defaultPaneLayout']>, {
-                        label: t('settings', 'defaultPaneLayout'),
-                        options: [
-                          { id: 'dual', label: t('settings', 'paneLayoutDual') },
-                          { id: 'single', label: t('settings', 'paneLayoutSingle') },
-                        ],
-                        checkedId: activeDraft.defaultPaneLayout,
-                        onchange: ([value]) =>
-                          value !== undefined && update(current, { defaultPaneLayout: value }),
-                      }),
-                    ]),
-                    m('.row', [
-                      m('fieldset.fm-settings-column-select.col.s12', [
-                        m('legend', t('settings', 'defaultColumns')),
-                        m(
-                          'ul.fm-settings-column-list',
-                          AVAILABLE_DEFAULT_COLUMNS.map((column) =>
-                            m('li', [
-                              m('label', [
-                                m('input', {
-                                  type: 'checkbox',
-                                  checked: activeDraft.defaultColumns.includes(column.id),
-                                  onchange: (event: Event) =>
-                                    toggleColumn(
-                                      current,
-                                      column.id,
-                                      (event.target as HTMLInputElement).checked,
-                                    ),
-                                }),
-                                m('span', t('table', column.labelKey)),
-                              ]),
-                            ]),
+                    activeFilesPart === 'behavior'
+                      ? [
+                          m(
+                            '.row',
+                            m(
+                              'h4.fm-settings-section-heading.col.s12',
+                              t('settings', 'fileBehavior'),
+                            ),
                           ),
-                        ),
-                      ]),
-                    ]),
-                    m('.row', [
-                      m(TextInput, {
-                        label: t('settings', 'defaultStartLocations'),
-                        value: startLocationsText,
-                        oninput: (value: string) => {
-                          startLocationsText = value;
-                        },
-                        onchange: (value: string) => {
-                          startLocationsText = value;
-                          update(current, { defaultStartLocations: parseListInput(value) });
-                        },
-                      }),
-                    ]),
+                          m('.row', [
+                            m(Switch, {
+                              className: 'col s12 m6',
+                              label: t('settings', 'showHiddenFiles'),
+                              checked: activeDraft.showHiddenFiles,
+                              left: t('settings', 'hiddenFilesHidden'),
+                              right: t('settings', 'hiddenFilesShown'),
+                              onchange: (checked: boolean) =>
+                                update(current, { showHiddenFiles: checked }),
+                            }),
+                            m(Switch, {
+                              className: 'col s12 m6',
+                              label: t('settings', 'confirmPermanentDelete'),
+                              checked: activeDraft.confirmPermanentDelete,
+                              left: t('settings', 'off'),
+                              right: t('settings', 'on'),
+                              onchange: (checked: boolean) =>
+                                update(current, { confirmPermanentDelete: checked }),
+                            }),
+                            m(Switch, {
+                              className: 'col s12 m6',
+                              label: t('settings', 'confirmFileOperations'),
+                              checked: activeDraft.confirmFileOperations,
+                              left: t('settings', 'off'),
+                              right: t('settings', 'on'),
+                              onchange: (checked: boolean) =>
+                                update(current, { confirmFileOperations: checked }),
+                            }),
+                            m(Switch, {
+                              className: 'col s12 m6',
+                              label: t('settings', 'viewerInSeparateWindow'),
+                              checked: activeDraft.viewerInSeparateWindow,
+                              left: t('settings', 'off'),
+                              right: t('settings', 'on'),
+                              onchange: (checked: boolean) =>
+                                update(current, { viewerInSeparateWindow: checked }),
+                            }),
+                            m(Switch, {
+                              className: 'col s12 m6',
+                              label: t('settings', 'rememberFolderViews'),
+                              checked: activeDraft.rememberFolderViews,
+                              left: t('settings', 'off'),
+                              right: t('settings', 'on'),
+                              onchange: (checked: boolean) =>
+                                update(current, { rememberFolderViews: checked }),
+                            }),
+                          ]),
+                        ]
+                      : undefined,
+                    activeFilesPart === 'pictures'
+                      ? [
+                          m(
+                            '.row',
+                            m(
+                              'h4.fm-settings-section-heading.col.s12',
+                              t('settings', 'pictureInfoSection'),
+                            ),
+                          ),
+                          m('.row', [
+                            m(Switch, {
+                              className: 'col s12 m6',
+                              label: t('settings', 'pictureTooltip'),
+                              checked: activeDraft.pictureInfo.tooltipEnabled,
+                              left: t('settings', 'off'),
+                              right: t('settings', 'on'),
+                              onchange: (checked: boolean) =>
+                                update(current, {
+                                  pictureInfo: {
+                                    ...activeDraft.pictureInfo,
+                                    tooltipEnabled: checked,
+                                  },
+                                }),
+                            }),
+                            m(NumberInput, {
+                              className: 'col s12 m6',
+                              label: t('settings', 'pictureTooltipDelay'),
+                              value: activeDraft.pictureInfo.tooltipDelayMs,
+                              min: 0,
+                              max: 5000,
+                              oninput: (value: number) =>
+                                update(current, {
+                                  pictureInfo: {
+                                    ...activeDraft.pictureInfo,
+                                    tooltipDelayMs: value,
+                                  },
+                                }),
+                              ...errorAttrs('tooltipDelayMs'),
+                            }),
+                          ]),
+                          pictureFieldChoices(
+                            current,
+                            activeDraft,
+                            'captionFields',
+                            t('settings', 'pictureCaptionFields'),
+                            CAPTION_FIELD_CHOICES,
+                          ),
+                          pictureFieldChoices(
+                            current,
+                            activeDraft,
+                            'tooltipFields',
+                            t('settings', 'pictureTooltipFields'),
+                            TOOLTIP_FIELD_CHOICES,
+                          ),
+                        ]
+                      : undefined,
+                    activeFilesPart === 'documentHub'
+                      ? [
+                          m(
+                            '.row',
+                            m(
+                              'h4.fm-settings-section-heading.col.s12',
+                              t('settings', 'documentHubSection'),
+                            ),
+                          ),
+                          m('.row', [
+                            m(TextInput, {
+                              className: 'col s12 m6',
+                              label: t('settings', 'documentHubExtensions'),
+                              helperText: t('settings', 'documentHubExtensionsHint'),
+                              value: hubExtensionsText,
+                              oninput: (value: string) => {
+                                hubExtensionsText = value;
+                                update(current, {
+                                  documentHub: {
+                                    ...activeDraft.documentHub,
+                                    extensions: value
+                                      .split(/[\s,]+/u)
+                                      .filter((item) => item.length > 0),
+                                  },
+                                });
+                              },
+                            }),
+                            m(TextInput, {
+                              className: 'col s12 m6',
+                              label: t('settings', 'documentHubBasePath'),
+                              helperText: t('settings', 'documentHubBasePathHint'),
+                              value: activeDraft.documentHub.basePath,
+                              oninput: (value: string) =>
+                                update(current, {
+                                  documentHub: { ...activeDraft.documentHub, basePath: value },
+                                }),
+                            }),
+                          ]),
+                          m(
+                            '.row',
+                            m(
+                              '.col.s12',
+                              m(
+                                'button.btn-flat',
+                                {
+                                  type: 'button',
+                                  onclick: () => {
+                                    hubExtensionsText =
+                                      DEFAULT_DOCUMENT_HUB_SETTINGS.extensions.join(' ');
+                                    update(current, { documentHub: DEFAULT_DOCUMENT_HUB_SETTINGS });
+                                  },
+                                },
+                                t('settings', 'documentHubReset'),
+                              ),
+                            ),
+                          ),
+                        ]
+                      : undefined,
+                    activeFilesPart === 'operations'
+                      ? [
+                          m(
+                            '.row',
+                            m(
+                              'h4.fm-settings-section-heading.col.s12',
+                              t('settings', 'operations'),
+                            ),
+                          ),
+                          m('.row', [
+                            m(Select<Settings['defaultConflictPolicy']>, {
+                              className: 'col s6',
+                              label: t('settings', 'defaultConflictPolicy'),
+                              options: [
+                                { id: 'ask', label: t('settings', 'conflictAsk') },
+                                { id: 'overwrite', label: t('settings', 'conflictOverwrite') },
+                                { id: 'keepBoth', label: t('settings', 'conflictKeepBoth') },
+                                { id: 'skip', label: t('settings', 'conflictSkip') },
+                              ],
+                              checkedId: activeDraft.defaultConflictPolicy,
+                              onchange: ([value]) =>
+                                value !== undefined &&
+                                update(current, { defaultConflictPolicy: value }),
+                            }),
+                            m(NumberInput, {
+                              className: 'col s6',
+                              label: t('settings', 'operationConcurrency'),
+                              value: activeDraft.operationConcurrency,
+                              min: 1,
+                              oninput: (value: number) =>
+                                update(current, { operationConcurrency: value }),
+                              ...errorAttrs('operationConcurrency'),
+                            }),
+                          ]),
+                        ]
+                      : undefined,
+                    activeFilesPart === 'workspaceDefaults'
+                      ? [
+                          m(
+                            '.row',
+                            m(
+                              'h4.fm-settings-section-heading.col.s12',
+                              t('settings', 'newWorkspaceDefaults'),
+                            ),
+                          ),
+                          m('.row', [
+                            m(Select<Settings['defaultPaneLayout']>, {
+                              label: t('settings', 'defaultPaneLayout'),
+                              options: [
+                                { id: 'dual', label: t('settings', 'paneLayoutDual') },
+                                { id: 'single', label: t('settings', 'paneLayoutSingle') },
+                              ],
+                              checkedId: activeDraft.defaultPaneLayout,
+                              onchange: ([value]) =>
+                                value !== undefined &&
+                                update(current, { defaultPaneLayout: value }),
+                            }),
+                          ]),
+                          m('.row', [
+                            m('fieldset.fm-settings-column-select.col.s12', [
+                              m('legend', t('settings', 'defaultColumns')),
+                              m(
+                                'ul.fm-settings-column-list',
+                                AVAILABLE_DEFAULT_COLUMNS.map((column) =>
+                                  m('li', [
+                                    m('label', [
+                                      m('input', {
+                                        type: 'checkbox',
+                                        checked: activeDraft.defaultColumns.includes(column.id),
+                                        onchange: (event: Event) =>
+                                          toggleColumn(
+                                            current,
+                                            column.id,
+                                            (event.target as HTMLInputElement).checked,
+                                          ),
+                                      }),
+                                      m('span', t('table', column.labelKey)),
+                                    ]),
+                                  ]),
+                                ),
+                              ),
+                            ]),
+                          ]),
+                          m('.row', [
+                            m(TextInput, {
+                              label: t('settings', 'defaultStartLocations'),
+                              value: startLocationsText,
+                              oninput: (value: string) => {
+                                startLocationsText = value;
+                              },
+                              onchange: (value: string) => {
+                                startLocationsText = value;
+                                update(current, { defaultStartLocations: parseListInput(value) });
+                              },
+                            }),
+                          ]),
+                        ]
+                      : undefined,
+                    activeFilesPart === 'terminal'
+                      ? [
+                          m(
+                            '.row',
+                            m('h4.fm-settings-section-heading.col.s12', t('settings', 'terminal')),
+                          ),
+                          m('.row', [
+                            m(TextInput, {
+                              label: t('settings', 'terminalCommand'),
+                              value: activeDraft.terminalCommand ?? '',
+                              placeholder: t('settings', 'systemDefault'),
+                              oninput: (value: string) =>
+                                update(current, {
+                                  terminalCommand: value.trim().length === 0 ? null : value,
+                                }),
+                              onchange: (value: string) =>
+                                update(current, {
+                                  terminalCommand: value.trim().length === 0 ? null : value,
+                                }),
+                            }),
+                          ]),
 
-                    m(
-                      '.row',
-                      m('h4.fm-settings-section-heading.col.s12', t('settings', 'terminal')),
-                    ),
-                    m('.row', [
-                      m(TextInput, {
-                        label: t('settings', 'terminalCommand'),
-                        value: activeDraft.terminalCommand ?? '',
-                        placeholder: t('settings', 'systemDefault'),
-                        oninput: (value: string) =>
-                          update(current, {
-                            terminalCommand: value.trim().length === 0 ? null : value,
-                          }),
-                        onchange: (value: string) =>
-                          update(current, {
-                            terminalCommand: value.trim().length === 0 ? null : value,
-                          }),
-                      }),
-                    ]),
+                          m('.row', [
+                            m(Switch, {
+                              className: 'col s12 m6',
+                              label: t('settings', 'terminalAssistant'),
+                              checked: activeDraft.terminalAssistant,
+                              left: t('settings', 'off'),
+                              right: t('settings', 'on'),
+                              onchange: (checked: boolean) =>
+                                update(current, { terminalAssistant: checked }),
+                            }),
+                            m(Switch, {
+                              className: 'col s12 m6',
+                              label: t('settings', 'terminalFollowPane'),
+                              checked: activeDraft.terminalFollowPane,
+                              left: t('settings', 'off'),
+                              right: t('settings', 'on'),
+                              onchange: (checked: boolean) =>
+                                update(current, { terminalFollowPane: checked }),
+                            }),
+                            m(Switch, {
+                              className: 'col s12 m6',
+                              label: t('settings', 'terminalAutoRunReadOnly'),
+                              checked: activeDraft.terminalAutoRunReadOnly,
+                              left: t('settings', 'off'),
+                              right: t('settings', 'on'),
+                              onchange: (checked: boolean) =>
+                                update(current, { terminalAutoRunReadOnly: checked }),
+                            }),
+                            m(Switch, {
+                              className: 'col s12 m6',
+                              label: t('settings', 'terminalAllowFileWrites'),
+                              checked: activeDraft.terminalAllowFileWrites,
+                              left: t('settings', 'off'),
+                              right: t('settings', 'on'),
+                              onchange: (checked: boolean) =>
+                                update(current, { terminalAllowFileWrites: checked }),
+                            }),
+                            // Reading is low-risk: no prompt per page, each read is a step line (0363).
+                            m(Switch, {
+                              className: 'col s12 m6',
+                              label: t('settings', 'assistantWebAccess'),
+                              checked: activeDraft.assistantWebAccess,
+                              left: t('settings', 'off'),
+                              right: t('settings', 'on'),
+                              onchange: (checked: boolean) =>
+                                update(current, { assistantWebAccess: checked }),
+                            }),
+                            // Session summaries become notes in sessions/ of the notes folder (0358).
+                            m(Switch, {
+                              className: 'col s12 m6',
+                              label: t('settings', 'assistantSessionMemory'),
+                              checked: activeDraft.assistantSessionMemory,
+                              left: t('settings', 'off'),
+                              right: t('settings', 'on'),
+                              onchange: (checked: boolean) =>
+                                update(current, { assistantSessionMemory: checked }),
+                            }),
+                            m(Switch, {
+                              className: 'col s12 m6',
+                              label: t('settings', 'terminalHideFunctionKeys'),
+                              checked: activeDraft.terminalHideFunctionKeys,
+                              left: t('settings', 'off'),
+                              right: t('settings', 'on'),
+                              onchange: (checked: boolean) =>
+                                update(current, { terminalHideFunctionKeys: checked }),
+                            }),
+                          ]),
 
-                    m('.row', [
-                      m(Switch, {
-                        className: 'col s12 m6',
-                        label: t('settings', 'terminalAssistant'),
-                        checked: activeDraft.terminalAssistant,
-                        left: t('settings', 'off'),
-                        right: t('settings', 'on'),
-                        onchange: (checked: boolean) =>
-                          update(current, { terminalAssistant: checked }),
-                      }),
-                      m(Switch, {
-                        className: 'col s12 m6',
-                        label: t('settings', 'terminalFollowPane'),
-                        checked: activeDraft.terminalFollowPane,
-                        left: t('settings', 'off'),
-                        right: t('settings', 'on'),
-                        onchange: (checked: boolean) =>
-                          update(current, { terminalFollowPane: checked }),
-                      }),
-                      m(Switch, {
-                        className: 'col s12 m6',
-                        label: t('settings', 'terminalAutoRunReadOnly'),
-                        checked: activeDraft.terminalAutoRunReadOnly,
-                        left: t('settings', 'off'),
-                        right: t('settings', 'on'),
-                        onchange: (checked: boolean) =>
-                          update(current, { terminalAutoRunReadOnly: checked }),
-                      }),
-                      m(Switch, {
-                        className: 'col s12 m6',
-                        label: t('settings', 'terminalAllowFileWrites'),
-                        checked: activeDraft.terminalAllowFileWrites,
-                        left: t('settings', 'off'),
-                        right: t('settings', 'on'),
-                        onchange: (checked: boolean) =>
-                          update(current, { terminalAllowFileWrites: checked }),
-                      }),
-                      // Reading is low-risk: no prompt per page, each read is a step line (0363).
-                      m(Switch, {
-                        className: 'col s12 m6',
-                        label: t('settings', 'assistantWebAccess'),
-                        checked: activeDraft.assistantWebAccess,
-                        left: t('settings', 'off'),
-                        right: t('settings', 'on'),
-                        onchange: (checked: boolean) =>
-                          update(current, { assistantWebAccess: checked }),
-                      }),
-                      // Session summaries become notes in sessions/ of the notes folder (0358).
-                      m(Switch, {
-                        className: 'col s12 m6',
-                        label: t('settings', 'assistantSessionMemory'),
-                        checked: activeDraft.assistantSessionMemory,
-                        left: t('settings', 'off'),
-                        right: t('settings', 'on'),
-                        onchange: (checked: boolean) =>
-                          update(current, { assistantSessionMemory: checked }),
-                      }),
-                      m(Switch, {
-                        className: 'col s12 m6',
-                        label: t('settings', 'terminalHideFunctionKeys'),
-                        checked: activeDraft.terminalHideFunctionKeys,
-                        left: t('settings', 'off'),
-                        right: t('settings', 'on'),
-                        onchange: (checked: boolean) =>
-                          update(current, { terminalHideFunctionKeys: checked }),
-                      }),
-                    ]),
+                          m(ToolCallingStatus, { client: current.client }),
 
-                    m(ToolCallingStatus, { client: current.client }),
-
-                    m('.row', [
-                      m('.col.s12.fm-settings-terminal-apps', [
-                        m(
-                          'label',
-                          { for: 'settings-terminal-apps' },
-                          t('settings', 'terminalApps'),
-                        ),
-                        m('textarea#settings-terminal-apps.browser-default', {
-                          rows: 5,
-                          spellcheck: false,
-                          value: terminalAppsText,
-                          oninput: (event: InputEvent) => {
-                            terminalAppsText = (event.currentTarget as HTMLTextAreaElement).value;
-                            update(current, { terminalApps: parseTerminalApps(terminalAppsText) });
-                          },
-                        }),
-                        m('p.helper-text', t('settings', 'terminalAppsHelp')),
-                      ]),
-                    ]),
-
-                    current.onOpenNotesSetup === undefined
-                      ? undefined
-                      : m(NotesSettingsSection, {
-                          client: current.client,
-                          onChangeFolder: current.onOpenNotesSetup,
-                          onIndexFolder: current.onIndexNotes,
-                        }),
-
-                    m('.row', [
-                      m('.col.s12', [
-                        m('label', t('settings', 'fileTemplates')),
-                        m(FileTemplatesEditor, {
-                          templates: activeDraft.fileTemplates,
-                          onChange: (fileTemplates) => update(current, { fileTemplates }),
-                          folder: activeDraft.templateFolder,
-                          onFolderChange: (templateFolder) => update(current, { templateFolder }),
-                        }),
-                        m('p.helper-text', t('settings', 'fileTemplatesHelp')),
-                      ]),
-                    ]),
-
-                    m('.row', m('h4.fm-settings-section-heading.col.s12', t('settings', 'editor'))),
-                    m('.row', [
-                      m(TextInput, {
-                        label: t('settings', 'editorCommand'),
-                        value: activeDraft.editorCommand ?? '',
-                        placeholder: t('settings', 'systemDefault'),
-                        oninput: (value: string) =>
-                          update(current, {
-                            editorCommand: value.trim().length === 0 ? null : value,
-                          }),
-                        onchange: (value: string) =>
-                          update(current, {
-                            editorCommand: value.trim().length === 0 ? null : value,
-                          }),
-                      }),
-                    ]),
+                          m('.row', [
+                            m('.col.s12.fm-settings-terminal-apps', [
+                              m(
+                                'label',
+                                { for: 'settings-terminal-apps' },
+                                t('settings', 'terminalApps'),
+                              ),
+                              m('textarea#settings-terminal-apps.browser-default', {
+                                rows: 5,
+                                spellcheck: false,
+                                value: terminalAppsText,
+                                oninput: (event: InputEvent) => {
+                                  terminalAppsText = (event.currentTarget as HTMLTextAreaElement)
+                                    .value;
+                                  update(current, {
+                                    terminalApps: parseTerminalApps(terminalAppsText),
+                                  });
+                                },
+                              }),
+                              m('p.helper-text', t('settings', 'terminalAppsHelp')),
+                            ]),
+                          ]),
+                        ]
+                      : undefined,
+                    activeFilesPart === 'notes'
+                      ? [
+                          current.onOpenNotesSetup === undefined
+                            ? undefined
+                            : m(NotesSettingsSection, {
+                                client: current.client,
+                                onChangeFolder: current.onOpenNotesSetup,
+                                onIndexFolder: current.onIndexNotes,
+                              }),
+                        ]
+                      : undefined,
+                    activeFilesPart === 'fileTemplates'
+                      ? [
+                          m(
+                            '.row',
+                            m(
+                              'h4.fm-settings-section-heading.col.s12',
+                              t('settings', 'fileTemplates'),
+                            ),
+                          ),
+                          m('.row', [
+                            m('.col.s12', [
+                              m(FileTemplatesEditor, {
+                                templates: activeDraft.fileTemplates,
+                                onChange: (fileTemplates) => update(current, { fileTemplates }),
+                                folder: activeDraft.templateFolder,
+                                onFolderChange: (templateFolder) =>
+                                  update(current, { templateFolder }),
+                              }),
+                              m('p.helper-text', t('settings', 'fileTemplatesHelp')),
+                            ]),
+                          ]),
+                        ]
+                      : undefined,
+                    activeFilesPart === 'editor'
+                      ? [
+                          m(
+                            '.row',
+                            m('h4.fm-settings-section-heading.col.s12', t('settings', 'editor')),
+                          ),
+                          m('.row', [
+                            m(TextInput, {
+                              label: t('settings', 'editorCommand'),
+                              value: activeDraft.editorCommand ?? '',
+                              placeholder: t('settings', 'systemDefault'),
+                              oninput: (value: string) =>
+                                update(current, {
+                                  editorCommand: value.trim().length === 0 ? null : value,
+                                }),
+                              onchange: (value: string) =>
+                                update(current, {
+                                  editorCommand: value.trim().length === 0 ? null : value,
+                                }),
+                            }),
+                          ]),
+                        ]
+                      : undefined,
                   ]
                 : undefined,
 

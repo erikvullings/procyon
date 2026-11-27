@@ -3398,6 +3398,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                 shellState.notesState = state;
               },
               getWorkspaceId: () => shellState.workspace?.id,
+              showFolder: async (location) => {
+                const paneId = shellState.workspace?.activePaneId;
+                if (paneId !== undefined) await shellState.navigation.navigate(paneId, location);
+              },
               toast: (message) => {
                 toast({ html: message });
               },

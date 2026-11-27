@@ -4,6 +4,7 @@ import 'mithril-materialized/components.css';
 import 'mithril-materialized/utilities.css';
 import 'mithril-materialized/presets/compact-minimal.css';
 import './themes/theme.css';
+import './themes/checkboxes.css';
 import './themes/mithril-materialized-procyon.css';
 
 import m from 'mithril';

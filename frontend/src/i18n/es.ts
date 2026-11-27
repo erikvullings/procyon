@@ -436,6 +436,7 @@ export const es = {
     templateFolderHelp:
       'Los archivos de texto de esta carpeta también se ofrecen en «Nuevo archivo desde plantilla». Déjelo vacío para desactivarlo.',
     templateEnabled: 'Activada',
+    templateOpenInEditor: 'Abrir en el editor',
     templateLabel: 'Nombre',
     templateFileName: 'Nombre de archivo sugerido',
     templateBody: 'Contenido',
@@ -1293,6 +1294,7 @@ export const es = {
     copy: 'Copiar',
     waitingForModel:
       'Esperando al modelo. La primera respuesta puede tardar un minuto mientras se carga.',
+    replyCutOff: 'El modelo alcanzó su límite de salida antes de terminar la respuesta.',
     imagesNotSupported: 'El endpoint de chat no acepta imágenes. Márcalo primero en Ajustes.',
     imageLimit: 'Máximo 4 imágenes por mensaje.',
     imageFailed: 'No se pudo leer la imagen.',
