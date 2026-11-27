@@ -1,13 +1,9 @@
-//! The assistant's one write tool (task 0338): create a new `.md` or `.txt` file in a fixed output
-//! folder under the working folder. It can never replace a file, never leaves that folder and
-//! never writes names that start programs or hold credentials, so it stays harmless even when a
-//! document the assistant read tells it to write somewhere else. It works through the VFS
-//! provider, so a local and an SSH folder behave the same.
+//! Bounded, create-only Markdown and text writes in the terminal working directory.
 
 use std::sync::Arc;
 
-use fm_domain::{EntryId, EntryKind, Location};
-use fm_vfs::{EntryRef, FileSystemProvider, ProviderRegistry, VfsError, WriteOptions};
+use fm_domain::Location;
+use fm_vfs::{FileSystemProvider, ProviderRegistry, VfsError, WriteOptions};
 use thiserror::Error;
 use tokio::io::AsyncWriteExt as _;
 use tokio_util::sync::CancellationToken;
@@ -15,8 +11,6 @@ use tokio_util::sync::CancellationToken;
 use fm_agent::is_secret_name;
 use fm_agent::redact_secrets;
 
-/// The folder under the working folder where files are created.
-pub(super) const OUTPUT_FOLDER: &str = "summaries";
 /// Largest file the assistant creates.
 pub(super) const MAX_FILE_BYTES: usize = 64 * 1024;
 /// Most files created for one question.
@@ -46,10 +40,12 @@ pub(super) enum WriteError {
         MAX_BYTES_PER_QUESTION / 1024
     )]
     QuestionLimit,
-    #[error("The output folder {OUTPUT_FOLDER}/ is not usable.")]
+    #[error("The working folder is not usable.")]
     Folder,
     #[error("{0} could not be created.")]
     Failed(String),
+    #[error("{0} already exists. Use edit_file to propose a change to it.")]
+    Exists(String),
 }
 
 /// A file that was created.
@@ -57,6 +53,7 @@ pub(super) enum WriteError {
 pub(super) struct Created {
     /// The name it got, which differs from the requested one when that was taken.
     pub(super) name: String,
+    pub(super) tool_path: String,
     pub(super) bytes: usize,
     /// Values replaced because they looked like secrets.
     pub(super) redacted: usize,
@@ -65,18 +62,14 @@ pub(super) struct Created {
 impl Created {
     /// The line for the person.
     pub(super) fn step(&self) -> String {
-        format!(
-            "Created {OUTPUT_FOLDER}/{} ({})",
-            self.name,
-            size_text(self.bytes)
-        )
+        format!("Created ./{} ({})", self.name, size_text(self.bytes))
     }
 
     /// The text for the model: the final name, which may differ from the requested one.
     pub(super) fn result(&self) -> String {
         let mut text = format!(
-            "Created {OUTPUT_FOLDER}/{} ({}). Existing files are never changed.",
-            self.name,
+            "Created {} ({}). Use this path with read_file or edit_file.",
+            self.tool_path,
             size_text(self.bytes)
         );
         if self.redacted > 0 {
@@ -118,6 +111,40 @@ pub(super) fn valid_name(name: &str) -> bool {
         && !stem.to_ascii_lowercase().contains("credential")
 }
 
+/// Recognises a direct creation instruction naming this destination in the person's question.
+pub(super) fn explicit_destination(question: &str, name: &str) -> bool {
+    question
+        .split_inclusive(['\n', ';', '!', '?'])
+        .any(|clause| {
+            let words: Vec<_> = clause.split_whitespace().collect();
+            !words.iter().any(|word| {
+                matches!(
+                    word.to_ascii_lowercase().as_str(),
+                    "not" | "don't" | "never" | "without" | "if"
+                )
+            }) && words.iter().enumerate().any(|(index, word)| {
+                if !matches!(
+                    word.to_ascii_lowercase().as_str(),
+                    "write" | "create" | "save"
+                ) {
+                    return false;
+                }
+                let tail = &words[index + 1..];
+                let is_name = |word: &str| {
+                    let word = word
+                        .trim_end_matches(['.', ',', '!', '?', ';'])
+                        .trim_matches(['`', '"', '\'']);
+                    word == name || word.strip_prefix("./") == Some(name)
+                };
+                tail.first().is_some_and(|word| is_name(word))
+                    || tail.windows(2).any(|pair| {
+                        matches!(pair[0].to_ascii_lowercase().as_str(), "to" | "into" | "as")
+                            && is_name(pair[1])
+                    })
+            })
+        })
+}
+
 /// Whether a file with this name and content may be created at all.
 pub(super) fn check(name: &str, content: &str) -> Result<(), WriteError> {
     if !valid_name(name) {
@@ -129,26 +156,46 @@ pub(super) fn check(name: &str, content: &str) -> Result<(), WriteError> {
     Ok(())
 }
 
-/// Creates files in the output folder of one working folder.
+/// Creates files in the shell working directory.
 #[derive(Clone)]
 pub(super) struct FileWriter {
     provider: Arc<dyn FileSystemProvider>,
     root: Location,
+    tool_prefix: String,
 }
 
 impl FileWriter {
     /// `None` when no provider serves the working folder.
-    pub(super) fn open(providers: &ProviderRegistry, working_directory: &str) -> Option<Self> {
+    pub(super) fn open(
+        providers: &ProviderRegistry,
+        working_directory: &str,
+        tools_folder: &str,
+    ) -> Option<Self> {
         let root = providers.parse(working_directory).ok()?;
         let provider = providers.resolve(&root).ok()?;
-        Some(Self { provider, root })
+        let relative = working_directory
+            .trim_end_matches('/')
+            .strip_prefix(tools_folder.trim_end_matches('/'))
+            .unwrap_or_default()
+            .trim_matches('/');
+        let tool_prefix = percent_encoding::percent_decode_str(relative)
+            .decode_utf8_lossy()
+            .into_owned();
+        Some(Self {
+            provider,
+            root,
+            tool_prefix,
+        })
     }
 
-    /// Creates `name` with `content` in the output folder. The folder is created when missing;
-    /// a name that is taken gets `-2`, `-3`, ... before its extension.
-    pub(super) async fn create(&self, name: &str, content: &str) -> Result<Created, WriteError> {
+    /// Creates a new file, optionally choosing a numbered suffix on collision.
+    pub(super) async fn create(
+        &self,
+        name: &str,
+        content: &str,
+        allow_suffix: bool,
+    ) -> Result<Created, WriteError> {
         check(name, content)?;
-        let folder = self.output_folder().await?;
         let text = redact_secrets(content);
         let redacted = text
             .matches("[redacted")
@@ -161,7 +208,8 @@ impl FileWriter {
             } else {
                 format!("{stem}-{attempt}.{extension}")
             };
-            let destination = folder
+            let destination = self
+                .root
                 .join(&candidate)
                 .map_err(|_| WriteError::Name(name.to_owned()))?;
             match self
@@ -181,45 +229,23 @@ impl FileWriter {
                     .await;
                     return written
                         .map(|()| Created {
+                            tool_path: if self.tool_prefix.is_empty() {
+                                candidate.clone()
+                            } else {
+                                format!("{}/{candidate}", self.tool_prefix)
+                            },
                             name: candidate.clone(),
                             bytes: text.len(),
                             redacted,
                         })
                         .map_err(|_| WriteError::Failed(candidate));
                 }
-                Err(VfsError::AlreadyExists { .. }) => continue,
+                Err(VfsError::AlreadyExists { .. }) if allow_suffix => continue,
+                Err(VfsError::AlreadyExists { .. }) => return Err(WriteError::Exists(candidate)),
                 Err(_) => return Err(WriteError::Failed(candidate)),
             }
         }
         Err(WriteError::Failed(name.to_owned()))
-    }
-
-    /// The output folder, created when it is missing. A link or a file of that name is refused.
-    async fn output_folder(&self) -> Result<Location, WriteError> {
-        let folder = self
-            .root
-            .join(OUTPUT_FOLDER)
-            .map_err(|_| WriteError::Folder)?;
-        let entry = EntryRef {
-            id: EntryId::new(),
-            location: folder.clone(),
-        };
-        match self
-            .provider
-            .inspect(&entry, CancellationToken::new())
-            .await
-        {
-            Ok(summary) if summary.kind == EntryKind::Directory => Ok(folder),
-            Ok(_) => Err(WriteError::Folder),
-            Err(VfsError::NotFound { .. }) => {
-                self.provider
-                    .create_directory(&self.root, OUTPUT_FOLDER, CancellationToken::new())
-                    .await
-                    .map_err(|_| WriteError::Folder)?;
-                Ok(folder)
-            }
-            Err(_) => Err(WriteError::Folder),
-        }
     }
 }
 

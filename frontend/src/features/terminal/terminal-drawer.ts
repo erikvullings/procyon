@@ -22,6 +22,7 @@ import type {
 } from '../../models';
 import { isThinkingEffort } from '../../models/llm-profile';
 import type { TerminalShellIntegration } from '../../models/settings';
+import { handleTextareaLineKey } from '../../utilities/textarea-line-key';
 import { thinkingLabel } from '../settings/llm-role-management';
 import {
   createAnswerStream,
@@ -87,7 +88,7 @@ import {
   transcriptTail,
 } from './terminal-assist';
 import type { TerminalClient } from './terminal-client';
-import { absolutePathOf, cdCommand } from './terminal-paths';
+import { absolutePathOf, cdCommand, fileUriOfPath } from './terminal-paths';
 import { applyTypedInput, EMPTY_INPUT, suggestionRemainder, type TypedInput } from './typed-input';
 
 /** What the file manager shows beside the terminal; the assistant may be told about it. */
@@ -350,6 +351,8 @@ type LiveTerminal = {
   typed: TypedInput;
   /** The folder the pane and the shell were last known to share; see `followPane`. */
   folder: string | undefined;
+  /** Last working directory reported by the shell, independent of pane navigation. */
+  shellDirectory: string | undefined;
   /** Commands run in this session, oldest first, for suggestions. */
   history: string[];
   /** The local shell's own history, oldest first, behind this terminal's commands (task 0333). */
@@ -774,7 +777,11 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     // Without command blocks the visible output stands in for the last command.
     const visible = scrollback && blocks.length === 0 ? scrollbackTranscript(live) : '';
     return {
-      listing: pane?.listing ?? [],
+      listing:
+        live.shellDirectory === undefined ||
+        live.shellDirectory === currentAttrs?.location?.uri.replace(/\/$/, '')
+          ? (pane?.listing ?? [])
+          : [],
       selected: pane?.selected ?? [],
       otherFolder: pane?.otherFolder,
       blocks:
@@ -802,7 +809,12 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   ): void {
     if (isBusy(live)) return;
     live.assistActive = true;
-    if (currentAttrs?.location !== undefined) live.assistRoot ??= currentAttrs.location;
+    if (currentAttrs?.location !== undefined) {
+      live.assistRoot ??= {
+        ...currentAttrs.location,
+        uri: live.shellDirectory ?? currentAttrs.location.uri,
+      };
+    }
     live.held = [];
     if (options.keepTypedLine === true && (live.typed.text !== '' || !live.typed.known)) {
       writeToShell(live, '\x15');
@@ -846,6 +858,14 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     // Lines and steps are written as they arrive; the reply then only says what to offer next.
     const answer = createAnswerStream(live.terminal.cols);
     let streamed = false;
+    // Approvals and command results resume with the shell prompt visible. A fresh question
+    // already printed its own line break.
+    let startBelowPrompt = input.question === undefined;
+    const writeOutput = (text: string): void => {
+      if (text === '') return;
+      live.terminal.write(startBelowPrompt ? `\r\n${text}` : text);
+      startBelowPrompt = false;
+    };
     const onEvent = (event: TerminalAssistEvent): void => {
       if (token !== live.requestId) return;
       // A report of a long tool call shows in the status line until the next event.
@@ -858,21 +878,19 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       if (event.kind === 'steered') {
         const index = live.steering.indexOf(event.text);
         if (index >= 0) live.steering.splice(index, 1);
-        live.terminal.write(questionAnsi(event.text, live.terminal.cols));
+        writeOutput(questionAnsi(event.text, live.terminal.cols));
         m.redraw();
         return;
       }
       streamed = true;
-      live.terminal.write(
-        event.kind === 'step' ? stepsAnsi([event.text]) : answer.line(event.text),
-      );
+      writeOutput(event.kind === 'step' ? stepsAnsi([event.text]) : answer.line(event.text));
     };
     attrs.client
       .assist(
         {
           kind: 'ask',
           transcript: '',
-          workingDirectory: attrs.location.uri,
+          workingDirectory: live.shellDirectory ?? attrs.location.uri,
           sessionId: live.assistSession,
           ...(attrs.workspaceId === undefined ? {} : { workspaceId: attrs.workspaceId }),
           ...(input.question === undefined ? {} : { request: input.question }),
@@ -892,10 +910,17 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       .then((reply) => {
         // The assistant may have created files or run commands.
         markStale(live);
-        presentReply(live, token, reply, streamed);
+        presentReply(live, token, reply, streamed, startBelowPrompt);
       })
       .catch((error: unknown) =>
-        present(live, token, noticeAnsi(assistFailureText(String(error))), undefined),
+        present(
+          live,
+          token,
+          noticeAnsi(assistFailureText(String(error))),
+          undefined,
+          undefined,
+          startBelowPrompt,
+        ),
       )
       .finally(() => m.redraw());
   }
@@ -906,6 +931,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     token: number,
     reply: TerminalAssistReply,
     streamed: boolean,
+    startBelowPrompt: boolean,
   ): void {
     // A streamed answer is already in the terminal; only a host that cannot stream gets it now.
     let text = streamed ? '' : stepsAnsi(reply.steps ?? []);
@@ -952,7 +978,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         next = { status: 'suggest', tabKey: live.key, command: cleanCommand(command) };
       }
     }
-    present(live, token, text, next, autoRun);
+    present(live, token, text, next, autoRun, startBelowPrompt);
   }
 
   /** The working and home folders of a tab's shell, as native paths when they are known. */
@@ -973,6 +999,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     text: string,
     next: AssistPanel | undefined,
     thenRun?: string,
+    startBelowPrompt = false,
   ): void {
     if (token !== live.requestId) return;
     panel = next;
@@ -981,7 +1008,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       if (thenRun !== undefined && token === live.requestId) runApproved(live, thenRun);
     };
     if (text === '') done();
-    else live.terminal.write(`\r\x1b[2K${text}`, done);
+    else live.terminal.write(`${startBelowPrompt ? '\r\n' : '\r\x1b[2K'}${text}`, done);
   }
 
   /** Asks the shell for a fresh prompt, puts back a half-typed command, and sends held keys. */
@@ -1087,7 +1114,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     attrs.onSaveAsNote({
       ...(live.assistActive ? { sessionId: live.assistSession } : {}),
       blocks: assistSource(live, undefined, true).blocks ?? [],
-      workingDirectory: attrs.location.uri,
+      workingDirectory: live.shellDirectory ?? attrs.location.uri,
     });
     return true;
   }
@@ -1104,7 +1131,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       .assist({
         kind: 'ask',
         transcript: '',
-        workingDirectory: currentAttrs.location?.uri ?? '',
+        workingDirectory: live.shellDirectory ?? currentAttrs.location?.uri ?? '',
         sessionId: live.assistSession,
         editDecision: 'decline',
       })
@@ -1122,7 +1149,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       .assist({
         kind: 'ask',
         transcript: '',
-        workingDirectory: currentAttrs.location?.uri ?? '',
+        workingDirectory: live.shellDirectory ?? currentAttrs.location?.uri ?? '',
         sessionId: live.assistSession,
         writeDecision: 'decline',
       })
@@ -1137,7 +1164,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
       .assist({
         kind: 'ask',
         transcript: '',
-        workingDirectory: currentAttrs.location?.uri ?? '',
+        workingDirectory: live.shellDirectory ?? currentAttrs.location?.uri ?? '',
         sessionId: live.assistSession,
         toolResult: { command, declined: true },
       })
@@ -1215,6 +1242,9 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
   /** Records a shell mark; a finished command becomes a block with its own actions. */
   /** The shell reported its folder: the pane follows, unless it is already there. */
   function shellFolderChanged(live: LiveTerminal, path: string): void {
+    const localUri = fileUriOfPath(path);
+    live.shellDirectory =
+      live.host === 'local' ? localUri : `${live.host}${localUri.slice('file://'.length)}`;
     if (live.folder === path) return;
     live.folder = path;
     const attrs = currentAttrs;
@@ -1630,7 +1660,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     // The drawer's toggle keys still reach the file manager.
     if (toggle) return;
     event.stopPropagation();
-    if (event.isComposing) return;
+    if (event.isComposing || handleTextareaLineKey(event, input)) return;
     if ((text === '' || event.key === 'Escape' || chord) && assistantKey(event)) {
       used();
       return;
@@ -1762,12 +1792,15 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
     switch (name) {
       case 'new': {
         forget();
-        live.assistRoot = attrs.location;
+        live.assistRoot =
+          attrs.location === undefined
+            ? undefined
+            : { ...attrs.location, uri: live.shellDirectory ?? attrs.location.uri };
         live.fileCache = undefined;
         live.fileLoad = undefined;
         live.skillCache = undefined;
         live.assistActive = false;
-        const folder = attrs.location?.uri ?? '';
+        const folder = live.assistRoot?.uri ?? '';
         showCommandOutput(live, question, infoAnsi([t('terminal', 'slashNew', { folder })]));
         return;
       }
@@ -2101,6 +2134,7 @@ export const TerminalDrawer: FactoryComponent<TerminalDrawerAttrs> = () => {
         decorations,
         typed: EMPTY_INPUT,
         folder: undefined,
+        shellDirectory: undefined,
         history: [],
         shellHistory: [],
         questions: [],

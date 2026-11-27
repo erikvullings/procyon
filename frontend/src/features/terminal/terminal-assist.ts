@@ -40,7 +40,7 @@ export type TerminalWriteDecision = 'question' | 'session' | 'decline';
 
 /** A file the assistant wants to create, waiting for approval (task 0338). */
 export interface TerminalWriteRequest {
-  /** The output folder as shown to the person, for example `./summaries/`. */
+  /** The output folder as shown to the person, for example `./`. */
   readonly folder: string;
   readonly name: string;
   readonly bytes: number;

@@ -5,6 +5,10 @@ Priority: medium
 Subsystem: backend, agent, frontend
 Depends on: none
 
+**Prepending text.** The tool also accepts `{ path, prepend: true, new_text }` for an insertion
+at the start of a file. Include any separator newlines in `new_text`. Prepending uses the same
+path checks, diff and approval as a replacement.
+
 ## Context
 
 Part of 0351. The assistant can only create new `.md`/`.txt` files in `summaries/`

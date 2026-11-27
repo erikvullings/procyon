@@ -73,6 +73,27 @@ describe('ChatTab header', () => {
     );
   }
 
+  it('moves and extends the selection to the current chat line edges', () => {
+    render();
+    const input = root.querySelector('textarea') as HTMLTextAreaElement;
+    input.value = 'first\nsecond\nthird';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.setSelectionRange(9, 9);
+    const press = (key: string, shiftKey = false) =>
+      input.dispatchEvent(new KeyboardEvent('keydown', { key, shiftKey, cancelable: true }));
+    expect(press('Home', true)).toBe(false);
+    expect([input.selectionStart, input.selectionEnd, input.selectionDirection]).toEqual([
+      6,
+      9,
+      'backward',
+    ]);
+    expect(press('End', true)).toBe(false);
+    expect([input.selectionStart, input.selectionEnd]).toEqual([9, 12]);
+    expect(press('Home')).toBe(false);
+    expect([input.selectionStart, input.selectionEnd]).toEqual([6, 6]);
+    expect(input.value).toBe('first\nsecond\nthird');
+  });
+
   it('routes image items to attachment handling and keeps native text paste available', () => {
     const onPrepareImagePaste = vi.fn();
     const onPasteImages = vi.fn();

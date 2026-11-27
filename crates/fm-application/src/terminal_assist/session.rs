@@ -112,7 +112,7 @@ struct Session {
     /// Whether the model answered at least once.
     answered: bool,
     /// The file waiting for approval.
-    pending_write: Option<PendingWrite>,
+    pending_write: Option<(String, PendingWrite)>,
     /// The edit waiting for approval (task 0352).
     pending_edit: Option<PendingEdit>,
     /// Edits allowed without asking: `Some(true)` for the session, `Some(false)` for the question.
@@ -440,14 +440,22 @@ impl Sessions {
     }
 
     /// Holds a file until the person decides.
-    pub(super) fn hold_write(&self, id: &str, pending: PendingWrite) {
-        self.with(id, |session| session.pending_write = Some(pending));
+    pub(super) fn hold_write(&self, id: &str, folder: &str, pending: PendingWrite) {
+        self.with(id, |session| {
+            session.pending_write = Some((folder.to_owned(), pending))
+        });
     }
 
     /// The held file, which is no longer held.
-    pub(super) fn take_write(&self, id: &str) -> Option<PendingWrite> {
+    pub(super) fn take_write(&self, id: &str, folder: &str) -> Option<PendingWrite> {
         let mut taken = None;
-        self.with(id, |session| taken = session.pending_write.take());
+        self.with(id, |session| {
+            taken = session
+                .pending_write
+                .take()
+                .filter(|(held, _)| held == folder)
+                .map(|(_, pending)| pending)
+        });
         taken
     }
 

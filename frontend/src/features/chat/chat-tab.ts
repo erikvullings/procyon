@@ -20,6 +20,7 @@ import { tooltip } from '../../components/tooltip';
 import { t } from '../../i18n';
 import type { ChatConversationSummary, ThinkingEffort } from '../../models';
 import { isThinkingEffort, THINKING_EFFORTS } from '../../models/llm-profile';
+import { handleTextareaLineKey } from '../../utilities/textarea-line-key';
 import { safeMarkdownHtml } from '../editor/markdown-preview';
 import { thinkingLabel } from '../settings/llm-role-management';
 import { CHAT_IMAGE_MAX_COUNT, type PastedImage, pastedImageFiles } from './chat-image';
@@ -525,6 +526,8 @@ export const ChatTab: FactoryComponent<ChatTabAttrs> = () => {
                       draft = (event.target as HTMLTextAreaElement).value;
                     },
                     onkeydown: (event: KeyboardEvent) => {
+                      if (handleTextareaLineKey(event, event.currentTarget as HTMLTextAreaElement))
+                        return;
                       if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
                         event.preventDefault();
                         submit(attrs);

@@ -1135,6 +1135,46 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     );
   });
 
+  it('streams an approved edit continuation below the visible shell prompt', async () => {
+    assist.mockResolvedValueOnce({
+      text: '',
+      editRequest: { path: 'summaries.md', diff: '+Table', added: 1, removed: 0 },
+    });
+    assist.mockImplementationOnce(async (_request, onEvent) => {
+      onEvent?.({ kind: 'line', text: 'Expanding the table.' });
+      onEvent?.({ kind: 'step', text: 'Edited summaries.md' });
+      return { text: 'Expanding the table.', steps: ['Edited summaries.md'] };
+    });
+    await mount();
+    await markPrompt();
+    ask('# expand the table');
+    await vi.waitFor(() => expect(button('Allow')).toBeDefined());
+    await markPrompt();
+    button('Allow')?.click();
+
+    const rows = () =>
+      [...root.querySelectorAll('.xterm-rows > div')].map((row) => row.textContent?.trim());
+    await vi.waitFor(() => {
+      expect(rows()).toContain('user %');
+      expect(rows()).toContain('Expanding the table.');
+      expect(rows()).toContain('↳ Edited summaries.md');
+    });
+  });
+
+  it('moves to the current chat line edges without sending Home or End to the shell', async () => {
+    await mount();
+    typeLine('#');
+    const input = keyTarget(root, textarea());
+    typeInChat(input, 'first\nsecond\nthird');
+    input.setSelectionRange(9, 9);
+    key('Home', 36);
+    expect(input.selectionStart).toBe(6);
+    key('End', 35);
+    expect(input.selectionStart).toBe(12);
+    expect(input.value).toBe('first\nsecond\nthird');
+    expect(write).not.toHaveBeenCalled();
+  });
+
   it('shows what a long tool call reports in the status line until its step arrives', async () => {
     let finish: (() => void) | undefined;
     assist.mockImplementationOnce(
@@ -1829,6 +1869,30 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
     );
   });
 
+  it('uses the shell working directory for chat even when the pane stays put', async () => {
+    await mount();
+    await markPrompt();
+    echo?.({ type: 'output', data: bytes('\x1b]133;P;Cwd=/tmp/source files\x07') });
+    await markPrompt();
+    ask('# Write the report to summaries.md');
+    await vi.waitFor(() =>
+      expect(sentAt(0)).toMatchObject({
+        workingDirectory: 'file:///tmp/source%20files',
+        root: 'file:///tmp/source%20files',
+      }),
+    );
+    await markPrompt();
+    echo?.({ type: 'output', data: bytes('\x1b]133;P;Cwd=/tmp/source files/archive\x07') });
+    await markPrompt();
+    ask('# Edit it');
+    await vi.waitFor(() =>
+      expect(sentAt(1)).toMatchObject({
+        workingDirectory: 'file:///tmp/source%20files/archive',
+        root: 'file:///tmp/source%20files',
+      }),
+    );
+  });
+
   it('shows shell-reported commands in the context chip after history recall', async () => {
     await mount();
     for (const command of ['pwd', 'ls -la']) {
@@ -1873,13 +1937,13 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
   it('asks once before creating files and sends the choice back', async () => {
     assist.mockResolvedValueOnce({
       text: '',
-      writeRequest: { folder: './summaries/', name: 'a.md', bytes: 1300 },
+      writeRequest: { folder: './', name: 'a.md', bytes: 1300 },
     });
     await mount();
     await markPrompt();
     ask('# summarise the documents');
 
-    await vi.waitFor(() => expect(root.textContent).toContain('Create files in ./summaries/?'));
+    await vi.waitFor(() => expect(root.textContent).toContain('Create files in ./?'));
     expect(root.textContent).toContain('a.md (1.3 KiB)');
     expect(sentAt(0)?.allowFileWrites).toBe(true);
 
@@ -1892,7 +1956,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
   it('can allow file creation for the session', async () => {
     assist.mockResolvedValueOnce({
       text: '',
-      writeRequest: { folder: './summaries/', name: 'a.md', bytes: 10 },
+      writeRequest: { folder: './', name: 'a.md', bytes: 10 },
     });
     await mount();
     await markPrompt();
@@ -1907,7 +1971,7 @@ describe('TerminalDrawer assistant session (task 0336)', () => {
   it('declining file creation tells the session and shows nothing more', async () => {
     assist.mockResolvedValueOnce({
       text: '',
-      writeRequest: { folder: './summaries/', name: 'a.md', bytes: 10 },
+      writeRequest: { folder: './', name: 'a.md', bytes: 10 },
     });
     await mount();
     await markPrompt();

@@ -82,13 +82,12 @@ impl TypedTool<TerminalInterrupt> for WriteFile {
     }
 
     fn description(&self) -> &'static str {
-        // The folder name is `OUTPUT_FOLDER`; a test keeps the two in step.
-        "Creates a Markdown or text file in the folder summaries/ next to the working folder, \
-         after the person approves. Use a short plain file name ending in .md or .txt, without \
-         folders. It only creates new files and never changes an existing one: a taken name \
-         gets a number, and the result tells you the final name. To summarise documents, use \
-         summarize_file for each, then write the summaries; it keeps the documents out of the \
-         conversation. Use it only when the person asks for files."
+        "Creates a Markdown or text file in the current shell directory. Pass just the filename \
+         ending in .md or .txt. Use the exact output filename the person requested. The result \
+         gives the path to pass to read_file or edit_file. The host may ask for approval and \
+         never overwrites existing files with this tool. To summarise documents, use \
+         summarize_file for each, then write the summaries. Use this tool only when the person \
+         asks for files."
     }
 
     async fn run_typed(
@@ -100,7 +99,12 @@ impl TypedTool<TerminalInterrupt> for WriteFile {
             return ToolOutcome::error("Create file", "path must not be empty.");
         }
         ToolOutcome::Interrupt(TerminalInterrupt::WriteFile(PendingWrite {
-            name: args.path.trim().to_owned(),
+            name: args
+                .path
+                .trim()
+                .strip_prefix("./")
+                .unwrap_or(args.path.trim())
+                .to_owned(),
             content: args.content,
         }))
     }
@@ -108,13 +112,12 @@ impl TypedTool<TerminalInterrupt> for WriteFile {
 
 #[cfg(test)]
 mod tests {
-    use super::super::write::OUTPUT_FOLDER;
     use super::*;
 
     #[test]
     fn the_description_names_the_output_folder() {
         let description = TypedTool::<TerminalInterrupt>::description(&WriteFile);
-        assert!(description.contains(&format!("{OUTPUT_FOLDER}/")));
+        assert!(description.contains("current shell directory"));
     }
 
     #[test]

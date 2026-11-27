@@ -21,7 +21,7 @@ pub const MAX_EDITED_FILE_BYTES: usize = 1024 * 1024;
 pub struct EditRequest {
     /// File relative to the working folder.
     pub path: String,
-    /// The exact text to replace.
+    /// The exact text to replace. Empty for an explicit prepend operation.
     pub old_text: String,
     /// What replaces it.
     pub new_text: String,
@@ -100,6 +100,9 @@ pub fn match_edit(content: &str, edit: &EditRequest) -> Result<(String, EditMatc
     };
     let old = lines(&edit.old_text);
     let new = lines(&edit.new_text);
+    if old.is_empty() && !new.is_empty() {
+        return Ok((format!("{new}{content}"), EditMatch::Exact));
+    }
     if old == new {
         return Err(EditError::Unchanged);
     }
@@ -274,7 +277,9 @@ pub struct EditFileArgs {
     /// File relative to the working folder.
     path: String,
     /// The exact text to replace, with enough surrounding lines to occur once in the file.
-    old_text: String,
+    old_text: Option<String>,
+    /// Insert new_text at the beginning of the file. Omit old_text when true.
+    prepend: Option<bool>,
     /// The text that replaces it.
     new_text: String,
     /// Replace every occurrence instead of exactly one.
@@ -301,9 +306,10 @@ impl<I: From<EditRequest> + Send + 'static> TypedTool<I> for EditFile {
     }
 
     fn description(&self) -> &'static str {
-        "Changes an existing text file by replacing exact text. Read the file first and copy the \
-         text to replace exactly, with enough surrounding lines that it occurs once. Several \
-         changes to one file are several calls. The person sees each change and may decline it."
+        "Changes an existing text file. To insert at the start, send path, prepend: true, and \
+         new_text including any separator newlines. To replace text, send path, old_text and \
+         new_text; copy a unique block from read_file into old_text. The host may show a diff \
+         for approval."
     }
 
     fn effect(&self) -> ToolEffect {
@@ -320,13 +326,21 @@ impl<I: From<EditRequest> + Send + 'static> TypedTool<I> for EditFile {
         if is_secret_name(name) {
             return ToolOutcome::error(step, format!("{path} may hold secrets and is not edited."));
         }
-        if args.old_text.is_empty() {
+        let old_text = args.old_text.unwrap_or_default();
+        let prepend = args.prepend.unwrap_or_default();
+        if prepend && (!old_text.is_empty() || args.replace_all.unwrap_or_default()) {
             return ToolOutcome::error(
                 step,
-                "old_text must not be empty; to create a file use write_file.",
+                "prepend cannot be used with old_text or replace_all.",
             );
         }
-        if args.old_text.len() > MAX_EDIT_TEXT_BYTES || args.new_text.len() > MAX_EDIT_TEXT_BYTES {
+        if !prepend && old_text.is_empty() {
+            return ToolOutcome::error(
+                step,
+                "Supply old_text for replacement or prepend: true to insert at the start. To create a file, use write_file.",
+            );
+        }
+        if old_text.len() > MAX_EDIT_TEXT_BYTES || args.new_text.len() > MAX_EDIT_TEXT_BYTES {
             return ToolOutcome::error(
                 step,
                 format!(
@@ -337,7 +351,7 @@ impl<I: From<EditRequest> + Send + 'static> TypedTool<I> for EditFile {
         }
         ToolOutcome::Interrupt(I::from(EditRequest {
             path: path.to_owned(),
-            old_text: args.old_text,
+            old_text,
             new_text: args.new_text,
             replace_all: args.replace_all.unwrap_or(false),
         }))

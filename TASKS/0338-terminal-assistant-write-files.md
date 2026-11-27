@@ -5,6 +5,13 @@ Priority: medium
 Subsystem: backend, frontend, settings
 Depends on: 0336, 0337
 
+**Current behavior.** The terminal assistant creates Markdown and text files directly in the
+shell working directory. A direct request naming the output file authorizes creating that exact
+name. Collisions on that path are reported and existing files are preserved. Requests without a
+recognized destination use the usual batch approval. The creation result gives the path relative
+to the session's tool root so it can be passed to `read_file` and `edit_file`. The original
+implementation is recorded below.
+
 ## Context
 The terminal assistant (0336) reads (`list_dir`, `read_file` incl. PDF/Word/EPUB, `grep`), proposes
 notes for review (0337) and runs single-line commands after approval. It cannot write files. A
