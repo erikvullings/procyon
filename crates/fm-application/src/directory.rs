@@ -947,7 +947,7 @@ async fn annotate_git_status(
     git_status.annotate(&dir, entries).await;
 }
 
-async fn list_all(
+pub(crate) async fn list_all(
     provider: Arc<dyn FileSystemProvider>,
     location: &fm_domain::Location,
     cancellation: CancellationToken,

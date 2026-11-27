@@ -261,6 +261,7 @@ pub struct FileManagerService {
     providers: ProviderRegistry,
     archive_provider: Arc<ArchiveFileSystemProvider>,
     events: EventBus,
+    cleanup_jobs: crate::watched_folders::CleanupJobs,
     settings_store: SettingsStore,
     settings: Arc<Mutex<Settings>>,
     plugin_manager: PluginManager,
@@ -704,6 +705,7 @@ impl FileManagerService {
             providers,
             archive_provider,
             events: events.clone(),
+            cleanup_jobs: crate::watched_folders::CleanupJobs::default(),
             settings_store: settings_store.clone(),
             settings: settings_mutex.clone(),
             plugin_manager,
@@ -4122,6 +4124,47 @@ impl FileManagerService {
             &self.plugin_manager,
             &self.operations,
         )
+    }
+
+    /// Proposes initial cleanup moves without changing the folder or starting a watch.
+    pub async fn preview_watched_folder_cleanup(
+        &self,
+        root: &Location,
+        model: &dyn fm_agent::SideModel,
+        cancellation: tokio_util::sync::CancellationToken,
+    ) -> Result<crate::CleanupPreview, ApplicationError> {
+        crate::watched_folders::preview_cleanup(
+            &self.providers,
+            root,
+            model.input_bytes(),
+            cancellation,
+            |prompt| async move {
+                model
+                    .complete(crate::watched_folders::CLEANUP_INSTRUCTIONS, &prompt)
+                    .await
+                    .map_err(|error| ApplicationError::InvalidRequest(error.to_string()))
+            },
+        )
+        .await
+    }
+
+    /// Starts a read-only cleanup preview through the configured chat role.
+    pub fn start_watched_folder_cleanup(&self, root: Location) -> Result<Uuid, ApplicationError> {
+        self.cleanup_jobs
+            .start(self.providers.clone(), self.llm_profiles.clone(), root)
+    }
+
+    /// Collects a finished cleanup preview once, or returns no preview while the job is running.
+    pub fn take_watched_folder_cleanup(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<crate::CleanupPreview>, ApplicationError> {
+        self.cleanup_jobs.take(id)
+    }
+
+    /// Cancels and discards a cleanup preview.
+    pub fn cancel_watched_folder_cleanup(&self, id: Uuid) -> Result<(), ApplicationError> {
+        self.cleanup_jobs.cancel(id)
     }
 
     /// Returns the current application-wide settings.

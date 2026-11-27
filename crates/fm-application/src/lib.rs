@@ -113,6 +113,7 @@ mod thumbnails;
 mod transfer_conflicts;
 mod transfer_recovery;
 mod tree_walk;
+mod watched_folders;
 mod webdav;
 pub mod workspace;
 
@@ -124,3 +125,4 @@ pub use plugin_manager::PluginPanel;
 pub use rejection::Rejection;
 pub use service::FileManagerService;
 pub use service_config::ServiceConfig;
+pub use watched_folders::{CleanupMove, CleanupPreview};
