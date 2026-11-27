@@ -43,6 +43,8 @@ describe('file templates', () => {
   it('bundles an empty file template that stays closed in the editor', () => {
     const empty = DEFAULT_FILE_TEMPLATES.find((template) => template.id === 'empty');
     expect(empty).toMatchObject({ body: '', openInEditor: false });
+    const blank = DEFAULT_FILE_TEMPLATES.find((template) => template.id === 'blank');
+    expect(blank).toMatchObject({ body: '', openInEditor: true });
     const markdown = DEFAULT_FILE_TEMPLATES.find((template) => template.id === 'markdown');
     expect(markdown?.openInEditor).toBe(true);
     expect(expandTemplateBody(markdown?.body ?? '', 'Idea.md', new Date(2026, 10, 27))).toBe(

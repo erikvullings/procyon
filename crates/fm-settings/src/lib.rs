@@ -482,6 +482,10 @@ const DEFAULT_TEMPLATE_BODIES: &[(&str, &str)] = &[
         include_str!("../../../frontend/src/features/templates/defaults/json.tmpl"),
     ),
     (
+        "blank",
+        include_str!("../../../frontend/src/features/templates/defaults/blank.tmpl"),
+    ),
+    (
         "empty",
         include_str!("../../../frontend/src/features/templates/defaults/empty.tmpl"),
     ),
@@ -1910,7 +1914,7 @@ mod tests {
             serde_json::from_str(DEFAULT_TEMPLATE_INDEX).expect("index.json parses");
         assert_eq!(index.len(), DEFAULT_TEMPLATE_BODIES.len());
         assert_eq!(default_file_templates().len(), index.len());
-        assert_eq!(default_file_templates().len(), 12);
+        assert_eq!(default_file_templates().len(), 13);
         assert!(
             default_file_templates()
                 .iter()

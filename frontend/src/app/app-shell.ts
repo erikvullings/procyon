@@ -35,6 +35,7 @@ import {
   type ActionCommandControllerContext,
   createActionCommandController,
 } from '../features/actions/action-command-controller';
+import { oppositePaneId } from '../features/assistant/assistant-tab-state';
 import { ChangeAttributesDialog } from '../features/attributes/change-attributes-dialog';
 import {
   type ChecksumControllerContext,
@@ -3091,10 +3092,15 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     });
   }
 
-  /** Opens the new file in an editor in the active pane; returns that pane (task 0312). */
+  /**
+   * Opens the new file in an editor in the pane opposite the active one, so the folder stays in
+   * view; returns the editor's pane (task 0312).
+   */
   function openEditorForCreatedFileInPane(location: Location, name: string): PaneId | undefined {
     const active = activeDirectory();
     if (active === undefined) return undefined;
+    const paneOrder = shellState.workspace?.paneOrder ?? [];
+    const target = oppositePaneId(paneOrder, active.paneId) ?? active.paneId;
     refetchAffectedPanes(active.paneId);
     // The editor loads `entry.location`, so it must be the new file's own
     // location (the directory under the cursor joined with its name), not the
@@ -3104,7 +3110,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       providerId: location.providerId,
       uri: `${location.uri.replace(/\/$/u, '')}/${encodeURIComponent(name)}`,
     };
-    previewWiring.openEditor(shellState.client, active.paneId, {
+    previewWiring.openEditor(shellState.client, target, {
       id: crypto.randomUUID(),
       location: fileLocation,
       name,
@@ -3113,7 +3119,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       readOnly: false,
       metadataRevision: 0,
     });
-    return active.paneId;
+    return target;
   }
 
   const appDialogsContext: AppDialogsContext = {

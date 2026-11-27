@@ -10,5 +10,11 @@
   { "id": "gitignore", "label": "Git ignore", "fileName": ".gitignore" },
   { "id": "html", "label": "HTML page", "fileName": "index.html" },
   { "id": "json", "label": "JSON document", "fileName": "data.json" },
-  { "id": "empty", "label": "Empty file", "fileName": "New file", "openInEditor": false }
+  { "id": "blank", "label": "Blank file (opens in editor)", "fileName": "New file" },
+  {
+    "id": "empty",
+    "label": "Empty file (not opened)",
+    "fileName": "New file",
+    "openInEditor": false
+  }
 ]
