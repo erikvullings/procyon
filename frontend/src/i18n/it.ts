@@ -386,10 +386,14 @@ export const it = {
     viewerInSeparateWindow: 'Apri il visualizzatore (F3) in una finestra separata',
     pictureInfoSection: 'Immagini',
     documentHubSection: 'Hub documenti',
+    documentHubIntro:
+      'Una cartella virtuale che elenca tutti i file con una di queste estensioni nella cartella di base e nelle sottocartelle, raggruppati per estensione. Si apre dalla palette dei comandi: Hub documenti. I file non vengono spostati né copiati.',
     documentHubExtensions: 'Estensioni',
-    documentHubExtensionsHint: 'Separate da spazi o virgole, ad esempio pdf docx pptx',
+    documentHubExtensionsHint:
+      'Tipi di file da elencare, ad esempio pdf docx pptx. Separali con spazi o virgole.',
     documentHubBasePath: 'Cartella di base',
-    documentHubBasePathHint: 'Cercata incluse le sottocartelle. ~ è la cartella home.',
+    documentHubBasePathHint:
+      'La cartella da cercare, incluse tutte le sottocartelle. ~ è la cartella home.',
     documentHubReset: 'Ripristina predefiniti',
     pictureCaptionFields: 'Righe sotto le miniature',
     pictureTooltip: 'Mostra i dettagli dell’immagine al passaggio del mouse',

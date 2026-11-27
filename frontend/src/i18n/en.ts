@@ -380,10 +380,14 @@ export const en = {
     viewerInSeparateWindow: 'Open viewer (F3) in a separate window',
     pictureInfoSection: 'Pictures',
     documentHubSection: 'Document hub',
+    documentHubIntro:
+      'A virtual folder that lists every file with one of these extensions in the base folder and its subfolders, grouped by extension. Open it from the command palette: Document hub. Files are not moved or copied.',
     documentHubExtensions: 'Extensions',
-    documentHubExtensionsHint: 'Separated by spaces or commas, for example pdf docx pptx',
+    documentHubExtensionsHint:
+      'File types to list, for example pdf docx pptx. Separate them with spaces or commas.',
     documentHubBasePath: 'Base folder',
-    documentHubBasePathHint: 'Searched including subfolders. ~ is your home folder.',
+    documentHubBasePathHint:
+      'The folder to search, including all its subfolders. ~ is your home folder.',
     documentHubReset: 'Restore defaults',
     pictureCaptionFields: 'Lines under thumbnails',
     pictureTooltip: 'Show picture details when hovering',

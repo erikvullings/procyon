@@ -388,10 +388,14 @@ export const pt = {
     viewerInSeparateWindow: 'Abrir o visualizador (F3) numa janela separada',
     pictureInfoSection: 'Imagens',
     documentHubSection: 'Hub de documentos',
+    documentHubIntro:
+      'Uma pasta virtual que lista todos os ficheiros com uma destas extensões na pasta base e nas subpastas, agrupados por extensão. Abra-a pela paleta de comandos: Hub de documentos. Os ficheiros não são movidos nem copiados.',
     documentHubExtensions: 'Extensões',
-    documentHubExtensionsHint: 'Separadas por espaços ou vírgulas, por exemplo pdf docx pptx',
+    documentHubExtensionsHint:
+      'Tipos de ficheiro a listar, por exemplo pdf docx pptx. Separe-os com espaços ou vírgulas.',
     documentHubBasePath: 'Pasta base',
-    documentHubBasePathHint: 'Pesquisada com as subpastas. ~ é a sua pasta pessoal.',
+    documentHubBasePathHint:
+      'A pasta a pesquisar, incluindo todas as subpastas. ~ é a sua pasta pessoal.',
     documentHubReset: 'Repor predefinições',
     pictureCaptionFields: 'Linhas sob as miniaturas',
     pictureTooltip: 'Mostrar detalhes da imagem ao passar o rato',

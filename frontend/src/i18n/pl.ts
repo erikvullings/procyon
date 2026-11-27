@@ -386,10 +386,14 @@ export const pl = {
     viewerInSeparateWindow: 'Otwieraj podgląd (F3) w osobnym oknie',
     pictureInfoSection: 'Obrazy',
     documentHubSection: 'Centrum dokumentów',
+    documentHubIntro:
+      'Wirtualny folder, który wyświetla wszystkie pliki o jednym z tych rozszerzeń w folderze bazowym i jego podfolderach, pogrupowane według rozszerzenia. Otwórz z palety poleceń: Centrum dokumentów. Pliki nie są przenoszone ani kopiowane.',
     documentHubExtensions: 'Rozszerzenia',
-    documentHubExtensionsHint: 'Oddzielone spacjami lub przecinkami, na przykład pdf docx pptx',
+    documentHubExtensionsHint:
+      'Typy plików do wyświetlenia, na przykład pdf docx pptx. Oddziel je spacjami lub przecinkami.',
     documentHubBasePath: 'Folder bazowy',
-    documentHubBasePathHint: 'Przeszukiwany wraz z podfolderami. ~ to folder domowy.',
+    documentHubBasePathHint:
+      'Folder przeszukiwany wraz z wszystkimi podfolderami. ~ to folder domowy.',
     documentHubReset: 'Przywróć domyślne',
     pictureCaptionFields: 'Wiersze pod miniaturami',
     pictureTooltip: 'Pokaż szczegóły obrazu po najechaniu',

@@ -84,7 +84,7 @@ export const FileTemplatesEditor: FactoryComponent<FileTemplatesEditorAttrs> = (
         ]),
         shown === undefined
           ? m('p.helper-text', t('newFromTemplate', 'empty'))
-          : m('.fm-file-template', { key: shown.id }, [
+          : m('.fm-file-template', [
               m('.fm-file-template__head', [
                 m('label.fm-file-template__name', [
                   m('span', t('settings', 'templateLabel')),

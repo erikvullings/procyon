@@ -393,10 +393,14 @@ export const de = {
     viewerInSeparateWindow: 'Viewer (F3) in einem eigenen Fenster öffnen',
     pictureInfoSection: 'Bilder',
     documentHubSection: 'Dokumenten-Hub',
+    documentHubIntro:
+      'Ein virtueller Ordner, der alle Dateien mit einer dieser Endungen im Basisordner und seinen Unterordnern auflistet, nach Endung gruppiert. Öffnen über die Befehlspalette: Dokumenten-Hub. Dateien werden nicht verschoben oder kopiert.',
     documentHubExtensions: 'Dateiendungen',
-    documentHubExtensionsHint: 'Durch Leerzeichen oder Kommas getrennt, zum Beispiel pdf docx pptx',
+    documentHubExtensionsHint:
+      'Dateitypen, die aufgelistet werden, zum Beispiel pdf docx pptx. Durch Leerzeichen oder Kommas trennen.',
     documentHubBasePath: 'Basisordner',
-    documentHubBasePathHint: 'Wird einschließlich Unterordnern durchsucht. ~ ist Ihr Home-Ordner.',
+    documentHubBasePathHint:
+      'Der Ordner, der samt allen Unterordnern durchsucht wird. ~ ist Ihr Home-Ordner.',
     documentHubReset: 'Standardwerte wiederherstellen',
     pictureCaptionFields: 'Zeilen unter Vorschaubildern',
     pictureTooltip: 'Bilddetails beim Darüberfahren anzeigen',

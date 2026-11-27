@@ -54,7 +54,6 @@ function harness(options: {
     createDirectory: vi.fn(async () => operation('op-1', 'running')),
     createTextFile: vi.fn(async () => operation('op-1', 'running')),
   };
-  const shown: Location[] = [];
   const controller = createNotesController({
     getClient: () => client as unknown as NotesClientNeeds,
     getOps: () => ops as never,
@@ -63,13 +62,10 @@ function harness(options: {
       state = next;
     },
     getWorkspaceId: () => ('workspaceId' in options ? options.workspaceId : 'ws-1'),
-    showFolder: async (location) => {
-      shown.push(location);
-    },
     toast: (message) => toasts.push(message),
     redraw: () => undefined,
   });
-  return { controller, client, ops, toasts, shown: () => shown, state: () => state };
+  return { controller, client, ops, toasts, state: () => state };
 }
 
 const REQUEST = { blocks: [], workingDirectory: 'file:///etc/nginx/', sessionId: 't1' };
@@ -109,7 +105,6 @@ describe('notes setup', () => {
       true,
     );
     expect(h.client.setNotesRoot).toHaveBeenCalledTimes(2);
-    expect(h.shown()).toEqual([{ providerId: 'local', uri: 'file:///Users/me/Notes' }]);
     // Indexing is never confirmed here: the inline consent step decides.
     expect(h.state()).toEqual({
       phase: 'enrol',

@@ -8,6 +8,7 @@ import {
   DEFAULT_PICTURE_INFO_SETTINGS,
 } from '../../models/settings';
 import { DEFAULT_MAP_SETTINGS } from '../map/map-settings';
+import { DEFAULT_FILE_TEMPLATES } from '../templates/file-templates';
 import { SettingsEditor } from './settings-editor';
 
 let root: HTMLElement;
@@ -586,5 +587,39 @@ describe('SettingsEditor', () => {
     openSection('Plugins');
 
     expect(root.querySelector('.fm-plugin-row strong')?.textContent).toBe('Example plugin');
+  });
+});
+
+describe('Files & operations submenu', () => {
+  function clickButton(text: string): void {
+    const button = [...root.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent?.trim() === text,
+    );
+    if (button === undefined) throw new Error(`no button ${text}`);
+    button.click();
+    m.redraw.sync();
+  }
+
+  it('shows the file templates part without rendering errors', () => {
+    const errors = vi.spyOn(console, 'error');
+    const warnings = vi.spyOn(console, 'warn');
+    mountEditor({
+      settings: fixtureSettings({ fileTemplates: DEFAULT_FILE_TEMPLATES.slice(0, 3) }),
+    });
+    clickButton('Files & operations');
+    clickButton('File templates');
+    expect(root.querySelector('.fm-file-templates__select')).not.toBeNull();
+    expect(root.querySelector('.fm-file-template')).not.toBeNull();
+    expect(errors).not.toHaveBeenCalled();
+    expect(warnings).not.toHaveBeenCalled();
+  });
+
+  it('starts a section at its top after scrolling another one', () => {
+    mountEditor();
+    const body = root.querySelector<HTMLElement>('.fm-settings-editor-body');
+    if (body === null) throw new Error('no settings body');
+    body.scrollTop = 300;
+    clickButton('Keybindings');
+    expect(body.scrollTop).toBe(0);
   });
 });

@@ -1181,7 +1181,7 @@ impl FileManagerService {
             .semantic_library()
             .await
             .folder_status(access, &consent)?;
-        self.ensure_active_semantic_folder(&context).await?;
+        self.ensure_enrolment_folder(&context).await?;
         Ok(status)
     }
 
@@ -1219,7 +1219,7 @@ impl FileManagerService {
     ) -> Result<SemanticEnrolmentPreview, SemanticLibraryError> {
         let library = self.semantic_library().await;
         library.ensure_operation_allowed(access, SemanticLibraryOperation::PreviewEnrolment)?;
-        self.ensure_active_semantic_folder(&context).await?;
+        self.ensure_enrolment_folder(&context).await?;
         let context = self.semantic_consent_context(context).await;
         library.preview_enrolment_with_pdf_image_policy(
             access,
@@ -1245,7 +1245,7 @@ impl FileManagerService {
     ) -> Result<SemanticLibraryStatus, SemanticLibraryError> {
         let library = self.semantic_library().await;
         library.ensure_operation_allowed(access, SemanticLibraryOperation::Enrol)?;
-        self.ensure_active_semantic_folder(&context).await?;
+        self.ensure_enrolment_folder(&context).await?;
         let context = self.semantic_consent_context(context).await;
         library.confirm_enrolment(access, confirmation_id, expected_revision, &context)
     }
@@ -1555,6 +1555,25 @@ impl FileManagerService {
         } else {
             Err(SemanticLibraryError::WorkspaceRequired)
         }
+    }
+
+    /// The folder an enrolment step may act on: the active pane's folder, or the configured notes
+    /// folder. The notes dialog sets that folder up and shows it in its consent step, so it needs
+    /// no navigation to be the active one.
+    async fn ensure_enrolment_folder(
+        &self,
+        context: &SemanticFolderContext,
+    ) -> Result<(), SemanticLibraryError> {
+        self.workspaces
+            .load(context.workspace_id)
+            .await
+            .map_err(|_| SemanticLibraryError::WorkspaceRequired)?;
+        if self.ensure_active_semantic_folder(context).await.is_ok()
+            || self.notes.root().as_ref() == Some(&context.location)
+        {
+            return Ok(());
+        }
+        Err(SemanticLibraryError::WorkspaceRequired)
     }
 
     async fn ensure_active_or_enrolled_semantic_root(

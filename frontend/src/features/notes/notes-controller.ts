@@ -43,8 +43,6 @@ export interface NotesControllerContext {
   setState(state: NotesState): void;
   /** The active workspace, whose consent semantic indexing is recorded under. */
   getWorkspaceId(): string | undefined;
-  /** Shows `location` in the active pane, so the consent step can include that folder. */
-  showFolder(location: Location): Promise<void>;
   toast(message: string): void;
   redraw(): void;
 }
@@ -269,8 +267,6 @@ export function createNotesController(context: NotesControllerContext): NotesCon
       const root = stored.root ?? location;
       const workspaceId = context.getWorkspaceId();
       if (state.index && state.semanticAvailable && workspaceId !== undefined) {
-        // Consent is only accepted for the folder the active pane shows.
-        await context.showFolder(root);
         set({ phase: 'enrol', root, ...(state.next === undefined ? {} : { next: state.next }) });
         return;
       }

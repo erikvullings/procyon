@@ -34,9 +34,9 @@ describe('NewFromTemplateDialog', () => {
   it('pre-fills and selects the first template name, and switches it with the template', () => {
     mount(true);
     const input = root.querySelector<HTMLInputElement>('#new-from-template-name');
-    expect(input?.value).toBe('New file.txt');
+    expect(input?.value).toBe('new_file.txt');
     expect(input?.selectionStart).toBe(0);
-    expect(input?.selectionEnd).toBe('New file.txt'.length);
+    expect(input?.selectionEnd).toBe('new_file.txt'.length);
 
     const markdown = [...root.querySelectorAll<HTMLButtonElement>('[role=radio]')].find(
       (button) => button.textContent === 'Markdown note',

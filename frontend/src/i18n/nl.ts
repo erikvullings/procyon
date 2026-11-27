@@ -382,10 +382,14 @@ export const nl = {
     viewerInSeparateWindow: 'Viewer (F3) in een apart venster openen',
     pictureInfoSection: 'Afbeeldingen',
     documentHubSection: 'Documentenhub',
+    documentHubIntro:
+      'Een virtuele map die alle bestanden met een van deze extensies toont, in de basismap en zijn submappen, gegroepeerd per extensie. Open via het opdrachtenpalet: Documentenhub. Bestanden worden niet verplaatst of gekopieerd.',
     documentHubExtensions: 'Extensies',
-    documentHubExtensionsHint: 'Gescheiden door spaties of komma’s, bijvoorbeeld pdf docx pptx',
+    documentHubExtensionsHint:
+      'Bestandstypen die getoond worden, bijvoorbeeld pdf docx pptx. Scheid ze met spaties of komma’s.',
     documentHubBasePath: 'Basismap',
-    documentHubBasePathHint: 'Inclusief submappen doorzocht. ~ is je thuismap.',
+    documentHubBasePathHint:
+      'De map die wordt doorzocht, inclusief alle submappen. ~ is je thuismap.',
     documentHubReset: 'Standaardwaarden herstellen',
     pictureCaptionFields: 'Regels onder miniaturen',
     pictureTooltip: 'Afbeeldingsdetails tonen bij aanwijzen',

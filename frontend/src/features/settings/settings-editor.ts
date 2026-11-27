@@ -106,6 +106,13 @@ function semanticComponentsInstalled(status: SemanticComponentStatus | undefined
   );
 }
 
+/** A section always starts at its top: the body keeps the scroll position of the section it left. */
+function scrollSettingsToTop(event: MouseEvent): void {
+  const layout = (event.currentTarget as HTMLElement).closest('.fm-settings-editor-layout');
+  const body = layout?.querySelector<HTMLElement>('.fm-settings-editor-body');
+  if (body !== null && body !== undefined) body.scrollTop = 0;
+}
+
 const LANGUAGE_LABEL_KEYS = {
   en: 'languageEnglish',
   nl: 'languageDutch',
@@ -362,8 +369,9 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                 {
                   type: 'button',
                   'aria-current': activeSection === section.id ? 'page' : undefined,
-                  onclick: () => {
+                  onclick: (event: MouseEvent) => {
                     const switchStarted = perfStart();
+                    scrollSettingsToTop(event);
                     activeSection = section.id;
                     perfEndAfterRender('settings-section', switchStarted, { section: section.id });
                   },
@@ -377,7 +385,8 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                       {
                         type: 'button',
                         'aria-current': activeFilesPart === part.id ? 'page' : undefined,
-                        onclick: () => {
+                        onclick: (event: MouseEvent) => {
+                          scrollSettingsToTop(event);
                           activeFilesPart = part.id;
                         },
                       },
@@ -630,6 +639,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                               t('settings', 'documentHubSection'),
                             ),
                           ),
+                          m('.row', m('p.col.s12.helper-text', t('settings', 'documentHubIntro'))),
                           m('.row', [
                             m(TextInput, {
                               className: 'col s12 m6',

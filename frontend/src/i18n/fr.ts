@@ -388,11 +388,14 @@ export const fr = {
     viewerInSeparateWindow: 'Ouvrir la visionneuse (F3) dans une fenêtre séparée',
     pictureInfoSection: 'Images',
     documentHubSection: 'Hub de documents',
+    documentHubIntro:
+      "Un dossier virtuel qui liste tous les fichiers ayant l'une de ces extensions dans le dossier de base et ses sous-dossiers, regroupés par extension. Ouvrez-le depuis la palette de commandes : Hub de documents. Les fichiers ne sont ni déplacés ni copiés.",
     documentHubExtensions: 'Extensions',
     documentHubExtensionsHint:
-      'Séparées par des espaces ou des virgules, par exemple pdf docx pptx',
+      'Types de fichiers à lister, par exemple pdf docx pptx. Séparez-les par des espaces ou des virgules.',
     documentHubBasePath: 'Dossier de base',
-    documentHubBasePathHint: 'Recherché avec les sous-dossiers. ~ est votre dossier personnel.',
+    documentHubBasePathHint:
+      'Le dossier à parcourir, avec tous ses sous-dossiers. ~ est votre dossier personnel.',
     documentHubReset: 'Rétablir les valeurs par défaut',
     pictureCaptionFields: 'Lignes sous les miniatures',
     pictureTooltip: 'Afficher les détails de l’image au survol',

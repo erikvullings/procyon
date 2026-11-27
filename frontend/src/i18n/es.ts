@@ -384,10 +384,14 @@ export const es = {
     viewerInSeparateWindow: 'Abrir el visor (F3) en una ventana independiente',
     pictureInfoSection: 'Imágenes',
     documentHubSection: 'Centro de documentos',
+    documentHubIntro:
+      'Una carpeta virtual que muestra todos los archivos con una de estas extensiones en la carpeta base y sus subcarpetas, agrupados por extensión. Ábrela desde la paleta de comandos: Centro de documentos. Los archivos no se mueven ni se copian.',
     documentHubExtensions: 'Extensiones',
-    documentHubExtensionsHint: 'Separadas por espacios o comas, por ejemplo pdf docx pptx',
+    documentHubExtensionsHint:
+      'Tipos de archivo a mostrar, por ejemplo pdf docx pptx. Sepáralos con espacios o comas.',
     documentHubBasePath: 'Carpeta base',
-    documentHubBasePathHint: 'Se busca incluyendo subcarpetas. ~ es tu carpeta personal.',
+    documentHubBasePathHint:
+      'La carpeta que se busca, incluidas todas sus subcarpetas. ~ es tu carpeta personal.',
     documentHubReset: 'Restaurar valores predeterminados',
     pictureCaptionFields: 'Líneas bajo las miniaturas',
     pictureTooltip: 'Mostrar detalles de la imagen al pasar el ratón',
