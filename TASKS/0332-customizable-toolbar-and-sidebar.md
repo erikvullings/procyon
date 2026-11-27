@@ -26,3 +26,14 @@ The action registry (0049) already backs menus, the palette and shortcuts, so ev
 
 ## Agent Notes
 - Created from user request; nothing investigated yet. Decide default layout and settings schema before coding.
+- 2026-11-27 claude (partial, status stays open): landed the pure, versioned layout model only —
+  `frontend/src/features/toolbar/toolbar-layout.ts` (`DEFAULT_TOOLBAR_LAYOUT`, `readToolbarLayout`
+  with malformed-item/duplicate/newer-version handling, add/remove/move/label-mode, reset, equality)
+  + 13 tests. Full frontend suite 4282/4282, tsc clean.
+  Not done: (1) persistence — needs a sidecar `VersionedDocument` in `fm-settings` (the migration
+  machinery is there) plus transport/API route; (2) app-shell still hard-coded, so nothing renders
+  from the layout yet, and overflow does not reflect it; (3) settings UI for add/remove/reorder/label;
+  (4) sidebar entries and context menu; (5) browser/Tauri parity check. Default layout uses
+  `client.basketAdd`, `client.basketToggle`, `client.syncBrowsing`, which are frontend-only toolbar
+  controls not in the backend registry; they need registering or mapping before rendering.
+  `core.*` ids and `client.searchKnowledge` / `client.exploreThemes` are existing ids.
