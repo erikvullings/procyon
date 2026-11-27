@@ -103,7 +103,11 @@ export const NewFromTemplateDialog: FactoryComponent<NewFromTemplateDialogAttrs>
       const error = fileName === '' ? undefined : validateEntryName(fileName);
       const canCreate = selectedId !== undefined && fileName !== '' && error === undefined;
       return m(ModalPanel, {
-        title: t('newFromTemplate', 'title'),
+        // Named after the chosen template, so the modal needs no line of its own for it (task 0312).
+        title:
+          chosen === undefined
+            ? t('newFromTemplate', 'title')
+            : t('newFromTemplate', 'titleWithTemplate', { template: chosen.label }),
         className: 'fm-dense-modal',
         description:
           attrs.templates.length === 0
@@ -132,7 +136,7 @@ export const NewFromTemplateDialog: FactoryComponent<NewFromTemplateDialogAttrs>
                         ),
                       ),
                     )
-                  : m('p.fm-new-from-template-chosen', [chosen.label, sourceTag(chosen)]),
+                  : undefined,
                 m('label.fm-create-directory-field', [
                   m('span', t('newFromTemplate', 'fileName')),
                   m('input#new-from-template-name', {

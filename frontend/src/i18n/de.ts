@@ -1504,6 +1504,7 @@ export const de = {
     loadFailed:
       'Die Vorlagenliste konnte nicht geladen werden. Es werden nur die App-Vorlagen angezeigt.',
     title: 'Neue Datei aus Vorlage',
+    titleWithTemplate: 'Neue Datei aus {template}',
     empty:
       'Keine Vorlagen aktiviert. Fügen Sie sie unter Einstellungen → Terminal hinzu oder aktivieren Sie sie.',
     templates: 'Vorlagen',
@@ -2938,6 +2939,8 @@ export const de = {
       'Was er tut, gelesen von einem separaten Modellaufruf, der nur den Befehl sah: {text}',
     commandDescribing: 'Ein separater Modellaufruf wird gefragt, was der Befehl tut…',
     commandShow: 'Befehl anzeigen',
+    commandHide: 'Befehl ausblenden',
+    commandDescriptionUnavailable: 'Keine Zusammenfassung des Befehls verfügbar.',
     slashHelpAuto:
       'automatische Freigabe ein- oder ausschalten: Befehle ausführen, Dateien anlegen und Änderungen übernehmen, ohne zu fragen, außer bei sehr gefährlichen Befehlen',
     slashAutoOn:

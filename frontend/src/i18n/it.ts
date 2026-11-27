@@ -1482,6 +1482,7 @@ export const it = {
     loadFailed:
       'Impossibile caricare l’elenco dei modelli. Vengono mostrati solo i modelli dell’app.',
     title: 'Nuovo file da modello',
+    titleWithTemplate: 'Nuovo file da {template}',
     empty: 'Nessun modello attivato. Aggiungili o attivali in Impostazioni → Terminale.',
     templates: 'Modelli',
     fileName: 'Nome del file',
@@ -2911,6 +2912,8 @@ export const it = {
       'Cosa fa, letto da una chiamata al modello separata che ha visto solo il comando: {text}',
     commandDescribing: 'Chiedo a una chiamata al modello separata cosa fa il comando…',
     commandShow: 'Mostra comando',
+    commandHide: 'Nascondi comando',
+    commandDescriptionUnavailable: 'Riepilogo del comando non disponibile.',
     slashHelpAuto:
       "attiva o disattiva l'approvazione automatica: esegui comandi, crea file e applica modifiche senza chiedere, tranne i comandi molto pericolosi",
     slashAutoOn:

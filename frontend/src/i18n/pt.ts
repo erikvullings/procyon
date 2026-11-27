@@ -1486,6 +1486,7 @@ export const pt = {
     loadFailed:
       'Não foi possível carregar a lista de modelos. São mostrados apenas os modelos da aplicação.',
     title: 'Novo ficheiro a partir de modelo',
+    titleWithTemplate: 'Novo ficheiro a partir de {template}',
     empty: 'Nenhum modelo ativado. Adicione-os ou ative-os em Definições → Terminal.',
     templates: 'Modelos',
     fileName: 'Nome do ficheiro',
@@ -2923,6 +2924,8 @@ export const pt = {
       'O que faz, lido por uma chamada ao modelo à parte que só viu o comando: {text}',
     commandDescribing: 'A perguntar a uma chamada ao modelo à parte o que o comando faz…',
     commandShow: 'Mostrar comando',
+    commandHide: 'Ocultar comando',
+    commandDescriptionUnavailable: 'Resumo do comando indisponível.',
     slashHelpAuto:
       'ativar ou desativar a aprovação automática: executar comandos, criar arquivos e aplicar alterações sem perguntar, exceto comandos muito perigosos',
     slashAutoOn:

@@ -1492,6 +1492,7 @@ export const fr = {
     loadFailed:
       'Impossible de charger la liste des modèles. Seuls les modèles de l’application sont affichés.',
     title: 'Nouveau fichier depuis un modèle',
+    titleWithTemplate: 'Nouveau fichier à partir de {template}',
     empty: 'Aucun modèle activé. Ajoutez-les ou activez-les dans Réglages → Terminal.',
     templates: 'Modèles',
     fileName: 'Nom du fichier',
@@ -2937,6 +2938,8 @@ export const fr = {
       'Ce qu’elle fait, lu par un appel de modèle séparé qui n’a vu que la commande : {text}',
     commandDescribing: 'Demande à un appel de modèle séparé ce que fait la commande…',
     commandShow: 'Afficher la commande',
+    commandHide: 'Masquer la commande',
+    commandDescriptionUnavailable: 'Résumé de la commande indisponible.',
     slashHelpAuto:
       "activer ou désactiver l'approbation automatique : exécuter des commandes, créer des fichiers et appliquer des modifications sans demander, sauf pour les commandes très dangereuses",
     slashAutoOn:

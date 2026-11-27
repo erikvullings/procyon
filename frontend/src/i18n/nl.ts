@@ -1893,6 +1893,7 @@ export const nl = {
     loadFailed:
       'De lijst met sjablonen kon niet worden geladen. Alleen de app-sjablonen worden getoond.',
     title: 'Nieuw bestand uit sjabloon',
+    titleWithTemplate: 'Nieuw bestand van {template}',
     empty: 'Geen sjablonen ingeschakeld. Voeg ze toe of schakel ze in via Instellingen → Terminal.',
     templates: 'Sjablonen',
     fileName: 'Bestandsnaam',
@@ -2908,6 +2909,8 @@ export const nl = {
       'Wat het doet, gelezen door een aparte modelaanroep die alleen de opdracht zag: {text}',
     commandDescribing: 'Een aparte modelaanroep vragen wat de opdracht doet…',
     commandShow: 'Opdracht tonen',
+    commandHide: 'Opdracht verbergen',
+    commandDescriptionUnavailable: 'Geen samenvatting van de opdracht beschikbaar.',
     slashHelpAuto:
       'automatisch goedkeuren aan- of uitzetten: opdrachten uitvoeren, bestanden maken en wijzigingen toepassen zonder te vragen, behalve zeer gevaarlijke opdrachten',
     slashAutoOn:

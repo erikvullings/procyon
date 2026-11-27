@@ -62,11 +62,9 @@ describe('NewFromTemplateDialog', () => {
         }),
     });
     m.redraw.sync();
-    // No list of other templates; the chosen one is named, and its file name is pre-filled.
+    // No list of other templates; the title names the chosen one, and its file name is pre-filled.
     expect(root.querySelectorAll('[role=radio]')).toHaveLength(0);
-    expect(root.querySelector('.fm-new-from-template-chosen')?.textContent).toContain(
-      'Markdown note',
-    );
+    expect(document.body.textContent).toContain('New file from Markdown note');
     expect(root.querySelector<HTMLInputElement>('#new-from-template-name')?.value).toBe('Note.md');
     root.querySelector<HTMLButtonElement>('#new-from-template-name')?.focus();
     const create = [...root.querySelectorAll<HTMLButtonElement>('button')].find(

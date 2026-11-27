@@ -52,6 +52,8 @@ export interface ContextMenuAttrs {
 }
 
 const CONTEXT_MENU_VIEWPORT_MARGIN = 8;
+/** How long the pointer rests on a flyout row before its flyout opens; passing over one does not open it. */
+const FLYOUT_HOVER_DELAY_MS = 150;
 
 /** Actions the "New" submenu replaces in the menu (task 0312). */
 const NEW_SUBMENU_ACTION_IDS: ReadonlySet<string> = CONTEXT_NEW_ACTION_IDS;
@@ -146,6 +148,7 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
   let groupItem: HTMLElement | undefined;
   let groupElement: HTMLElement | undefined;
   let focusGroup = false;
+  let hoverTimer: ReturnType<typeof setTimeout> | undefined;
   let newChoices: readonly NewMenuChoice[] = [];
   let newGeneration = 0;
   let newItem: HTMLElement | undefined;
@@ -188,6 +191,10 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
 
   function showOpenWith(attrs: ContextMenuAttrs, fromKeyboard = false): void {
     if (attrs.openWithSubmenu === undefined) return;
+    if (submenu === 'closed') {
+      dismissNew();
+      dismissGroup();
+    }
     if (submenu !== 'closed') {
       if (fromKeyboard) {
         if (submenu === 'loading') focusApplication = true;
@@ -234,6 +241,7 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
   function showNew(attrs: ContextMenuAttrs, fromKeyboard = false): void {
     if (attrs.newSubmenu === undefined || !newSubmenuAvailable(attrs)) return;
     dismissGroup();
+    if (newFlyout === 'closed') dismissSubmenu();
     if (newFlyout !== 'closed') {
       if (fromKeyboard) newElement?.querySelector<HTMLElement>('button')?.focus();
       return;
@@ -279,6 +287,27 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
     void attrs;
   }
 
+  function cancelHover(): void {
+    clearTimeout(hoverTimer);
+    hoverTimer = undefined;
+  }
+
+  /**
+   * The pointer moved onto a row: every flyout closes at once, so only one is ever open, and a
+   * flyout row opens its own after a short rest (task 0312).
+   */
+  function enterRow(open?: () => void): void {
+    cancelHover();
+    dismissSubmenu();
+    dismissNew();
+    dismissGroup();
+    if (open === undefined) return;
+    hoverTimer = setTimeout(() => {
+      hoverTimer = undefined;
+      open();
+    }, FLYOUT_HOVER_DELAY_MS);
+  }
+
   function dismissGroup(): void {
     openGroup = undefined;
     focusGroup = false;
@@ -295,6 +324,7 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
   }
 
   function close(attrs: ContextMenuAttrs): void {
+    cancelHover();
     dismissSubmenu();
     dismissNew();
     dismissGroup();
@@ -402,7 +432,7 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
                 },
                 onmouseenter: (event: MouseEvent) => {
                   groupItem = event.currentTarget as HTMLElement;
-                  if (available) showGroup(attrs, row.id);
+                  enterRow(available ? () => showGroup(attrs, row.id) : undefined);
                 },
                 onclick: () => invoke(attrs, row),
               },
@@ -432,7 +462,7 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
                 },
                 onmouseenter: (event: MouseEvent) => {
                   newItem = event.currentTarget as HTMLElement;
-                  if (available) showNew(attrs);
+                  enterRow(available ? () => showNew(attrs) : undefined);
                 },
                 onclick: () => invoke(attrs, row),
               },
@@ -472,18 +502,14 @@ export const ContextMenu: FactoryComponent<ContextMenuAttrs> = () => {
                     'aria-controls': 'fm-open-with-submenu',
                     onmouseenter: (event: MouseEvent) => {
                       openWithItem = event.currentTarget as HTMLElement;
-                      if (item.available) showOpenWith(attrs);
+                      enterRow(item.available ? () => showOpenWith(attrs) : undefined);
                     },
                     oncreate: ({ dom }: m.VnodeDOM) => {
                       openWithItem = dom as HTMLElement;
                     },
                   }
                 : {
-                    onmouseenter: () => {
-                      if (submenu !== 'closed') dismissSubmenu();
-                      if (newFlyout !== 'closed') dismissNew();
-                      if (openGroup !== undefined) dismissGroup();
-                    },
+                    onmouseenter: () => enterRow(),
                   }),
               onclick: () => invoke(attrs, row),
             },

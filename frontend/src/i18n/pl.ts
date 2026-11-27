@@ -1479,6 +1479,7 @@ export const pl = {
     pluginSource: 'Wtyczka',
     loadFailed: 'Nie udało się wczytać listy szablonów. Wyświetlono tylko szablony aplikacji.',
     title: 'Nowy plik z szablonu',
+    titleWithTemplate: 'Nowy plik z szablonu {template}',
     empty: 'Brak włączonych szablonów. Dodaj je lub włącz w Ustawienia → Terminal.',
     templates: 'Szablony',
     fileName: 'Nazwa pliku',
@@ -2908,6 +2909,8 @@ export const pl = {
       'Co robi, według osobnego wywołania modelu, które widziało tylko polecenie: {text}',
     commandDescribing: 'Pytam osobne wywołanie modelu, co robi polecenie…',
     commandShow: 'Pokaż polecenie',
+    commandHide: 'Ukryj polecenie',
+    commandDescriptionUnavailable: 'Podsumowanie polecenia jest niedostępne.',
     slashHelpAuto:
       'włącz lub wyłącz automatyczne zatwierdzanie: uruchamianie poleceń, tworzenie plików i wprowadzanie zmian bez pytania, z wyjątkiem bardzo niebezpiecznych poleceń',
     slashAutoOn:

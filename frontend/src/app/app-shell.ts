@@ -5183,7 +5183,16 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                               }),
                         })),
                       ),
-                    onChoose: (id: string) => openNewFromTemplate(undefined, id),
+                    // The folder of the pane whose menu it is, not the active pane's (the menu can be
+                    // opened on the inactive pane).
+                    onChoose: (id: string) => {
+                      const paneId = shellState.contextMenu?.paneId;
+                      const location =
+                        paneId === undefined
+                          ? undefined
+                          : shellState.directories.get(activeTabKey(paneId))?.location;
+                      openNewFromTemplate(location, id);
+                    },
                   },
                 }
               : {}),

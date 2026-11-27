@@ -485,6 +485,58 @@ describe('ContextMenu', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it('closes an open Open With flyout when the pointer moves onto the New row (task 0312)', async () => {
+    const openWith: AvailableAction = {
+      action: {
+        id: 'core.openWith',
+        title: 'Open With',
+        category: 'navigation',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' },
+      },
+      available: true,
+    };
+    const createDirectory: AvailableAction = {
+      action: {
+        id: 'core.createDirectory',
+        title: 'New folder',
+        category: 'fileOperations',
+        defaultShortcuts: [],
+        contextRequirements: {},
+        source: { kind: 'core' },
+      },
+      available: true,
+    };
+    m.mount(root, {
+      view: () =>
+        m(ContextMenu, {
+          open: true,
+          x: 10,
+          y: 20,
+          actions: [openWith, createDirectory],
+          openWithSubmenu: {
+            load: vi.fn().mockResolvedValue([]),
+            iconFor: vi.fn(),
+            onChoose: vi.fn(),
+            onOther: vi.fn(),
+          },
+          newSubmenu: { title: 'New', load: vi.fn().mockResolvedValue([]), onChoose: vi.fn() },
+          onClose: vi.fn(),
+          onInvoke: vi.fn(),
+        }),
+    });
+    const rows = [
+      ...root.querySelectorAll<HTMLButtonElement>('.fm-context-menu [role="menuitem"]'),
+    ];
+    rows[0]?.dispatchEvent(new MouseEvent('mouseenter'));
+    await vi.waitFor(() => expect(root.querySelector('#fm-open-with-submenu')).not.toBeNull());
+    rows[1]?.dispatchEvent(new MouseEvent('mouseenter'));
+    await vi.waitFor(() => expect(root.querySelector('#fm-open-with-submenu')).toBeNull());
+    await vi.waitFor(() => expect(root.querySelector('#fm-new-submenu')).not.toBeNull());
+    expect(root.querySelector('#fm-open-with-submenu')).toBeNull();
+  });
+
   it('moves keyboard focus into a submenu already opened by hover', async () => {
     const openWith: AvailableAction = {
       action: {

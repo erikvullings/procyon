@@ -1486,6 +1486,7 @@ export const es = {
     loadFailed:
       'No se pudo cargar la lista de plantillas. Solo se muestran las plantillas de la aplicación.',
     title: 'Nuevo archivo desde plantilla',
+    titleWithTemplate: 'Nuevo archivo desde {template}',
     empty: 'No hay plantillas activadas. Añádalas o actívelas en Ajustes → Terminal.',
     templates: 'Plantillas',
     fileName: 'Nombre de archivo',
@@ -2918,6 +2919,8 @@ export const es = {
       'Lo que hace, leído por una llamada al modelo aparte que solo vio el comando: {text}',
     commandDescribing: 'Preguntando a una llamada al modelo aparte qué hace el comando…',
     commandShow: 'Mostrar comando',
+    commandHide: 'Ocultar comando',
+    commandDescriptionUnavailable: 'Resumen del comando no disponible.',
     slashHelpAuto:
       'activar o desactivar la aprobación automática: ejecutar comandos, crear archivos y aplicar cambios sin preguntar, salvo comandos muy peligrosos',
     slashAutoOn:

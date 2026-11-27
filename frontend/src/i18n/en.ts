@@ -1857,6 +1857,7 @@ export const en = {
     pluginSource: 'Plugin',
     loadFailed: 'Could not load the template list. Only the app templates are shown.',
     title: 'New File from Template',
+    titleWithTemplate: 'New file from {template}',
     empty: 'No templates are enabled. Add or enable them under Settings → Terminal.',
     templates: 'Templates',
     fileName: 'File name',
@@ -2854,6 +2855,8 @@ export const en = {
       'What it does, read by a separate model call that saw only the command: {text}',
     commandDescribing: 'Asking a separate model call what the command does…',
     commandShow: 'Show command',
+    commandHide: 'Hide command',
+    commandDescriptionUnavailable: 'Command summary unavailable.',
     slashHelpAuto:
       'turn auto-approve on or off: run commands, create files and apply edits without asking, except very dangerous commands',
     slashAutoOn:
