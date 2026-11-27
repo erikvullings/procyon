@@ -22,6 +22,7 @@ export const DEFAULT_FILE_TEMPLATES: readonly FileTemplate[] = defaultIndex.map(
   ...entry,
   body: defaultBody(entry.id),
   enabled: true,
+  openInEditor: entry.openInEditor ?? true,
 }));
 
 /** The templates to offer: enabled ones, in their configured order. */
@@ -38,6 +39,7 @@ export function appTemplateEntries(templates: readonly FileTemplate[]): FileTemp
     body: template.body,
     source: 'app',
     sourceName: null,
+    openInEditor: template.openInEditor,
   }));
 }
 

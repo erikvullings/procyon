@@ -423,6 +423,13 @@ pub struct FileTemplate {
     pub body: String,
     /// Disabled templates stay in the list but are not offered.
     pub enabled: bool,
+    /// Whether the created file opens in an editor; `false` leaves it closed (task 0312 follow-up).
+    #[serde(default = "default_open_in_editor")]
+    pub open_in_editor: bool,
+}
+
+fn default_open_in_editor() -> bool {
+    true
 }
 
 /// Bundled default templates, shared with the frontend, which loads the same files so the two
@@ -474,6 +481,10 @@ const DEFAULT_TEMPLATE_BODIES: &[(&str, &str)] = &[
         "json",
         include_str!("../../../frontend/src/features/templates/defaults/json.tmpl"),
     ),
+    (
+        "empty",
+        include_str!("../../../frontend/src/features/templates/defaults/empty.tmpl"),
+    ),
 ];
 
 /// One entry of the bundled `index.json`.
@@ -483,6 +494,8 @@ struct DefaultTemplateEntry {
     id: String,
     label: String,
     file_name: String,
+    #[serde(default = "default_open_in_editor")]
+    open_in_editor: bool,
 }
 
 /// The templates offered until the user edits the list.
@@ -502,6 +515,7 @@ pub fn default_file_templates() -> Vec<FileTemplate> {
                 file_name: entry.file_name,
                 body: (*body).to_owned(),
                 enabled: true,
+                open_in_editor: entry.open_in_editor,
             })
         })
         .collect()
@@ -1506,6 +1520,7 @@ mod tests {
                 file_name: "note.md".into(),
                 body: "# {name}\n".into(),
                 enabled: true,
+                open_in_editor: true,
             }],
             editor_command: Some("code --wait".into()),
             default_start_locations: vec!["file:///tmp".into()],
@@ -1895,7 +1910,7 @@ mod tests {
             serde_json::from_str(DEFAULT_TEMPLATE_INDEX).expect("index.json parses");
         assert_eq!(index.len(), DEFAULT_TEMPLATE_BODIES.len());
         assert_eq!(default_file_templates().len(), index.len());
-        assert_eq!(default_file_templates().len(), 11);
+        assert_eq!(default_file_templates().len(), 12);
         assert!(
             default_file_templates()
                 .iter()
@@ -1913,6 +1928,7 @@ mod tests {
             file_name: file_name.into(),
             body: "x".into(),
             enabled: true,
+            open_in_editor: true,
         };
         store
             .save(&Settings {

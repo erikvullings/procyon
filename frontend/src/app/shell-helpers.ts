@@ -166,6 +166,19 @@ export function tabKey(paneId: PaneId, tabId: TabId): string {
   return `${paneId}:${tabId}`;
 }
 
+/** Whether two locations name the same file; URIs compare decoded, so `%20` matches a space. */
+export function sameFileLocation(left: Location, right: Location): boolean {
+  return left.providerId === right.providerId && decodedUri(left.uri) === decodedUri(right.uri);
+}
+
+function decodedUri(uri: string): string {
+  try {
+    return decodeURIComponent(uri);
+  } catch {
+    return uri;
+  }
+}
+
 /** An open file editor, owned by the editor tab it was opened in. */
 export interface EditorTab {
   readonly paneId: PaneId;

@@ -377,6 +377,7 @@ impl PluginManager {
                         body: template.body,
                         source: fm_transport_dto::FileTemplateSourceDto::Plugin,
                         source_name: Some(plugin_name.clone()),
+                        open_in_editor: true,
                     }
                 })
             })

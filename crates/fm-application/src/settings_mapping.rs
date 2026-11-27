@@ -90,6 +90,7 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
                 file_name: template.file_name,
                 body: template.body,
                 enabled: template.enabled,
+                open_in_editor: template.open_in_editor,
             })
             .collect(),
         template_folder: settings.template_folder,
@@ -282,6 +283,7 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
                 file_name: template.file_name,
                 body: template.body,
                 enabled: template.enabled,
+                open_in_editor: template.open_in_editor,
             })
             .collect(),
         template_folder: settings.template_folder,

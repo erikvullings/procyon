@@ -91,6 +91,7 @@ export const FileTemplatesEditor: FactoryComponent<FileTemplatesEditorAttrs> = (
                   fileName: 'new.txt',
                   body: '',
                   enabled: true,
+                  openInEditor: true,
                 },
               ]),
           },

@@ -254,7 +254,12 @@ import { createMiscWiring } from './misc-wiring';
 import { createOperationsWiring } from './operations-wiring';
 import { createPreviewWiring } from './preview-wiring';
 import { createSettingsWiring } from './settings-wiring';
-import { locationForPath, respectSystemLocationReadOnly, windowControlIcon } from './shell-helpers';
+import {
+  locationForPath,
+  respectSystemLocationReadOnly,
+  sameFileLocation,
+  windowControlIcon,
+} from './shell-helpers';
 import type { DiskUsageTabEntry, KnowledgeSearchTabEntry, ThemesTabEntry } from './shell-state';
 import { createShellState } from './shell-state';
 import { createTreeWiring } from './tree-wiring';
@@ -1315,6 +1320,20 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     );
   }
 
+  /**
+   * Closes the editors of files that just left their folder (deleted, or moved away). A dirty
+   * editor asks first, as any editor close does.
+   */
+  function closeEditorsOfRemovedFiles(removed: readonly EntrySummary[]): void {
+    if (removed.length === 0) return;
+    for (const editor of [...shellState.editorByTab.values()]) {
+      const file = editor.state.entry.location;
+      if (removed.some((entry) => sameFileLocation(entry.location, file))) {
+        previewWiring.requestCloseEditorTab(editor.paneId, editor.tabId);
+      }
+    }
+  }
+
   function applyDelta(paneId: PaneId, delta: DirectoryDelta): void {
     const started = perfStart();
     try {
@@ -1366,6 +1385,8 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         refetchAffectedPanes(paneId);
         return;
       }
+      const gone = new Set<string>(delta.entryIds);
+      closeEditorsOfRemovedFiles(current.entries.filter((entry) => gone.has(entry.id)));
       for (const id of delta.entryIds) byId.delete(id);
     } else {
       if (!Array.isArray(delta.entries)) {

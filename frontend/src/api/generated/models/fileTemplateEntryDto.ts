@@ -16,6 +16,8 @@ export interface FileTemplateEntryDto {
   id: string;
   /** User-visible name in the template picker. */
   label: string;
+  /** Whether the created file opens in an editor; `false` leaves it closed. */
+  openInEditor: boolean;
   /** Which source offered this entry. */
   source: FileTemplateSourceDto;
   /**

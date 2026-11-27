@@ -178,6 +178,13 @@ pub struct FileTemplateDto {
     pub body: String,
     /// Disabled templates are kept but not offered.
     pub enabled: bool,
+    /// Whether the created file opens in an editor; `false` leaves it closed.
+    #[serde(default = "open_in_editor_default")]
+    pub open_in_editor: bool,
+}
+
+fn open_in_editor_default() -> bool {
+    true
 }
 
 /// How a multi-rename rule cases the composed filename.
@@ -701,4 +708,6 @@ pub struct FileTemplateEntryDto {
     pub source: FileTemplateSourceDto,
     /// The template folder's name for `folder` entries, the plugin's name for `plugin` entries.
     pub source_name: Option<String>,
+    /// Whether the created file opens in an editor; `false` leaves it closed.
+    pub open_in_editor: bool,
 }

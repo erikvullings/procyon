@@ -27,6 +27,7 @@ pub(crate) fn catalog(
             body: template.body.clone(),
             source: FileTemplateSourceDto::App,
             source_name: None,
+            open_in_editor: template.open_in_editor,
         });
     let folder = template_folder
         .map(|folder| folder_templates(&expand_home(folder)))
@@ -78,6 +79,7 @@ pub(crate) fn folder_templates(folder: &Path) -> Vec<FileTemplateEntryDto> {
                 body,
                 source: FileTemplateSourceDto::Folder,
                 source_name: source_name.clone(),
+                open_in_editor: true,
             })
         })
         .take(MAX_FOLDER_TEMPLATES)
@@ -146,6 +148,7 @@ mod tests {
             body: String::new(),
             source: FileTemplateSourceDto::Plugin,
             source_name: Some("Example".into()),
+            open_in_editor: true,
         };
 
         let ids: Vec<String> = catalog(&file_templates, Some(&folder), vec![plugin])

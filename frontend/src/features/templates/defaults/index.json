@@ -9,5 +9,6 @@
   { "id": "csv", "label": "CSV table", "fileName": "data.csv" },
   { "id": "gitignore", "label": "Git ignore", "fileName": ".gitignore" },
   { "id": "html", "label": "HTML page", "fileName": "index.html" },
-  { "id": "json", "label": "JSON document", "fileName": "data.json" }
+  { "id": "json", "label": "JSON document", "fileName": "data.json" },
+  { "id": "empty", "label": "Empty file", "fileName": "New file", "openInEditor": false }
 ]

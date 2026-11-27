@@ -50,7 +50,10 @@ export function settingsFromDto(settings: SettingsDto): Settings {
       name: app.name,
       command: app.command,
     })),
-    fileTemplates: (settings.fileTemplates ?? []).map((template) => ({ ...template })),
+    fileTemplates: (settings.fileTemplates ?? []).map((template) => ({
+      ...template,
+      openInEditor: template.openInEditor ?? true,
+    })),
     templateFolder: settings.templateFolder ?? null,
     editorCommand: settings.editorCommand ?? null,
     rememberFolderViews: settings.rememberFolderViews ?? true,

@@ -83,6 +83,7 @@ describe('NewFromTemplateDialog', () => {
         body: '',
         source: 'folder',
         sourceName: 'Templates',
+        openInEditor: true,
       },
       {
         id: 'plugin:example.p:t',
@@ -90,6 +91,7 @@ describe('NewFromTemplateDialog', () => {
         fileName: 'p.md',
         body: '',
         source: 'plugin',
+        openInEditor: true,
         sourceName: 'Example',
       },
     ];

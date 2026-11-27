@@ -121,6 +121,8 @@ export interface FileTemplate {
   /** Initial content; `{date}` and `{name}` are filled in on creation. */
   readonly body: string;
   readonly enabled: boolean;
+  /** Whether the created file opens in an editor; `false` leaves it closed. */
+  readonly openInEditor: boolean;
 }
 
 /** Where an entry offered by "New file from template" comes from (task 0312). */
@@ -135,6 +137,8 @@ export interface FileTemplateEntry {
   readonly source: FileTemplateSource;
   /** Folder name for `folder` entries, plugin name for `plugin` entries. */
   readonly sourceName: string | null;
+  /** Whether the created file opens in an editor; `false` leaves it closed. */
+  readonly openInEditor: boolean;
 }
 
 /** Which picture facts grid tiles and hover tooltips show (task 0347). Ids the field registry

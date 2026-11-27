@@ -322,7 +322,9 @@ export function renderAppDialogs(
             .getOpsController()
             .createTextFile(loc, n, expandTemplateBody(template.body, n))
             .then(() => {
-              ctx.openEditorForCreatedFile(loc, n);
+              // A template may leave its file closed (an empty file, say); it still shows in the pane.
+              if (template.openInEditor) ctx.openEditorForCreatedFile(loc, n);
+              else ctx.refetchAffectedPanes();
             }),
         );
       },
