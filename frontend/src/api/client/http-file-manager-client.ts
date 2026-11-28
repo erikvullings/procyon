@@ -520,7 +520,7 @@ import type { FileManagerClient, NativeFileDrop } from './file-manager-client';
 import { buildMediaUrl } from './media-url';
 import { trustedOneDriveAuthorizationUrl } from './onedrive-authorization-url';
 import { operationFromDto } from './operation-mapping';
-import { settingsFromDto, settingsToDto } from './settings-mapping';
+import { searchScopeToDto, settingsFromDto, settingsToDto } from './settings-mapping';
 
 /**
  * HTTP transport adapter, wrapping the Orval-generated client behind
@@ -2228,10 +2228,7 @@ export class HttpFileManagerClient implements FileManagerClient {
           : {
               structuredQuery: {
                 ...request.structuredQuery,
-                scope: {
-                  ...request.structuredQuery.scope,
-                  locations: [...request.structuredQuery.scope.locations],
-                },
+                scope: searchScopeToDto(request.structuredQuery.scope),
                 entryKinds: [...request.structuredQuery.entryKinds],
                 mimeTypes: [...request.structuredQuery.mimeTypes],
                 gitStatuses: [...request.structuredQuery.gitStatuses],

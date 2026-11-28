@@ -667,6 +667,41 @@ describe('DirectoryTable rows', () => {
     expect(root.querySelector<HTMLElement>('.fm-directory-row')?.style.height).toBe('20px');
   });
 
+  it('shows the source folder for each identically named hub result', () => {
+    mount({
+      state: { type: 'loaded' },
+      source: entryArraySource([
+        entry({
+          id: 'one',
+          name: 'SKILL.md',
+          extension: 'md',
+          location: { providerId: 'local', uri: 'file:///home/erik/.agents/skills/tasks/SKILL.md' },
+        }),
+        entry({
+          id: 'two',
+          name: 'SKILL.md',
+          extension: 'md',
+          location: {
+            providerId: 'local',
+            uri: 'file:///home/erik/.agents/skills/code-review/SKILL.md',
+          },
+        }),
+      ]),
+      groupByParent: true,
+      groupByExtension: true,
+      collapsibleGroups: true,
+      showFullPath: true,
+      homeDirectory: '/home/erik',
+    });
+
+    const paths = [...root.querySelectorAll('.fm-search-result-parent')];
+    expect(paths.map((path) => path.textContent)).toEqual(['tasks', 'code-review']);
+    expect(paths.map((path) => path.closest('.fm-tooltip')?.getAttribute('data-tooltip'))).toEqual([
+      '~/.agents/skills/tasks/SKILL.md',
+      '~/.agents/skills/code-review/SKILL.md',
+    ]);
+  });
+
   it('renders non-interactive home-relative parent group rows without changing entry indices', () => {
     const onCursorChange = vi.fn();
     mount({

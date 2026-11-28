@@ -28,7 +28,7 @@ import type { ActiveSourceState } from '../operations/operation-state';
 import { isParentEntry } from '../panes/parent-entry';
 import { fileAgeColumn } from '../plugin-columns/file-age-column';
 import { entryIcon } from './entry-icons';
-import { extensionGroupKey } from './extension-groups';
+import { extensionGroupKey, hubParentFolderName } from './extension-groups';
 import { finderTagColorSwatch } from './finder-tag-colors';
 import type { FinderTagsLoader } from './finder-tags-loader';
 import type { NativeIconLoader } from './native-icon-loader';
@@ -233,6 +233,7 @@ export interface DirectoryTableAttrs {
   readonly groupByParent?: boolean;
   /** With `groupByParent`: headings are extensions with a file count, not parent folders. */
   readonly groupByExtension?: boolean;
+  readonly homeDirectory?: string | undefined;
   /** Search-only collapsible parent headings; other grouped virtual folders stay unchanged. */
   readonly collapsibleGroups?: boolean;
   readonly groupScope?: string;
@@ -360,6 +361,7 @@ export interface DirectoryColumnDescriptor {
     finderTagsLoader?: FinderTagsLoader,
     previousEntry?: EntrySummary,
     separateExtension?: boolean,
+    hubFolder?: string,
   ): m.Children;
 }
 
@@ -372,6 +374,16 @@ function parentPath(entry: EntrySummary): string {
   } catch {
     return entry.location.uri;
   }
+}
+
+function hubFolderPath(entry: EntrySummary, homeDirectory?: string): string {
+  const path = parentPath(entry);
+  if (!entry.location.uri.startsWith('file:')) return path;
+  const nativePath = path.replace(/^\/([A-Za-z]:)/u, '$1');
+  const home = homeDirectory?.replaceAll('\\', '/').replace(/\/+$/u, '');
+  if (home && nativePath === home) return '~/';
+  if (home && nativePath.startsWith(`${home}/`)) return `~${nativePath.slice(home.length)}`;
+  return nativePath;
 }
 
 export function parentPathLabel(entry: EntrySummary): string {
@@ -466,8 +478,10 @@ const INITIAL_COLUMNS: readonly DirectoryColumnDescriptor[] = [
       finderTagsLoader,
       previousEntry,
       separateExtension = false,
+      hubFolder,
     ) => {
-      const searchResult = showFullPath === true && !isParentEntry(entry.id);
+      const searchResult =
+        showFullPath === true && hubFolder === undefined && !isParentEntry(entry.id);
       const name = displayName(entry, separateExtension);
       const resultParentPath = searchResult ? parentPath(entry) : undefined;
       const displayedParentPath = searchResult
@@ -480,52 +494,71 @@ const INITIAL_COLUMNS: readonly DirectoryColumnDescriptor[] = [
         nameMatchPrefix === undefined
           ? -1
           : name.toLocaleLowerCase().indexOf(nameMatchPrefix.toLocaleLowerCase());
+      const filename = m(
+        searchResult || hubFolder !== undefined ? 'span.fm-search-result-name' : 'span',
+        { title: hubFolder === undefined ? entry.name : undefined },
+        matchIndex < 0 || nameMatchPrefix === undefined
+          ? name
+          : [
+              name.slice(0, matchIndex),
+              m(
+                'span.fm-typeahead-match',
+                name.slice(matchIndex, matchIndex + nameMatchPrefix.length),
+              ),
+              name.slice(matchIndex + nameMatchPrefix.length),
+            ],
+      );
       return [
         listEntryIcon(entry, nativeIconLoader, thumbnailLoader),
-        m(searchResult ? 'span.fm-entry-name.fm-search-result' : 'span.fm-entry-name', [
-          searchResult && resultParentPath !== undefined && displayedParentPath !== undefined
-            ? m(
-                'span.fm-search-result-parent',
-                { title: resultParentPath },
-                (() => {
-                  const { prefix, collapsedSegments, segments } = displayedParentPath;
-                  return [
-                    prefix.length === 0
-                      ? undefined
-                      : m('span.fm-search-result-path-prefix', prefix),
-                    ...Array.from({ length: collapsedSegments }, (_, index) => [
-                      index === 0 ? undefined : ' ',
-                      m('span.fm-search-result-path-collapse', { 'aria-hidden': 'true' }, '.'),
-                    ]),
-                    ...segments.flatMap((segment, index) => [
-                      collapsedSegments > 0 && index === 0
-                        ? m('span.fm-search-result-path-separator', { 'aria-hidden': 'true' }, ' /')
-                        : prefix === '~' || index > 0
-                          ? m(
-                              'span.fm-search-result-path-separator',
-                              { 'aria-hidden': 'true' },
-                              '/',
-                            )
-                          : undefined,
-                      m('span.fm-search-result-path-part', segment),
-                    ]),
-                  ];
-                })(),
-              )
-            : undefined,
-          m(searchResult ? 'span.fm-search-result-name' : 'span', { title: entry.name }, [
-            matchIndex < 0 || nameMatchPrefix === undefined
-              ? name
-              : [
-                  name.slice(0, matchIndex),
-                  m(
-                    'span.fm-typeahead-match',
-                    name.slice(matchIndex, matchIndex + nameMatchPrefix.length),
-                  ),
-                  name.slice(matchIndex + nameMatchPrefix.length),
-                ],
-          ]),
-        ]),
+        hubFolder !== undefined
+          ? tooltip(
+              `${hubFolder}${hubFolder.endsWith('/') ? '' : '/'}${entry.name}`,
+              [
+                filename,
+                m(
+                  'span.fm-search-result-parent',
+                  m('span.fm-search-result-path-part', hubParentFolderName(entry)),
+                ),
+              ],
+              { class: 'fm-entry-name fm-search-result' },
+            )
+          : m(searchResult ? 'span.fm-entry-name.fm-search-result' : 'span.fm-entry-name', [
+              searchResult && resultParentPath !== undefined && displayedParentPath !== undefined
+                ? m(
+                    'span.fm-search-result-parent',
+                    { title: resultParentPath },
+                    (() => {
+                      const { prefix, collapsedSegments, segments } = displayedParentPath;
+                      return [
+                        prefix.length === 0
+                          ? undefined
+                          : m('span.fm-search-result-path-prefix', prefix),
+                        ...Array.from({ length: collapsedSegments }, (_, index) => [
+                          index === 0 ? undefined : ' ',
+                          m('span.fm-search-result-path-collapse', { 'aria-hidden': 'true' }, '.'),
+                        ]),
+                        ...segments.flatMap((segment, index) => [
+                          collapsedSegments > 0 && index === 0
+                            ? m(
+                                'span.fm-search-result-path-separator',
+                                { 'aria-hidden': 'true' },
+                                ' /',
+                              )
+                            : prefix === '~' || index > 0
+                              ? m(
+                                  'span.fm-search-result-path-separator',
+                                  { 'aria-hidden': 'true' },
+                                  '/',
+                                )
+                              : undefined,
+                          m('span.fm-search-result-path-part', segment),
+                        ]),
+                      ];
+                    })(),
+                  )
+                : undefined,
+              filename,
+            ]),
         entry.kind === 'symlink'
           ? m(
               'span.fm-entry-symlink-indicator',
@@ -1354,6 +1387,11 @@ export const DirectoryTable: FactoryComponent<DirectoryTableAttrs> = () => {
                           attrs.finderTagsLoader,
                           entryIndex === 0 ? undefined : source.entryAt(entryIndex - 1),
                           separateExtension,
+                          column.id === 'core.name' &&
+                            attrs.groupByExtension &&
+                            !isParentEntry(entry.id)
+                            ? hubFolderPath(entry, attrs.homeDirectory)
+                            : undefined,
                         ),
                         column.id === 'core.name' && activeSource !== undefined
                           ? m('span.fm-source-state', ` · ${activeSourceLabel(activeSource)}`)

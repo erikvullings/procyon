@@ -1246,6 +1246,9 @@ pub enum BackendEventPayload {
         /// Whether the backend has stopped producing further batches for
         /// this search (either finished or cancelled).
         is_complete: bool,
+        /// Whether this final batch ended a cancelled search.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        is_cancelled: bool,
         /// Cumulative count of unreadable directories skipped so far.
         warnings_count: u32,
         /// How this result set is currently being populated.
@@ -1975,6 +1978,7 @@ mod tests {
                         .expect("fixture operation id must be valid"),
                     entries: vec![],
                     is_complete: true,
+                    is_cancelled: false,
                     warnings_count: 0,
                     execution_mode: SearchExecutionModePayload::LiveRecursive,
                 },

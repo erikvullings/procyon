@@ -545,7 +545,44 @@ pub struct DocumentHubSettingsDto {
     /// Extensions to include, lower case, without the dot.
     pub extensions: Vec<String>,
     /// Folder searched recursively; `~` is the home folder.
-    pub base_path: String,
+    #[serde(
+        alias = "basePath",
+        deserialize_with = "fm_domain::deserialize_hub_base_paths"
+    )]
+    pub base_paths: Vec<String>,
+    /// Case-insensitive names and glob patterns to skip during the scan.
+    #[serde(default = "default_hub_excluded_file_names")]
+    pub excluded_file_names: Vec<String>,
+    /// Case-insensitive names and glob patterns to skip during the scan.
+    #[serde(default = "default_hub_excluded_directory_names")]
+    pub excluded_directory_names: Vec<String>,
+    /// Whether the hub scans hidden files and directories.
+    #[serde(default)]
+    pub show_hidden: bool,
+}
+
+fn default_hub_excluded_file_names() -> Vec<String> {
+    ["README.md", "LICENSE.txt", "LICENSE.md", "COPYING.txt"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+}
+
+fn default_hub_excluded_directory_names() -> Vec<String> {
+    [
+        "node_modules",
+        ".venv",
+        ".git",
+        ".hg",
+        ".svn",
+        "__pycache__",
+        "Caches",
+        "AppData",
+        "copilot-worktrees",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
 }
 
 /// Mirrors `fm_settings::DocumentHubSettings::default()`; a test in `fm-application` keeps the two
@@ -560,7 +597,10 @@ impl Default for DocumentHubSettingsDto {
             .iter()
             .map(|extension| (*extension).to_owned())
             .collect(),
-            base_path: "~".to_owned(),
+            base_paths: vec!["~".to_owned()],
+            excluded_file_names: default_hub_excluded_file_names(),
+            excluded_directory_names: default_hub_excluded_directory_names(),
+            show_hidden: false,
         }
     }
 }

@@ -40,7 +40,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::archive_scan::{is_searchable_archive, scan_zip};
-use crate::matcher::{detect_match_mode, matches_name};
+use crate::matcher::{detect_match_mode, glob_match, matches_name};
 use crate::scanner::{FileScanError, extract_text, is_extractable, scan_file, scan_text};
 use crate::store::SearchResultsStore;
 
@@ -111,6 +111,10 @@ pub struct SearchStart {
 /// Parameters for a search request.
 #[derive(Debug, Clone)]
 pub struct SearchOptions {
+    /// Lowercase filenames or glob patterns excluded from results.
+    pub excluded_file_names: HashSet<String>,
+    /// Lowercase directory names or glob patterns pruned during traversal.
+    pub excluded_directory_names: HashSet<String>,
     /// Filename query. Empty string means "match all filenames".
     pub filename_query: String,
     /// Explicit filename mode; legacy callers use automatic detection.
@@ -199,6 +203,7 @@ impl SearchEngine {
                 search_id,
                 entries: payload_entries,
                 is_complete: true,
+                is_cancelled: false,
                 warnings_count: 0,
                 execution_mode: SearchExecutionModePayload::Semantic,
             },
@@ -466,6 +471,7 @@ impl SearchEngine {
 struct SearchContext<'a> {
     search_id: Uuid,
     store: &'a SearchResultsStore,
+    cancellation: &'a CancellationToken,
     events: &'a EventBus,
     audience: &'a EventAudience,
     operation_id: Option<OperationId>,
@@ -537,6 +543,7 @@ fn can_accelerate(
         || !options.recurse
         || options.content_query.is_some()
         || !options.git_statuses.is_empty()
+        || !options.excluded_directory_names.is_empty()
         || options.entry_kinds.contains(&EntryKind::Symlink)
     {
         return false;
@@ -593,6 +600,7 @@ fn run_search_indexed(
     let ctx = SearchContext {
         search_id,
         store,
+        cancellation,
         events,
         audience,
         operation_id: options.operation_id,
@@ -838,6 +846,7 @@ fn run_search_native(
     let ctx = SearchContext {
         search_id,
         store,
+        cancellation,
         events,
         audience,
         operation_id: options.operation_id,
@@ -862,13 +871,25 @@ fn run_search_native(
     let mut current_entry: Option<EntryRefPayload> = None;
 
     let mut deferred_archives: Vec<PathBuf> = Vec::new();
+    let mut matched_paths = (roots.len() > 1).then(HashSet::new);
     let max_depth = if options.recurse { None } else { Some(1) };
     'roots: for root in roots {
+        let excluded_directory_names = options.excluded_directory_names.clone();
         let walker = ignore::WalkBuilder::new(&root)
             .follow_links(false)
             .max_depth(max_depth)
             .hidden(!options.show_hidden)
-            .filter_entry(|entry| entry.file_name().to_str() != Some(".git"))
+            .filter_entry(move |entry| {
+                entry.depth() == 0
+                    || (entry.file_name().to_str() != Some(".git")
+                        && !entry.file_type().is_some_and(|kind| {
+                            kind.is_dir()
+                                && excluded_name(
+                                    &excluded_directory_names,
+                                    entry.file_name().to_str(),
+                                )
+                        }))
+            })
             .build();
         for entry in walker {
             if cancellation.is_cancelled() {
@@ -931,6 +952,13 @@ fn run_search_native(
                         continue;
                     };
                     if !matches_summary(&summary, options) {
+                        continue;
+                    }
+
+                    if matched_paths
+                        .as_mut()
+                        .is_some_and(|paths| !paths.insert(path.to_path_buf()))
+                    {
                         continue;
                     }
 
@@ -1123,6 +1151,7 @@ async fn run_search_vfs(
     let ctx = SearchContext {
         search_id,
         store,
+        cancellation,
         events,
         audience,
         operation_id: options.operation_id,
@@ -1220,6 +1249,9 @@ async fn run_search_vfs(
                     continue;
                 }
                 if entry.kind == EntryKind::Directory {
+                    if excluded_name(&options.excluded_directory_names, Some(&entry.name)) {
+                        continue;
+                    }
                     // Track visited directories to prevent cycles (no symlinks
                     // following, but providers may return circular refs).
                     if options.recurse && visited.insert(entry.location.uri.clone()) {
@@ -1473,6 +1505,7 @@ fn flush(
                 search_id: ctx.search_id,
                 entries: payload_entries,
                 is_complete,
+                is_cancelled: is_complete && ctx.cancellation.is_cancelled(),
                 warnings_count,
                 execution_mode: ctx.execution.mode_or(ctx.planned_mode),
             },
@@ -1594,7 +1627,23 @@ fn build_entry_summary(path: &Path) -> Option<EntrySummary> {
     })
 }
 
+fn excluded_name(names: &HashSet<String>, name: Option<&str>) -> bool {
+    !names.is_empty()
+        && name.is_some_and(|name| {
+            let name = name.to_lowercase();
+            names.contains(&name)
+                || names
+                    .iter()
+                    .any(|pattern| pattern.contains(['*', '?']) && glob_match(&name, pattern))
+        })
+}
+
 fn matches_summary(entry: &EntrySummary, options: &SearchOptions) -> bool {
+    if entry.kind == EntryKind::File
+        && excluded_name(&options.excluded_file_names, Some(&entry.name))
+    {
+        return false;
+    }
     if options
         .min_size_bytes
         .is_some_and(|minimum| entry.size.is_none_or(|size| size < minimum))
@@ -1789,6 +1838,8 @@ mod tests {
 
     fn base_options(filename: &str) -> SearchOptions {
         SearchOptions {
+            excluded_file_names: HashSet::new(),
+            excluded_directory_names: HashSet::new(),
             filename_query: filename.to_owned(),
             filename_mode: None,
             filename_case_sensitive: false,
@@ -2220,6 +2271,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn document_hub_search_deduplicates_overlapping_native_roots() {
+        let temp = tempdir().unwrap();
+        let nested = temp.path().join("nested");
+        let separate = tempdir().unwrap();
+        fs::create_dir(&nested).unwrap();
+        fs::write(nested.join("plan.pdf"), b"").unwrap();
+        fs::write(separate.path().join("slides.pdf"), b"").unwrap();
+
+        let store = Arc::new(SearchResultsStore::new());
+        let events = EventBus::new(16);
+        let engine = SearchEngine::new(Arc::clone(&store), events.clone(), ProviderRegistry::new());
+        let subscription = subscribe(&events);
+        let id = Uuid::new_v4();
+        let roots = [temp.path(), &nested, separate.path()]
+            .map(|path| Location::from_native_path(path).unwrap());
+        engine
+            .start(
+                id,
+                roots.to_vec(),
+                base_options("*.pdf"),
+                EventAudience::Global,
+            )
+            .unwrap();
+
+        let batches = collect_batches(subscription).await;
+        assert_eq!(
+            batches
+                .iter()
+                .map(|(entries, _, _)| entries.len())
+                .sum::<usize>(),
+            2
+        );
+        let (entries, has_more) = store.page(id, 0, 10).unwrap();
+        assert!(!has_more);
+        let mut names: Vec<_> = entries.iter().map(|entry| entry.name.as_str()).collect();
+        names.sort_unstable();
+        assert_eq!(names, ["plan.pdf", "slides.pdf"]);
+    }
+
+    #[tokio::test]
     async fn combines_kind_name_mime_and_size_predicates_across_interleaved_results() {
         let root = tempdir().unwrap();
         fs::create_dir_all(root.path().join("clip-small.mp4")).unwrap();
@@ -2342,6 +2433,8 @@ mod tests {
                 search_id,
                 vec![root_location],
                 SearchOptions {
+                    excluded_file_names: HashSet::new(),
+                    excluded_directory_names: HashSet::new(),
                     filename_query: "report".to_owned(),
                     content_query: None,
                     recurse: true,
@@ -2393,6 +2486,70 @@ mod tests {
         assert_eq!(
             total, 2,
             "both the dotfile and the regular file match when show_hidden is true"
+        );
+    }
+
+    #[tokio::test]
+    async fn document_search_prunes_excluded_names_and_keeps_matching_documents() {
+        let root = tempdir().unwrap();
+        for directory in [
+            "work",
+            "Node_Modules",
+            ".venv",
+            "Copilot-Worktrees",
+            "build-2",
+        ] {
+            let folder = root.path().join(directory);
+            fs::create_dir(&folder).unwrap();
+            for file in [
+                "README.MD",
+                "LICENSE.TXT",
+                "draft, archived.PDF",
+                "report.PDF",
+                "slides.pptx",
+                "book.epub",
+            ] {
+                fs::write(folder.join(file), "").unwrap();
+            }
+        }
+        let store = Arc::new(SearchResultsStore::new());
+        let events = EventBus::new(16);
+        let engine = SearchEngine::new(Arc::clone(&store), events.clone(), ProviderRegistry::new());
+        let subscription = subscribe(&events);
+        let search_id = Uuid::new_v4();
+        let mut options = base_options("*.pdf,*.pptx,*.epub,*.md,*.txt");
+        options.excluded_file_names = [
+            "readme.md".into(),
+            "license.txt".into(),
+            "draft, *.pdf".into(),
+        ]
+        .into();
+        options.excluded_directory_names = [
+            "node_modules".into(),
+            ".venv".into(),
+            "copilot-worktrees".into(),
+            "build-?".into(),
+        ]
+        .into();
+        engine
+            .start(
+                search_id,
+                vec![Location::from_native_path(root.path()).unwrap()],
+                options,
+                EventAudience::Global,
+            )
+            .unwrap();
+
+        collect_batches(subscription).await;
+        let (entries, has_more) = store.page(search_id, 0, 32).unwrap();
+        assert!(!has_more);
+        let mut names: Vec<_> = entries.iter().map(|entry| entry.name.as_str()).collect();
+        names.sort_unstable();
+        assert_eq!(names, ["book.epub", "report.PDF", "slides.pptx"]);
+        assert!(
+            entries
+                .iter()
+                .all(|entry| entry.location.uri.contains("/work/"))
         );
     }
 
@@ -2635,6 +2792,8 @@ mod tests {
                 _search_id,
                 vec![root_location],
                 SearchOptions {
+                    excluded_file_names: HashSet::new(),
+                    excluded_directory_names: HashSet::new(),
                     filename_query: String::new(),
                     content_query: Some(ContentQuery::new("needle", false, false, false).unwrap()),
                     recurse: true,
@@ -2684,6 +2843,8 @@ mod tests {
                 Uuid::new_v4(),
                 vec![Location::from_native_path(root.path()).unwrap()],
                 SearchOptions {
+                    excluded_file_names: HashSet::new(),
+                    excluded_directory_names: HashSet::new(),
                     filename_query: String::new(),
                     content_query: Some(ContentQuery::new("staal", false, false, false).unwrap()),
                     recurse: true,
@@ -2734,6 +2895,8 @@ mod tests {
                 Uuid::new_v4(),
                 vec![Location::from_native_path(root.path()).unwrap()],
                 SearchOptions {
+                    excluded_file_names: HashSet::new(),
+                    excluded_directory_names: HashSet::new(),
                     filename_query: String::new(),
                     content_query: Some(ContentQuery::new("staal", false, false, false).unwrap()),
                     recurse: true,
@@ -2781,6 +2944,8 @@ mod tests {
                 _search_id,
                 vec![root_location],
                 SearchOptions {
+                    excluded_file_names: HashSet::new(),
+                    excluded_directory_names: HashSet::new(),
                     filename_query: "report".to_owned(),
                     content_query: Some(ContentQuery::new("needle", false, false, false).unwrap()),
                     recurse: true,
@@ -2818,6 +2983,8 @@ mod tests {
                 _search_id,
                 vec![root_location],
                 SearchOptions {
+                    excluded_file_names: HashSet::new(),
+                    excluded_directory_names: HashSet::new(),
                     filename_query: String::new(),
                     content_query: Some(ContentQuery::new("needle", false, false, false).unwrap()),
                     recurse: true,
@@ -2859,6 +3026,8 @@ mod tests {
                 _search_id,
                 vec![root_location],
                 SearchOptions {
+                    excluded_file_names: HashSet::new(),
+                    excluded_directory_names: HashSet::new(),
                     filename_query: String::new(),
                     content_query: Some(ContentQuery::new("match", false, false, false).unwrap()),
                     recurse: false,
@@ -2899,6 +3068,8 @@ mod tests {
                 _search_id,
                 vec![root_location],
                 SearchOptions {
+                    excluded_file_names: HashSet::new(),
+                    excluded_directory_names: HashSet::new(),
                     filename_query: String::new(),
                     content_query: Some(ContentQuery::new("ERROR.*", true, false, false).unwrap()),
                     recurse: true,
@@ -2941,6 +3112,8 @@ mod tests {
                 _search_id,
                 vec![root_location],
                 SearchOptions {
+                    excluded_file_names: HashSet::new(),
+                    excluded_directory_names: HashSet::new(),
                     filename_query: String::new(),
                     content_query: Some(
                         ContentQuery::new("nonexistent_needle", false, false, false).unwrap(),
@@ -2982,6 +3155,8 @@ mod tests {
                 _search_id,
                 vec![root_location],
                 SearchOptions {
+                    excluded_file_names: HashSet::new(),
+                    excluded_directory_names: HashSet::new(),
                     filename_query: String::new(),
                     content_query: Some(ContentQuery::new("needle", false, false, false).unwrap()),
                     recurse: true,
@@ -3234,6 +3409,8 @@ mod tests {
             search_id,
             vec![root_location],
             SearchOptions {
+                excluded_file_names: HashSet::new(),
+                excluded_directory_names: HashSet::new(),
                 filename_query: filename_query.to_string(),
                 content_query,
                 recurse: true,
@@ -3316,6 +3493,8 @@ mod tests {
                 search_id,
                 vec![unknown_location],
                 SearchOptions {
+                    excluded_file_names: HashSet::new(),
+                    excluded_directory_names: HashSet::new(),
                     filename_query: String::new(),
                     content_query: None,
                     recurse: true,

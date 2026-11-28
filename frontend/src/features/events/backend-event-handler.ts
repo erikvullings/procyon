@@ -162,7 +162,9 @@ export interface BackendEventContext {
   findPanesWithUri(uri: string): readonly PaneId[];
   /** Opens the search location in its intended pane after the first result arrives. */
   revealSearchResults(searchId: string): Promise<readonly PaneId[]>;
-  loadPane(paneId: PaneId, options?: { background?: boolean }): Promise<void>;
+  loadPane(paneId: PaneId, options?: { background?: boolean; allPages?: boolean }): Promise<void>;
+  isDocumentHub?(locationUri: string): boolean;
+  acceptDocumentHubBatch?(searchId: string, complete: boolean, cancelled: boolean): boolean;
   /**
    * Called once a search with results has finished and `paneId` has applied its final reload.
    */
@@ -218,7 +220,13 @@ export function createBackendEventHandler(ctx: BackendEventContext): (event: Bac
       try {
         while (state.dirty) {
           state.dirty = false;
-          await ctx.loadPane(paneId, { background: !state.complete });
+          const allPages = state.complete && ctx.isDocumentHub?.(`search://local/${searchId}`);
+          if (allPages && !ctx.findPanesWithUri(`search://local/${searchId}`).includes(paneId))
+            break;
+          await ctx.loadPane(paneId, {
+            background: !state.complete || allPages === true,
+            ...(allPages ? { allPages } : {}),
+          });
         }
         if (state.complete) ctx.reportSearchCompletion(paneId, searchId);
       } finally {
@@ -414,6 +422,16 @@ export function createBackendEventHandler(ctx: BackendEventContext): (event: Bac
         if (ctx.hasPendingFindFilesStart?.()) ctx.deferSearchResultBatch?.(event);
         return;
       }
+      const hub = ctx.isDocumentHub?.(searchUri) === true;
+      if (
+        hub &&
+        ctx.acceptDocumentHubBatch?.(
+          payload.searchId,
+          payload.isComplete,
+          payload.isCancelled === true,
+        ) === false
+      )
+        return;
       if (payload.entries.length > 0) searchesWithResults.add(payload.searchId);
       for (const entry of payload.entries) {
         if (entry.contentMatches !== undefined && entry.contentMatches.length > 0) {
@@ -423,10 +441,10 @@ export function createBackendEventHandler(ctx: BackendEventContext): (event: Bac
       const visiblePanes = ctx.findPanesWithUri(searchUri);
       const hasResults = searchesWithResults.has(payload.searchId);
       if (payload.isComplete) searchesWithResults.delete(payload.searchId);
-      if (payload.isComplete && !hasResults) {
+      if (payload.isComplete && !hasResults && !hub) {
         ctx.clearFindFilesTargetPane?.(payload.searchId);
         ctx.reportSearchWithoutResults(payload.searchId);
-      } else if (hasResults || visiblePanes.length > 0) {
+      } else if (hasResults || visiblePanes.length > 0 || (hub && payload.isComplete)) {
         void revealSearch(payload.searchId).then((paneIds) => {
           for (const paneId of paneIds) {
             queueSearchReload(paneId, payload.searchId, payload.isComplete);

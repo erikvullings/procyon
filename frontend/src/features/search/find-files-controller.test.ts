@@ -359,13 +359,14 @@ describe('FindFilesController refresh', () => {
   });
 });
 
-describe('FindFilesController branch view', () => {
+describe('FindFilesController virtual folders', () => {
   const root: Location = { providerId: 'local', uri: 'file:///Projects' };
   const resultLocation: Location = { providerId: 'search', uri: 'search://local/branch-1' };
 
   function setup(active: Location) {
     const roots = new Map<string, Location>();
     const queries = new Map<string, SearchQuery>();
+    const params = new Map<string, FindFilesSearchParams>();
     const presentations = new Map();
     const startSearch = vi.fn().mockResolvedValue({
       searchId: 'branch-1',
@@ -385,7 +386,7 @@ describe('FindFilesController branch view', () => {
       getFindFilesGeneration: () => generation,
       getFindFilesRootsByLocationUri: () => roots,
       getFindFilesPresentationsByLocationUri: () => presentations,
-      getFindFilesParamsByLocationUri: () => new Map(),
+      getFindFilesParamsByLocationUri: () => params,
       getFindFilesQueriesByLocationUri: () => queries,
       setFindFilesOpen: vi.fn(),
       setFindFilesRoot: vi.fn(),
@@ -418,7 +419,7 @@ describe('FindFilesController branch view', () => {
       reportLimitations: vi.fn(),
       notify: vi.fn(),
       getDocumentHubSettings: () => DEFAULT_DOCUMENT_HUB_SETTINGS,
-      resolveHubRoot: () => undefined,
+      resolveHubRoot: () => root,
     };
     return {
       context,
@@ -473,6 +474,40 @@ describe('FindFilesController branch view', () => {
     expect(navigateTo).toHaveBeenCalledWith('pane-1', root);
     expect(startSearch).toHaveBeenCalledOnce();
   });
+
+  it.each([false, true])(
+    'keeps the cached hub visible until refresh settles (cancelled: %s)',
+    async (cancelled) => {
+      const { context, startSearch, navigateTo, setActive } = setup(root);
+      const refreshedLocation = { providerId: 'search', uri: 'search://local/updated-hub' };
+      const controller = createFindFilesController(context);
+      controller.openDocumentHub();
+      await vi.waitFor(() => expect(controller.isDocumentHub(resultLocation.uri)).toBe(true));
+      expect(startSearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          structuredQuery: expect.objectContaining({
+            scope: expect.objectContaining({ showHidden: false }),
+          }),
+        }),
+      );
+      expect(controller.acceptDocumentHubBatch('branch-1', true)).toBe(true);
+      startSearch.mockResolvedValueOnce({
+        searchId: 'updated-hub',
+        location: refreshedLocation,
+        limitations: [],
+        executionMode: 'liveRecursive',
+      });
+      navigateTo.mockImplementationOnce((_paneId, location) => setActive(location));
+
+      controller.openDocumentHub();
+
+      expect(navigateTo).toHaveBeenCalledWith('pane-1', resultLocation);
+      await vi.waitFor(() => expect(controller.isDocumentHub(refreshedLocation.uri)).toBe(true));
+      expect(controller.acceptDocumentHubBatch('updated-hub', false)).toBe(false);
+      expect(controller.acceptDocumentHubBatch('updated-hub', true, cancelled)).toBe(!cancelled);
+      if (cancelled) expect(context.clearFindFilesTargetPane).toHaveBeenCalledWith('updated-hub');
+    },
+  );
 
   it('does not turn an ordinary search result into a branch view', () => {
     const search: Location = { providerId: 'search', uri: 'search://local/other' };

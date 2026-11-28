@@ -21,21 +21,37 @@ describe('normalizeHubExtensions', () => {
 });
 
 describe('documentHubQuery', () => {
-  it('searches the base folder recursively for files with any of the extensions', () => {
-    const query = documentHubQuery({ extensions: ['pdf', 'docx'], basePath: '~' }, HOME, false);
+  it('searches multiple base folders recursively for files with any of the extensions', () => {
+    const work = { providerId: 'local', uri: 'file:///Volumes/Work' };
+    const query = documentHubQuery(
+      { ...DEFAULT_DOCUMENT_HUB_SETTINGS, extensions: ['pdf', 'docx'] },
+      [HOME, work],
+    );
 
-    expect(query.scope).toEqual({ locations: [HOME], recurse: true, showHidden: false });
+    expect(query.scope).toEqual({
+      locations: [HOME, work],
+      recurse: true,
+      showHidden: false,
+      excludedFileNames: DEFAULT_DOCUMENT_HUB_SETTINGS.excludedFileNames,
+      excludedDirectoryNames: DEFAULT_DOCUMENT_HUB_SETTINGS.excludedDirectoryNames,
+    });
     expect(query.entryKinds).toEqual(['file']);
     expect(query.name).toEqual({ pattern: '*.pdf,*.docx', mode: 'glob', caseSensitive: false });
     expect(query.content).toBeUndefined();
   });
 
-  it('follows the show-hidden setting', () => {
-    expect(documentHubQuery(DEFAULT_DOCUMENT_HUB_SETTINGS, HOME, true).scope.showHidden).toBe(true);
+  it('allows hidden paths only when enabled in the hub settings', () => {
+    expect(
+      documentHubQuery({ ...DEFAULT_DOCUMENT_HUB_SETTINGS, showHidden: true }, [HOME]).scope
+        .showHidden,
+    ).toBe(true);
   });
 
   it('uses the normalised extensions, so a typo in settings cannot widen the search', () => {
-    const query = documentHubQuery({ extensions: ['.PDF', '*'], basePath: '~' }, HOME, false);
+    const query = documentHubQuery(
+      { ...DEFAULT_DOCUMENT_HUB_SETTINGS, extensions: ['.PDF', '*'] },
+      [HOME],
+    );
 
     expect(query.name?.pattern).toBe('*.pdf');
   });

@@ -18,16 +18,21 @@ export function normalizeHubExtensions(raw: readonly string[]): string[] {
 }
 
 /** The document hub as an ordinary recursive search: one comma-separated filename glob per
- * configured extension, files only, below `root` (the resolved base folder). */
+ * configured extension, files only, below the resolved base folders. */
 export function documentHubQuery(
   settings: DocumentHubSettings,
-  root: Location,
-  showHidden: boolean,
+  roots: readonly Location[],
 ): SearchQuery {
   return {
     schemaVersion: 2,
     mode: 'name',
-    scope: { locations: [root], recurse: true, showHidden },
+    scope: {
+      locations: roots,
+      recurse: true,
+      showHidden: settings.showHidden,
+      excludedFileNames: settings.excludedFileNames,
+      excludedDirectoryNames: settings.excludedDirectoryNames,
+    },
     name: {
       pattern: normalizeHubExtensions(settings.extensions)
         .map((extension) => `*.${extension}`)

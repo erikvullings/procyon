@@ -1,5 +1,5 @@
 import type { EntrySummary } from '../../models/entry';
-import { extensionGroupKey } from '../directory-table/extension-groups';
+import { extensionGroupKey, hubParentFolderName } from '../directory-table/extension-groups';
 
 export type SortColumn = 'name' | 'extension' | 'size' | 'modified';
 export type SortDirection = 'ascending' | 'descending';
@@ -104,8 +104,8 @@ export function sortEntries(
 }
 
 /** Orders two entries by their group (extension, else parent folder) before any column sort, so
- * each group stays contiguous; files without an extension come last. Descending name sorts flip
- * the group order too, as the parent-folder grouping always has. */
+ * each group stays contiguous. Name sorting within an extension orders by the displayed folder
+ * first. Descending name sorts reverse the group order as well. */
 function compareGroups(
   left: EntrySummary,
   right: EntrySummary,
@@ -120,6 +120,9 @@ function compareGroups(
       leftKey === '' || rightKey === ''
         ? Number(leftKey === '') - Number(rightKey === '')
         : compareNames(leftKey, rightKey);
+    if (comparison === 0 && descriptor?.column === 'name') {
+      comparison = compareNames(hubParentFolderName(left), hubParentFolderName(right));
+    }
   } else if (grouping.groupByParentPath === true) {
     comparison = compareNames(parentPath(left), parentPath(right));
   }

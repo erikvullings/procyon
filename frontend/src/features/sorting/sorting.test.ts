@@ -52,6 +52,34 @@ describe('entry sorting', () => {
     ]);
   });
 
+  it('sorts hub names by extension, immediate folder, and filename', async () => {
+    const entries = [
+      entry('SKILL.md', {
+        id: 'tasks',
+        location: { providerId: 'local', uri: 'file:///a/tasks/SKILL.md' },
+      }),
+      entry('SKILL.md', {
+        id: 'review',
+        location: { providerId: 'local', uri: 'file:///z/code-review/SKILL.md' },
+      }),
+      entry('Guide.md', {
+        id: 'guide',
+        location: { providerId: 'local', uri: 'file:///z/code-review/Guide.md' },
+      }),
+      entry('Notes.txt', {
+        id: 'text',
+        location: { providerId: 'local', uri: 'file:///a/tasks/Notes.txt' },
+      }),
+    ];
+    const sort: SortModel = [{ column: 'name', direction: 'ascending' }];
+    const grouping = { groupByExtension: true };
+    const expected = ['guide', 'review', 'tasks', 'text'];
+
+    expect(sortEntries(entries, sort, false, grouping).map(({ id }) => id)).toEqual(expected);
+    const responsive = await sortEntriesResponsive(entries, sort, false, grouping);
+    expect(responsive.map(({ id }) => id)).toEqual(expected);
+  });
+
   it('groups large search results by parent path in the responsive sorter', async () => {
     const entries = [
       entry('alpha.pdf', {

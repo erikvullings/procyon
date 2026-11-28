@@ -31,7 +31,7 @@ pub use search::{
     ConceptHierarchyScope, SEARCH_QUERY_SCHEMA_VERSION, SavedSearch, SearchConceptPredicate,
     SearchContentPredicate, SearchEntryKind, SearchMode, SearchNameMode, SearchNamePredicate,
     SearchQuery, SearchScope, SearchSemanticConceptSource, SearchSemanticPredicate,
-    SemanticSearchScope,
+    SemanticSearchScope, deserialize_hub_base_paths,
 };
 pub use snapshot::{DirectoryDelta, DirectorySnapshot, LoadingState};
 pub use workspace::{

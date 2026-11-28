@@ -8,7 +8,13 @@
  */
 export interface DocumentHubSettingsDto {
   /** Folder searched recursively; `~` is the home folder. */
-  basePath: string;
+  basePaths: string[];
+  /** Case-insensitive names and glob patterns to skip during the scan. */
+  excludedDirectoryNames?: string[];
+  /** Case-insensitive names and glob patterns to skip during the scan. */
+  excludedFileNames?: string[];
   /** Extensions to include, lower case, without the dot. */
   extensions: string[];
+  /** Whether the hub scans hidden files and directories. */
+  showHidden?: boolean;
 }

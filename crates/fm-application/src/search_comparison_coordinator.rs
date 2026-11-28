@@ -158,6 +158,20 @@ impl SearchComparisonCoordinator {
             None,
         );
         let options = fm_search::SearchOptions {
+            excluded_file_names: structured
+                .into_iter()
+                .flat_map(|query| &query.scope.excluded_file_names)
+                .take(64)
+                .filter(|name| name.len() <= 255)
+                .map(|name| name.to_lowercase())
+                .collect(),
+            excluded_directory_names: structured
+                .into_iter()
+                .flat_map(|query| &query.scope.excluded_directory_names)
+                .take(64)
+                .filter(|name| name.len() <= 255)
+                .map(|name| name.to_lowercase())
+                .collect(),
             filename_query: structured
                 .and_then(|query| query.name.as_ref())
                 .map_or(request.query, |name| name.pattern.clone()),
@@ -1133,6 +1147,8 @@ mod tests {
                         schema_version: 2,
                         mode: SearchModeDto::Semantic,
                         scope: SearchScopeDto {
+                            excluded_file_names: Vec::new(),
+                            excluded_directory_names: Vec::new(),
                             locations: vec![fm_transport_dto::LocationDto {
                                 provider_id: "local".to_owned(),
                                 uri: root_location.uri.clone(),
@@ -1320,6 +1336,8 @@ mod tests {
                 schema_version: 3,
                 mode: SearchModeDto::Concept,
                 scope: SearchScopeDto {
+                    excluded_file_names: Vec::new(),
+                    excluded_directory_names: Vec::new(),
                     locations: vec![fm_transport_dto::LocationDto {
                         provider_id: "local".to_owned(),
                         uri: root_location.uri.clone(),

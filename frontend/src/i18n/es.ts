@@ -385,13 +385,18 @@ export const es = {
     pictureInfoSection: 'Imágenes',
     documentHubSection: 'Centro de documentos',
     documentHubIntro:
-      'Una carpeta virtual que muestra todos los archivos con una de estas extensiones en la carpeta base y sus subcarpetas, agrupados por extensión. Ábrela desde la paleta de comandos: Centro de documentos. Los archivos no se mueven ni se copian.',
+      'El centro de documentos muestra los archivos coincidentes de las carpetas seleccionadas y sus subcarpetas, agrupados por extensión. Ábrelo desde la paleta de comandos.',
+    documentHubShowHidden: 'Incluir archivos y carpetas ocultos',
+    documentHubExcludedFiles: 'Nombres de archivo excluidos',
+    documentHubExcludedFolders: 'Nombres de carpeta excluidos',
+    documentHubExclusionsHint:
+      'Un nombre o patrón por línea. Usa * o ?. Se ignoran las mayúsculas.',
     documentHubExtensions: 'Extensiones',
     documentHubExtensionsHint:
       'Tipos de archivo a mostrar, por ejemplo pdf docx pptx. Sepáralos con espacios o comas.',
-    documentHubBasePath: 'Carpeta base',
+    documentHubBasePath: 'Carpetas base',
     documentHubBasePathHint:
-      'La carpeta que se busca, incluidas todas sus subcarpetas. ~ es tu carpeta personal.',
+      'Una carpeta por línea, incluidas sus subcarpetas. Usa ~ para tu carpeta personal.',
     documentHubReset: 'Restaurar valores predeterminados',
     pictureCaptionFields: 'Líneas bajo las miniaturas',
     pictureTooltip: 'Mostrar detalles de la imagen al pasar el ratón',
@@ -1070,7 +1075,7 @@ export const es = {
     branchViewLabel: 'Vista plana',
     documentHubLabel: 'Centro de documentos',
     documentHubRootUnknown:
-      'No se puede abrir el centro de documentos: la carpeta base {path} no está disponible.',
+      'El centro de documentos no pudo resolver estas rutas de carpeta: {path}',
     unableToStart: 'No se puede iniciar la búsqueda',
     startingSearch: 'Iniciando búsqueda…',
     refresh: 'Actualizar búsqueda',

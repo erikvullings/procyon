@@ -740,7 +740,7 @@ export function createPaneContentBuilder(
       onInsertEntryPath: (entry: EntrySummary) => context.insertEntryPath(entry),
       formatSettings: entryFormatSettings,
       ...(tab !== undefined && context.isDocumentHub(tab.location.uri)
-        ? { groupByExtension: true }
+        ? { groupByExtension: true, homeDirectory: context.getHomeDirectory?.() }
         : {}),
       ...(nativeIconLoader === undefined ? {} : { nativeIconLoader }),
       ...(thumbnailLoader === undefined ? {} : { thumbnailLoader }),

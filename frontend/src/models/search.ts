@@ -28,6 +28,8 @@ export interface SearchQuery {
     readonly locations: readonly Location[];
     readonly recurse: boolean;
     readonly showHidden: boolean;
+    readonly excludedFileNames?: readonly string[];
+    readonly excludedDirectoryNames?: readonly string[];
   };
   readonly name?: {
     readonly pattern: string;

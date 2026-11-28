@@ -233,6 +233,57 @@ describe('navigation controller', () => {
     expect(context.client.listDirectory).toHaveBeenCalledOnce();
   });
 
+  it('uses the hub visibility setting independently of the current pane preference', async () => {
+    const uri = 'search://local/documents';
+    const context = setup(workspace(uri, 'search', { showHidden: false }));
+    echoingSnapshot(context.client, uri, ['.notes.md']);
+    const controller = createNavigationController({
+      client: context.client,
+      getWorkspace: context.getWorkspace,
+      replaceWorkspace: context.replaceWorkspace,
+      updatePane: (_paneId, _tabId, view) => context.views.push(view),
+      getHiddenVisibility: (location) => (location.uri === uri ? true : undefined),
+    });
+
+    await controller.load('left');
+
+    expect(context.client.listDirectory).toHaveBeenCalledWith(
+      expect.objectContaining({ showHidden: true }),
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('includes document types that only appear on later pages of a completed hub scan', async () => {
+    const uri = 'search://local/documents';
+    const context = setup(workspace(uri, 'search'));
+    vi.mocked(context.client.listDirectory)
+      .mockImplementationOnce(async (request) =>
+        snapshot(request.requestId, uri, ['notes.md'], {
+          hasMore: true,
+          continuationToken: 'next',
+        }),
+      )
+      .mockImplementationOnce(async (request) =>
+        snapshot(request.requestId, uri, ['report.pdf', 'slides.pptx', 'book.epub']),
+      );
+    const controller = createNavigationController({
+      client: context.client,
+      getWorkspace: context.getWorkspace,
+      replaceWorkspace: context.replaceWorkspace,
+      updatePane: (_paneId, _tabId, view) => context.views.push(view),
+    });
+
+    await controller.load('left', { background: true, allPages: true });
+
+    expect(context.views.at(-1)?.entries.map((entry) => entry.name)).toEqual([
+      'notes.md',
+      'report.pdf',
+      'slides.pptx',
+      'book.epub',
+    ]);
+    expect(context.views.at(-1)?.hasMore).toBe(false);
+  });
+
   it('requests an archive credential and retries the same listing', async () => {
     const archive = { providerId: 'archive', uri: 'archive:///tmp/secret.zip!/' } as const;
     const context = setup(workspace(archive.uri, archive.providerId));

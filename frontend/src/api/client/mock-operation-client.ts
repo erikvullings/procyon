@@ -289,7 +289,7 @@ export class MockOperationClient implements OperationClient {
       const contentQuery =
         request.structuredQuery?.content?.query ?? semanticQuery ?? request.contentQuery;
       const semanticMode = request.structuredQuery?.mode === 'semantic';
-      const entries = roots.flatMap((root) =>
+      const matches = roots.flatMap((root) =>
         collectMatches(
           root.uri,
           filenameQuery,
@@ -299,6 +299,10 @@ export class MockOperationClient implements OperationClient {
           request.structuredQuery,
         ),
       );
+      const entries =
+        roots.length > 1
+          ? [...new Map(matches.map((entry) => [entry.location.uri, entry])).values()]
+          : matches;
       this.ctx.searches.set(searchId, { cancelled: false, entries });
       // Deferred with a macrotask (rather than a microtask) so it always runs
       // after this method's own promise has resolved and the caller has

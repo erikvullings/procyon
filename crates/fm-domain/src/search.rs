@@ -123,6 +123,10 @@ pub struct SearchContentPredicate {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchScope {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded_file_names: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded_directory_names: Vec<String>,
     pub locations: Vec<Location>,
     pub recurse: bool,
     pub show_hidden: bool,
@@ -160,4 +164,22 @@ pub struct SavedSearch {
     pub name: String,
     pub pinned: bool,
     pub query: SearchQuery,
+}
+
+/// Reads the Document Hub's folder list, accepting the old single-folder value.
+pub fn deserialize_hub_base_paths<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum SavedPaths {
+        List(Vec<String>),
+        Single(String),
+    }
+
+    Ok(match SavedPaths::deserialize(deserializer)? {
+        SavedPaths::List(paths) => paths,
+        SavedPaths::Single(path) => vec![path],
+    })
 }

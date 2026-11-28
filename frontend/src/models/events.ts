@@ -102,6 +102,7 @@ export type BackendEventPayload =
   | { type: 'notification.created'; notification: BackendNotification }
   | {
       type: 'search.resultsBatch';
+      isCancelled?: boolean;
       searchId: string;
       entries: EntrySummary[];
       isComplete: boolean;

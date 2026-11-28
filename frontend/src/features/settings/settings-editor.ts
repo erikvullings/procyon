@@ -4,6 +4,7 @@ import {
   NumberInput,
   Select,
   Switch,
+  TextArea,
   TextInput,
   ThemeSwitcher,
 } from 'mithril-materialized';
@@ -171,6 +172,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
   let startLocationsText = '';
   let terminalAppsText = '';
   let hubExtensionsText = '';
+  let hubListText = { basePaths: '', excludedFileNames: '', excludedDirectoryNames: '' };
   let saving = false;
   let saveError: string | undefined;
   let activeSection: SettingsSection = 'appearance';
@@ -205,6 +207,11 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
     startLocationsText = formatListInput(draft.defaultStartLocations);
     terminalAppsText = formatTerminalApps(draft.terminalApps);
     hubExtensionsText = draft.documentHub.extensions.join(' ');
+    hubListText = {
+      basePaths: draft.documentHub.basePaths.join('\n'),
+      excludedFileNames: draft.documentHub.excludedFileNames.join('\n'),
+      excludedDirectoryNames: draft.documentHub.excludedDirectoryNames.join('\n'),
+    };
     saveError = undefined;
   }
 
@@ -651,7 +658,7 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                           m('.row', m('p.col.s12.helper-text', t('settings', 'documentHubIntro'))),
                           m('.row', [
                             m(TextInput, {
-                              className: 'col s12 m6',
+                              className: 'col s12',
                               label: t('settings', 'documentHubExtensions'),
                               helperText: t('settings', 'documentHubExtensionsHint'),
                               value: hubExtensionsText,
@@ -667,26 +674,76 @@ export const SettingsEditor: FactoryComponent<SettingsEditorAttrs> = () => {
                                 });
                               },
                             }),
-                            m(TextInput, {
-                              className: 'col s12 m6',
-                              label: t('settings', 'documentHubBasePath'),
-                              helperText: t('settings', 'documentHubBasePathHint'),
-                              value: activeDraft.documentHub.basePath,
-                              oninput: (value: string) =>
-                                update(current, {
-                                  documentHub: { ...activeDraft.documentHub, basePath: value },
-                                }),
-                            }),
                           ]),
                           m(
                             '.row',
+                            m(Switch, {
+                              className: 'col s12 m6',
+                              label: t('settings', 'documentHubShowHidden'),
+                              checked: activeDraft.documentHub.showHidden,
+                              left: t('settings', 'off'),
+                              right: t('settings', 'on'),
+                              onchange: (showHidden: boolean) =>
+                                update(current, {
+                                  documentHub: { ...activeDraft.documentHub, showHidden },
+                                }),
+                            }),
+                          ),
+                          (
+                            ['basePaths', 'excludedFileNames', 'excludedDirectoryNames'] as const
+                          ).map((field) =>
                             m(
-                              '.col.s12',
+                              '.row.fm-document-hub-list-field',
+                              m(TextArea, {
+                                className: 'col s12',
+                                label: t(
+                                  'settings',
+                                  field === 'basePaths'
+                                    ? 'documentHubBasePath'
+                                    : field === 'excludedFileNames'
+                                      ? 'documentHubExcludedFiles'
+                                      : 'documentHubExcludedFolders',
+                                ),
+                                helperText: t(
+                                  'settings',
+                                  field === 'basePaths'
+                                    ? 'documentHubBasePathHint'
+                                    : 'documentHubExclusionsHint',
+                                ),
+                                value: hubListText[field],
+                                oninput: (value: string) => {
+                                  hubListText[field] = value;
+                                  update(current, {
+                                    documentHub: {
+                                      ...activeDraft.documentHub,
+                                      [field]: value
+                                        .split(/\r?\n/u)
+                                        .map((name) => name.trim())
+                                        .filter(Boolean),
+                                    },
+                                  });
+                                },
+                              }),
+                            ),
+                          ),
+                          m(
+                            '.row',
+                            m(
+                              '.col.s12.right-align',
                               m(
                                 'button.btn-flat',
                                 {
                                   type: 'button',
                                   onclick: () => {
+                                    hubListText = {
+                                      basePaths: DEFAULT_DOCUMENT_HUB_SETTINGS.basePaths.join('\n'),
+                                      excludedFileNames:
+                                        DEFAULT_DOCUMENT_HUB_SETTINGS.excludedFileNames.join('\n'),
+                                      excludedDirectoryNames:
+                                        DEFAULT_DOCUMENT_HUB_SETTINGS.excludedDirectoryNames.join(
+                                          '\n',
+                                        ),
+                                    };
                                     hubExtensionsText =
                                       DEFAULT_DOCUMENT_HUB_SETTINGS.extensions.join(' ');
                                     update(current, { documentHub: DEFAULT_DOCUMENT_HUB_SETTINGS });

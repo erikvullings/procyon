@@ -381,13 +381,17 @@ export const en = {
     pictureInfoSection: 'Pictures',
     documentHubSection: 'Document hub',
     documentHubIntro:
-      'A virtual folder that lists every file with one of these extensions in the base folder and its subfolders, grouped by extension. Open it from the command palette: Document hub. Files are not moved or copied.',
+      'The Document hub lists matching files from the selected folders and their subfolders, grouped by extension. Open it from the command palette.',
     documentHubExtensions: 'Extensions',
+    documentHubShowHidden: 'Include hidden files and folders',
+    documentHubExcludedFiles: 'Excluded filenames',
+    documentHubExcludedFolders: 'Excluded folder names',
+    documentHubExclusionsHint: 'One name or glob per line. Use * or ?. Matching ignores case.',
     documentHubExtensionsHint:
       'File types to list, for example pdf docx pptx. Separate them with spaces or commas.',
-    documentHubBasePath: 'Base folder',
+    documentHubBasePath: 'Base folders',
     documentHubBasePathHint:
-      'The folder to search, including all its subfolders. ~ is your home folder.',
+      'One folder per line, including its subfolders. Use ~ for your home folder.',
     documentHubReset: 'Restore defaults',
     pictureCaptionFields: 'Lines under thumbnails',
     pictureTooltip: 'Show picture details when hovering',
@@ -1018,8 +1022,7 @@ export const en = {
     folderScope: 'Folder: {path}',
     branchViewLabel: 'Branch view',
     documentHubLabel: 'Document hub',
-    documentHubRootUnknown:
-      'Cannot open the document hub: the base folder {path} is not available.',
+    documentHubRootUnknown: 'Document hub could not resolve these folder paths: {path}',
     unableToStart: 'Unable to start search',
     startingSearch: 'Starting search…',
     refresh: 'Refresh search',

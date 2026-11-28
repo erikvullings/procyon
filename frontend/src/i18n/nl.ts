@@ -383,13 +383,17 @@ export const nl = {
     pictureInfoSection: 'Afbeeldingen',
     documentHubSection: 'Documentenhub',
     documentHubIntro:
-      'Een virtuele map die alle bestanden met een van deze extensies toont, in de basismap en zijn submappen, gegroepeerd per extensie. Open via het opdrachtenpalet: Documentenhub. Bestanden worden niet verplaatst of gekopieerd.',
+      'De Documenthub toont passende bestanden uit de gekozen mappen en hun submappen, gegroepeerd op extensie. Open de hub via het commandopalet.',
+    documentHubShowHidden: 'Verborgen bestanden en mappen opnemen',
+    documentHubExcludedFiles: 'Uitgesloten bestandsnamen',
+    documentHubExcludedFolders: 'Uitgesloten mapnamen',
+    documentHubExclusionsHint:
+      'Eén naam of patroon per regel. Gebruik * of ?. Hoofdletters maken geen verschil.',
     documentHubExtensions: 'Extensies',
     documentHubExtensionsHint:
       'Bestandstypen die getoond worden, bijvoorbeeld pdf docx pptx. Scheid ze met spaties of komma’s.',
-    documentHubBasePath: 'Basismap',
-    documentHubBasePathHint:
-      'De map die wordt doorzocht, inclusief alle submappen. ~ is je thuismap.',
+    documentHubBasePath: 'Basismappen',
+    documentHubBasePathHint: 'Eén map per regel, inclusief submappen. Gebruik ~ voor je thuismap.',
     documentHubReset: 'Standaardwaarden herstellen',
     pictureCaptionFields: 'Regels onder miniaturen',
     pictureTooltip: 'Afbeeldingsdetails tonen bij aanwijzen',
@@ -1030,8 +1034,7 @@ export const nl = {
     folderScope: 'Map: {path}',
     branchViewLabel: 'Vertakkingsweergave',
     documentHubLabel: 'Documentenhub',
-    documentHubRootUnknown:
-      'Kan de documentenhub niet openen: de basismap {path} is niet beschikbaar.',
+    documentHubRootUnknown: 'De Documenthub kon deze mappaden niet vinden: {path}',
     unableToStart: 'Kan zoekopdracht niet starten',
     startingSearch: 'Zoekopdracht starten…',
     refresh: 'Zoekopdracht vernieuwen',

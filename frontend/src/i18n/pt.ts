@@ -389,13 +389,18 @@ export const pt = {
     pictureInfoSection: 'Imagens',
     documentHubSection: 'Hub de documentos',
     documentHubIntro:
-      'Uma pasta virtual que lista todos os ficheiros com uma destas extensões na pasta base e nas subpastas, agrupados por extensão. Abra-a pela paleta de comandos: Hub de documentos. Os ficheiros não são movidos nem copiados.',
+      'O centro de documentos mostra os ficheiros correspondentes das pastas selecionadas e das respetivas subpastas, agrupados por extensão. Abra-o na paleta de comandos.',
+    documentHubShowHidden: 'Incluir ficheiros e pastas ocultos',
+    documentHubExcludedFiles: 'Nomes de ficheiros excluídos',
+    documentHubExcludedFolders: 'Nomes de pastas excluídos',
+    documentHubExclusionsHint:
+      'Um nome ou padrão por linha. Use * ou ?. As maiúsculas são ignoradas.',
     documentHubExtensions: 'Extensões',
     documentHubExtensionsHint:
       'Tipos de ficheiro a listar, por exemplo pdf docx pptx. Separe-os com espaços ou vírgulas.',
-    documentHubBasePath: 'Pasta base',
+    documentHubBasePath: 'Pastas base',
     documentHubBasePathHint:
-      'A pasta a pesquisar, incluindo todas as subpastas. ~ é a sua pasta pessoal.',
+      'Uma pasta por linha, incluindo as suas subpastas. Use ~ para a sua pasta pessoal.',
     documentHubReset: 'Repor predefinições',
     pictureCaptionFields: 'Linhas sob as miniaturas',
     pictureTooltip: 'Mostrar detalhes da imagem ao passar o rato',
@@ -1070,8 +1075,7 @@ export const pt = {
     closeMedia: 'Fechar {type}',
     branchViewLabel: 'Vista plana',
     documentHubLabel: 'Hub de documentos',
-    documentHubRootUnknown:
-      'Não é possível abrir o hub de documentos: a pasta base {path} não está disponível.',
+    documentHubRootUnknown: 'O centro de documentos não conseguiu resolver estes caminhos: {path}',
     unableToStart: 'Não é possível iniciar a pesquisa',
     startingSearch: 'A iniciar pesquisa…',
     refresh: 'Atualizar pesquisa',

@@ -44,12 +44,14 @@ use serde_json::Value;
 use thiserror::Error;
 
 /// Current on-disk settings schema.
-pub const CURRENT_SCHEMA_VERSION: u32 = 9;
+pub const CURRENT_SCHEMA_VERSION: u32 = 10;
 
 /// Default semantic indexing source-size limit in MiB.
 pub const DEFAULT_SEMANTIC_MAX_SOURCE_MIB: u32 = 64;
 /// First schema version whose installs enable [`DEFAULT_ENABLED_PLUGINS`] automatically.
 const DEFAULT_PLUGINS_SCHEMA_VERSION: u64 = 9;
+const HUB_WORKTREE_EXCLUSION_SCHEMA_VERSION: u64 = 10;
+const HUB_WORKTREE_FOLDER: &str = "copilot-worktrees";
 /// Bundled plugins that are on until the user turns them off (task 0142's preview renderers).
 /// They only fill extensions no built-in renderer handles and read nothing but the file being
 /// previewed, so enabling them by default adds no ambient authority.
@@ -702,20 +704,55 @@ impl PictureInfoSettings {
 const MAX_HUB_EXTENSIONS: usize = 64;
 /// Longest extension kept for the document hub, in bytes.
 const MAX_HUB_EXTENSION_LEN: usize = 16;
+const MAX_HUB_BASE_PATHS: usize = 32;
 /// Longest document hub base path, in bytes.
 const MAX_HUB_BASE_PATH_LEN: usize = 4_096;
 /// Base path meaning "the user's home folder", resolved by the host.
 const HUB_HOME_PATH: &str = "~";
 
 /// The "Document hub" virtual folder (task 0357): every file with one of `extensions` below
-/// `base_path`, in one list grouped by extension.
+/// the configured base folders, in one list grouped by extension.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct DocumentHubSettings {
     /// Extensions to include, lower case, without the dot.
     pub extensions: Vec<String>,
     /// Folder searched recursively; `~` is the home folder.
-    pub base_path: String,
+    #[serde(
+        alias = "basePath",
+        deserialize_with = "fm_domain::deserialize_hub_base_paths"
+    )]
+    pub base_paths: Vec<String>,
+    /// Case-insensitive names and glob patterns to skip during the scan.
+    pub excluded_file_names: Vec<String>,
+    /// Case-insensitive names and glob patterns to skip during the scan.
+    pub excluded_directory_names: Vec<String>,
+    /// Whether the hub scans hidden files and directories.
+    pub show_hidden: bool,
+}
+
+fn default_hub_excluded_file_names() -> Vec<String> {
+    ["README.md", "LICENSE.txt", "LICENSE.md", "COPYING.txt"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+}
+
+fn default_hub_excluded_directory_names() -> Vec<String> {
+    [
+        "node_modules",
+        ".venv",
+        ".git",
+        ".hg",
+        ".svn",
+        "__pycache__",
+        "Caches",
+        "AppData",
+        HUB_WORKTREE_FOLDER,
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
 }
 
 impl Default for DocumentHubSettings {
@@ -728,7 +765,10 @@ impl Default for DocumentHubSettings {
             .iter()
             .map(|extension| (*extension).to_owned())
             .collect(),
-            base_path: HUB_HOME_PATH.to_owned(),
+            base_paths: vec![HUB_HOME_PATH.to_owned()],
+            excluded_file_names: default_hub_excluded_file_names(),
+            excluded_directory_names: default_hub_excluded_directory_names(),
+            show_hidden: false,
         }
     }
 }
@@ -759,12 +799,41 @@ impl DocumentHubSettings {
         if self.extensions.is_empty() {
             self.extensions = Self::default().extensions;
         }
-        let base_path = self.base_path.trim();
-        self.base_path = if base_path.is_empty() || base_path.len() > MAX_HUB_BASE_PATH_LEN {
-            HUB_HOME_PATH.to_owned()
-        } else {
-            base_path.to_owned()
-        };
+        for names in [
+            &mut self.excluded_file_names,
+            &mut self.excluded_directory_names,
+        ] {
+            seen.clear();
+            *names = names
+                .iter()
+                .map(|name| name.trim())
+                .filter(|name| {
+                    !name.is_empty()
+                        && name.len() <= 255
+                        && *name != "."
+                        && *name != ".."
+                        && !name.contains(['/', '\\', '\0'])
+                })
+                .filter(|name| seen.insert(name.to_lowercase()))
+                .take(64)
+                .map(str::to_owned)
+                .collect();
+        }
+        seen.clear();
+        self.base_paths = self
+            .base_paths
+            .iter()
+            .map(|path| path.trim())
+            .filter(|path| {
+                !path.is_empty() && path.len() <= MAX_HUB_BASE_PATH_LEN && !path.contains('\0')
+            })
+            .filter(|path| seen.insert((*path).to_owned()))
+            .take(MAX_HUB_BASE_PATHS)
+            .map(str::to_owned)
+            .collect();
+        if self.base_paths.is_empty() {
+            self.base_paths.push(HUB_HOME_PATH.to_owned());
+        }
     }
 }
 
@@ -1443,7 +1512,18 @@ fn migrate(bytes: &[u8]) -> Result<Settings, serde_json::Error> {
         value["iconTheme"] = Value::from(CATPPUCCIN_ICON_THEME_PLUGIN);
         enable_plugin(&mut value, CATPPUCCIN_ICON_THEME_PLUGIN);
     }
-    serde_json::from_value(value)
+    let mut settings: Settings = serde_json::from_value(value)?;
+    if version < HUB_WORKTREE_EXCLUSION_SCHEMA_VERSION {
+        let exclusions = &mut settings.document_hub.excluded_directory_names;
+        let defaults = default_hub_excluded_directory_names();
+        if exclusions
+            .iter()
+            .eq(defaults.iter().filter(|name| *name != HUB_WORKTREE_FOLDER))
+        {
+            exclusions.push(HUB_WORKTREE_FOLDER.to_owned());
+        }
+    }
+    Ok(settings)
 }
 
 /// Adds `plugin_id` to the document's `enabledPlugins` unless it is already there.
@@ -1812,7 +1892,7 @@ mod tests {
     fn the_document_hub_defaults_to_common_documents_under_the_home_folder() {
         let hub = Settings::default().document_hub;
 
-        assert_eq!(hub.base_path, "~");
+        assert_eq!(hub.base_paths, ["~"]);
         for extension in ["pdf", "docx", "pptx", "xlsx", "odt", "epub", "md"] {
             assert!(
                 hub.extensions
@@ -1832,7 +1912,7 @@ mod tests {
                 "Docx".into(),
                 "tar.gz".into(),
             ],
-            base_path: "~".into(),
+            ..DocumentHubSettings::default()
         });
 
         assert_eq!(hub.extensions, ["pdf", "docx"]);
@@ -1850,7 +1930,7 @@ mod tests {
                 "p".repeat(17),
                 "odt".into(),
             ],
-            base_path: "~".into(),
+            ..DocumentHubSettings::default()
         });
 
         assert_eq!(hub.extensions, ["odt"]);
@@ -1860,7 +1940,7 @@ mod tests {
     fn an_empty_document_hub_extension_list_restores_the_defaults() {
         let hub = round_trip_document_hub(DocumentHubSettings {
             extensions: vec!["  ".into()],
-            base_path: "~".into(),
+            ..DocumentHubSettings::default()
         });
 
         assert_eq!(hub.extensions, DocumentHubSettings::default().extensions);
@@ -1870,7 +1950,7 @@ mod tests {
     fn document_hub_keeps_a_bounded_number_of_extensions() {
         let hub = round_trip_document_hub(DocumentHubSettings {
             extensions: (0..200).map(|index| format!("e{index}")).collect(),
-            base_path: "~".into(),
+            ..DocumentHubSettings::default()
         });
 
         assert_eq!(hub.extensions.len(), 64);
@@ -1878,18 +1958,63 @@ mod tests {
     }
 
     #[test]
-    fn the_document_hub_base_path_is_trimmed_and_a_blank_one_means_home() {
+    fn the_document_hub_base_paths_are_trimmed_and_deduplicated() {
         let trimmed = round_trip_document_hub(DocumentHubSettings {
-            base_path: "  /Users/me/Work  ".into(),
+            base_paths: vec![
+                "  /Users/me/Work  ".into(),
+                "/Users/me/Photos".into(),
+                "/Users/me/Work".into(),
+            ],
             ..DocumentHubSettings::default()
         });
         let blank = round_trip_document_hub(DocumentHubSettings {
-            base_path: "   ".into(),
+            base_paths: vec!["   ".into()],
             ..DocumentHubSettings::default()
         });
 
-        assert_eq!(trimmed.base_path, "/Users/me/Work");
-        assert_eq!(blank.base_path, "~");
+        assert_eq!(trimmed.base_paths, ["/Users/me/Work", "/Users/me/Photos"]);
+        assert_eq!(blank.base_paths, ["~"]);
+    }
+
+    #[test]
+    fn document_hub_updates_only_the_old_default_folder_exclusions() {
+        let defaults = default_hub_excluded_directory_names();
+        let old_defaults: Vec<_> = defaults
+            .iter()
+            .filter(|name| *name != HUB_WORKTREE_FOLDER)
+            .collect();
+        for (version, exclusions, expected) in [
+            (9, old_defaults.clone(), defaults.iter().collect::<Vec<_>>()),
+            (CURRENT_SCHEMA_VERSION, old_defaults.clone(), old_defaults),
+            (9, Vec::new(), Vec::new()),
+        ] {
+            let json = serde_json::json!({
+                "schemaVersion": version,
+                "documentHub": { "excludedDirectoryNames": exclusions }
+            });
+            let settings = migrate(&serde_json::to_vec(&json).unwrap()).unwrap();
+            assert_eq!(
+                settings
+                    .document_hub
+                    .excluded_directory_names
+                    .iter()
+                    .collect::<Vec<_>>(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn document_hub_migrates_the_previous_single_base_path() {
+        let legacy = serde_json::from_value::<DocumentHubSettings>(serde_json::json!({
+            "basePath": "~/Work"
+        }))
+        .expect("legacy hub settings");
+        let hub = round_trip_document_hub(legacy);
+        assert_eq!(hub.base_paths, ["~/Work"]);
+        let saved = serde_json::to_value(hub).expect("save hub settings");
+        assert_eq!(saved["basePaths"], serde_json::json!(["~/Work"]));
+        assert!(saved.get("basePath").is_none());
     }
 
     #[test]
@@ -2219,6 +2344,8 @@ mod tests {
                 schema_version: fm_domain::SEARCH_QUERY_SCHEMA_VERSION,
                 mode: fm_domain::SearchMode::Name,
                 scope: fm_domain::SearchScope {
+                    excluded_file_names: Vec::new(),
+                    excluded_directory_names: Vec::new(),
                     locations: vec![Location::new(
                         fm_domain::ProviderId::new("sftp"),
                         "sftp://alice:secret@example.test/reports?token=temporary#session",

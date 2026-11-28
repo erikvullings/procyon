@@ -387,13 +387,18 @@ export const it = {
     pictureInfoSection: 'Immagini',
     documentHubSection: 'Hub documenti',
     documentHubIntro:
-      'Una cartella virtuale che elenca tutti i file con una di queste estensioni nella cartella di base e nelle sottocartelle, raggruppati per estensione. Si apre dalla palette dei comandi: Hub documenti. I file non vengono spostati né copiati.',
+      'Il centro documenti mostra i file corrispondenti delle cartelle selezionate e delle relative sottocartelle, raggruppati per estensione. Aprilo dalla tavolozza dei comandi.',
+    documentHubShowHidden: 'Includi file e cartelle nascosti',
+    documentHubExcludedFiles: 'Nomi di file esclusi',
+    documentHubExcludedFolders: 'Nomi di cartelle esclusi',
+    documentHubExclusionsHint:
+      'Un nome o motivo per riga. Usa * o ?. Le maiuscole vengono ignorate.',
     documentHubExtensions: 'Estensioni',
     documentHubExtensionsHint:
       'Tipi di file da elencare, ad esempio pdf docx pptx. Separali con spazi o virgole.',
-    documentHubBasePath: 'Cartella di base',
+    documentHubBasePath: 'Cartelle di base',
     documentHubBasePathHint:
-      'La cartella da cercare, incluse tutte le sottocartelle. ~ è la cartella home.',
+      'Una cartella per riga, incluse le sottocartelle. Usa ~ per la tua cartella personale.',
     documentHubReset: 'Ripristina predefiniti',
     pictureCaptionFields: 'Righe sotto le miniature',
     pictureTooltip: 'Mostra i dettagli dell’immagine al passaggio del mouse',
@@ -1067,8 +1072,7 @@ export const it = {
     closeMedia: 'Chiudi {type}',
     branchViewLabel: 'Vista appiattita',
     documentHubLabel: 'Hub documenti',
-    documentHubRootUnknown:
-      'Impossibile aprire l’hub documenti: la cartella di base {path} non è disponibile.',
+    documentHubRootUnknown: 'Il centro documenti non ha potuto risolvere questi percorsi: {path}',
     unableToStart: 'Impossibile avviare la ricerca',
     startingSearch: 'Avvio della ricerca…',
     refresh: 'Aggiorna ricerca',

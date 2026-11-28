@@ -387,13 +387,18 @@ export const pl = {
     pictureInfoSection: 'Obrazy',
     documentHubSection: 'Centrum dokumentów',
     documentHubIntro:
-      'Wirtualny folder, który wyświetla wszystkie pliki o jednym z tych rozszerzeń w folderze bazowym i jego podfolderach, pogrupowane według rozszerzenia. Otwórz z palety poleceń: Centrum dokumentów. Pliki nie są przenoszone ani kopiowane.',
+      'Centrum dokumentów pokazuje pasujące pliki z wybranych folderów i ich podfolderów, pogrupowane według rozszerzenia. Otwórz je z palety poleceń.',
+    documentHubShowHidden: 'Uwzględnij ukryte pliki i foldery',
+    documentHubExcludedFiles: 'Wykluczone nazwy plików',
+    documentHubExcludedFolders: 'Wykluczone nazwy folderów',
+    documentHubExclusionsHint:
+      'Jedna nazwa lub wzorzec na wiersz. Użyj * lub ?. Wielkość liter nie ma znaczenia.',
     documentHubExtensions: 'Rozszerzenia',
     documentHubExtensionsHint:
       'Typy plików do wyświetlenia, na przykład pdf docx pptx. Oddziel je spacjami lub przecinkami.',
-    documentHubBasePath: 'Folder bazowy',
+    documentHubBasePath: 'Foldery bazowe',
     documentHubBasePathHint:
-      'Folder przeszukiwany wraz z wszystkimi podfolderami. ~ to folder domowy.',
+      'Jeden folder na wiersz, wraz z jego podfolderami. Użyj ~, aby wskazać folder domowy.',
     documentHubReset: 'Przywróć domyślne',
     pictureCaptionFields: 'Wiersze pod miniaturami',
     pictureTooltip: 'Pokaż szczegóły obrazu po najechaniu',
@@ -1066,8 +1071,7 @@ export const pl = {
     closeMedia: 'Zamknij {type}',
     branchViewLabel: 'Widok płaski',
     documentHubLabel: 'Centrum dokumentów',
-    documentHubRootUnknown:
-      'Nie można otworzyć centrum dokumentów: folder bazowy {path} jest niedostępny.',
+    documentHubRootUnknown: 'Centrum dokumentów nie mogło rozpoznać tych ścieżek folderów: {path}',
     unableToStart: 'Nie można rozpocząć wyszukiwania',
     startingSearch: 'Uruchamianie wyszukiwania…',
     refresh: 'Odśwież wyszukiwanie',

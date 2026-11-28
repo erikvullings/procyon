@@ -10,6 +10,24 @@ export function extensionGroupKey(entry: EntrySummary): string {
   return dot <= 0 ? '' : entry.name.slice(dot + 1).toLocaleLowerCase();
 }
 
+const parentFolderNames = new WeakMap<EntrySummary, string>();
+
+/** Immediate parent as displayed and sorted in the Document Hub. */
+export function hubParentFolderName(entry: EntrySummary): string {
+  const cached = parentFolderNames.get(entry);
+  if (cached !== undefined) return cached;
+  let name = '';
+  try {
+    const uri = new URL(entry.location.uri);
+    const parent = uri.pathname.replace(/\/+$/u, '').split('/').at(-2);
+    name = parent ? decodeURIComponent(parent) : uri.host || '/';
+  } catch {
+    name = '/';
+  }
+  parentFolderNames.set(entry, name);
+  return name;
+}
+
 export interface ExtensionGroup {
   readonly key: string;
   readonly count: number;

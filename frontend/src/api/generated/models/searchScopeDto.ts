@@ -8,6 +8,8 @@ import type { LocationDto } from './locationDto.ts';
  * Provider-neutral scope for a structured search.
  */
 export interface SearchScopeDto {
+  excludedDirectoryNames?: string[];
+  excludedFileNames?: string[];
   locations: LocationDto[];
   recurse: boolean;
   showHidden: boolean;

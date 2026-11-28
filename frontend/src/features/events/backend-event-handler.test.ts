@@ -463,6 +463,32 @@ describe('createBackendEventHandler', () => {
       expect(ctx.reportSearchCompletion).toHaveBeenCalledWith(PANE_ID, searchId);
     });
 
+    it('loads every page when a Document Hub scan completes', async () => {
+      const searchId = 'hub';
+      const ctx = makeContext({
+        getFindFilesSearchId: vi.fn(() => searchId),
+        findPanesWithUri: vi.fn(() => [PANE_ID]),
+        isDocumentHub: (uri) => uri === 'search://local/hub',
+      });
+      createBackendEventHandler(ctx)(
+        makeEvent(
+          {
+            type: 'search.resultsBatch',
+            searchId,
+            entries: [],
+            isComplete: true,
+            warningsCount: 0,
+            executionMode: 'liveRecursive',
+          },
+          WS_ID,
+        ),
+      );
+
+      await vi.waitFor(() =>
+        expect(ctx.loadPane).toHaveBeenCalledWith(PANE_ID, { background: true, allPages: true }),
+      );
+    });
+
     it('does not report completion for a batch that is not yet complete', async () => {
       const searchId = 'search-42';
       const ctx = makeContext({

@@ -1794,6 +1794,9 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
       return [paneId];
     },
     loadPane: (paneId, options) => shellState.navigation.load(paneId, options),
+    isDocumentHub: (uri) => shellState.findFilesController.isDocumentHub(uri),
+    acceptDocumentHubBatch: (id, complete, cancelled) =>
+      shellState.findFilesController.acceptDocumentHubBatch(id, complete, cancelled),
     reportSearchCompletion: (paneId, searchId) => {
       const searchUri = `search://local/${searchId}`;
       const active = activeDirectory();
@@ -1803,7 +1806,7 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
         return;
       }
       const entries = shellState.directories.get(activeTabKey(paneId))?.entries ?? [];
-      if (entries.length > 0) return;
+      if (entries.length > 0 || shellState.findFilesController.isDocumentHub(searchUri)) return;
       if (shellState.findFilesPresentationsByLocationUri.get(searchUri)?.conceptSearch) return;
       toast({ html: t('search', 'noResultsToast') });
       const root = shellState.findFilesRootsByLocationUri.get(searchUri);
@@ -2469,7 +2472,16 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
     },
     openTabAt: (paneId, location, historyOrigin) =>
       shellState.tabController.openTabAt(paneId, location, historyOrigin),
-    navigateTo: (paneId, location) => void shellState.navigation.navigate(paneId, location),
+    navigateTo: async (paneId, location) => {
+      await shellState.navigation.navigate(paneId, location);
+      const pane = shellState.workspace?.panesById[paneId];
+      if (
+        pane?.tabsById[pane.activeTabId]?.location.uri === location.uri &&
+        shellState.findFilesController.isDocumentHub(location.uri)
+      ) {
+        await shellState.navigation.load(paneId, { background: true, allPages: true });
+      }
+    },
     reportLimitations: (message) => toast({ html: t('search', 'filterLimitations', { message }) }),
     notify: (message) => {
       const text = document.createElement('span');
@@ -3445,6 +3457,10 @@ export const AppShell: FactoryComponent<AppShellAttrs> = (vnode) => {
                   m.redraw();
                 },
                 requestArchivePassword,
+                getHiddenVisibility: (location) =>
+                  shellState.findFilesController?.isDocumentHub(location.uri)
+                    ? shellState.findFilesQueriesByLocationUri.get(location.uri)?.scope.showHidden
+                    : undefined,
                 // Mirrors the same "on and the directory actually reports git status" gate
                 // `pane-content-builder.ts` uses to decide whether to render the column - here it
                 // decides whether to *ask the backend to compute* git status at all, so a hidden

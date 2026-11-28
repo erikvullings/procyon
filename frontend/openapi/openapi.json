@@ -14285,12 +14285,29 @@
         "description": "What the document hub virtual folder collects (task 0357).",
         "required": [
           "extensions",
-          "basePath"
+          "basePaths"
         ],
         "properties": {
-          "basePath": {
-            "type": "string",
+          "basePaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
             "description": "Folder searched recursively; `~` is the home folder."
+          },
+          "excludedDirectoryNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Case-insensitive names and glob patterns to skip during the scan."
+          },
+          "excludedFileNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Case-insensitive names and glob patterns to skip during the scan."
           },
           "extensions": {
             "type": "array",
@@ -14298,6 +14315,10 @@
               "type": "string"
             },
             "description": "Extensions to include, lower case, without the dot."
+          },
+          "showHidden": {
+            "type": "boolean",
+            "description": "Whether the hub scans hidden files and directories."
           }
         }
       },
@@ -26042,6 +26063,18 @@
           "showHidden"
         ],
         "properties": {
+          "excludedDirectoryNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "excludedFileNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "locations": {
             "type": "array",
             "items": {

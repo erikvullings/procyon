@@ -2190,6 +2190,10 @@ main.fm-workspace {
   overflow-y: auto;
 }
 
+.fm-document-hub-list-field + .fm-document-hub-list-field {
+  margin-block-start: 0.75rem;
+}
+
 .fm-settings-editor-body[data-section="plugins"] {
   display: flex;
   flex-direction: column;

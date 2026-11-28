@@ -95,6 +95,7 @@ export interface WorkspacePaneContent {
   readonly groupByParent?: boolean;
   /** Groups the list under collapsible extension headings (the document hub, task 0357). */
   readonly groupByExtension?: boolean;
+  readonly homeDirectory?: string | undefined;
   /** Fixed, non-navigable breadcrumb text for virtual folders such as the basket. */
   readonly breadcrumbLabel?: string;
   readonly nativeIconLoader?: NativeIconLoader;
@@ -695,6 +696,7 @@ export const WorkspaceLayoutView: FactoryComponent<WorkspaceLayoutViewAttrs> = (
             showGitStatusColumn: content.showGitStatusColumn,
             groupByParent: content.groupByParent,
             groupByExtension: content.groupByExtension,
+            homeDirectory: content.homeDirectory,
             nativeIconLoader: content.nativeIconLoader,
             thumbnailLoader: content.thumbnailLoader,
             pictureInfo: content.pictureInfo,

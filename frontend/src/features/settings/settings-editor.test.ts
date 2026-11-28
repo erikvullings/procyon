@@ -134,7 +134,7 @@ function numberInput(label: string): HTMLInputElement {
   return input;
 }
 
-function fireChange(input: HTMLInputElement, value: string): void {
+function fireChange(input: HTMLInputElement | HTMLTextAreaElement, value: string): void {
   input.value = value;
   input.dispatchEvent(new Event('input', { bubbles: true }));
   m.redraw.sync();
@@ -612,6 +612,33 @@ describe('Files & operations submenu', () => {
     expect(root.querySelector('.fm-file-template')).not.toBeNull();
     expect(errors).not.toHaveBeenCalled();
     expect(warnings).not.toHaveBeenCalled();
+  });
+
+  it('saves the Document Hub folder and exclusion text areas one item per line', async () => {
+    const { onSave } = mountEditor();
+    clickButton('Files & operations');
+    clickButton('Document hub');
+    const [folders, files, excludedFolders] = root.querySelectorAll('textarea');
+    if (!folders || !files || !excludedFolders) throw new Error('expected three hub text areas');
+
+    expect(folders.value).toBe('~');
+    expect(files.value).toContain('README.md\nLICENSE.txt');
+    fireChange(folders, '~/Work Docs\n\n~/Downloads');
+    fireChange(files, 'README.md\nProject, archived.txt');
+    fireChange(excludedFolders, 'node_modules\nBuild Output');
+    root.querySelector<HTMLButtonElement>('.fm-settings-save')?.click();
+
+    await vi.waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          documentHub: expect.objectContaining({
+            basePaths: ['~/Work Docs', '~/Downloads'],
+            excludedFileNames: ['README.md', 'Project, archived.txt'],
+            excludedDirectoryNames: ['node_modules', 'Build Output'],
+          }),
+        }),
+      ),
+    );
   });
 
   it('starts a section at its top after scrolling another one', () => {

@@ -46,6 +46,7 @@ export interface PaneDirectoryView {
 
 /** Integration callbacks kept outside the navigation module. */
 export interface NavigationControllerOptions {
+  getHiddenVisibility?(location: Location): boolean | undefined;
   readonly client: NavigationClient;
   readonly getWorkspace: () => WorkspaceProjection | undefined;
   readonly replaceWorkspace: (workspace: WorkspaceProjection) => void;
@@ -94,6 +95,8 @@ export interface NavigationController {
        * and only re-hydrates the later pages from the backend's cached listing.
        */
       readonly firstSnapshot?: DirectorySnapshot;
+      /** Finish loading a completed virtual listing without waiting for scrolling. */
+      readonly allPages?: boolean;
     },
   ): Promise<void>;
   navigate(
@@ -123,7 +126,7 @@ export interface NavigationController {
 }
 
 /** Distinguishes an explicit navigation (push/back/forward/parent) from a plain reload/refresh. */
-type RequestKind = 'navigate' | 'load';
+type RequestKind = 'navigate' | 'load' | 'hydrate';
 
 interface ActiveRequest {
   readonly id: string;
@@ -436,7 +439,7 @@ export function createNavigationController(
       requestId,
       location,
       ...(continuationToken === undefined ? {} : { continuationToken }),
-      ...viewOptionsFor(tab),
+      ...viewOptionsFor(location, tab),
     };
   }
 
@@ -447,13 +450,14 @@ export function createNavigationController(
    * backend default view settings.
    */
   function viewOptionsFor(
+    location: Location,
     tab: TabProjection | undefined,
   ): Pick<ListDirectoryRequest, 'sort' | 'showHidden' | 'foldersFirst' | 'showGitStatus'> {
+    const showHidden = options.getHiddenVisibility?.(location) ?? tab?.view.showHidden;
     return {
+      ...(showHidden === undefined ? {} : { showHidden }),
       ...(tab?.view.sort === undefined ? {} : { sort: tab.view.sort }),
-      ...(tab === undefined
-        ? {}
-        : { showHidden: tab.view.showHidden, foldersFirst: tab.view.foldersFirst }),
+      ...(tab === undefined ? {} : { foldersFirst: tab.view.foldersFirst }),
       showGitStatus: options.getShowGitStatusColumn?.() ?? false,
     };
   }
@@ -534,7 +538,11 @@ export function createNavigationController(
 
   async function load(
     paneId: PaneId,
-    loadOptions?: { readonly background?: boolean; readonly firstSnapshot?: DirectorySnapshot },
+    loadOptions?: {
+      readonly background?: boolean;
+      readonly allPages?: boolean;
+      readonly firstSnapshot?: DirectorySnapshot;
+    },
   ): Promise<void> {
     const workspace = options.getWorkspace();
     const tab = workspace === undefined ? undefined : activeTab(workspace, paneId);
@@ -557,7 +565,7 @@ export function createNavigationController(
         return;
       }
     }
-    const request = begin(paneId, tab.id, 'load');
+    const request = begin(paneId, tab.id, loadOptions?.allPages ? 'hydrate' : 'load');
     const loadStarted = perfStart();
     if (!loadOptions?.background) {
       publish(paneId, tab.id, loadingView(paneId, tab.id, request, tab.location));
@@ -574,21 +582,22 @@ export function createNavigationController(
             );
       // Re-fetch every page that was already loaded, so a refresh of a large paged directory
       // doesn't drop later entries - which would prune the cursor/selection onto page one.
-      if (
-        current !== undefined &&
-        current.location !== undefined &&
-        current.location.uri === tab.location.uri &&
-        current.location.providerId === tab.location.providerId &&
-        current.entries.length > snapshot.entries.length &&
-        snapshot.hasMore
-      ) {
+      const sameLocation =
+        current?.location?.uri === tab.location.uri &&
+        current.location.providerId === tab.location.providerId;
+      const minEntries = loadOptions?.allPages
+        ? Number.POSITIVE_INFINITY
+        : sameLocation
+          ? current.entries.length
+          : 0;
+      if (snapshot.hasMore && minEntries > snapshot.entries.length) {
         snapshot = await hydrateBackgroundSnapshot(
           workspace,
           paneId,
           tab,
           request,
           snapshot,
-          current.entries.length,
+          minEntries,
         );
       }
       if (isCurrent(paneId, tab.id, request) && snapshot.requestId === request.id) {
@@ -622,7 +631,19 @@ export function createNavigationController(
             ];
           const timer = setTimeout(() => {
             backgroundRetryTimers.delete(key);
-            void load(paneId, { background: true });
+            const activeWorkspace = options.getWorkspace();
+            const active =
+              activeWorkspace === undefined ? undefined : activeTab(activeWorkspace, paneId);
+            if (
+              activeWorkspace?.id === workspace.id &&
+              active?.id === tab.id &&
+              active.location.uri === tab.location.uri
+            ) {
+              void load(paneId, {
+                background: true,
+                ...(loadOptions.allPages ? { allPages: true } : {}),
+              });
+            }
           }, delay);
           backgroundRetryTimers.set(key, timer);
           return;
@@ -708,7 +729,7 @@ export function createNavigationController(
         paneId: currentPaneId,
         requestId: currentRequestId,
         location: currentLocation,
-        ...viewOptionsFor(currentTab),
+        ...viewOptionsFor(currentLocation, currentTab),
       };
       return withSerializedLocationAccess(currentLocation, currentPaneId, async () => {
         try {
@@ -880,6 +901,7 @@ export function createNavigationController(
       return Promise.resolve();
     }
     const key = tabKey(paneId, resolvedTabId);
+    if (activeRequests.get(key)?.kind === 'hydrate') return Promise.resolve();
     const pending = pendingNextPage.get(key);
     if (pending !== undefined) {
       return pending;
@@ -904,8 +926,14 @@ export function createNavigationController(
       if (stillActive === undefined || activeTab(stillActive, paneId)?.id !== tabId) {
         return;
       }
-      const current = paneViews.get(tabKey(paneId, tabId));
-      if (current === undefined || !current.hasMore || current.state.type === 'error') {
+      const key = tabKey(paneId, tabId);
+      const current = paneViews.get(key);
+      if (
+        activeRequests.get(key)?.kind === 'hydrate' ||
+        current === undefined ||
+        !current.hasMore ||
+        current.state.type === 'error'
+      ) {
         return;
       }
       await loadNextPage(paneId, tabId);

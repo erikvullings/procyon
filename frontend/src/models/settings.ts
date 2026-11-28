@@ -189,14 +189,18 @@ export const DEFAULT_PICTURE_INFO_SETTINGS: PictureInfoSettings = {
 
 /** What the "Document hub" virtual folder collects (task 0357). */
 export interface DocumentHubSettings {
+  readonly showHidden: boolean;
+  readonly excludedFileNames: readonly string[];
+  readonly excludedDirectoryNames: readonly string[];
   /** Extensions to include, lower case, without the dot. */
   readonly extensions: readonly string[];
-  /** Folder searched recursively; `~` is the home folder. */
-  readonly basePath: string;
+  /** Folders searched recursively; `~` is the home folder. */
+  readonly basePaths: readonly string[];
 }
 
 /** Mirrors the backend default: common office and text documents under the home folder. */
 export const DEFAULT_DOCUMENT_HUB_SETTINGS: DocumentHubSettings = {
+  showHidden: false,
   extensions: [
     'pdf',
     'docx',
@@ -213,7 +217,19 @@ export const DEFAULT_DOCUMENT_HUB_SETTINGS: DocumentHubSettings = {
     'md',
     'epub',
   ],
-  basePath: '~',
+  basePaths: ['~'],
+  excludedFileNames: ['README.md', 'LICENSE.txt', 'LICENSE.md', 'COPYING.txt'],
+  excludedDirectoryNames: [
+    'node_modules',
+    '.venv',
+    '.git',
+    '.hg',
+    '.svn',
+    '__pycache__',
+    'Caches',
+    'AppData',
+    'copilot-worktrees',
+  ],
 };
 
 /** Versioned application-wide settings returned by both backend transports. */

@@ -210,7 +210,10 @@ pub(crate) fn settings_to_dto(settings: Settings) -> SettingsDto {
         },
         document_hub: DocumentHubSettingsDto {
             extensions: settings.document_hub.extensions,
-            base_path: settings.document_hub.base_path,
+            base_paths: settings.document_hub.base_paths,
+            excluded_file_names: settings.document_hub.excluded_file_names,
+            excluded_directory_names: settings.document_hub.excluded_directory_names,
+            show_hidden: settings.document_hub.show_hidden,
         },
     }
 }
@@ -407,7 +410,10 @@ pub(crate) fn settings_from_dto(settings: SettingsDto) -> Settings {
         },
         document_hub: DocumentHubSettings {
             extensions: settings.document_hub.extensions,
-            base_path: settings.document_hub.base_path,
+            base_paths: settings.document_hub.base_paths,
+            excluded_file_names: settings.document_hub.excluded_file_names,
+            excluded_directory_names: settings.document_hub.excluded_directory_names,
+            show_hidden: settings.document_hub.show_hidden,
         },
     }
 }
@@ -500,6 +506,8 @@ fn search_query_to_dto(query: fm_domain::SearchQuery) -> SearchQueryDto {
             fm_domain::SearchMode::Concept => SearchModeDto::Concept,
         },
         scope: SearchScopeDto {
+            excluded_file_names: query.scope.excluded_file_names,
+            excluded_directory_names: query.scope.excluded_directory_names,
             locations: query.scope.locations.into_iter().map(Into::into).collect(),
             recurse: query.scope.recurse,
             show_hidden: query.scope.show_hidden,
@@ -597,6 +605,8 @@ fn search_query_from_dto(query: SearchQueryDto) -> fm_domain::SearchQuery {
             SearchModeDto::Concept => fm_domain::SearchMode::Concept,
         },
         scope: fm_domain::SearchScope {
+            excluded_file_names: query.scope.excluded_file_names,
+            excluded_directory_names: query.scope.excluded_directory_names,
             locations: query.scope.locations.into_iter().map(Into::into).collect(),
             recurse: query.scope.recurse,
             show_hidden: query.scope.show_hidden,
@@ -699,6 +709,8 @@ mod semantic_source_tests {
             schema_version: fm_domain::SEARCH_QUERY_SCHEMA_VERSION,
             mode: SearchModeDto::Semantic,
             scope: SearchScopeDto {
+                excluded_file_names: Vec::new(),
+                excluded_directory_names: Vec::new(),
                 locations: Vec::new(),
                 recurse: true,
                 show_hidden: false,
@@ -801,7 +813,9 @@ mod filter_preset_tests {
         let settings = Settings {
             document_hub: DocumentHubSettings {
                 extensions: vec!["pdf".into(), "odt".into()],
-                base_path: "/Users/me/Work".into(),
+                base_paths: vec!["/Users/me/Work".into(), "/Users/me/Photos".into()],
+                show_hidden: true,
+                ..DocumentHubSettings::default()
             },
             ..Settings::default()
         };

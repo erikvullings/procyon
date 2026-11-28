@@ -380,13 +380,16 @@ export function matchesQuery(
     .split(',')
     .map((alternative) => alternative.trim())
     .filter((alternative) => alternative.length > 0)
-    .some((alternative) => {
-      const escaped = alternative
-        .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-        .replace(/\*/g, '.*')
-        .replace(/\?/g, '.');
-      return new RegExp(`^${escaped}$`, 'u').test(candidate);
-    });
+    .some((alternative) => matchesGlob(candidate, alternative));
+}
+
+function matchesGlob(candidate: string, pattern: string): boolean {
+  if (!pattern.includes('*') && !pattern.includes('?')) return candidate === pattern;
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '.*')
+    .replace(/\?/g, '.');
+  return new RegExp(`^${escaped}$`, 'su').test(candidate);
 }
 
 export function firstContentMatch(
@@ -459,6 +462,16 @@ export function collectMatches(
     if (fixtures === undefined) continue;
     for (const fixture of fixtures) {
       const entry = fixtureEntry(uri, fixture);
+      const exclusions =
+        fixture.kind === 'directory'
+          ? structuredQuery?.scope.excludedDirectoryNames
+          : structuredQuery?.scope.excludedFileNames;
+      if (
+        exclusions?.some((pattern) =>
+          matchesGlob(fixture.name.toLowerCase(), pattern.toLowerCase()),
+        )
+      )
+        continue;
       if (entry.hidden && !showHidden) continue;
       if (fixture.kind === 'directory') {
         if (structuredQuery?.scope.recurse ?? true) pending.push(entry.location.uri);

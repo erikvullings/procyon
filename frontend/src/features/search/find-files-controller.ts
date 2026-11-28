@@ -40,7 +40,7 @@ export interface FindFilesControllerContext {
   redraw(): void;
   openTabAt(paneId: PaneId, location: Location, historyOrigin?: Location): void;
   /** Navigates a pane's active tab to `location` (used to leave a branch view). */
-  navigateTo(paneId: PaneId, location: Location): void;
+  navigateTo(paneId: PaneId, location: Location): void | Promise<void>;
   reportLimitations(message: string): void;
   /** Shows a short message to the person (a toast). */
   notify(message: string): void;
@@ -84,6 +84,8 @@ export interface FindFilesController {
   openDocumentHub(target?: SavedSearchOpenTarget): void;
   /** Whether `locationUri` is a document hub result list. */
   isDocumentHub(locationUri: string): boolean;
+  /** Returns false while a refresh is building its replacement or if its pane has moved. */
+  acceptDocumentHubBatch(searchId: string, complete: boolean, cancelled?: boolean): boolean;
   /** Starts the same request again, producing a fresh indexed/live result set. */
   refreshSearch(searchLocationUri: string, paneId: PaneId): void;
 
@@ -173,6 +175,15 @@ export function createFindFilesController(
   const branchLocationUris = new Set<string>();
   /** Result locations that are the document hub, grouped by extension (task 0357). */
   const hubLocationUris = new Set<string>();
+  let latestHub: { key: string; location: Location; completed: boolean } | undefined;
+  const hubRefreshes = new Map<
+    string,
+    { paneId: PaneId; locationUri: string; previousSearchId: string; generation: number }
+  >();
+
+  function hubKey(workspaceId: string, query: SearchQuery): string {
+    return JSON.stringify([workspaceId, query]);
+  }
 
   function runSearch(
     query: SearchQuery,
@@ -261,7 +272,22 @@ export function createFindFilesController(
         context.getFindFilesParamsByLocationUri().set(result.location.uri, params);
         context.getFindFilesQueriesByLocationUri().set(result.location.uri, query);
         if (branch) branchLocationUris.add(result.location.uri);
-        if (hub) hubLocationUris.add(result.location.uri);
+        if (hub) {
+          hubLocationUris.add(result.location.uri);
+          if (refresh === undefined) {
+            latestHub = {
+              key: hubKey(workspace.id, query),
+              location: result.location,
+              completed: false,
+            };
+          } else {
+            hubRefreshes.set(result.searchId, {
+              ...refresh,
+              previousSearchId: refresh.searchId,
+              generation: nextGeneration,
+            });
+          }
+        }
         if (result.limitations.length > 0) {
           context.reportLimitations(
             result.limitations
@@ -358,17 +384,22 @@ export function createFindFilesController(
 
     openDocumentHub(target: SavedSearchOpenTarget = 'currentPane'): void {
       const settings = context.getDocumentHubSettings();
-      const root = context.resolveHubRoot(settings.basePath);
-      if (root === undefined) {
-        context.notify(t('search', 'documentHubRootUnknown', { path: settings.basePath }));
-        return;
+      const roots = new Map<string, Location>();
+      const unresolved: string[] = [];
+      for (const path of settings.basePaths.length === 0 ? ['~'] : settings.basePaths) {
+        const root = context.resolveHubRoot(path);
+        if (root === undefined) {
+          unresolved.push(path);
+        } else {
+          roots.set(JSON.stringify([root.providerId, root.uri]), root);
+        }
       }
+      if (unresolved.length > 0) {
+        context.notify(t('search', 'documentHubRootUnknown', { path: unresolved.join(', ') }));
+      }
+      if (roots.size === 0) return;
       const paneId = context.getActiveDirectory()?.paneId ?? context.getWorkspace()?.activePaneId;
-      const query = documentHubQuery(
-        settings,
-        root,
-        paneId === undefined ? false : this.activeShowHidden(paneId),
-      );
+      const query = documentHubQuery(settings, [...roots.values()]);
       const params: FindFilesSearchParams = {
         mode: 'name',
         filenameQuery: query.name?.pattern ?? '',
@@ -382,11 +413,69 @@ export function createFindFilesController(
         tags: [],
         metadata: {},
       };
+      const workspace = context.getWorkspace();
+      if (workspace === undefined || paneId === undefined) return;
+      if (
+        target !== 'newTab' &&
+        latestHub?.completed &&
+        latestHub.key === hubKey(workspace.id, query)
+      ) {
+        const cached = latestHub.location;
+        const destination =
+          target === 'otherPane'
+            ? (workspace.paneOrder.find((candidate) => candidate !== paneId) ?? paneId)
+            : paneId;
+        const reopen = async () => {
+          if (context.getPaneLocationUri(destination) !== cached.uri) {
+            await context.navigateTo(destination, cached);
+          }
+          if (context.getPaneLocationUri(destination) === cached.uri) {
+            if (
+              ![...hubRefreshes.values()].some(
+                (refresh) => refresh.paneId === destination && refresh.locationUri === cached.uri,
+              )
+            ) {
+              this.refreshSearch(cached.uri, destination);
+            }
+          }
+        };
+        void reopen();
+        return;
+      }
       runSearch(query, params, target, undefined, t('search', 'documentHubLabel'), false, true);
     },
 
     isDocumentHub(locationUri: string): boolean {
       return hubLocationUris.has(locationUri);
+    },
+
+    acceptDocumentHubBatch(searchId: string, complete: boolean, cancelled = false): boolean {
+      const uri = `search://local/${searchId}`;
+      const refresh = hubRefreshes.get(searchId);
+      if (refresh !== undefined) {
+        if (!complete) return false;
+        hubRefreshes.delete(searchId);
+        if (
+          cancelled ||
+          context.getPaneLocationUri(refresh.paneId) !== refresh.locationUri ||
+          refreshGenerationBySearchId.get(refresh.previousSearchId) !== refresh.generation
+        ) {
+          context.clearFindFilesTargetPane(searchId);
+          return false;
+        }
+        const workspace = context.getWorkspace();
+        const query = context.getFindFilesQueriesByLocationUri().get(uri);
+        if (workspace !== undefined && query !== undefined) {
+          latestHub = {
+            key: hubKey(workspace.id, query),
+            location: { providerId: 'search', uri },
+            completed: true,
+          };
+        }
+      } else if (complete && !cancelled && latestHub?.location.uri === uri) {
+        latestHub.completed = true;
+      }
+      return true;
     },
 
     toggleBranchView(): void {
@@ -491,6 +580,8 @@ export function createFindFilesController(
         'currentPane',
         { paneId, searchId, locationUri: searchLocationUri },
         context.getFindFilesPresentationsByLocationUri().get(searchLocationUri)?.label,
+        branchLocationUris.has(searchLocationUri),
+        hubLocationUris.has(searchLocationUri),
       );
     },
 

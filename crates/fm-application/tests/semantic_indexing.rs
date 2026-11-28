@@ -1187,6 +1187,8 @@ async fn enrolled_gemma_media_crosses_provider_worker_and_authorized_search() {
                 schema_version: 2,
                 mode: SearchModeDto::Semantic,
                 scope: SearchScopeDto {
+                    excluded_file_names: Vec::new(),
+                    excluded_directory_names: Vec::new(),
                     locations: vec![root_location],
                     recurse: true,
                     show_hidden: false,

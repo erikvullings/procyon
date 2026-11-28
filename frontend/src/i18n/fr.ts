@@ -390,12 +390,16 @@ export const fr = {
     documentHubSection: 'Hub de documents',
     documentHubIntro:
       "Un dossier virtuel qui liste tous les fichiers ayant l'une de ces extensions dans le dossier de base et ses sous-dossiers, regroupés par extension. Ouvrez-le depuis la palette de commandes : Hub de documents. Les fichiers ne sont ni déplacés ni copiés.",
+    documentHubShowHidden: 'Inclure les fichiers et dossiers cachés',
+    documentHubExcludedFiles: 'Noms de fichiers exclus',
+    documentHubExcludedFolders: 'Noms de dossiers exclus',
+    documentHubExclusionsHint: 'Un nom ou motif par ligne. Utilisez * ou ?. La casse est ignorée.',
     documentHubExtensions: 'Extensions',
     documentHubExtensionsHint:
       'Types de fichiers à lister, par exemple pdf docx pptx. Séparez-les par des espaces ou des virgules.',
-    documentHubBasePath: 'Dossier de base',
+    documentHubBasePath: 'Dossiers de base',
     documentHubBasePathHint:
-      'Le dossier à parcourir, avec tous ses sous-dossiers. ~ est votre dossier personnel.',
+      'Un dossier par ligne, avec ses sous-dossiers. Utilisez ~ pour votre dossier personnel.',
     documentHubReset: 'Rétablir les valeurs par défaut',
     pictureCaptionFields: 'Lignes sous les miniatures',
     pictureTooltip: 'Afficher les détails de l’image au survol',
@@ -1074,7 +1078,7 @@ export const fr = {
     branchViewLabel: 'Vue aplatie',
     documentHubLabel: 'Hub de documents',
     documentHubRootUnknown:
-      'Impossible d’ouvrir le hub de documents : le dossier de base {path} est indisponible.',
+      'Le hub de documents n’a pas pu résoudre ces chemins de dossiers : {path}',
     unableToStart: 'Impossible de démarrer la recherche',
     startingSearch: 'Lancement de la recherche…',
     refresh: 'Actualiser la recherche',

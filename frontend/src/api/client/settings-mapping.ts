@@ -7,6 +7,7 @@ import {
   DEFAULT_QUICK_FILTER_MATCH_MODE,
 } from '../../models/settings';
 import type { FilterCriteriaDto } from '../generated/models/filterCriteriaDto';
+import type { SearchScopeDto } from '../generated/models/searchScopeDto';
 import type { SettingsDto } from '../generated/models/settingsDto';
 import type { SyncProfileDto } from '../generated/models/syncProfileDto';
 
@@ -68,8 +69,20 @@ export function settingsFromDto(settings: SettingsDto): Settings {
     assistantSessionMemory: settings.assistantSessionMemory ?? false,
     terminalHideFunctionKeys: settings.terminalHideFunctionKeys ?? true,
     pictureInfo: settings.pictureInfo ?? DEFAULT_PICTURE_INFO_SETTINGS,
-    documentHub: settings.documentHub ?? DEFAULT_DOCUMENT_HUB_SETTINGS,
+    documentHub: { ...DEFAULT_DOCUMENT_HUB_SETTINGS, ...settings.documentHub },
     map: settings.map ?? DEFAULT_MAP_SETTINGS,
+  };
+}
+
+export function searchScopeToDto(scope: SearchQuery['scope']): SearchScopeDto {
+  const { locations, excludedFileNames, excludedDirectoryNames, ...flags } = scope;
+  return {
+    ...flags,
+    locations: [...locations],
+    ...(excludedFileNames === undefined ? {} : { excludedFileNames: [...excludedFileNames] }),
+    ...(excludedDirectoryNames === undefined
+      ? {}
+      : { excludedDirectoryNames: [...excludedDirectoryNames] }),
   };
 }
 
@@ -173,10 +186,7 @@ export function settingsToDto(settings: Settings): SettingsDto {
       ...saved,
       query: {
         ...saved.query,
-        scope: {
-          ...saved.query.scope,
-          locations: [...saved.query.scope.locations],
-        },
+        scope: searchScopeToDto(saved.query.scope),
         entryKinds: [...saved.query.entryKinds],
         mimeTypes: [...saved.query.mimeTypes],
         gitStatuses: [...saved.query.gitStatuses],
@@ -214,6 +224,9 @@ export function settingsToDto(settings: Settings): SettingsDto {
     documentHub: {
       ...settings.documentHub,
       extensions: [...settings.documentHub.extensions],
+      basePaths: [...settings.documentHub.basePaths],
+      excludedFileNames: [...settings.documentHub.excludedFileNames],
+      excludedDirectoryNames: [...settings.documentHub.excludedDirectoryNames],
     },
     recentLocationsByWorkspace: Object.fromEntries(
       Object.entries(settings.recentLocationsByWorkspace).map(([workspaceId, locations]) => [

@@ -142,6 +142,10 @@ pub struct SearchContentPredicateDto {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchScopeDto {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded_file_names: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded_directory_names: Vec<String>,
     pub locations: Vec<LocationDto>,
     pub recurse: bool,
     pub show_hidden: bool,
@@ -450,6 +454,8 @@ mod tests {
             schema_version: SEARCH_QUERY_SCHEMA_VERSION,
             mode: SearchModeDto::Name,
             scope: SearchScopeDto {
+                excluded_file_names: Vec::new(),
+                excluded_directory_names: Vec::new(),
                 locations: vec![sample_location()],
                 recurse: true,
                 show_hidden: false,

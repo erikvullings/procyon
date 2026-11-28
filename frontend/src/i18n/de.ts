@@ -394,13 +394,18 @@ export const de = {
     pictureInfoSection: 'Bilder',
     documentHubSection: 'Dokumenten-Hub',
     documentHubIntro:
-      'Ein virtueller Ordner, der alle Dateien mit einer dieser Endungen im Basisordner und seinen Unterordnern auflistet, nach Endung gruppiert. Öffnen über die Befehlspalette: Dokumenten-Hub. Dateien werden nicht verschoben oder kopiert.',
+      'Der Dokumenten-Hub zeigt passende Dateien aus den gewählten Ordnern und ihren Unterordnern, gruppiert nach Dateiendung. Öffne ihn über die Befehlspalette.',
+    documentHubShowHidden: 'Versteckte Dateien und Ordner einbeziehen',
+    documentHubExcludedFiles: 'Ausgeschlossene Dateinamen',
+    documentHubExcludedFolders: 'Ausgeschlossene Ordnernamen',
+    documentHubExclusionsHint:
+      'Ein Name oder Muster pro Zeile. Verwende * oder ?. Groß- und Kleinschreibung werden ignoriert.',
     documentHubExtensions: 'Dateiendungen',
     documentHubExtensionsHint:
       'Dateitypen, die aufgelistet werden, zum Beispiel pdf docx pptx. Durch Leerzeichen oder Kommas trennen.',
     documentHubBasePath: 'Basisordner',
     documentHubBasePathHint:
-      'Der Ordner, der samt allen Unterordnern durchsucht wird. ~ ist Ihr Home-Ordner.',
+      'Ein Ordner pro Zeile, einschließlich Unterordnern. ~ steht für deinen Benutzerordner.',
     documentHubReset: 'Standardwerte wiederherstellen',
     pictureCaptionFields: 'Zeilen unter Vorschaubildern',
     pictureTooltip: 'Bilddetails beim Darüberfahren anzeigen',
@@ -1079,8 +1084,7 @@ export const de = {
     closeMedia: '{type} schließen',
     branchViewLabel: 'Verzweigte Ansicht',
     documentHubLabel: 'Dokumenten-Hub',
-    documentHubRootUnknown:
-      'Der Dokumenten-Hub kann nicht geöffnet werden: Der Basisordner {path} ist nicht verfügbar.',
+    documentHubRootUnknown: 'Der Dokumenten-Hub konnte diese Ordnerpfade nicht auflösen: {path}',
     unableToStart: 'Suche kann nicht gestartet werden',
     startingSearch: 'Suche wird gestartet…',
     refresh: 'Suche aktualisieren',

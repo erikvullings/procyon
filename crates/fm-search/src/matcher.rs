@@ -50,7 +50,7 @@ pub fn matches_name(name: &str, query: &str, mode: MatchMode, case_sensitive: bo
 ///
 /// Operates on `char`s rather than bytes so multi-byte UTF-8 sequences are
 /// never split mid-character.
-fn glob_match(name: &str, pattern: &str) -> bool {
+pub(crate) fn glob_match(name: &str, pattern: &str) -> bool {
     let name: Vec<char> = name.chars().collect();
     let pattern: Vec<char> = pattern.chars().collect();
     let (mut n, mut p) = (0usize, 0usize);

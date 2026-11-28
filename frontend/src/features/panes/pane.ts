@@ -204,6 +204,7 @@ export interface TableConfigAttrs {
   readonly groupByParent?: boolean | undefined;
   /** Shows collapsible extension group rows instead (the document hub, task 0357). */
   readonly groupByExtension?: boolean | undefined;
+  readonly homeDirectory?: string | undefined;
   readonly nativeIconLoader?: NativeIconLoader | undefined;
   readonly thumbnailLoader?: ThumbnailLoader | undefined;
   readonly pictureInfo?: GridPictureInfo | undefined;
@@ -2445,6 +2446,7 @@ export const Pane: FactoryComponent<PaneAttrs> = () => {
                   showFullPath: isSearchLocation,
                   groupByParent: isSearchLocation || attrs.tableConfig.groupByParent === true,
                   groupByExtension: attrs.tableConfig.groupByExtension === true,
+                  homeDirectory: attrs.tableConfig.homeDirectory,
                   collapsibleGroups: isSearchLocation,
                   ...(isSearchLocation ? { groupScope: activeLocationUri } : {}),
                   ...(isSearchLocation
